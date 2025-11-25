@@ -56,10 +56,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 18, 10, 16),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,13 +148,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         captureProvider.recordingState == RecordingState.pause;
 
     // Check if any recording is active (phone mic, system audio, or device recording)
-    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
+    // For device recording states (deviceRecord/pause), only consider active if device is still connected
+    bool isDeviceRecordingActive = isHavingRecordingDevice &&
+        (captureProvider.recordingState == RecordingState.deviceRecord ||
+            captureProvider.recordingState == RecordingState.pause ||
+            captureProvider.isPaused);
+
+    bool isPhoneMicRecordingActive = captureProvider.recordingState == RecordingState.record ||
         captureProvider.recordingState == RecordingState.systemAudioRecord ||
-        captureProvider.recordingState == RecordingState.deviceRecord ||
         captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause ||
-        captureProvider.isPaused ||
         _isPhoneMicPaused;
+
+    bool isAnyRecordingActive = isDeviceRecordingActive || isPhoneMicRecordingActive;
 
     // Hide the widget when no recording is active and there are no segments or photos
     if (!isAnyRecordingActive && !isHavingTranscript && !isHavingPhotos && !isHavingRecordingDevice) {
@@ -298,121 +303,137 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       isPaused = _isPhoneMicPaused || provider.isPaused;
     }
 
-    // When recording is active, show the unified UI design
+    // When recording is active, show simplified UI
     if (isDeviceRecording || isPhoneRecording) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 4),
-          // Top row with status tag and controls
+          // Status with green/orange dot
           Padding(
-            padding: const EdgeInsets.only(left: 8, right: 6),
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Left: Status tag
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF35343B),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
-                        style: const TextStyle(
-                          color: Color(0xFFC9CBCF),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Right: Control buttons for both device and phone recording
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Pause/Resume button
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        // Track mute/pause action
-                        if (!isPaused) {
-                          // User is pausing/muting
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: true,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        } else {
-                          // User is resuming
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: false,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        }
-                        _toggleRecording(context, provider);
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isPaused
-                              ? isDeviceRecording
-                                  ? const Color(0xFFFE5D50)
-                                  : const Color(0xFF7C3AED)
-                              : isDeviceRecording
-                                  ? const Color(0xFF35343B)
-                                  : const Color(0xFFFF9500),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: FaIcon(
-                            isPaused
-                                ? isDeviceRecording
-                                    ? FontAwesomeIcons.microphoneSlash
-                                    : FontAwesomeIcons.play
-                                : isDeviceRecording
-                                    ? FontAwesomeIcons.microphone
-                                    : FontAwesomeIcons.pause,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
+                    Text(
+                      isPaused ? 'Paused' : 'Listening',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    // Pulsing status dot
+                    _PulsingDot(
+                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFF34d399),
+                    ),
                   ],
+                ),
+                // Mute/unmute button
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    _toggleRecording(context, provider);
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2a2a2a),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Icon(
+                        isPaused ? Icons.mic_off : Icons.mic,
+                        color: isPaused ? Colors.red : Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 4),
-          // Show transcript below controls during recording
+          // Divider
+          Container(
+            height: 1,
+            color: const Color(0xFF35343B),
+            margin: const EdgeInsets.only(bottom: 8),
+          ),
+          // Live Transcription header
+          Padding(
+            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 6),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.text_fields, color: Colors.grey.shade400, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Live Transcription',
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF34d399),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(Icons.arrow_forward_ios, color: Colors.grey.shade600, size: 14),
+              ],
+            ),
+          ),
+          // Transcript preview
           if (provider.segments.isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: 12, bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _AutoScrollingText(
-                text: provider.segments.map((segment) => segment.text).join(' '),
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    provider.segments.isNotEmpty
+                        ? 'Speaker 1: ${provider.segments.last.text}'
+                        : 'Waiting for speech...',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to view full transcript (${provider.segments.length} segments)',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-          // Show photos widget if there are photos
-          if (provider.photos.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const LiteCaptureWidget(),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
+              child: Text(
+                'Waiting for speech...',
+                style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 13,
+                ),
+              ),
+            ),
           ],
         ],
       );
@@ -787,6 +808,63 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
           )
         ],
       ),
+    );
+  }
+}
+
+// Pulsing Dot Widget
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+
+  const _PulsingDot({required this.color});
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.0, end: 1.6).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: widget.color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: widget.color.withOpacity(0.6),
+                blurRadius: 4 * _animation.value,
+                spreadRadius: 2 * _animation.value,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

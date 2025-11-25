@@ -6,6 +6,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
@@ -86,7 +87,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                         child: const Text(
                           'Done',
                           style: TextStyle(
-                            color: Colors.deepPurple,
+                            color: Color(0xFF3B82F6),
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),
@@ -121,127 +122,155 @@ class _SearchWidgetState extends State<SearchWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      color: const Color(0xFF0F0F0F), // Match scaffold background
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: TextFormField(
-              controller: searchController,
-              focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
-              onTap: () {
-                MixpanelManager().searchBarFocused();
-              },
-              onChanged: (value) {
-                var provider = Provider.of<ConversationProvider>(context, listen: false);
-                _debouncer.run(() async {
-                  await provider.searchConversations(value);
+            child: SizedBox(
+              height: 44,
+              child: SearchBar(
+                hintText: 'Search Conversations',
+                leading: const Padding(
+                  padding: EdgeInsets.only(left: 6.0),
+                  child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
+                ),
+                backgroundColor: WidgetStateProperty.all(AppStyles.backgroundSecondary),
+                elevation: WidgetStateProperty.all(0),
+                padding: WidgetStateProperty.all(
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                ),
+                focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
+                controller: searchController,
+                trailing: showClearButton
+                    ? [
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minHeight: 36,
+                            minWidth: 36,
+                          ),
+                          onPressed: () async {
+                            var provider = Provider.of<ConversationProvider>(context, listen: false);
+                            await provider.searchConversations(""); // clear
+                            searchController.clear();
+                            setShowClearButton();
+                            MixpanelManager().searchQueryCleared();
+                          },
+                        )
+                      ]
+                    : null,
+                hintStyle: WidgetStateProperty.all(
+                  TextStyle(color: AppStyles.textTertiary, fontSize: 14),
+                ),
+                textStyle: WidgetStateProperty.all(
+                  const TextStyle(color: AppStyles.textPrimary, fontSize: 14),
+                ),
+                shape: WidgetStateProperty.all(
+                  RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
+                  ),
+                ),
+                onChanged: (value) {
+                  var provider = Provider.of<ConversationProvider>(context, listen: false);
+                  _debouncer.run(() async {
+                    await provider.searchConversations(value);
+                    if (value.isNotEmpty) {
+                      // Track search query with results count
+                      MixpanelManager().searchQueryEntered(value, provider.searchedConversations.length);
+                    }
+                  });
+                  setShowClearButton();
+                },
+                onTap: () {
+                  MixpanelManager().searchBarFocused();
+                },
+                onSubmitted: (value) {
                   if (value.isNotEmpty) {
-                    // Track search query with results count
+                    var provider = Provider.of<ConversationProvider>(context, listen: false);
                     MixpanelManager().searchQueryEntered(value, provider.searchedConversations.length);
                   }
-                });
-                setShowClearButton();
-              },
-              decoration: InputDecoration(
-                hintText: 'Search Conversations',
-                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
-                filled: true,
-                fillColor: const Color(0xFF1F1F25),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  color: Colors.white60,
-                ),
-                suffixIcon: showClearButton
-                    ? GestureDetector(
-                        onTap: () async {
-                          var provider = Provider.of<ConversationProvider>(context, listen: false);
-                          await provider.searchConversations(""); // clear
-                          searchController.clear();
-                          setShowClearButton();
-                          MixpanelManager().searchQueryCleared();
-                        },
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                        ),
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                },
               ),
-              style: const TextStyle(color: Colors.white),
             ),
           ),
-          const SizedBox(
-            width: 8,
-          ),
+          const SizedBox(width: 8),
           // Calendar button
           Consumer<ConversationProvider>(
             builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
-              return Container(
-                decoration: BoxDecoration(
-                  color:
-                      convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : const Color(0xFF1F1F25),
-                  borderRadius: const BorderRadius.all(Radius.circular(16)),
-                ),
-                child: IconButton(
-                  onPressed: () async {
-                    HapticFeedback.mediumImpact();
-                    if (convoProvider.selectedDate != null) {
-                      // Clear date filter
-                      await convoProvider.clearDateFilter();
-                      MixpanelManager().calendarFilterCleared();
-                    } else {
-                      // Open date picker
-                      await _selectDate(context);
-                    }
-                  },
-                  icon: Icon(
-                    convoProvider.selectedDate != null ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
-                    color: Colors.white,
-                    size: 18,
+              return SizedBox(
+                width: 44,
+                height: 44,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: convoProvider.selectedDate != null
+                        ? const Color(0xFF3B82F6).withOpacity(0.3)
+                        : AppStyles.backgroundSecondary,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  tooltip: convoProvider.selectedDate != null
-                      ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear'
-                      : 'Filter by date',
+                  child: IconButton(
+                    onPressed: () async {
+                      HapticFeedback.mediumImpact();
+                      if (convoProvider.selectedDate != null) {
+                        // Clear date filter
+                        await convoProvider.clearDateFilter();
+                        MixpanelManager().calendarFilterCleared();
+                      } else {
+                        // Open date picker
+                        await _selectDate(context);
+                      }
+                    },
+                    icon: Icon(
+                      convoProvider.selectedDate != null
+                          ? FontAwesomeIcons.calendarDay
+                          : FontAwesomeIcons.calendarDays,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    tooltip: convoProvider.selectedDate != null
+                        ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear'
+                        : 'Filter by date',
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
               );
             },
           ),
-          const SizedBox(
-            width: 8,
-          ),
+          const SizedBox(width: 8),
           // Filter button
           Consumer<ConversationProvider>(
-              builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
-            return Container(
-              decoration: BoxDecoration(
-                color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : const Color(0xFF1F1F25),
-                borderRadius: const BorderRadius.all(Radius.circular(16)),
-              ),
-              child: IconButton(
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  convoProvider.toggleDiscardConversations();
-                  MixpanelManager().deletedConversationsFilterToggled(!convoProvider.showDiscardedConversations);
-                },
-                icon: Icon(
-                  FontAwesomeIcons.trashCan,
-                  color: Colors.white,
-                  size: 18,
+            builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+              return SizedBox(
+                width: 44,
+                height: 44,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: convoProvider.showDiscardedConversations
+                        ? Colors.red.withOpacity(0.5)
+                        : AppStyles.backgroundSecondary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: IconButton(
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      convoProvider.toggleDiscardConversations();
+                      MixpanelManager().deletedConversationsFilterToggled(!convoProvider.showDiscardedConversations);
+                    },
+                    icon: Icon(
+                      convoProvider.showDiscardedConversations
+                          ? FontAwesomeIcons.eyeSlash
+                          : FontAwesomeIcons.eye,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
-            );
-          }),
+              );
+            },
+          ),
         ],
       ),
     );

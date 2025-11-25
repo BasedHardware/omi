@@ -5,18 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/theme/brand_colors.dart';
 
 /// Basic notification service for platforms without Firebase Messaging support
 /// Currently used for Windows - provides local notifications only
 class _BasicNotificationService implements NotificationInterface {
   _BasicNotificationService._();
 
+  // Use dynamic brand color for notifications
+  static final _notificationColor = BrandColors.getColorsForFlavor().primary;
+
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Omi Notifications',
-    channelDescription: 'Notification channel for Omi',
-    defaultColor: const Color(0xFF9D50DD),
+    channelName: '${Env.appName} Notifications',
+    channelDescription: 'Notification channel for ${Env.appName}',
+    defaultColor: _notificationColor,
     ledColor: Colors.white,
   );
 
@@ -38,7 +43,7 @@ class _BasicNotificationService implements NotificationInterface {
             channelKey: channel.channelKey,
             channelName: channel.channelName,
             channelDescription: channel.channelDescription,
-            defaultColor: const Color(0xFF9D50DD),
+            defaultColor: _notificationColor,
             ledColor: Colors.white,
           )
         ],

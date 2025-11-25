@@ -111,7 +111,7 @@ class GetSummaryWidgets extends StatelessWidget {
 
   Widget _buildInfoChips(ServerConversation conversation) {
     return Wrap(
-      spacing: 8,
+      spacing: 6,
       runSpacing: 8,
       children: [
         // Date chip
@@ -138,31 +138,78 @@ class GetSummaryWidgets extends StatelessWidget {
 
   Widget _buildChip({required String label, required IconData icon}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.08),
+          width: 0.5,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
-            size: 14,
-            color: Colors.grey.shade300,
+            size: 13,
+            color: Colors.white.withOpacity(0.6),
           ),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
-              color: Colors.grey.shade300,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+              color: Colors.white.withOpacity(0.7),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w400,
+              letterSpacing: 0.1,
             ),
           ),
         ],
       ),
     );
+  }
+
+  Map<String, Color> _getCategoryColors(String category) {
+    category = category.toLowerCase();
+
+    // Dark mode colors matching the reference
+    if (category.contains('work') || category.contains('business') || category.contains('meeting') || category.contains('project')) {
+      return {'color': const Color(0xFF60a5fa), 'bgColor': const Color(0xFF1e3a5f)};
+    } else if (category.contains('personal') || category.contains('family')) {
+      return {'color': const Color(0xFFa78bfa), 'bgColor': const Color(0xFF2e1065)};
+    } else if (category.contains('health') || category.contains('fitness')) {
+      return {'color': const Color(0xFF34d399), 'bgColor': const Color(0xFF064e3b)};
+    } else if (category.contains('finance') || category.contains('shopping')) {
+      return {'color': const Color(0xFFfb923c), 'bgColor': const Color(0xFF431407)};
+    } else if (category.contains('entertainment') || category.contains('music') || category.contains('sports')) {
+      return {'color': const Color(0xFFf472b6), 'bgColor': const Color(0xFF4a044e)};
+    } else if (category.contains('technology') || category.contains('education')) {
+      return {'color': const Color(0xFF22d3ee), 'bgColor': const Color(0xFF164e63)};
+    } else if (category.contains('food') || category.contains('restaurant')) {
+      return {'color': const Color(0xFFfb923c), 'bgColor': const Color(0xFF431407)};
+    } else if (category.contains('travel')) {
+      return {'color': const Color(0xFF22d3ee), 'bgColor': const Color(0xFF164e63)};
+    } else {
+      // Default blue
+      return {'color': const Color(0xFF60a5fa), 'bgColor': const Color(0xFF1e3a5f)};
+    }
+  }
+
+  IconData _getCategoryIcon(String category) {
+    category = category.toLowerCase();
+
+    if (category.contains('work') || category.contains('business')) {
+      return Icons.business_center_outlined;
+    } else if (category.contains('personal') || category.contains('life')) {
+      return Icons.person_outline;
+    } else if (category.contains('family')) {
+      return Icons.people_outline;
+    } else if (category.contains('health') || category.contains('medical')) {
+      return Icons.favorite_outline;
+    } else {
+      return Icons.chat_bubble_outline;
+    }
   }
 
   @override
@@ -171,27 +218,72 @@ class GetSummaryWidgets extends StatelessWidget {
       selector: (context, provider) => Tuple3(provider.conversation, provider.titleController, provider.titleFocusNode),
       builder: (context, data, child) {
         ServerConversation conversation = data.item1;
+        final categoryColors = _getCategoryColors(conversation.structured.category);
+
         return Column(
           mainAxisAlignment: MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
+            // Category badge with icon
+            if (conversation.structured.category.isNotEmpty && !conversation.discarded)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: categoryColors['bgColor'],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _getCategoryIcon(conversation.structured.category),
+                            size: 16,
+                            color: categoryColors['color'],
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            conversation.getTag(),
+                            style: TextStyle(
+                              color: categoryColors['color'],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Check icon for completed conversations
+                    if (conversation.status == ConversationStatus.completed)
+                      const Icon(
+                        Icons.check_circle,
+                        size: 10,
+                        color: Color(0xFF34d399),
+                      ),
+                  ],
+                ),
+              ),
+            // Title
             conversation.discarded
                 ? Text(
                     'Discarded Conversation',
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32),
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 28, fontWeight: FontWeight.w600),
                   )
                 : GetEditTextField(
                     conversationId: conversation.id,
                     focusNode: data.item3,
                     controller: data.item2,
                     content: conversation.structured.title.decodeString,
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
+                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 28, fontWeight: FontWeight.w600, color: Colors.white, height: 1.3),
                   ),
             const SizedBox(height: 16),
             _buildInfoChips(conversation),
-            const SizedBox(height: 16),
-            conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+            const SizedBox(height: 24),
           ],
         );
       },

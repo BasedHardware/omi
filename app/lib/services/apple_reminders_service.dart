@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class AppleRemindersService {
@@ -127,7 +128,7 @@ class AppleRemindersService {
     // Add the reminder
     final success = await addReminder(
       title: actionItemDescription,
-      notes: 'From Omi',
+      notes: 'From ${Env.appName}',
       listName: 'Reminders',
     );
 

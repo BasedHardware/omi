@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'firmware_update_dialog.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -197,7 +198,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             ),
             const SizedBox(height: 8),
             Text(
-              'Please restart your ${widget.device?.name ?? "Omi device"} to complete the update',
+              'Please restart your ${widget.device?.name ?? "${Env.appName} device"} to complete the update',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -60,7 +61,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
               },
               () {},
               'Enable Bluetooth',
-              'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
+              '${Env.appName} needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
               singleButton: true,
             ),
           );

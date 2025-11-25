@@ -1,5 +1,6 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 
 /// Shared handler for action item notifications
 class ActionItemNotificationHandler {
@@ -31,7 +32,7 @@ class ActionItemNotificationHandler {
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '⏰ Omi Reminder',
+          title: '⏰ ${Env.appName} Reminder',
           body: description,
           payload: {
             'action_item_id': actionItemId,

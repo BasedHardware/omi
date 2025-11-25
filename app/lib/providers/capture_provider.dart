@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';

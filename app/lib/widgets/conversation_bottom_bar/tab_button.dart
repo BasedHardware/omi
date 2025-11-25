@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/utils/colors.dart';
 import 'package:omi/widgets/conversation_bottom_bar/app_image.dart';
 
 class TabButton extends StatelessWidget {
@@ -34,13 +35,16 @@ class TabButton extends StatelessWidget {
       width: label != null ? 100 : 60,
       height: 40,
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF6B46C1) : Colors.transparent, // Lighter purple for selected state
+        color: isSelected ? AppColors.primary : Colors.transparent, // Blue (GPT color) for selected state
         borderRadius: BorderRadius.circular(20),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
+          splashColor: Colors.transparent, // Disable splash to avoid any purple
+          highlightColor: Colors.transparent, // Disable highlight to avoid any purple
+          hoverColor: Colors.transparent, // Disable hover to avoid any purple
           onTap: () {
             HapticFeedback.mediumImpact();
             onTap();

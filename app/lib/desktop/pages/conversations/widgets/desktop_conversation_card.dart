@@ -572,13 +572,14 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> with 
   Widget _buildModernHeader() {
     return Row(
       children: [
-        // Avatar with emoji fallback
+        // Avatar with icon fallback
         OmiAvatar(
           size: 40,
-          fallback: Center(
-            child: Text(
-              widget.conversation.structured.getEmoji(),
-              style: const TextStyle(fontSize: 18),
+          fallback: const Center(
+            child: Icon(
+              Icons.chat_bubble_outline,
+              size: 20,
+              color: Colors.white70,
             ),
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
@@ -171,9 +172,9 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                             Container(
                               constraints: const BoxConstraints(maxWidth: 480),
                               padding: const EdgeInsets.symmetric(horizontal: 40),
-                              child: const Text(
-                                'Enable features for the best Omi experience on your device.',
-                                style: TextStyle(
+                              child: Text(
+                                'Enable features for the best ${Env.appName} experience on your device.',
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w400,
                                   color: Color(0xFF9CA3AF),
@@ -203,7 +204,7 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
                                 title: 'Bluetooth Access',
-                                subtitle: 'Connect to your Omi device',
+                                subtitle: 'Connect to your ${Env.appName} device',
                                 selected: provider.hasBluetoothPermission,
                                 onTap: () {
                                   if (!provider.hasBluetoothPermission) {

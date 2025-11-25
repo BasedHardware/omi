@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/env/env.dart';
 
 enum Environment {
   prod,
@@ -22,11 +23,11 @@ class F {
   static String get title {
     switch (env) {
       case Environment.prod:
-        return 'Omi';
+        return Env.appName;
       case Environment.dev:
-        return 'Omi Dev';
+        return '${Env.appName} Dev';
       default:
-        return 'Omi Dev';
+        return '${Env.appName} Dev';
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -126,9 +127,9 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                       Container(
                         constraints: const BoxConstraints(maxWidth: 480),
                         padding: const EdgeInsets.symmetric(horizontal: 40),
-                        child: const Text(
-                          'Welcome to Omi! Your AI companion is ready to assist you with conversations, tasks, and more.',
-                          style: TextStyle(
+                        child: Text(
+                          'Welcome to ${Env.appName}! Your AI companion is ready to assist you with conversations, tasks, and more.',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w400,
                             color: Color(0xFF9CA3AF),
@@ -142,7 +143,7 @@ class _DesktopCompleteScreenState extends State<DesktopCompleteScreen> with Tick
                         constraints: const BoxConstraints(maxWidth: 400),
                         margin: const EdgeInsets.symmetric(horizontal: 40),
                         child: OmiButton(
-                          label: 'Start Using Omi',
+                          label: 'Start Using ${Env.appName}',
                           icon: Icons.arrow_forward_rounded,
                           onPressed: () {
                             MixpanelManager().onboardingCompleted();

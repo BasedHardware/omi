@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -53,7 +54,7 @@ class _DesktopAuthScreenState extends State<DesktopAuthScreen> {
                   SizedBox(height: responsive.spacing(baseSpacing: 32)),
 
                   Text(
-                    'Welcome to Omi',
+                    'Welcome to ${Env.appName}',
                     style: responsive.headlineLarge.copyWith(
                       fontWeight: FontWeight.w700,
                     ),

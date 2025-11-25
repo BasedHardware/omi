@@ -42,9 +42,9 @@ class MemoryItem extends StatelessWidget {
       },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
         decoration: BoxDecoration(
-          color: AppStyles.backgroundSecondary,
+          color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -56,33 +56,27 @@ class MemoryItem extends StatelessWidget {
         ),
         child: Stack(
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        memory.content.decodeString,
-                        style: AppStyles.body,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                // Header: Icon + Category + Lock + Time
+                _buildHeader(),
+                const SizedBox(height: 16),
+                // Main content text
+                Text(
+                  memory.content.decodeString,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    height: 1.5,
+                    color: Colors.white,
                   ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: AppStyles.spacingM),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (memory.conversationId != null) ...[
-                      _buildConversationLinkButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    // _buildVisibilityButton(context),
-                  ],
-                ),
+                const SizedBox(height: 16),
+                // Footer: Conversation icon + label + Edited + Time ago
+                _buildFooter(),
               ],
             ),
             if (memory.isLocked)
@@ -92,7 +86,7 @@ class MemoryItem extends StatelessWidget {
                     filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
                     child: GestureDetector(
                       onTap: () {
-                        MixpanelManager().paywallOpened('Action Item');
+                        MixpanelManager().paywallOpened('Memory Item');
                         routeToPage(
                           context,
                           const UsagePage(showUpgradeDialog: true),
@@ -159,6 +153,154 @@ class MemoryItem extends StatelessWidget {
       ),
       child: memoryWidget,
     );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        // Category Icon
+        Icon(
+          _getCategoryIcon(),
+          size: 16,
+          color: const Color(0xFF9CA3AF),
+        ),
+        const SizedBox(width: 8),
+        // Category Label
+        Text(
+          _getCategoryLabel(),
+          style: const TextStyle(
+            color: Color(0xFF9CA3AF),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const Spacer(),
+        // Lock icon if locked
+        if (memory.isLocked) ...[
+          const Icon(
+            Icons.lock,
+            size: 14,
+            color: Color(0xFF9CA3AF),
+          ),
+          const SizedBox(width: 8),
+        ],
+        // Time
+        Text(
+          _getFormattedTime(),
+          style: const TextStyle(
+            color: Color(0xFF9CA3AF),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFooter() {
+    return Row(
+      children: [
+        // Conversation icon and label
+        const Icon(
+          Icons.chat_bubble_outline,
+          size: 14,
+          color: Color(0xFF6A6B71),
+        ),
+        const SizedBox(width: 6),
+        const Text(
+          'Conversation',
+          style: TextStyle(
+            color: Color(0xFF6A6B71),
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        // Edited badge
+        if (memory.edited) ...[
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.edit,
+            size: 12,
+            color: Color(0xFF6A6B71),
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'Edited',
+            style: TextStyle(
+              color: Color(0xFF6A6B71),
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+        const Spacer(),
+        // Time ago
+        Text(
+          _getTimeAgo(),
+          style: const TextStyle(
+            color: Color(0xFF6A6B71),
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getCategoryIcon() {
+    switch (memory.category) {
+      case MemoryCategory.system:
+        return Icons.settings;
+      case MemoryCategory.interesting:
+        return Icons.star;
+      default:
+        return Icons.chat_bubble_outline;
+    }
+  }
+
+  String _getCategoryLabel() {
+    switch (memory.category) {
+      case MemoryCategory.system:
+        return 'System';
+      case MemoryCategory.interesting:
+        return 'Interesting';
+      default:
+        return 'Memory';
+    }
+  }
+
+  String _getFormattedTime() {
+    final now = DateTime.now();
+    final time = memory.createdAt;
+
+    // If today, show time
+    if (now.year == time.year && now.month == time.month && now.day == time.day) {
+      final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+      final period = time.hour >= 12 ? 'PM' : 'AM';
+      final minute = time.minute.toString().padLeft(2, '0');
+      return '$hour:$minute $period';
+    }
+
+    // Otherwise show date
+    return '${time.month}/${time.day}/${time.year}';
+  }
+
+  String _getTimeAgo() {
+    final now = DateTime.now();
+    final difference = now.difference(memory.createdAt);
+
+    if (difference.inDays > 7) {
+      final weeks = (difference.inDays / 7).floor();
+      return '${weeks}w ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 
   Widget _buildConversationLinkButton(BuildContext context) {

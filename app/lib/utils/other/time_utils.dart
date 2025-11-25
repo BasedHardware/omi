@@ -3,15 +3,10 @@ String secondsToHumanReadable(int seconds) {
     return '$seconds secs';
   } else if (seconds < 3600) {
     var minutes = (seconds / 60).floor();
-    var remainingSeconds = seconds % 60;
-    if (remainingSeconds == 0) {
-      if (minutes == 1) {
-        return '$minutes min';
-      }
-      return '$minutes mins';
-    } else {
-      return '$minutes mins $remainingSeconds secs';
+    if (minutes == 1) {
+      return '$minutes min';
     }
+    return '$minutes mins';
   } else if (seconds < 86400) {
     var hours = (seconds / 3600).floor();
     var remainingMinutes = (seconds % 3600 / 60).floor();
@@ -44,13 +39,7 @@ String secondsToCompactDuration(int seconds) {
     return '${seconds}s';
   } else if (seconds < 3600) {
     var minutes = (seconds / 60).floor();
-    var remainingSeconds = seconds % 60;
-    if (remainingSeconds == 0 || minutes >= 10) {
-      return '${minutes}m';
-    } else {
-      // Only show seconds for durations less than 10 minutes
-      return '${minutes}m ${remainingSeconds}s';
-    }
+    return '${minutes}m';
   } else {
     var hours = (seconds / 3600).floor();
     var remainingMinutes = (seconds % 3600 / 60).floor();
