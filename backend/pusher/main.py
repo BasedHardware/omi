@@ -21,8 +21,10 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
         credentials = firebase_admin.credentials.Certificate(service_account_info)
         firebase_admin.initialize_app(credentials)
     else:
-        # For authorized_user, use default initialization (reads from GOOGLE_APPLICATION_CREDENTIALS)
-        firebase_admin.initialize_app()
+        # For authorized_user, use default initialization with explicit project ID
+        project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or service_account_info.get('quota_project_id')
+        options = {'projectId': project_id} if project_id else None
+        firebase_admin.initialize_app(options=options)
 else:
     firebase_admin.initialize_app()
 
