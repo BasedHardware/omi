@@ -69,10 +69,10 @@ packages:
     dependency: transitive
     description:
       name: archive
-      sha256: cb6a278ef2dbb298455e1a713bda08524a175630ec643a242c399c932a0a1f7d
+      sha256: "2fde1607386ab523f7a36bb3e7edb43bd58e6edaf2ffb29d8a6d578b297fdbbd"
       url: "https://pub.dev"
     source: hosted
-    version: "3.6.1"
+    version: "4.0.7"
   args:
     dependency: transitive
     description:
@@ -329,6 +329,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.6"
+  cryptography_flutter_plus:
+    dependency: transitive
+    description:
+      name: cryptography_flutter_plus
+      sha256: "35a8c270aae0abaac7125a6b6b33c2b3daa0ea90d85320aa7d588b6dd6c2edc9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.4"
+  cryptography_plus:
+    dependency: transitive
+    description:
+      name: cryptography_plus
+      sha256: "34db787df4f4740a39474b6fb0a610aa6dc13a5b5b68754b4787a79939ac0454"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.7.1"
   csslib:
     dependency: transitive
     description:
@@ -361,6 +377,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.11"
+  desktop_updater:
+    dependency: "direct main"
+    description:
+      name: desktop_updater
+      sha256: abab8542cf02b1ce96428c1fca091e4c627716c6cffbe944b1b6014dd8df17ec
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.0"
   device_info_plus:
     dependency: "direct main"
     description:
@@ -679,10 +703,10 @@ packages:
     dependency: "direct dev"
     description:
       name: flutter_flavorizr
-      sha256: e9550f67a890b9111ac5a555954f3808cb8c0132ce6dea08e3381964de39b906
+      sha256: "7ac1a53e95d36e96017bbf4aa94023dc652e455de3f0ce9c80e9eaa274c73e81"
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.3"
+    version: "2.4.1"
   flutter_foreground_task:
     dependency: "direct main"
     description:
@@ -829,10 +853,11 @@ packages:
   frame_sdk:
     dependency: "direct main"
     description:
-      name: frame_sdk
-      sha256: afab5eede530d4f215d88bc8eb84d6b0944907bcbde58eee662253029392463b
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: master
+      resolved-ref: "78d8ad55354e30759243e29e793f0981f9aa317d"
+      url: "https://github.com/mdmohsin7/frame-sdk-flutter.git"
+    source: git
     version: "0.0.7"
   frontend_server_client:
     dependency: transitive
@@ -955,10 +980,10 @@ packages:
     dependency: "direct main"
     description:
       name: googleapis_auth
-      sha256: af7c3a3edf9d0de2e1e0a77e994fae0a581c525fa7012af4fa0d4a52ed9484da
+      sha256: b81fe352cc4a330b3710d2b7ad258d9bcef6f909bb759b306bf42973a7d046db
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.1"
+    version: "2.0.0"
   gradient_borders:
     dependency: "direct main"
     description:
@@ -1043,10 +1068,10 @@ packages:
     dependency: "direct main"
     description:
       name: image
-      sha256: f31d52537dc417fdcde36088fdf11d191026fd5e4fae742491ebd40e5a8bea7d
+      sha256: "4e973fcf4caae1a4be2fa0a13157aa38a8f9cb049db6529aa00b4d71abc4d928"
       url: "https://pub.dev"
     source: hosted
-    version: "4.3.0"
+    version: "4.5.4"
   image_picker:
     dependency: "direct main"
     description:
@@ -1197,13 +1222,13 @@ packages:
     source: hosted
     version: "1.0.5"
   js:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: js
-      sha256: f2c445dce49627136094980615a031419f7f3eb393237e4ecd97ac15dea343f3
+      sha256: "53385261521cc4a0c4658fd0ad07a7d14591cf8fc33abbceae306ddb974888dc"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.7"
+    version: "0.7.2"
   json_annotation:
     dependency: "direct main"
     description:
@@ -1296,10 +1321,10 @@ packages:
     dependency: "direct main"
     description:
       name: lottie
-      sha256: "377d87b8dcef640c04717e93afb86a510f0e1117a399ab94dc4b3f39c85eaa87"
+      sha256: "8ae0be46dbd9e19641791dc12ee480d34e1fd3f84c749adc05f3ad9342b71b95"
       url: "https://pub.dev"
     source: hosted
-    version: "3.3.0"
+    version: "3.3.2"
   map_launcher:
     dependency: "direct main"
     description:
@@ -1316,6 +1341,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.3.0"
+  mason_logger:
+    dependency: transitive
+    description:
+      name: mason_logger
+      sha256: "6d5a989ff41157915cb5162ed6e41196d5e31b070d2f86e1c2edf216996a158c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.3"
   matcher:
     dependency: transitive
     description:
@@ -1368,10 +1401,11 @@ packages:
   mixpanel_flutter:
     dependency: "direct main"
     description:
-      name: mixpanel_flutter
-      sha256: "0ecd870cceed1cf4600c403e5544b88efa65b8fd3f30fad679702d1ae9e0ac15"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: f9234e9
+      resolved-ref: f9234e9e4f94f9f24b88f3775230c11a734ed7cd
+      url: "https://github.com/beastoin/mixpanel-flutter.git"
+    source: git
     version: "2.4.4"
   nested:
     dependency: transitive
@@ -1408,10 +1442,11 @@ packages:
   opus_dart:
     dependency: "direct main"
     description:
-      name: opus_dart
-      sha256: e8ab4774409997af33cbfdfe91a186854ed6458b2fec66b0e52f4434b1af2f7c
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: dev
+      resolved-ref: e2202b0f38cf6c9e70ab7807b4cdaa3304b145ec
+      url: "https://github.com/mdmohsin7/opus_dart.git"
+    source: git
     version: "3.0.1"
   opus_flutter:
     dependency: "direct main"
@@ -1679,6 +1714,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.1"
+  posix:
+    dependency: transitive
+    description:
+      name: posix
+      sha256: "6323a5b0fa688b6a010df4905a56b00181479e6d10534cecfecede2aa55add61"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.3"
   process:
     dependency: transitive
     description:
@@ -2284,6 +2327,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "15.0.2"
+  wasm_ffi:
+    dependency: transitive
+    description:
+      name: wasm_ffi
+      sha256: f4539052e4d80575bb4820c836a2d6400af061b71c1605af60ebfb30b7c5369a
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
   watcher:
     dependency: transitive
     description:

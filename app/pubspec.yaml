@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.74+436
+version: 1.0.78+471
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -20,6 +20,7 @@ dependencies:
 
   # Desktop
   window_manager: 0.3.7
+  desktop_updater: ^1.4.0
 
   # Localizations
   flutter_localizations:
@@ -62,6 +63,12 @@ dependencies:
   # Logging
   talker_flutter: 5.0.0
 
+  # Devices
+  frame_sdk:
+    git:
+      url: https://github.com/mdmohsin7/frame-sdk-flutter.git
+      ref: master
+
   # Utils
   collection: ^1.19.1
   flutter_blue_plus: 1.33.6
@@ -77,7 +84,7 @@ dependencies:
   path: ^1.9.0
   uuid: ^4.4.0
   tuple: ^2.0.2
-  googleapis_auth: 1.4.1
+  googleapis_auth: 2.0.0
   envied: 1.1.1
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
@@ -97,7 +104,10 @@ dependencies:
   flutter_background_service_android: 6.3.0
   flutter_background_service_platform_interface: 5.1.2
   opus_flutter: ^3.0.3
-  opus_dart: ^3.0.1
+  opus_dart:
+    git:
+      url: https://github.com/mdmohsin7/opus_dart.git
+      ref: dev
   growthbook_sdk_flutter: 3.9.2
   flutter_timezone: 3.0.1
   cached_network_image: 3.4.1
@@ -109,7 +119,6 @@ dependencies:
   flutter_sound: ^9.10.0
   just_audio: ^0.9.39
   video_player: ^2.8.2
-  frame_sdk: ^0.0.7
   web_socket_channel: ^3.0.3
   image_picker: ^1.1.2
   timeago: ^3.7.0
@@ -123,6 +132,7 @@ dependencies:
   image: ^4.3.0
 
 dependency_overrides:
+  js: ^0.7.1
   uuid: ^4.4.0
   opus_flutter_ios:
     git:
