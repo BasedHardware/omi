@@ -6,7 +6,13 @@ import uuid
 from google.cloud import firestore
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
+    try:
+        service_account_info = json.loads(json_str)
+    except json.JSONDecodeError:
+        # Handle escaped JSON from Coolify (quotes are escaped as \")
+        cleaned = json_str.replace('\\', '')
+        service_account_info = json.loads(cleaned)
     # create google-credentials.json
     with open('google-credentials.json', 'w') as f:
         json.dump(service_account_info, f)
