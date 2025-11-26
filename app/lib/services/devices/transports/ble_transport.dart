@@ -208,12 +208,10 @@ class BleTransport extends DeviceTransport {
         } catch (e) {
           if (_isDisconnectionError(e)) {
             debugPrint('Device Disconnected');
-            _updateState(DeviceTransportState.disconnected);
             return;
           }
 
           if (!_bleDevice.isConnected) {
-            _updateState(DeviceTransportState.disconnected);
             return;
           }
 
