@@ -278,6 +278,8 @@ void storage_write(void)
         if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
             LOG_INF("no heartbeat sent\n");
             save_offset(offset);
+            // ensure heartbeat count resets
+            heartbeat_count = 0;
         }
 
         if (remaining_length > 0) {
