@@ -54,6 +54,7 @@ Future<Map<String, String>> buildHeaders({
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
     'X-App-Platform': PlatformManager.instance.platform,
+    'X-Device-Id-Hash': PlatformManager.instance.deviceIdHash,
     'X-App-Version': PlatformManager.instance.appVersion,
     ...fromHeaders,
   };

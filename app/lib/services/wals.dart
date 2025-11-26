@@ -366,49 +366,49 @@ class SDCardWalSync implements IWalSync {
 
   Future _readStorageBytesToFile(Wal wal, Function(File f, int offset) callback) async {
     var deviceId = wal.device;
-
-    // Move the offset
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
     int timerStart = wal.timerStart;
-    await _writeToStorage(deviceId, fileNum, 0, offset);
 
     debugPrint("_readStorageBytesToFile ${offset}");
 
-    // Read
     List<List<int>> bytesData = [];
     var bytesLeft = 0;
     var chunkSize = sdcardChunkSizeSecs * 100;
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
+    bool firstDataReceived = false;
+    Timer? timeoutTimer;
 
     _storageStream = await _getBleStorageBytesListener(deviceId, onStorageBytesReceived: (List<int> value) async {
       if (value.isEmpty || hasError) return;
 
+      // Cancel timeout on first data
+      if (!firstDataReceived) {
+        firstDataReceived = true;
+        timeoutTimer?.cancel();
+        debugPrint('First data received, timeout cancelled');
+      }
+
       // Process command
       if (value.length == 1) {
-        // result codes i guess
         debugPrint('returned $value');
         if (value[0] == 0) {
-          // valid command
           debugPrint('good to go');
         } else if (value[0] == 3) {
           debugPrint('bad file size. finishing...');
         } else if (value[0] == 4) {
-          // file size is zero.
           debugPrint('file size is zero. going to next one....');
           if (!completer.isCompleted) {
             completer.complete(true);
           }
         } else if (value[0] == 100) {
-          // valid end command
           debugPrint('end');
           if (!completer.isCompleted) {
             completer.complete(true);
           }
         } else {
-          // bad bit
           debugPrint('Error bit returned');
           if (!completer.isCompleted) {
             completer.complete(true);
@@ -458,11 +458,27 @@ class SDCardWalSync implements IWalSync {
       }
     });
 
+    // Start transfer
+    await _writeToStorage(deviceId, fileNum, 0, offset);
+
+    // Timeout for first data
+    timeoutTimer = Timer(const Duration(seconds: 5), () {
+      if (!firstDataReceived && !completer.isCompleted) {
+        hasError = true;
+        final error = TimeoutException('No data received from SD card within 5 seconds');
+        debugPrint('SD card read timeout: ${error.message}');
+        completer.completeError(error);
+      }
+    });
+
+    // Wait processing
     try {
       await completer.future;
     } catch (e) {
-      await _storageStream?.cancel();
       rethrow;
+    } finally {
+      await _storageStream?.cancel();
+      timeoutTimer.cancel();
     }
 
     // Flush remaining bytes only if no error occurred
@@ -508,21 +524,13 @@ class SDCardWalSync implements IWalSync {
             debugPrint('SDCard sync batch failed: $e');
             syncFailed = true;
 
-            var prevOffset = wal.storageOffset;
-            await _writeToStorage(wal.device, wal.fileNum, 0, prevOffset);
-
             await _storageStream?.cancel();
             throw Exception('SDCard sync batch failed: $e');
           }
 
-          // Write offset only if sync succeeded
-          if (!syncFailed) {
-            await _writeToStorage(wal.device, wal.fileNum, 0, offset);
-
-            // Callback
-            if (updates != null) {
-              updates(offset);
-            }
+          // Update progress without sending command (avoids restarting transfer)
+          if (!syncFailed && updates != null) {
+            updates(offset);
           }
         }
       });
@@ -553,9 +561,8 @@ class SDCardWalSync implements IWalSync {
         throw Exception('SDCard sync remaining files failed: $e');
       }
 
-      // Write offset
+      // Update offset in memory only (don't restart transfer)
       wal.storageOffset = lastOffset;
-      await _writeToStorage(wal.device, wal.fileNum, 0, lastOffset);
 
       // Callback
       if (updates != null) {

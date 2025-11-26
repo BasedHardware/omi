@@ -19,12 +19,38 @@
 #endif
 #include "lib/core/sd_card.h"
 #include "spi_flash.h"
+#include "wdog_facade.h"
+#include <hal/nrf_reset.h>
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
+
+static void print_reset_reason(void)
+{
+    uint32_t reas;
+
+    reas = nrf_reset_resetreas_get(NRF_RESET);
+    nrf_reset_resetreas_clear(NRF_RESET, reas);
+    
+    if (reas & NRF_RESET_RESETREAS_DOG0_MASK) {
+        printk("Reset by WATCHDOG\n");
+    } else if (reas & NRF_RESET_RESETREAS_NFC_MASK) {
+        printk("Wake up by NFC field detect\n");
+    } else if (reas & NRF_RESET_RESETREAS_RESETPIN_MASK) {
+        printk("Reset by pin-reset\n");
+    } else if (reas & NRF_RESET_RESETREAS_SREQ_MASK) {
+        printk("Reset by soft-reset\n");
+    } else if (reas & NRF_RESET_RESETREAS_LOCKUP_MASK) {
+        printk("Reset by CPU LOCKUP\n");
+    } else if (reas) {
+        printk("Reset by a different source (0x%08X)\n", reas);
+    } else {
+        printk("Power-on-reset\n");
+    }
+}
 
 static void codec_handler(uint8_t *data, size_t len)
 {
@@ -126,8 +152,16 @@ static int suspend_unused_modules(void)
 int main(void)
 {
     int ret;
-
     printk("Starting omi ...\n");
+
+    // print reset reason at startup
+    print_reset_reason();
+
+    // Initialize watchdog first to catch any early freezes
+    ret = watchdog_init();
+    if (ret) {
+        LOG_WRN("Watchdog init failed (err %d), continuing without watchdog", ret);
+    }
 
     // Initialize Haptic driver first; this is building up for future of omi turn on sequence - long press to turn on
     // instead of short press
@@ -269,6 +303,7 @@ int main(void)
     LOG_INF("Device initialized successfully\n");
 
     while (1) {
+        watchdog_feed();
         monitor_log_metrics();
 
         set_led_state();

@@ -57,8 +57,22 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 
 
 @router.post('/v1/users/fcm-token')
-def save_token(data: SaveFcmTokenRequest, uid: str = Depends(auth.get_current_user_uid)):
-    notification_db.save_token(uid, data.dict())
+def save_token(
+    data: SaveFcmTokenRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+):
+    platform = x_app_platform or 'unknown'
+    device_hash = x_device_id_hash or 'default'
+    
+    # Create key: ios_abc123, android_xyz456, macos_def789
+    device_key = f"{platform}_{device_hash}"
+    
+    token_data = data.dict()
+    token_data['device_key'] = device_key
+    
+    notification_db.save_token(uid, token_data)
     return {'status': 'Ok'}
 
 
@@ -74,8 +88,7 @@ def send_notification_to_user(data: dict, secret_key: str = Header(...)):
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')
     uid = data['uid']
-    token = notification_db.get_token_only(uid)
-    send_notification(token, data['title'], data['body'], data.get('data', {}))
+    send_notification(uid, data['title'], data['body'], data.get('data', {}))
     return {'status': 'Ok'}
 
 
@@ -126,6 +139,9 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
             content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
-    token = notification_db.get_token_only(uid)
-    send_app_notification(token, app.name, app.id, data['message'])
-    return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
+    send_app_notification(uid, app.name, app.id, data['message'])
+    return JSONResponse(
+        status_code=200, 
+        headers=headers, 
+        content={'status': 'Ok'}
+    )

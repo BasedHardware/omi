@@ -25,6 +25,8 @@ class CategoryChip extends StatelessWidget {
         return Colors.blue;
       case MemoryCategory.system:
         return Colors.grey;
+      case MemoryCategory.manual:
+        return Colors.purple;
     }
   }
 
@@ -34,6 +36,8 @@ class CategoryChip extends StatelessWidget {
         return Icons.star_outline;
       case MemoryCategory.system:
         return Icons.settings_outlined;
+      case MemoryCategory.manual:
+        return Icons.edit_outlined;
     }
   }
 
@@ -48,6 +52,9 @@ class CategoryChip extends StatelessWidget {
         break;
       case MemoryCategory.system:
         displayName = "System";
+        break;
+      case MemoryCategory.manual:
+        displayName = "Manual";
         break;
     }
 

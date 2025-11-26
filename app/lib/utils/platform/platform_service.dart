@@ -15,6 +15,7 @@ class PlatformService {
   static bool get isNotificationSupported => !(isMacOS || isWindows);
   static bool get isIntercomSupported => !(isMacOS || isWindows);
   static bool get isMixpanelSupported => !(kIsWeb);
+  static bool get isMixpanelNativelySupported => isAndroid || isIOS || isMacOS;
   static bool get isCrashlyticsSupported => !(isWindows || kIsWeb);
 
   /// Execute a function only if the platform supports it

@@ -5,7 +5,7 @@ import 'package:omi/widgets/extensions/string.dart';
 
 import 'delete_confirmation.dart';
 
-class MemoryEditSheet extends StatelessWidget {
+class MemoryEditSheet extends StatefulWidget {
   final Memory memory;
   final MemoriesProvider provider;
   final Function(BuildContext, Memory, MemoriesProvider)? onDelete;
@@ -18,12 +18,31 @@ class MemoryEditSheet extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final contentController = TextEditingController(text: memory.content.decodeString);
+  State<MemoryEditSheet> createState() => _MemoryEditSheetState();
+}
+
+class _MemoryEditSheetState extends State<MemoryEditSheet> {
+  late final TextEditingController contentController;
+  bool _isSaving = false;
+  bool _saveFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    contentController = TextEditingController(text: widget.memory.content.decodeString);
     contentController.selection = TextSelection.fromPosition(
       TextPosition(offset: contentController.text.length),
     );
+  }
 
+  @override
+  void dispose() {
+    contentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
@@ -51,7 +70,7 @@ class MemoryEditSheet extends StatelessWidget {
                       const Icon(Icons.label_outline, size: 14, color: Colors.white),
                       const SizedBox(width: 4),
                       Text(
-                        memory.category.toString().split('.').last,
+                        widget.memory.category.toString().split('.').last,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -67,65 +86,72 @@ class MemoryEditSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: contentController,
-              autofocus: true,
-              maxLines: null,
-              textInputAction: TextInputAction.done,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                height: 1.4,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 250),
+              child: SingleChildScrollView(
+                child: TextField(
+                  controller: contentController,
+                  autofocus: true,
+                  maxLines: null,
+                  minLines: 3,
+                  textInputAction: TextInputAction.newline,
+                  keyboardType: TextInputType.multiline,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    height: 1.4,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                    isDense: true,
+                  ),
+                ),
               ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                isDense: true,
-              ),
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  provider.editMemory(memory, value, memory.category);
-                }
-                Navigator.pop(context);
-              },
             ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+            const SizedBox(height: 24),
+            if (_saveFailed) ...[
+              const Text(
+                'Failed to save. Please check your connection.',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+            ],
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSaving ? null : _handleSave,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.keyboard_return,
-                        size: 13,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Press done to save',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 11,
+                  disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
+                  disabledForegroundColor: Colors.white.withOpacity(0.7),
+                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        _saveFailed ? 'Retry' : 'Save Memory',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${contentController.text.length}/200',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -133,13 +159,46 @@ class MemoryEditSheet extends StatelessWidget {
     );
   }
 
+  Future<void> _handleSave() async {
+    if (contentController.text.trim().isEmpty) return;
+
+    setState(() {
+      _isSaving = true;
+      _saveFailed = false;
+    });
+
+    bool success;
+
+    try {
+      success = await widget.provider.editMemory(
+        widget.memory,
+        contentController.text,
+        widget.memory.category,
+      );
+    } catch (e) {
+      success = false;
+      debugPrint('Error saving memory: $e');
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSaving = false;
+      _saveFailed = !success;
+    });
+
+    if (success) {
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _showDeleteConfirmation(BuildContext context) async {
     final shouldDelete = await DeleteConfirmation.show(context);
     if (shouldDelete) {
-      provider.deleteMemory(memory);
+      widget.provider.deleteMemory(widget.memory);
       Navigator.pop(context); // Close edit sheet
-      if (onDelete != null) {
-        onDelete!(context, memory, provider);
+      if (widget.onDelete != null) {
+        widget.onDelete!(context, widget.memory, widget.provider);
       }
     }
   }
