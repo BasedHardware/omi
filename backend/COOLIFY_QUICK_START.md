@@ -6,7 +6,39 @@ This guide helps you deploy the Omi backend to Coolify using Docker Compose (inc
 
 - Coolify instance v4.0+
 - Git repository connected to Coolify
+- **GCP Project with Firestore and GCS** - See [Automated Setup](#automated-gcp-setup-recommended) below
 - API keys and credentials ready
+
+## Automated GCP Setup (Recommended)
+
+**NEW:** We provide an automated setup script that creates everything you need in GCP!
+
+```bash
+cd backend/scripts
+./setup_gcp_project.sh
+```
+
+This script automatically:
+- ✅ Creates/configures GCP project
+- ✅ Enables required APIs (Firestore, Storage, Firebase)
+- ✅ Creates Firestore database
+- ✅ Creates all 9 GCS buckets
+- ✅ Sets up service account with proper IAM roles
+- ✅ Deploys Firestore indexes
+- ✅ Generates environment variables
+
+**See [scripts/README_SETUP.md](scripts/README_SETUP.md) for detailed instructions.**
+
+After running the script, you'll have:
+- Service account JSON file
+- `.env.YOUR_PROJECT_ID` file with all required variables
+- All GCP infrastructure ready to go!
+
+---
+
+## Manual Setup (Alternative)
+
+If you prefer manual setup or already have a GCP project configured, continue with the steps below.
 
 ## Step 1: Prepare Environment Variables
 
