@@ -47,9 +47,13 @@ services:
       - REDIS_DB_HOST=redis
       - REDIS_DB_PORT=6379
       - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
     volumes:
-      # Google credentials - will be populated via Coolify's storage management
-      - google-credentials:/app/credentials:ro
+      # Google credentials (optional) - can mount via Coolify storage
+      # In Coolify: Add storage volume mounting google-credentials.json to /app/google-credentials.json
+      # OR set SERVICE_ACCOUNT_JSON environment variable (backend creates file automatically)
 
       # Persist temporary files across restarts
       - omi-temp:/app/_temp
@@ -80,9 +84,13 @@ services:
       - REDIS_DB_HOST=redis
       - REDIS_DB_PORT=6379
       - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
     volumes:
-      # Google credentials - shared with backend
-      - google-credentials:/app/credentials:ro
+      # Google credentials (optional) - can mount via Coolify storage
+      # In Coolify: Add storage volume mounting google-credentials.json to /app/google-credentials.json
+      # OR set SERVICE_ACCOUNT_JSON environment variable (backend creates file automatically)
 
       # Persist temporary files
       - omi-temp:/app/_temp
@@ -109,6 +117,4 @@ volumes:
   omi-segments:
     driver: local
   omi-speech-profiles:
-    driver: local
-  google-credentials:
     driver: local

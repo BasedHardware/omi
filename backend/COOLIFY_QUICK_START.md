@@ -72,17 +72,23 @@ GITHUB_TOKEN=...
 
 ### Google Cloud Credentials:
 
-**Option A - Environment Variable (Easier):**
+Choose **ONE** of the following methods:
+
+**Option A - Storage Volume (Recommended for security):**
+1. In Coolify, go to your service's **"Storages"** tab
+2. Click **"Add Storage"**
+3. Select **"File Mount"**
+4. Set source path: `/path/on/host/google-credentials.json` (upload your file to Coolify server first)
+5. Set destination: `/app/google-credentials.json`
+6. Save
+
+**Option B - Environment Variable:**
 1. Minify your `google-credentials.json`:
    ```bash
    cat google-credentials.json | jq -c
    ```
-2. Add as `SERVICE_ACCOUNT_JSON` environment variable
-
-**Option B - File Upload:**
-1. Go to **"Storages"** tab
-2. Create mount: Host path -> `/app/google-credentials.json`
-3. Add env var: `GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json`
+2. Add the output as `SERVICE_ACCOUNT_JSON` environment variable in Coolify
+3. The backend will automatically create `/app/google-credentials.json` from this variable
 
 ## Step 4: Deploy
 
