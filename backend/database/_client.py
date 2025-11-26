@@ -17,7 +17,13 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
     with open('google-credentials.json', 'w') as f:
         json.dump(service_account_info, f)
 
-db = firestore.Client()
+# Initialize Firestore client
+# For authorized_user credentials, we need to explicitly set the project
+project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('GCP_PROJECT_ID')
+if project_id:
+    db = firestore.Client(project=project_id)
+else:
+    db = firestore.Client()
 
 
 def get_users_uid():

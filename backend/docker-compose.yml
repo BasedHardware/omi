@@ -50,6 +50,8 @@ services:
       # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
       - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      # Google Cloud project ID (required for authorized_user credentials)
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
     volumes:
       # Google credentials (optional) - can mount via Coolify storage
       # In Coolify: Add storage volume mounting google-credentials.json to /app/google-credentials.json
@@ -87,6 +89,8 @@ services:
       # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
       - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      # Google Cloud project ID (required for authorized_user credentials)
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
     volumes:
       # Google credentials (optional) - can mount via Coolify storage
       # In Coolify: Add storage volume mounting google-credentials.json to /app/google-credentials.json
