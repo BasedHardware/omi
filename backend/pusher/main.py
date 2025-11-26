@@ -31,6 +31,12 @@ else:
 app = FastAPI()
 app.include_router(pusher.router)
 
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
 for path in paths:
     if not os.path.exists(path):
