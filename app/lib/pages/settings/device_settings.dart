@@ -32,6 +32,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
 
+  String? _customDeviceName;
+  bool? _hasDeviceNameFeature;
+
   Timer? _debounce;
   Timer? _micGainDebounce;
 
@@ -65,14 +68,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceProvider.pairedDevice != null) {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
       if (connection != null) {
+        String? customName = await connection.getDeviceName();
+
         var features = await connection.getFeatures();
         final hasDimming = (features & OmiFeatures.ledDimming) != 0;
         final hasMicGain = (features & OmiFeatures.micGain) != 0;
+        final hasDeviceName = customName != null;
 
         if (!mounted) return;
         setState(() {
+          _customDeviceName = customName;
           _hasDimmingFeature = hasDimming;
           _hasMicGainFeature = hasMicGain;
+          _hasDeviceNameFeature = hasDeviceName;
         });
 
         if (!hasDimming) {
@@ -146,7 +154,17 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               Stack(
                 children: [
                   Column(
-                    children: deviceSettingsWidgets(provider.pairedDevice, context),
+                    children: deviceSettingsWidgets(
+                      provider.pairedDevice,
+                      context,
+                      _customDeviceName,
+                      (String newName) {
+                        setState(() {
+                          _customDeviceName = newName;
+                        });
+                      },
+                      _hasDeviceNameFeature,
+                    ),
                   ),
                   if (!provider.isConnected)
                     ClipRRect(
@@ -647,13 +665,76 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 }
 
-List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
+List<Widget> deviceSettingsWidgets(
+  BtDevice? device,
+  BuildContext context,
+  String? customDeviceName,
+  Function(String) onNameChanged,
+  bool? hasDeviceNameFeature,
+) {
   var provider = Provider.of<DeviceProvider>(context, listen: true);
 
   return [
     ListTile(
       title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Omi DevKit'),
+      subtitle: hasDeviceNameFeature == false
+          ? const Text('This feature is not available on your device.')
+          : Text(customDeviceName ?? device?.name ?? 'Omi DevKit'),
+      trailing: hasDeviceNameFeature == false ? null : const Icon(Icons.edit),
+      onTap: hasDeviceNameFeature == false
+          ? null
+          : () {
+              String currentName = customDeviceName ?? device?.name ?? 'Omi DevKit';
+              TextEditingController controller = TextEditingController(text: currentName);
+
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Edit Device Name'),
+                  content: TextField(
+                    controller: controller,
+                    maxLength: 10,
+                    decoration: const InputDecoration(
+                      labelText: 'Device Name',
+                      hintText: 'Enter device name',
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        String newName = controller.text.trim();
+                        Navigator.pop(context);
+
+                        if (newName.isNotEmpty && newName != currentName) {
+                          final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                          if (deviceProvider.pairedDevice != null) {
+                            var connection = await ServiceManager.instance()
+                                .device
+                                .ensureConnection(deviceProvider.pairedDevice!.id);
+
+                            onNameChanged(newName);
+
+                            // Send to device
+                            await connection?.setDeviceName(newName);
+
+                            SharedPreferencesUtil().deviceName = newName;
+                            SharedPreferencesUtil().setCustomDeviceName(deviceProvider.pairedDevice!.id, newName);
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
     ),
     ListTile(
       title: const Text('Device ID'),

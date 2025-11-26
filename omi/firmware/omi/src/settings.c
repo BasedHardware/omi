@@ -3,16 +3,20 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/settings/settings.h>
+#include <string.h>
 
 LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 
 // Default values if not found in flash
 #define DEFAULT_DIM_LIGHT_RATIO 50
 #define DEFAULT_MIC_GAIN 6
+#define DEFAULT_DEVICE_NAME "Omi"
+#define MAX_DEVICE_NAME_LENGTH 10
 
 // In-memory cache for the settings
 static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
+static char device_name[MAX_DEVICE_NAME_LENGTH + 1] = DEFAULT_DEVICE_NAME;
 
 static int settings_set(const char *name, size_t len, settings_read_cb read_cb, void *cb_arg)
 {
@@ -43,6 +47,19 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         return rc;
     }
 
+    if (settings_name_steq(name, "device_name", &next) && !next) {
+        if (len > MAX_DEVICE_NAME_LENGTH) {
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, device_name, len);
+        if (rc >= 0) {
+            device_name[len] = '\0';
+            LOG_INF("Loaded device_name: %s", device_name);
+            return 0;
+        }
+        return rc;
+    }
+
     return -ENOENT;
 }
 
@@ -61,7 +78,7 @@ int app_settings_init(void)
         LOG_ERR("Failed to load settings (err %d)", err);
     }
 
-    LOG_INF("Settings initialized. Current dim ratio: %u, mic gain: %u", dim_light_ratio, mic_gain);
+    LOG_INF("Settings initialized. Current dim ratio: %u, mic gain: %u, device name: %s", dim_light_ratio, mic_gain, device_name);
     return err;
 }
 
@@ -97,4 +114,40 @@ int app_settings_save_mic_gain(uint8_t new_gain)
 uint8_t app_settings_get_mic_gain(void)
 {
     return mic_gain;
+}
+
+int app_settings_save_device_name(const char *new_name)
+{
+    if (new_name == NULL || strlen(new_name) > MAX_DEVICE_NAME_LENGTH) {
+        LOG_ERR("Invalid device name");
+        return -EINVAL;
+    }
+    
+    strncpy(device_name, new_name, MAX_DEVICE_NAME_LENGTH);
+    device_name[MAX_DEVICE_NAME_LENGTH] = '\0';
+    
+    int err = settings_save_one("omi/device_name", device_name, strlen(device_name));
+    if (err) {
+        LOG_ERR("Failed to save device_name (err %d)", err);
+    } else {
+        LOG_INF("Saved device_name: %s", device_name);
+    }
+    return err;
+}
+
+int app_settings_get_device_name(char *name_buffer, size_t buffer_size)
+{
+    if (name_buffer == NULL || buffer_size == 0) {
+        return -EINVAL;
+    }
+    
+    size_t name_len = strlen(device_name);
+    if (name_len >= buffer_size) {
+        return -ENOMEM;
+    }
+    
+    strncpy(name_buffer, device_name, buffer_size - 1);
+    name_buffer[buffer_size - 1] = '\0';
+    
+    return 0;
 }
