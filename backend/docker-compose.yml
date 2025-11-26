@@ -63,6 +63,9 @@ services:
       - omi-segments:/app/_segments
       - omi-speech-profiles:/app/_speech_profiles
 
+      # Cache pretrained models (VAD, etc.) to avoid re-downloading on every restart
+      - omi-pretrained-models:/app/pretrained_models
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
       interval: 30s
@@ -102,6 +105,9 @@ services:
       - omi-segments:/app/_segments
       - omi-speech-profiles:/app/_speech_profiles
 
+      # Cache pretrained models (VAD, etc.) to avoid re-downloading on every restart
+      - omi-pretrained-models:/app/pretrained_models
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -121,4 +127,6 @@ volumes:
   omi-segments:
     driver: local
   omi-speech-profiles:
+    driver: local
+  omi-pretrained-models:
     driver: local
