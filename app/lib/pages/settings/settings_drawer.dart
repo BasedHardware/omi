@@ -399,11 +399,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Share Omi for Mac',
+                title: 'Get Omi for Mac',
                 icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
-                  await Share.share('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
+                  await Share.share('https://www.omi.me/pages/download');
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
