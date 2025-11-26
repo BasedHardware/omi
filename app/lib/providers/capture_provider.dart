@@ -125,21 +125,22 @@ class CaptureProvider extends ChangeNotifier
   }
 
   void _handleAppResumed() async {
-    if (recordingState == RecordingState.systemAudioRecord) {
-      try {
-        // Check if native recording is still active
-        bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+    if (!PlatformService.isDesktop || !_shouldAutoResumeAfterWake) return;
+    
+    try {
+      final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
 
-        if (nativeRecording && recordingState != RecordingState.systemAudioRecord) {
-          // Will be handled by existing logic in streamSystemAudioRecording error handling
-        } else if (!nativeRecording && recordingState == RecordingState.systemAudioRecord) {
-          updateRecordingState(RecordingState.stop);
-          await _socket?.stop(reason: 'native recording stopped during sleep');
-          await DebugLogManager.logEvent('transcription_socket_stop_due_to_sleep', {});
-        }
-      } catch (e) {
-        debugPrint('Could not check state during app resume: $e');
+      if (!nativeRecording && recordingState != RecordingState.stop) {
+        updateRecordingState(RecordingState.stop);
+        await _socket?.stop(reason: 'native recording stopped during sleep');
       }
+      
+      if (!nativeRecording && recordingState == RecordingState.stop) {
+        await Future.delayed(const Duration(seconds: 2));
+        await streamSystemAudioRecording();
+      }
+    } catch (e) {
+      debugPrint('[AutoRecord] Resume error: $e');
     }
   }
 
@@ -204,6 +205,11 @@ class CaptureProvider extends ChangeNotifier
 
   bool _isPaused = false;
   bool get isPaused => _isPaused;
+
+  // Session-based auto-resume flag
+  // Always true on app start, set to false only when user manually stops/pauses
+  bool _shouldAutoResumeAfterWake = true;
+  bool get shouldAutoResumeAfterWake => _shouldAutoResumeAfterWake;
 
   bool _transcriptServiceReady = false;
 
@@ -749,6 +755,9 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    // User wants to record - enable auto-resume after wake
+    _shouldAutoResumeAfterWake = true;
+
     updateRecordingState(RecordingState.initialising);
 
     _systemAudioBuffer = [];
@@ -796,9 +805,20 @@ class CaptureProvider extends ChangeNotifier
             debugPrint('System will sleep - was recording: $wasRecording');
           },
           onSystemDidWake: (nativeIsRecording) async {
-            debugPrint('System woke up - Native recording: $nativeIsRecording, Flutter state: $recordingState');
+            debugPrint('[SystemWake] Native recording: $nativeIsRecording, Flutter state: $recordingState');
+            
             if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
+              // Native stopped, sync Flutter state
               updateRecordingState(RecordingState.stop);
+              
+              // Auto-resume based on session flag (was recording before sleep?)
+              if (_shouldAutoResumeAfterWake) {
+                debugPrint('[SystemWake] Auto-resuming recording (was recording before sleep)...');
+                await Future.delayed(const Duration(seconds: 2));
+                await streamSystemAudioRecording();
+              } else {
+                debugPrint('[SystemWake] Not auto-resuming (user manually stopped)');
+              }
             }
           },
           onScreenDidLock: (wasRecording) {
@@ -821,33 +841,27 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<bool> _checkAndRequestSystemAudioPermissions() async {
-    // Check microphone permission first
-    String micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
-    debugPrint('Microphone permission status: $micStatus');
+    final micStatus = await _screenCaptureChannel.invokeMethod('checkMicrophonePermission');
 
     if (micStatus != 'granted') {
       if (micStatus == 'undetermined' || micStatus == 'unavailable') {
-        bool micGranted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
-        if (!micGranted) {
-          AppSnackbar.showSnackbarError('Microphone permission is required for system audio recording.');
+        final granted = await _screenCaptureChannel.invokeMethod('requestMicrophonePermission');
+        if (!granted) {
+          AppSnackbar.showSnackbarError('Microphone permission required');
           return false;
         }
       } else if (micStatus == 'denied') {
-        AppSnackbar.showSnackbarError(
-            'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.');
+        AppSnackbar.showSnackbarError('Grant microphone permission in System Preferences');
         return false;
       }
     }
 
-    // Check screen capture permission
-    String screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
-    debugPrint('Screen capture permission status: $screenStatus');
+    final screenStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
 
     if (screenStatus != 'granted') {
-      bool screenGranted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
-      if (!screenGranted) {
-        AppSnackbar.showSnackbarError(
-            'Screen recording permission is required. Please grant permission in System Preferences > Privacy & Security > Screen Recording.');
+      final granted = await _screenCaptureChannel.invokeMethod('requestScreenCapturePermission');
+      if (!granted) {
+        AppSnackbar.showSnackbarError('Screen recording permission required');
         return false;
       }
     }
@@ -855,32 +869,31 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _onMicrophoneDeviceChanged() async {
-    debugPrint('Microphone device changed. Restarting recording in 5 seconds...');
-    bool nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
-    if (nativeRecording) {
-      _isAutoReconnecting = true;
-      _reconnectCountdown = 5;
-      notifyListeners();
+    final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
+    if (!nativeRecording) return;
+    
+    _isAutoReconnecting = true;
+    _reconnectCountdown = 5;
+    notifyListeners();
 
-      await pauseSystemAudioRecording(isAuto: true);
+    await pauseSystemAudioRecording(isAuto: true);
 
-      _reconnectTimer?.cancel();
-      _reconnectTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (_reconnectCountdown > 1) {
-          _reconnectCountdown--;
-          notifyListeners();
-        } else {
-          _reconnectTimer?.cancel();
-          _reconnectTimer = null;
-          if (_isAutoReconnecting) {
-            resumeSystemAudioRecording().then((_) {
-              _isAutoReconnecting = false;
-              notifyListeners();
-            });
-          }
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_reconnectCountdown > 1) {
+        _reconnectCountdown--;
+        notifyListeners();
+      } else {
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
+        if (_isAutoReconnecting) {
+          resumeSystemAudioRecording().then((_) {
+            _isAutoReconnecting = false;
+            notifyListeners();
+          });
         }
-      });
-    }
+      }
+    });
   }
 
   void _onMicrophoneStatus(String deviceName, double micLevel, double systemAudioLevel) {
@@ -908,35 +921,45 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
+    
+    // User manually stopped - don't auto-resume after wake
+    _shouldAutoResumeAfterWake = false;
+    
     _isAutoReconnecting = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+    
     ServiceManager.instance().systemAudio.stop();
-    _isPaused = false; // Clear paused state when stopping
+    _isPaused = false;
     _stopRecordingTimer();
-    await _socket?.stop(reason: 'stop system audio recording from Flutter');
+    await _socket?.stop(reason: 'manual stop');
     await _cleanupCurrentState();
   }
 
   Future<void> pauseSystemAudioRecording({bool isAuto = false}) async {
     if (!PlatformService.isDesktop) return;
+    
     if (!isAuto) {
+      // User manually paused - don't auto-resume after wake
+      _shouldAutoResumeAfterWake = false;
       _isAutoReconnecting = false;
       _reconnectTimer?.cancel();
       _reconnectTimer = null;
     }
 
     ServiceManager.instance().systemAudio.stop();
-    _isPaused = true; // Set paused state
+    _isPaused = true;
     notifyListeners();
     _broadcastRecordingState();
   }
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    _isPaused = false; // Clear paused state
-    await streamSystemAudioRecording(); // Re-trigger the recording flow
-
+    
+    // User wants to resume - enable auto-resume after wake
+    _shouldAutoResumeAfterWake = true;
+    _isPaused = false;
+    await streamSystemAudioRecording();
     _broadcastRecordingState();
   }
 
@@ -962,10 +985,8 @@ class CaptureProvider extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    debugPrint('[Provider] Socket is closed with code: $closeCode');
 
     if (closeCode == 4002) {
-      // Refresh subscription to get latest usage data which will reflect the out of credits status.
       usageProvider?.markAsOutOfCreditsAndRefresh();
     }
 
@@ -1013,14 +1034,10 @@ class CaptureProvider extends ChangeNotifier
   void onError(Object err) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    debugPrint('Socket error: $err');
 
-    // Check for display-related errors
     if (err.toString().contains('Failed to find any displays or windows to capture')) {
-      debugPrint('Display detection error in socket - likely external display disconnect');
       if (recordingState == RecordingState.systemAudioRecord) {
-        AppSnackbar.showSnackbarError(
-            'Display detection failed during recording. This often happens when external displays are disconnected. Recording will stop.');
+        AppSnackbar.showSnackbarError('Display detection failed. Recording stopped.');
         updateRecordingState(RecordingState.stop);
       }
     }
@@ -1032,7 +1049,6 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
-    debugPrint('Socket connected');
     notifyListeners();
   }
 
@@ -1263,21 +1279,19 @@ class CaptureProvider extends ChangeNotifier
     if (newSegments.isEmpty) return;
 
     if (segments.isEmpty) {
-      debugPrint('newSegments: ${newSegments.last}');
       if (!PlatformService.isDesktop) {
         FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       }
       await _loadInProgressConversation();
     }
-    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    
+    final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
-
     hasTranscripts = true;
     notifyListeners();
   }
 
   void onConnectionStateChanged(bool isConnected) {
-    debugPrint("[CaptureProvider] Internet connection changed $isConnected");
     _isConnected = isConnected;
     notifyListeners();
   }

@@ -845,11 +845,20 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         print("SCStream stopped with error: \(error.localizedDescription)")
         
+        // Mark as not recording since stream stopped
+        _isRecording = false
+        
         // Clean up sleep prevention since recording stopped
         stopSleepPrevention()
         
         if isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
+            
+            // Notify Flutter that recording ended so state stays in sync
+            if audioFormatSentToFlutter {
+                self.screenCaptureChannel?.invokeMethod("audioStreamEnded", arguments: nil)
+                audioFormatSentToFlutter = false
+            }
         }
         self.stream = nil
         self.streamOutputReference = nil

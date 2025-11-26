@@ -17,7 +17,7 @@ import 'widgets/memory_review_sheet.dart';
 import 'widgets/memory_management_sheet.dart';
 
 // Filter options for the dropdown
-enum FilterOption { interesting, system, all }
+enum FilterOption { interesting, system, manual, all }
 
 class MemoriesPage extends StatefulWidget {
   const MemoriesPage({super.key});
@@ -158,15 +158,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
-    // Set default filter based on current date
-    final now = DateTime.now();
-    final cutoffDate = DateTime(2025, 5, 31);
-
-    if (now.isAfter(cutoffDate)) {
-      _currentFilter = FilterOption.interesting;
-    } else {
-      _currentFilter = FilterOption.all;
-    }
+    // Set default filter to all
+    _currentFilter = FilterOption.all;
 
     (() async {
       final provider = context.read<MemoriesProvider>();
@@ -190,30 +183,34 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   void _applyFilter(FilterOption option) {
-    if (!mounted) return;
-
-    MemoryCategory? category;
-    switch (option) {
-      case FilterOption.interesting:
-        category = MemoryCategory.interesting;
-        MixpanelManager().memoriesFiltered('interesting');
-        break;
-      case FilterOption.system:
-        category = MemoryCategory.system;
-        MixpanelManager().memoriesFiltered('system');
-        break;
-      case FilterOption.all:
-        category = null; // null means no category filter
-        MixpanelManager().memoriesFiltered('all');
-        break;
-    }
-
-    if (!mounted) return;
     setState(() {
       _currentFilter = option;
+      switch (option) {
+        case FilterOption.interesting:
+          _filterByCategory(MemoryCategory.interesting);
+          MixpanelManager().memoriesFiltered('interesting');
+          break;
+        case FilterOption.system:
+          _filterByCategory(MemoryCategory.system);
+          MixpanelManager().memoriesFiltered('system');
+          break;
+        case FilterOption.manual:
+          _filterByCategory(MemoryCategory.manual);
+          MixpanelManager().memoriesFiltered('manual');
+          break;
+        case FilterOption.all:
+          _filterByCategory(null);
+          MixpanelManager().memoriesFiltered('all');
+          break;
+      }
+    });
+  }
+
+  void _filterByCategory(MemoryCategory? category) {
+    if (!mounted) return;
+    setState(() {
       _selectedCategory = category;
     });
-
     final provider = context.read<MemoriesProvider>();
     provider.setCategoryFilter(category);
   }
@@ -440,6 +437,20 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                             ),
                                             const Spacer(),
                                             if (_currentFilter == FilterOption.system)
+                                              const Icon(Icons.check, size: 16, color: Colors.white),
+                                          ],
+                                        ),
+                                      ),
+                                      PopupMenuItem<FilterOption>(
+                                        value: FilterOption.manual,
+                                        child: Row(
+                                          children: [
+                                            const Text(
+                                              'Manual',
+                                              style: TextStyle(color: Colors.white),
+                                            ),
+                                            const Spacer(),
+                                            if (_currentFilter == FilterOption.manual)
                                               const Icon(Icons.check, size: 16, color: Colors.white),
                                           ],
                                         ),
