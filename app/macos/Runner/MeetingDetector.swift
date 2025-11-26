@@ -1,13 +1,11 @@
 import Foundation
 import Cocoa
 import FlutterMacOS
-import ApplicationServices
 
 class MeetingDetector: NSObject {
 
     // MARK: - Properties
-    private var logProcess: Process?
-    private var buffer = ""
+    private var monitorTimer: Timer?
     private var activeMicApps = Set<String>()
     private var eventChannel: FlutterEventChannel?
     private var eventSink: FlutterEventSink?
@@ -17,14 +15,11 @@ class MeetingDetector: NSObject {
     var onMeetingEnded: (() -> Void)?
 
     // Window title tracking for browsers
-    private var currentFrontmostApp: NSRunningApplication?
-    private var currentWindowTitle: String?
     private var trackedBrowserBundleIds = Set<String>()  // Browsers we're actively monitoring
-    private var browserMeetingTitles: [String: String] = [:]  // Bundle ID -> Meeting window title
 
     // Debouncing to prevent showing nub during brief mic checks
     private var pendingMeetingTimers: [String: Timer] = [:]  // Bundle ID -> Timer for delayed confirmation
-    private var latestMicActiveApps = Set<String>()  // Latest snapshot of apps using mic (from log entries)
+    private var latestMeetingApps = Set<String>()  // Latest snapshot of apps with meeting windows
 
     // Bundle IDs to exclude from meeting detection
     private lazy var excludedBundleIds: Set<String> = {
@@ -50,28 +45,28 @@ class MeetingDetector: NSObject {
         setupAppMonitoring()
     }
 
-    // Setup app activation monitoring to detect when browsers become frontmost
+    // Setup app termination monitoring
     private func setupAppMonitoring() {
         NSWorkspace.shared.notificationCenter.addObserver(
             self,
-            selector: #selector(handleAppActivation(_:)),
-            name: NSWorkspace.didActivateApplicationNotification,
+            selector: #selector(handleAppTermination(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
             object: nil
         )
     }
 
-    @objc private func handleAppActivation(_ notification: Notification) {
+    @objc private func handleAppTermination(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let bundleId = app.bundleIdentifier else {
             return
         }
 
-        currentFrontmostApp = app
-
-        // If a browser we're tracking becomes active, re-check its window title
-        // This handles the case where user switches tabs or windows
-        if trackedBrowserBundleIds.contains(bundleId) {
-            recheckBrowserMeetingStatus(for: app, bundleId: bundleId)
+        // If a meeting app terminated, immediately remove it
+        if activeMicApps.contains(bundleId) {
+            activeMicApps.remove(bundleId)
+            trackedBrowserBundleIds.remove(bundleId)
+            print("MeetingDetector: App terminated - removing \(bundleId)")
+            notifyMeetingStateChanged()
         }
     }
 
@@ -83,93 +78,38 @@ class MeetingDetector: NSObject {
     }
 
     func start() {
-        guard logProcess == nil else {
+        guard monitorTimer == nil else {
             print("MeetingDetector: Already running")
             return
         }
 
 
-        // Build predicate for filtering Control Center microphone events
-        // Start with broader filter - just subsystem
-        let predicate = "subsystem == \"com.apple.controlcenter\""
+        // Perform initial check
+        checkForMeetingApps()
 
-        // Create process to run log stream command
-        logProcess = Process()
-        logProcess?.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        logProcess?.arguments = [
-            "stream",
-            "--type", "log",
-            "--level", "default",
-            "--predicate", predicate,
-            "--style", "ndjson"
-        ]
-
-
-        // Setup output pipe
-        let outputPipe = Pipe()
-        logProcess?.standardOutput = outputPipe
-
-        // Setup error pipe
-        let errorPipe = Pipe()
-        logProcess?.standardError = errorPipe
-
-        // Handle output data
-        outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            guard let self = self else { return }
-
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-
-            if let output = String(data: data, encoding: .utf8) {
-                self.handleLogData(output)
-            }
+        // Start polling every 3 seconds
+        monitorTimer = Timer.scheduledTimer(
+            withTimeInterval: 3.0,
+            repeats: true
+        ) { [weak self] _ in
+            self?.checkForMeetingApps()
         }
 
-        // Handle error data
-        errorPipe.fileHandleForReading.readabilityHandler = { handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-
-            if let errorOutput = String(data: data, encoding: .utf8) {
-            }
-        }
-
-        // Handle process termination
-        logProcess?.terminationHandler = { [weak self] process in
-            print("MeetingDetector: log stream exited with code \(process.terminationStatus)")
-            self?.logProcess = nil
-        }
-
-        // Start the process
-        do {
-            try logProcess?.run()
-        } catch {
-            print("MeetingDetector: Failed to start log stream: \(error.localizedDescription)")
-            logProcess = nil
-        }
     }
 
     func stop() {
-        guard let process = logProcess else {
+        guard monitorTimer != nil else {
             return
         }
 
+        // Stop the timer
+        monitorTimer?.invalidate()
+        monitorTimer = nil
 
-        // Clear handlers to prevent memory leaks
-        if let outputPipe = process.standardOutput as? Pipe {
-            outputPipe.fileHandleForReading.readabilityHandler = nil
-        }
-        if let errorPipe = process.standardError as? Pipe {
-            errorPipe.fileHandleForReading.readabilityHandler = nil
-        }
-
-        process.terminate()
-        logProcess = nil
+        // Clear state
         activeMicApps.removeAll()
         trackedBrowserBundleIds.removeAll()
-        browserMeetingTitles.removeAll()
-        latestMicActiveApps.removeAll()
-        buffer = ""
+        latestMeetingApps.removeAll()
         wasInMeeting = false
 
         // Cancel all pending timers
@@ -177,101 +117,6 @@ class MeetingDetector: NSObject {
             timer.invalidate()
         }
         pendingMeetingTimers.removeAll()
-
-    }
-
-    /// Re-check if a browser still has a meeting window open (called when app becomes frontmost)
-    /// This is for detecting when user switches BACK to a meeting tab they were already in
-    private func recheckBrowserMeetingStatus(for app: NSRunningApplication, bundleId: String) {
-        guard checkAccessibilityPermission() else { return }
-
-        let pid = app.processIdentifier
-        let axApp = AXUIElementCreateApplication(pid)
-
-        // Get all windows
-        var windowsValue: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsValue)
-
-        guard result == .success,
-              let windows = windowsValue as? [AXUIElement],
-              !windows.isEmpty else {
-            // No windows found - browser closed entirely
-            if activeMicApps.contains(bundleId) {
-                activeMicApps.remove(bundleId)
-                trackedBrowserBundleIds.remove(bundleId)
-                browserMeetingTitles.removeValue(forKey: bundleId)
-                print("MeetingDetector: Browser closed entirely - removing \(bundleId)")
-                notifyMeetingStateChanged()
-            }
-            return
-        }
-
-        // Check if the first window (frontmost) has a meeting title
-        var foundMeetingTitle = false
-        var titleValue: CFTypeRef?
-        let titleResult = AXUIElementCopyAttributeValue(windows[0], kAXTitleAttribute as CFString, &titleValue)
-
-        if titleResult == .success,
-           let title = titleValue as? String,
-           !title.isEmpty {
-            print("MeetingDetector: Browser frontmost window title: \(title)")
-            foundMeetingTitle = isMeetingWindowTitle(title)
-        }
-
-        // Only ADD back if user switched back to meeting tab
-        // Don't remove just because user is on a different tab - they might return
-        if foundMeetingTitle && !activeMicApps.contains(bundleId) {
-            // User switched back to meeting tab
-            activeMicApps.insert(bundleId)
-            notifyMeetingStateChanged()
-        }
-    }
-
-    /// Check if meeting tab is closed when mic goes inactive
-    /// Only remove meeting if BOTH mic is off AND meeting tab is not found
-    private func checkIfMeetingTabClosed(for app: NSRunningApplication, bundleId: String) {
-        guard checkAccessibilityPermission() else { return }
-
-        let pid = app.processIdentifier
-        let axApp = AXUIElementCreateApplication(pid)
-
-        // Get all windows
-        var windowsValue: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsValue)
-
-        guard result == .success,
-              let windows = windowsValue as? [AXUIElement],
-              !windows.isEmpty else {
-            // Browser closed
-            activeMicApps.remove(bundleId)
-            trackedBrowserBundleIds.remove(bundleId)
-            browserMeetingTitles.removeValue(forKey: bundleId)
-            notifyMeetingStateChanged()
-            return
-        }
-
-        // Check ALL windows (not just frontmost) to see if meeting tab still exists
-        var meetingTabStillOpen = false
-        for window in windows {
-            var titleValue: CFTypeRef?
-            let titleResult = AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleValue)
-
-            if titleResult == .success,
-               let title = titleValue as? String,
-               !title.isEmpty,
-               isMeetingWindowTitle(title) {
-                meetingTabStillOpen = true
-                break
-            }
-        }
-
-        if !meetingTabStillOpen {
-            // Meeting tab is closed AND mic is off - remove the meeting
-            activeMicApps.remove(bundleId)
-            trackedBrowserBundleIds.remove(bundleId)
-            browserMeetingTitles.removeValue(forKey: bundleId)
-            notifyMeetingStateChanged()
-        }
     }
 
     func getActiveMeetingApps() -> [String] {
@@ -280,204 +125,85 @@ class MeetingDetector: NSObject {
 
     // MARK: - Private Methods
 
-    private func handleLogData(_ data: String) {
+    /// Check all running apps for active meetings using CGWindowList
+    private func checkForMeetingApps() {
+        let runningApps = NSWorkspace.shared.runningApplications
+        var currentMeetingApps = Set<String>()
 
-        buffer += data
-
-        // Process complete JSON lines
-        let lines = buffer.components(separatedBy: "\n")
-        buffer = lines.last ?? "" // Keep incomplete line in buffer
-
-        for line in lines.dropLast() {
-            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmedLine.isEmpty else { continue }
+        // Build a map of PID -> bundleId for quick lookup
+        var pidToBundleId: [Int32: String] = [:]
+        
+        for app in runningApps {
+            guard let bundleId = app.bundleIdentifier else { continue }
+            if excludedBundleIds.contains(bundleId) { continue }
+            guard isKnownMeetingApp(bundleId) else { continue }
             
-            // Skip non-JSON lines (like the "Filtering the log data..." message)
-            guard trimmedLine.hasPrefix("{") else {
+            pidToBundleId[app.processIdentifier] = bundleId
+        }
+
+        // Get all on-screen windows using Core Graphics
+        guard let windowList = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            // Update latest snapshot
+            latestMeetingApps = currentMeetingApps
+            handleMeetingAppsChanged(to: currentMeetingApps)
+            return
+        }
+
+        // Check each window for meeting indicators
+        for window in windowList {
+            guard let ownerPID = window[kCGWindowOwnerPID as String] as? Int32,
+                  let bundleId = pidToBundleId[ownerPID],
+                  let title = window[kCGWindowName as String] as? String,
+                  !title.isEmpty else {
                 continue
             }
 
-            do {
-                if let jsonData = line.data(using: .utf8),
-                   let logEntry = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                    processLogEntry(logEntry)
+            // Check if window title indicates a meeting
+            if isMeetingWindowTitle(title) {
+                currentMeetingApps.insert(bundleId)
+                
+                // Track browsers separately for logging
+                if MeetingApps.browserBundleIds.contains(bundleId) {
+                    trackedBrowserBundleIds.insert(bundleId)
                 }
-            } catch {
-                print("MeetingDetector: JSON parse error for line: \(line.prefix(100))... Error: \(error)")
             }
         }
+
+        // Update latest snapshot
+        latestMeetingApps = currentMeetingApps
+
+        // Detect changes and update state
+        handleMeetingAppsChanged(to: currentMeetingApps)
     }
 
-    private func processLogEntry(_ logEntry: [String: Any]) {
-        let message = logEntry["eventMessage"] as? String ?? ""
-        var changed = false
+    /// Handle changes in detected meeting apps
+    private func handleMeetingAppsChanged(to newApps: Set<String>) {
+        var stateChanged = false
 
-        // ONLY process authoritative "Active activity attributions changed" messages
-        // These are the definitive source of truth for what's currently using the mic
-        if message.contains("Active activity attributions changed to") ||
-           message.contains("Sorted active attributions") {
+        // Apps that stopped (were in activeMicApps but not in newApps)
+        let stoppedApps = activeMicApps.subtracting(newApps)
+        for bundleId in stoppedApps {
+            // Meeting window no longer visible - remove it
+            activeMicApps.remove(bundleId)
+            trackedBrowserBundleIds.remove(bundleId)
+            stateChanged = true
+        }
 
-            let currentBundleIds = extractAllBundleIds(from: message)
-
-            // Update latest mic state snapshot
-            latestMicActiveApps = currentBundleIds
-
-            // 1. Identify apps that stopped (in activeMicApps but not in new list)
-            for app in activeMicApps {
-                if !currentBundleIds.contains(app) {
-                    // Only remove when BOTH mic is inactive AND user has switched away from meeting tab
-                    if MeetingApps.browserBundleIds.contains(app) {
-                        // Check if user is still on the meeting tab
-                        if let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == app }) {
-                            checkIfMeetingTabClosed(for: runningApp, bundleId: app)
-                        }
-                        continue
-                    }
-
-                    // For non-browser apps, remove immediately
-                    activeMicApps.remove(app)
-                    changed = true
-                    print("MeetingDetector: Microphone session ended (removed from list): \(app)")
-                }
-            }
-
-            // 2. Identify apps that started (in new list but not in activeMicApps)
-            for app in currentBundleIds {
-                // Filter excluded/unknown apps
-                if excludedBundleIds.contains(app) { continue }
-
-                // For browsers, we need to check window title before confirming it's a meeting
-                if MeetingApps.browserBundleIds.contains(app) {
-                    if !activeMicApps.contains(app) {
-                        // Browser started using mic - check window title
-                        trackedBrowserBundleIds.insert(app)
-
-                        // Get the running app and check its window title
-                        if let runningApp = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == app }) {
-                            checkBrowserWindowTitle(for: runningApp, bundleId: app)
-                        }
-                    }
-                    continue
-                }
-
-                // For non-browser apps, use existing logic
-                if !isKnownMeetingApp(app) { continue }
-
-                if !activeMicApps.contains(app) && !pendingMeetingTimers.keys.contains(app) {
-                    // Schedule a delayed confirmation - wait 3 seconds then check if mic still active
-                    scheduleMeetingConfirmation(for: app, currentBundleIds: currentBundleIds)
-                }
-            }
-
-            if changed {
-                notifyMeetingStateChanged()
+        // Apps that started (in newApps but not in activeMicApps)
+        let startedApps = newApps.subtracting(activeMicApps)
+        for bundleId in startedApps {
+            // Use debouncing to avoid false positives (e.g., briefly visiting a meeting page)
+            if !pendingMeetingTimers.keys.contains(bundleId) {
+                scheduleMeetingConfirmation(for: bundleId)
             }
         }
 
-    }
-
-    private func extractAllBundleIds(from message: String) -> Set<String> {
-        var foundIds = Set<String>()
-        
-        // Regex for "mic:bundle.id" or "[mic] ... (bundle.id)"
-        // Matches: mic:us.zoom.xos
-        let pattern1 = #"(?:mic:|mic\])\s*([a-zA-Z0-9._-]+)"#
-        if let regex = try? NSRegularExpression(pattern: pattern1) {
-            let results = regex.matches(in: message, range: NSRange(message.startIndex..., in: message))
-            for result in results {
-                if let range = Range(result.range(at: 1), in: message) {
-                    let id = String(message[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if id.contains(".") { foundIds.insert(id) }
-                }
-            }
+        if stateChanged {
+            notifyMeetingStateChanged()
         }
-        
-        // Matches: (us.zoom.xos)
-        let pattern2 = #"\(([a-z0-9._-]+\.[a-z0-9._-]+)\)"#
-        if let regex = try? NSRegularExpression(pattern: pattern2) {
-            let results = regex.matches(in: message, range: NSRange(message.startIndex..., in: message))
-            for result in results {
-                if let range = Range(result.range(at: 1), in: message) {
-                    let id = String(message[range])
-                    if !id.isEmpty { foundIds.insert(id) }
-                }
-            }
-        }
-        
-        return foundIds
-    }
-
-    private func extractBundleId(from logEntry: [String: Any], processPath: String) -> String? {
-        let message = logEntry["eventMessage"] as? String ?? ""
-        
-        // Method 1: Extract from sensor-indicators messages like:
-        // "Active activity attributions changed to ["mic:us.zoom.xos"]"
-        // "Sorted active attributions from SystemStatus update: [[mic] zoom.us (us.zoom.xos)]"
-        if let match = message.range(of: #"(?:mic:|mic\])\s*([a-zA-Z0-9._-]+)"#, options: .regularExpression) {
-            let matched = String(message[match])
-            // Extract bundle ID after "mic:" or "mic]"
-            if let colonRange = matched.range(of: #"(?:mic:|mic\])\s*"#, options: .regularExpression) {
-                let bundleId = String(matched[colonRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !bundleId.isEmpty && bundleId.contains(".") {
-                    print("MeetingDetector: Extracted bundle ID from mic attribution: \(bundleId)")
-                    return bundleId
-                }
-            }
-        }
-        
-        // Method 2: Extract from messages with bundle ID in parentheses: "(us.zoom.xos)"
-        if let match = message.range(of: #"\(([a-z0-9._-]+\.[a-z0-9._-]+)\)"#, options: .regularExpression) {
-            let matched = String(message[match])
-            let bundleId = matched.trimmingCharacters(in: CharacterSet(charactersIn: "()"))
-            if !bundleId.isEmpty {
-                print("MeetingDetector: Extracted bundle ID from parentheses: \(bundleId)")
-                return bundleId
-            }
-        }
-        
-        // Method 3: Direct bundle ID from log entry
-        if let bundleId = logEntry["bundleID"] as? String {
-            print("MeetingDetector: Extracted bundle ID from logEntry.bundleID: \(bundleId)")
-            return bundleId
-        }
-
-        // Method 4: Extract from process path
-        if !processPath.isEmpty {
-            if let bundleId = extractBundleIdFromPath(processPath) {
-                print("MeetingDetector: Extracted bundle ID from path: \(bundleId)")
-                return bundleId
-            }
-        }
-
-        // Method 5: Parse from event message with common prefixes
-        if let match = message.range(of: #"(?:bundle(?:ID)?|client|attribution)[:\s]+([a-zA-Z0-9\._-]+)"#, options: [.regularExpression, .caseInsensitive]) {
-            let bundleIdString = String(message[match])
-            let components = bundleIdString.components(separatedBy: CharacterSet(charactersIn: ": \t"))
-            if let bundleId = components.last?.trimmingCharacters(in: .whitespacesAndNewlines), !bundleId.isEmpty {
-                print("MeetingDetector: Extracted bundle ID from message prefix: \(bundleId)")
-                return bundleId
-            }
-        }
-
-        return nil
-    }
-
-    private func extractBundleIdFromPath(_ processPath: String) -> String? {
-        // Extract app name from path like:
-        // /Applications/zoom.us.app/Contents/MacOS/zoom.us
-        // /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-
-        guard let appMatch = processPath.range(of: #"/([^/]+\.app)/"#, options: .regularExpression) else {
-            return nil
-        }
-
-        let appPathComponent = String(processPath[appMatch])
-        let appName = appPathComponent
-            .replacingOccurrences(of: "/", with: "")
-            .replacingOccurrences(of: ".app", with: "")
-
-        // Look up bundle ID from mapping
-        return MeetingApps.bundleIdMap[appName]
     }
 
     // Callbacks for controlling the Nub
@@ -583,8 +309,8 @@ class MeetingDetector: NSObject {
     // MARK: - Meeting Confirmation (Debouncing)
 
     /// Schedule a delayed confirmation for a meeting
-    /// After 3 seconds, check if mic is still active before adding to activeMicApps
-    private func scheduleMeetingConfirmation(for bundleId: String, currentBundleIds: Set<String>) {
+    /// After 3 seconds, check if meeting window is still visible before adding to activeMicApps
+    private func scheduleMeetingConfirmation(for bundleId: String) {
         // Cancel any existing timer for this app
         pendingMeetingTimers[bundleId]?.invalidate()
 
@@ -599,7 +325,7 @@ class MeetingDetector: NSObject {
                 // Remove from pending
                 self.pendingMeetingTimers.removeValue(forKey: bundleId)
 
-                // Check if mic is STILL active by querying the latest system logs
+                // Check if meeting window is STILL visible
                 self.verifyAndConfirmMeeting(for: bundleId)
             }
 
@@ -607,10 +333,10 @@ class MeetingDetector: NSObject {
         }
     }
 
-    /// Verify if mic is still active and confirm the meeting
+    /// Verify if meeting window is still visible and confirm the meeting
     private func verifyAndConfirmMeeting(for bundleId: String) {
-        // Check if mic is STILL active in the latest snapshot
-        guard latestMicActiveApps.contains(bundleId) else {
+        // Check if meeting window is STILL visible in the latest snapshot
+        guard latestMeetingApps.contains(bundleId) else {
             return
         }
 
@@ -619,92 +345,59 @@ class MeetingDetector: NSObject {
             return
         }
 
-        // Add to active meetings - mic was sustained for 3+ seconds
+        // Add to active meetings - meeting window was sustained for 3+ seconds
         if !activeMicApps.contains(bundleId) {
             activeMicApps.insert(bundleId)
             notifyMeetingStateChanged()
         }
     }
 
-    // MARK: - Browser Window Title Detection
-
-    /// Check if Accessibility permission is granted
-    private func checkAccessibilityPermission() -> Bool {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false]
-        return AXIsProcessTrustedWithOptions(options as CFDictionary)
-    }
-
-    /// Request Accessibility permission with prompt
-    private func requestAccessibilityPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
-    }
-
-    /// Check browser window title using Accessibility API
-    private func checkBrowserWindowTitle(for app: NSRunningApplication, bundleId: String) {
-        // Check if we have Accessibility permission
-        guard checkAccessibilityPermission() else {
-            requestAccessibilityPermission()
-            return
-        }
-
-        let pid = app.processIdentifier
-        let axApp = AXUIElementCreateApplication(pid)
-
-        // Get all windows for this app
-        var windowsValue: CFTypeRef?
-        let result = AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsValue)
-
-        guard result == .success,
-              let windows = windowsValue as? [AXUIElement],
-              !windows.isEmpty else {
-            return
-        }
-
-        // Try to get the title from the first window (usually the frontmost)
-        var windowTitle: String?
-        for window in windows {
-            var titleValue: CFTypeRef?
-            let titleResult = AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleValue)
-
-            if titleResult == .success, let title = titleValue as? String, !title.isEmpty {
-                windowTitle = title
-                break
-            }
-        }
-
-        guard let title = windowTitle else {
-            return
-        }
-
-        currentWindowTitle = title
-
-        // Check if the title contains meeting keywords
-        if isMeetingWindowTitle(title) {
-            if !activeMicApps.contains(bundleId) {
-                activeMicApps.insert(bundleId)
-                browserMeetingTitles[bundleId] = title  // Store initial meeting title
-                notifyMeetingStateChanged()
-            }
-        } else {
-            // Remove from tracked browsers since it's not a meeting
-            trackedBrowserBundleIds.remove(bundleId)
-        }
-    }
+    // MARK: - Window Title Detection
 
     /// Check if a window title indicates a meeting is happening
     private func isMeetingWindowTitle(_ title: String) -> Bool {
-        // Check if title contains any meeting keywords
+        // Special handling for Google Meet to avoid landing page false positives
+        // Actual meetings have format: "Meet – xxx-yyyy-zzz" or "Meet - xxx-yyyy-zzz"
+        // Landing page: "Google Meet - Google Chrome"
+        if title.contains("Meet") {
+            // If title starts with "Meet –" or "Meet -" (with dash), it's likely an actual meeting
+            if title.hasPrefix("Meet –") || title.hasPrefix("Meet -") {
+                // Look for meeting code pattern (xxx-xxx-xxx)
+                let pattern = "[a-z]{3}-[a-z]{4}-[a-z]{3}"
+                if title.range(of: pattern, options: .regularExpression) != nil {
+                    return true
+                }
+            }
+
+            // Check for meet.google.com URL in title
+            if title.contains("meet.google.com") {
+                return true
+            }
+
+            // If it's just "Google Meet" or similar without meeting code, it's the landing page
+            if title.contains("Google Meet") && !title.hasPrefix("Meet") {
+                return false
+            }
+        }
+
+        // Check other meeting keywords normally
         for keyword in MeetingApps.meetingKeywordsInTitle {
+            // Skip "Meet" since we handled it above
+            if keyword == "Meet" || keyword == "meet.google.com" {
+                continue
+            }
+
             if title.contains(keyword) {
                 return true
             }
         }
+
         return false
     }
 
     deinit {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
+        monitorTimer?.invalidate()
         stop()
     }
 }

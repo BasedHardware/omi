@@ -230,7 +230,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 
             case "start":
                 // Track that recording was started manually from the app
-                self.recordingSource = .manual
+                // BUT only if not already set by nub click (microphoneOnly, calendar, etc.)
+                if self.recordingSource == .none {
+                    self.recordingSource = .manual
+                }
 
                 Task {
                     // Check permissions before starting
@@ -260,6 +263,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 }
             case "stop":
                 self.audioManager.stopCapture()
+                result(nil)
+                
+            case "resetRecordingSource":
+                // Called when user explicitly stops recording from UI
                 self.recordingSource = .none
                 result(nil)
                 
@@ -517,7 +524,10 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 reason = "unknown source"
             }
 
+            print("MainFlutterWindow: shouldAutoStop = \(shouldAutoStop), reason = \(reason)")
+
             if shouldAutoStop {
+                print("MainFlutterWindow: Auto-stopping recording")
                 self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
                 self.audioManager.stopCapture()
                 self.hideFloatingControlBar()
@@ -529,13 +539,24 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         meetingDetector?.onShowNub = { [weak self] appName in
             guard let self = self else { return }
 
-            // If already recording, check if we need to upgrade the source
+            // Check if recording is active AND not paused
             if self.audioManager.isRecording() {
-                // Only upgrade from calendar to microphoneLinked (one-time)
-                if self.recordingSource == .calendar {
-                    self.recordingSource = .microphoneLinked
+                // Query Flutter to check if recording is paused
+                self.screenCaptureChannel.invokeMethod("isRecordingPaused", arguments: nil) { result in
+                    let isPaused = result as? Bool ?? false
+
+                    // If recording is active but NOT paused, don't show nub
+                    if !isPaused {
+                        // Only upgrade from calendar to microphoneLinked (one-time)
+                        if self.recordingSource == .calendar {
+                            self.recordingSource = .microphoneLinked
+                        }
+                        return
+                    }
+
+                    // Recording is paused, show nub to let user resume/restart
+                    NubManager.shared.showNub(for: appName)
                 }
-                // Don't show nub if already recording
                 return
             }
 
@@ -661,53 +682,35 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 self.recordingSource = .manual
             }
 
-            // 1. Start recording
+            // Check permissions first, then let Flutter handle the recording start
             Task {
-                do {
-                    // Check permissions first
-                    let micStatus = self.permissionManager.checkMicrophonePermission()
-                    if micStatus != "granted" {
-                        // Open main window to show permission request
-                        self.makeKeyAndOrderFront(nil)
-                        NSApp.activate(ignoringOtherApps: true)
-                        return
-                    }
-
-                    let screenStatus = await self.permissionManager.checkScreenCapturePermission()
-                    if screenStatus != "granted" {
-                        // Open main window to show permission request
-                        self.makeKeyAndOrderFront(nil)
-                        NSApp.activate(ignoringOtherApps: true)
-                        return
-                    }
-
-                    // Start audio capture
-                    try await self.audioManager.startCapture()
-
-                    // 2. Show floating control bar
-                    DispatchQueue.main.async {
-                        self.showFloatingControlBar()
-
-                        // Manually update the floating control bar state since recording was started from native
-                        self.floatingControlBar?.updateRecordingState(
-                            isRecording: true,
-                            isPaused: false,
-                            duration: 0,
-                            isInitialising: false
-                        )
-                    }
-
-                    // 3. Notify Flutter that recording started
-                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: nil)
-
-                } catch {
-                    print("MainFlutterWindow: Error starting recording from nub: \(error.localizedDescription)")
-
-                    // Show main window if there's an error
+                let micStatus = self.permissionManager.checkMicrophonePermission()
+                if micStatus != "granted" {
+                    // Open main window to show permission request
                     DispatchQueue.main.async {
                         self.makeKeyAndOrderFront(nil)
                         NSApp.activate(ignoringOtherApps: true)
                     }
+                    return
+                }
+
+                let screenStatus = await self.permissionManager.checkScreenCapturePermission()
+                if screenStatus != "granted" {
+                    // Open main window to show permission request
+                    DispatchQueue.main.async {
+                        self.makeKeyAndOrderFront(nil)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                    return
+                }
+
+                // Permissions OK - notify Flutter to start recording
+                // Flutter will handle stopping any existing recording and starting fresh
+                self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: nil)
+
+                // Show floating control bar
+                DispatchQueue.main.async {
+                    self.showFloatingControlBar()
                 }
             }
         }

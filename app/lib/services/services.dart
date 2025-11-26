@@ -394,6 +394,7 @@ abstract class ISystemAudioRecorderService {
     Function()? onStoppedAutomatically,
   });
   void stop();
+  void stopAndClearCallbacks();
   void setOnRecordingStartedFromNub(Function() callback);
   // TODO: Add status property
 }
@@ -674,6 +675,19 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
       _onError?.call(e.toString());
       _onStop?.call();
       _clearCallbacks();
+    }
+  }
+
+  /// Stop recording and immediately clear callbacks to prevent them from being
+  /// called when the native stop completes
+  @override
+  void stopAndClearCallbacks() {
+    _isRecording = false;
+    _clearCallbacks();
+    try {
+      _channel.invokeMethod('stop');
+    } catch (e) {
+      debugPrint('DesktopSystemAudioRecorderService: Error stopping: $e');
     }
   }
 }
