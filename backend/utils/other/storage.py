@@ -12,7 +12,13 @@ from utils import encryption
 from database import users as users_db
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
+    try:
+        service_account_info = json.loads(json_str)
+    except json.JSONDecodeError:
+        # Handle escaped JSON from Coolify (quotes are escaped as \")
+        cleaned = json_str.replace('\\', '')
+        service_account_info = json.loads(cleaned)
     credentials = service_account.Credentials.from_service_account_info(service_account_info)
     storage_client = storage.Client(credentials=credentials)
 else:
