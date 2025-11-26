@@ -23,7 +23,9 @@
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
+#ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
+#endif
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
@@ -596,8 +598,10 @@ static struct ring_buf ring_buf;
 
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     // Increment the counter
     monitor_inc_tx_queue_write();
+#endif
 
     if (size > CODEC_OUTPUT_MAX_BYTES) {
         return false;
@@ -679,7 +683,9 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Try send notification
             int err =
                 bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+#ifdef CONFIG_OMI_ENABLE_MONITOR
             monitor_inc_gatt_notify();
+#endif
 
             // Log failure
             if (err) {
@@ -774,7 +780,9 @@ bool write_to_storage(void)
         buffer_offset = buffer_offset + packet_size;
     }
 
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     monitor_inc_storage_write();
+#endif
     return true;
 }
 #endif

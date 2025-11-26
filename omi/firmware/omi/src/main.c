@@ -11,7 +11,9 @@
 #include "lib/core/led.h"
 #include "lib/core/lib/battery/battery.h"
 #include "lib/core/mic.h"
+#ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "lib/core/monitor.h"
+#endif
 #include "lib/core/settings.h"
 #include "lib/core/transport.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -54,17 +56,23 @@ static void print_reset_reason(void)
 
 static void codec_handler(uint8_t *data, size_t len)
 {
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     monitor_inc_broadcast_audio();
+#endif
     int err = broadcast_audio_packets(data, len);
     if (err) {
+#ifdef CONFIG_OMI_ENABLE_MONITOR
         monitor_inc_broadcast_audio_failed();
+#endif
     }
 }
 
 static void mic_handler(int16_t *buffer)
 {
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     // Track total bytes processed (each sample is 2 bytes)
     monitor_inc_mic_buffer();
+#endif
 
     int err = codec_receive_pcm(buffer, MIC_BUFFER_SAMPLES);
     if (err) {
@@ -203,12 +211,14 @@ int main(void)
         LOG_ERR("Failed to initialize settings (err %d)", setting_ret);
     }
 
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     // Initialize monitoring system
     LOG_INF("Initializing monitoring system...\n");
     ret = monitor_init();
     if (ret) {
         LOG_ERR("Failed to initialize monitoring system (err %d)", ret);
     }
+#endif
 
     if (setting_ret) {
         error_settings();
@@ -304,7 +314,9 @@ int main(void)
 
     while (1) {
         watchdog_feed();
+#ifdef CONFIG_OMI_ENABLE_MONITOR
         monitor_log_metrics();
+#endif
 
         set_led_state();
 
