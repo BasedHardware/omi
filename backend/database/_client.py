@@ -20,6 +20,17 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 # Initialize Firestore client
 # For authorized_user credentials, we need to explicitly set the project
 project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('GCP_PROJECT_ID')
+
+# Extract project from credentials if not in env
+if not project_id and os.environ.get('SERVICE_ACCOUNT_JSON'):
+    try:
+        creds = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+        project_id = creds.get('project_id') or creds.get('quota_project_id')
+    except:
+        pass
+
+print(f"Initializing Firestore with project_id: {project_id}")
+
 if project_id:
     db = firestore.Client(project=project_id)
 else:
