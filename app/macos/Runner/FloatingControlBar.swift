@@ -1286,7 +1286,7 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
 
         // Batch resize requests
         resizeWorkItem = DispatchWorkItem { [weak self] in
-            self?.resizeAnchored(to: size, makeResizable: true, animated: animated)
+            self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
         }
 
         if let workItem = resizeWorkItem {
