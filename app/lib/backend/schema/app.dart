@@ -361,7 +361,10 @@ class App {
     if (image.startsWith('http')) {
       return image;
     } else {
-      return 'https://raw.githubusercontent.com/BasedHardware/Omi/main$image';
+      // Return empty string for invalid/relative paths
+      // The backend should provide full URLs for plugin images
+      // This prevents "No host specified in URI" errors
+      return '';
     }
   }
 

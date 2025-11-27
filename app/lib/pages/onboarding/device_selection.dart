@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:video_player/video_player.dart';
@@ -121,9 +122,9 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Title and subtitle
-                        const Text(
-                          'Omi – Your AI Companion',
-                          style: TextStyle(
+                        Text(
+                          '${Env.appName} – Your AI Companion',
+                          style: const TextStyle(
                             color: Colors.black,
                             fontSize: 34,
                             fontWeight: FontWeight.bold,

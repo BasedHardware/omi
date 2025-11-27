@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 
@@ -31,7 +32,7 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'Help us improve Omi by answering a few questions.  🫶 💜',
+                'Help us improve ${Env.appName} by answering a few questions.  🫶 💜',
                 style: Theme.of(context).textTheme.titleLarge,
                 textAlign: TextAlign.start,
               ),
@@ -52,7 +53,7 @@ class _SetupQuestionsPageState extends State<SetupQuestionsPage> {
             const SizedBox(height: 40),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text('2. Where do you plan to use your Omi?', style: Theme.of(context).textTheme.titleLarge),
+              child: Text('2. Where do you plan to use your ${Env.appName}?', style: Theme.of(context).textTheme.titleLarge),
             ),
             const SizedBox(height: 16),
             for (var i = 0; i < options2.length; i++)

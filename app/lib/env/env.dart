@@ -7,6 +7,8 @@ abstract class Env {
     _instance = instance ?? DevEnv() as EnvFields;
   }
 
+  static String get appName => _instance.appName ?? 'Nooto';
+
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
   static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
@@ -31,9 +33,13 @@ abstract class Env {
   static bool get useWebAuth => _instance.useWebAuth ?? false;
 
   static bool get useAuthCustomToken => _instance.useAuthCustomToken ?? false;
+
+  static bool get disableRateOnStoreOnboarding => _instance.disableRateOnStoreOnboarding ?? false;
 }
 
 abstract class EnvFields {
+  String? get appName;
+
   String? get openAIAPIKey;
 
   String? get mixpanelProjectToken;
@@ -57,4 +63,6 @@ abstract class EnvFields {
   bool? get useWebAuth;
 
   bool? get useAuthCustomToken;
+
+  bool? get disableRateOnStoreOnboarding;
 }

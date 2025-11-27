@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -246,7 +247,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                         content:
-                            Text('Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
+                            Text('Your ${Env.appName} is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
                       ));
                       MixpanelManager().disconnectFriendClicked();
                     },
@@ -653,7 +654,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
   return [
     ListTile(
       title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Omi DevKit'),
+      subtitle: Text(device?.name ?? '${Env.appName} DevKit'),
     ),
     ListTile(
       title: const Text('Device ID'),
@@ -706,7 +707,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
     ),
     ListTile(
       title: const Text('Model Number'),
-      subtitle: Text(device?.modelNumber ?? 'Omi DevKit'),
+      subtitle: Text(device?.modelNumber ?? '${Env.appName} DevKit'),
     ),
     ListTile(
       title: const Text('Manufacturer Name'),

@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -891,7 +892,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               },
                             ),
                             PullDownMenuItem(
-                              title: 'Omi',
+                              title: Env.appName,
                               iconWidget: _getOmiAvatar(),
                               onTap: () {
                                 controller.reverse().then((_) {
@@ -955,7 +956,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           Container(
             constraints: const BoxConstraints(maxWidth: 100),
             child: Text(
-              selectedApp != null ? selectedApp.getName() : "Omi",
+              selectedApp != null ? selectedApp.getName() : Env.appName,
               style: const TextStyle(color: Colors.white, fontSize: 16),
               overflow: TextOverflow.fade,
             ),

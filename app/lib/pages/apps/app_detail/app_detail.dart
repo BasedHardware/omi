@@ -194,10 +194,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
         if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
           getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            value = value.replaceAll(
-              '](assets/',
-              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-            );
+            // Note: Asset paths should be absolute URLs from the backend
+            // If relative paths are used, they need to be resolved by the backend
             setState(() => instructionsMarkdown = value);
           });
         }

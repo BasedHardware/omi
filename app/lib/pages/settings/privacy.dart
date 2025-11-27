@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 
 class PrivacyInfoPage extends StatelessWidget {
   const PrivacyInfoPage({super.key});
@@ -27,9 +28,9 @@ class PrivacyInfoPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'At Omi, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:',
-              style: TextStyle(fontSize: 16),
+            Text(
+              'At ${Env.appName}, we take your privacy very seriously. We want to be transparent about the data we collect and how we use it to improve our product for you. Here\'s what you need to know:',
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -107,14 +108,14 @@ class PrivacyInfoPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'We are committed to using the data we collect only to make Omi a better product for you. Your privacy and trust are paramount to us.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              'We are committed to using the data we collect only to make ${Env.appName} a better product for you. Your privacy and trust are paramount to us.',
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              'Thank you for being a valued user of ${Env.appName}. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.',
+              style: const TextStyle(fontSize: 16),
             ),
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -52,7 +53,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                       maxWidth: 100,
                     ),
                     child: Text(
-                      selectedApp != null ? selectedApp.getName() : "Omi",
+                      selectedApp != null ? selectedApp.getName() : Env.appName,
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       overflow: TextOverflow.fade,
                     ),
@@ -205,7 +206,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
         height: 1,
         child: Divider(height: 1),
       ),
-      // Add Omi option to the dropdown
+      // Add default app option to the dropdown
       PopupMenuItem<String>(
         height: 40,
         value: 'no_selected',
@@ -219,9 +220,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      "Omi",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                    Text(
+                      Env.appName,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
                     selectedApp == null
                         ? const SizedBox(
@@ -347,9 +348,9 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      "Omi",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
+                    Text(
+                      Env.appName,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
                     ),
                     selectedApp == null
                         ? const SizedBox(

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -16,6 +17,17 @@ class UserReviewPage extends StatefulWidget {
 
 class _UserReviewPageState extends State<UserReviewPage> {
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatically skip if disabled via env variable
+    if (Env.disableRateOnStoreOnboarding) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.goNext();
+      });
+    }
+  }
 
   Future<void> _requestReview() async {
     setState(() {
@@ -52,6 +64,11 @@ class _UserReviewPageState extends State<UserReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    // If disabled, return empty container (page will auto-skip)
+    if (Env.disableRateOnStoreOnboarding) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       children: [
         // Background area - takes remaining space
@@ -78,9 +95,9 @@ class _UserReviewPageState extends State<UserReviewPage> {
                 const SizedBox(height: 32),
 
                 // Main title
-                const Text(
-                  'Loving Omi?',
-                  style: TextStyle(
+                Text(
+                  'Loving ${Env.appName}?',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 32,
                     fontWeight: FontWeight.bold,

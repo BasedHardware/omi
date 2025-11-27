@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/webview.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -18,7 +19,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: const Text('About Omi'),
+        title: Text('About ${Env.appName}'),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: Padding(
