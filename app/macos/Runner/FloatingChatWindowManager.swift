@@ -26,39 +26,34 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
     // MARK: - Ask AI Window Management
 
     func floatingButtonDidMove() {
-        // Only sync width when button moves (position is handled by parent/child relationship)
-        syncWindowWidth()
-    }
-    
-    private func syncWindowWidth() {
-        guard let window = aiConversationWindow, 
-              window.isVisible,
-              let button = floatingButton else { return }
-        
-        let buttonWidth = button.frame.width
-        if abs(window.frame.width - buttonWidth) > 1.0 {
-            aiConversationWindowWidth = buttonWidth
-            let currentHeight = window.frame.height
-            window.setContentSize(NSSize(width: buttonWidth, height: currentHeight))
-            // Update min/max size to maintain fixed width
-            window.minSize = NSSize(width: buttonWidth, height: 150)
-            window.maxSize = NSSize(width: buttonWidth, height: 800)
-        }
+        positionAIConversationWindow()
     }
 
     func positionAIConversationWindow() {
-        guard let window = aiConversationWindow else { return }
+        guard let window = aiConversationWindow, window.isVisible else { return }
 
         if let button = floatingButton {
+            // Synchronize width first
+            let buttonWidth = button.frame.width
+            if abs(window.frame.width - buttonWidth) > 1.0 { // Only resize if significantly different
+                aiConversationWindowWidth = buttonWidth
+                let currentHeight = window.frame.height
+                window.setContentSize(NSSize(width: buttonWidth, height: currentHeight))
+            }
+            
             // Position relative to floating control bar
             let buttonFrame = button.frame
             let spacing: CGFloat = 8
+
             let windowFrame = window.frame
             let newX = buttonFrame.origin.x
             let newY = buttonFrame.origin.y - windowFrame.height - spacing
             
-            // Set initial position (subsequent moves handled by parent/child relationship)
-            window.setFrameOrigin(NSPoint(x: newX, y: newY))
+            // Add check to prevent feedback loop
+            let newOrigin = NSPoint(x: newX, y: newY)
+            if abs(windowFrame.origin.x - newOrigin.x) > 0.1 || abs(windowFrame.origin.y - newOrigin.y) > 0.1 {
+                window.setFrameOrigin(newOrigin)
+            }
         } else {
             // If no floating control bar, center the window on screen
             if let screen = NSScreen.main {
@@ -68,6 +63,26 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
                 let newY = screenFrame.origin.y + (screenFrame.height - windowFrame.height) / 2
                 window.setFrameOrigin(NSPoint(x: newX, y: newY))
             }
+        }
+    }
+
+    @objc private func aiConversationWindowDidMove(_ notification: Notification) {
+        guard let window = notification.object as? AIConversationWindow,
+              window == self.aiConversationWindow,
+              let floatingButton = self.floatingButton else {
+            return
+        }
+        
+        // Position floating button relative to this window
+        let windowFrame = window.frame
+        let spacing: CGFloat = 8
+        let newX = windowFrame.origin.x
+        let newY = windowFrame.origin.y + windowFrame.height + spacing
+        
+        // Add check to prevent feedback loop
+        let newOrigin = NSPoint(x: newX, y: newY)
+        if abs(floatingButton.frame.origin.x - newOrigin.x) > 0.1 || abs(floatingButton.frame.origin.y - newOrigin.y) > 0.1 {
+            floatingButton.setFrameOrigin(newOrigin)
         }
     }
 
@@ -92,7 +107,13 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
                 let windowRect = NSRect(x: 0, y: 0, width: initialWidth, height: 300)
                 self.aiConversationWindow = AIConversationWindow(contentRect: windowRect, defer: false)
                 
-                // No need to observe move events - parent/child relationship handles this
+                // Observe window move events to sync floating button
+                NotificationCenter.default.addObserver(
+                    self,
+                    selector: #selector(self.aiConversationWindowDidMove),
+                    name: NSWindow.didMoveNotification,
+                    object: self.aiConversationWindow
+                )
             }
             
             // Update view
@@ -107,16 +128,9 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
                 self.aiConversationWindow?.setContentSize(NSSize(width: currentWidth, height: newSize.height))
             }
             
-            // Position the window first
-            self.positionAIConversationWindow()
-            
-            // Make chat window a child of floating button for synchronized movement
-            if let button = self.floatingButton, let chatWindow = self.aiConversationWindow {
-                button.addChildWindow(chatWindow, ordered: .below)
-            }
-            
-            // Show the window
+            // Position and show the window (this will handle width sync)
             self.aiConversationWindow?.makeKeyAndOrderFront(nil)
+            self.positionAIConversationWindow()
             NSApp.activate(ignoringOtherApps: true)
         }
     }
@@ -161,12 +175,6 @@ class FloatingChatWindowManager: NSObject, ObservableObject {
             self.askAIInputText = ""
             self.currentScreenshotURL = nil
             self.isShowingAIResponse = false
-            
-            // Remove as child window before hiding
-            if let button = self.floatingButton, let chatWindow = self.aiConversationWindow {
-                button.removeChildWindow(chatWindow)
-            }
-            
             self.aiConversationWindow?.orderOut(nil)
         }
     }
