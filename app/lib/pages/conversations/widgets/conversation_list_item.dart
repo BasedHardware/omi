@@ -74,7 +74,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             return;
           }
           MixpanelManager().conversationListItemClicked(widget.conversation, widget.conversationIdx);
-          context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+          context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);
 

@@ -144,14 +144,15 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     final detailProvider = ConversationDetailProvider();
     detailProvider.conversationProvider = conversationProvider;
     detailProvider.appProvider = appProvider;
-    detailProvider.updateConversation(index, date);
+    detailProvider.updateConversation(conversation.id, date);
 
     await detailProvider.initConversation();
 
     // If conversation has no app results, update details
     if (detailProvider.conversation.appResults.isEmpty) {
-      await conversationProvider.updateSearchedConvoDetails(detailProvider.conversation.id, date, index);
-      detailProvider.updateConversation(index, date);
+      await conversationProvider.updateSearchedConvoDetails(
+          detailProvider.conversation.id, date, index);
+      detailProvider.updateConversation(detailProvider.conversation.id, date);
     }
 
     setState(() {

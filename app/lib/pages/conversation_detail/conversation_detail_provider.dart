@@ -22,7 +22,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   // late ServerConversation memory;
 
-  int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
   String? _cachedConversationId;
 
@@ -57,13 +56,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     ServerConversation? result;
 
     if (list != null && list.isNotEmpty) {
-      final i = list.indexWhere((c) => c.id == id);
-      if (i != -1) {
-        result = list[conversationIdx = i];
-      } else if (conversationIdx < list.length) {
-        result = list[conversationIdx];
-        _cachedConversationId = result.id;
+      if (id != null) {
+        result = list.firstWhereOrNull((c) => c.id == id);
       }
+      result ??= list.first;
+      _cachedConversationId = result.id;
     }
 
     result ??= _cachedConversation;
@@ -141,13 +138,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  void updateConversation(int memIdx, DateTime date) {
-    conversationIdx = memIdx;
+  void updateConversation(String conversationId, DateTime date) {
     selectedDate = date;
     final list = conversationProvider?.groupedConversations[date];
-    if (list != null && memIdx < list.length) {
-      _cachedConversationId = list[memIdx].id;
-      _cachedConversation = list[memIdx];
+    if (list != null) {
+      final conv = list.firstWhereOrNull((c) => c.id == conversationId);
+      if (conv != null) {
+        _cachedConversationId = conv.id;
+        _cachedConversation = conv;
+      }
     }
     appResponseExpanded = List.filled(conversation.appResults.length, false);
     notifyListeners();

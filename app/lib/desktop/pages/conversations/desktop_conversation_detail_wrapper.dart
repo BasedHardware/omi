@@ -24,7 +24,7 @@ class DesktopConversationDetailWrapper extends StatelessWidget {
     return ChangeNotifierProxyProvider2<ConversationProvider, AppProvider, ConversationDetailProvider>(
       create: (context) {
         var provider = ConversationDetailProvider();
-        provider.updateConversation(conversationIndex, selectedDate);
+        provider.updateConversation(conversation.id, selectedDate);
         return provider;
       },
       update: (context, conversationProvider, appProvider, previous) {
@@ -32,7 +32,7 @@ class DesktopConversationDetailWrapper extends StatelessWidget {
           var provider = ConversationDetailProvider();
           provider.conversationProvider = conversationProvider;
           provider.appProvider = appProvider;
-          provider.updateConversation(conversationIndex, selectedDate);
+          provider.updateConversation(conversation.id, selectedDate);
           return provider;
         }
         previous.conversationProvider = conversationProvider;

@@ -104,9 +104,14 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await Provider.of<ConversationProvider>(context, listen: false)
-            .updateSearchedConvoDetails(provider.conversation.id, provider.selectedDate, provider.conversationIdx);
-        provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+        final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
+        final date = provider.selectedDate;
+        final list = convoProvider.groupedConversations[date] ?? [];
+        final idx = list.indexWhere((c) => c.id == provider.conversation.id);
+        if (idx != -1) {
+          await convoProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        }
+        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Start animations

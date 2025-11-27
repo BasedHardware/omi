@@ -161,13 +161,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Find the proper date and index for this conversation in the grouped conversations
       var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      provider.updateConversation(index >= 0 ? index : 0, date);
+      provider.updateConversation(widget.conversation.id, date);
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await conversationProvider.updateSearchedConvoDetails(
-            provider.conversation.id, provider.selectedDate, provider.conversationIdx);
-        provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+        final date = provider.selectedDate;
+        final list = conversationProvider.groupedConversations[date] ?? [];
+        final idx = list.indexWhere((c) => c.id == provider.conversation.id);
+        if (idx != -1) {
+          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        }
+        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -255,7 +259,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           context,
           () => Navigator.pop(context),
           () {
-            context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+            {
+              final convoProvider = context.read<ConversationProvider>();
+              final date = provider.selectedDate;
+              final list = convoProvider.groupedConversations[date] ?? [];
+              final idx = list.indexWhere((c) => c.id == provider.conversation.id);
+              convoProvider.deleteConversation(provider.conversation, idx);
+            }
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, {'deleted': true}); // Close detail page
           },
