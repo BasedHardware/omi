@@ -86,8 +86,11 @@ class _FoundDevicesState extends State<FoundDevices> {
   /// Show bottom sheet when Apple Watch is not reachable
   Future<void> _showWatchNotReachableBottomSheet(String deviceId) async {
     final provider = Provider.of<OnboardingProvider>(context, listen: false);
-    final deviceList = provider.deviceList;
-    final device = deviceList.firstWhere((d) => d.id == deviceId);
+    final device = provider.deviceList.firstWhereOrNull((d) => d.id == deviceId);
+    if (device == null) {
+      debugPrint('Device with id $deviceId not found in provider list.');
+      return;
+    }
 
     await showModalBottomSheet(
       context: context,
@@ -104,8 +107,11 @@ class _FoundDevicesState extends State<FoundDevices> {
 
   Future<void> _showMicrophonePermissionPage(AppleWatchDeviceConnection connection) async {
     final provider = Provider.of<OnboardingProvider>(context, listen: false);
-    final deviceList = provider.deviceList;
-    final device = deviceList.firstWhere((d) => d.id == connection.device.id);
+    final device = provider.deviceList.firstWhereOrNull((d) => d.id == connection.device.id);
+    if (device == null) {
+      debugPrint('Device with id ${connection.device.id} not found in provider list.');
+      return;
+    }
 
     await Navigator.of(context).push(
       MaterialPageRoute(
