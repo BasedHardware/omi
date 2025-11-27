@@ -403,7 +403,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
-                  final Uri url = Uri.parse('https://www.omi.me/pages/download');
+                  final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 },
               ),
