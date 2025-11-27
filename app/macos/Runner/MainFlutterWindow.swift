@@ -557,6 +557,11 @@ extension MainFlutterWindow {
     }
     
     @objc private func handleMenuBarOpenChatWindow() {
+        // Ensure floating control bar exists before using it
+        if floatingControlBar == nil {
+            showFloatingControlBar()
+        }
+        
         let fileUrl = ScreenCaptureManager.captureScreen()
         FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
     }
@@ -584,12 +589,27 @@ extension MainFlutterWindow {
         if floatingControlBar?.isVisible ?? false {
             hideFloatingControlBar()
         } else {
+            // Activate the app first so it can receive keyboard input
+            NSApp.activate(ignoringOtherApps: true)
             showFloatingControlBar()
         }
     }
 
     @objc private func handleAskAIShortcut() {
+        // Activate the app first so it can receive keyboard input
+        NSApp.activate(ignoringOtherApps: true)
+        
         let fileUrl = ScreenCaptureManager.captureScreen()
-        FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        
+        // Ensure floating control bar exists before using it
+        if floatingControlBar == nil {
+            showFloatingControlBar()
+            // Delay to ensure window is fully initialized and ready to accept focus
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+            }
+        } else {
+            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        }
     }
 }
