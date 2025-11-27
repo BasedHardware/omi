@@ -13,6 +13,7 @@ class GlobalShortcutManager {
     
     private enum HotKeyID: UInt32 {
         case askAI = 1
+        case askAIKeypad = 2
         case toggleButton = 3
     }
     
@@ -30,7 +31,8 @@ class GlobalShortcutManager {
         // Unregister any existing shortcuts before registering new ones.
         unregisterShortcuts()
         
-        registerHotKey(keyCode: kVK_ANSI_K, modifiers: cmdKey, id: .askAI) // CMD+K
+        registerHotKey(keyCode: kVK_Return, modifiers: cmdKey, id: .askAI) // CMD+Enter
+        registerHotKey(keyCode: kVK_ANSI_KeypadEnter, modifiers: cmdKey, id: .askAIKeypad) // CMD+Keypad Enter
         registerHotKey(keyCode: 42, modifiers: cmdKey, id: .toggleButton) // kVK_Backslash
     }
     
@@ -68,8 +70,8 @@ class GlobalShortcutManager {
         }
         
         switch id {
-        case .askAI:
-            print("CMD+K shortcut detected. Triggering Ask AI...")
+        case .askAI, .askAIKeypad:
+            print("CMD+Enter shortcut detected. Triggering Ask AI...")
             NotificationCenter.default.post(name: GlobalShortcutManager.askAINotification, object: nil)
         case .toggleButton:
             print("CMD+\\ shortcut detected. Toggling floating button...")

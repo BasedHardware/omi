@@ -28,6 +28,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   bool isConnected = false;
   int batteryPercentage = -1;
   String deviceName = '';
+  DeviceType? deviceType;
   String deviceId = '';
   String? connectingToDeviceId;
   List<BtDevice> deviceList = [];
@@ -412,6 +413,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       deviceId = device.id;
       await SharedPreferencesUtil().btDeviceSet(device);
       deviceName = device.name;
+      deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         deviceProvider!.setConnectedDevice(cDevice);
@@ -452,6 +454,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     batteryPercentage = -1;
     isConnected = false;
     deviceName = '';
+    deviceType = null;
     deviceId = '';
     notifyListeners();
   }

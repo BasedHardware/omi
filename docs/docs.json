@@ -14,26 +14,13 @@
         "group": "Get Started",
         "pages": [
           "doc/get_started/introduction",
-           "getstartedwithomi",
-          "doc/get_started/Flash_device"
+           "getstartedwithomi"
+          
         ]
       },
       {
         "group": "Developer",
         "pages": [
-          {
-            "group": "Apps",
-            "pages": [
-              "doc/developer/apps/Introduction",
-              "doc/developer/apps/PromptBased",
-              "doc/developer/apps/Integrations",
-              "doc/developer/apps/AudioStreaming",
-              "doc/developer/apps/Import",
-              "doc/developer/apps/Submitting",
-              "doc/developer/apps/Oauth",
-              "doc/developer/apps/Notifications"
-            ]
-          },
           "doc/developer/AppSetup",
           {
             "group": "Backend",
@@ -82,6 +69,27 @@
         ]
       },
       {
+        "group": "Build Apps",
+        "pages": [
+          "doc/developer/apps/Introduction",
+          "doc/developer/apps/PromptBased",
+          "doc/developer/apps/Integrations",
+          {
+            "group": "Examples",
+            "pages": [
+              "doc/developer/apps/examples/Github",
+              "doc/developer/apps/examples/Slack",
+              "doc/developer/apps/examples/OmiMentor"
+            ]
+          },
+          "doc/developer/apps/AudioStreaming",
+          "doc/developer/apps/Import",
+          "doc/developer/apps/Oauth",
+          "doc/developer/apps/Notifications",
+          "doc/developer/apps/Submitting"
+        ]
+      },
+      {
         "group": "Hardware",
         "pages": [
           "doc/hardware/OmiConsumer",
@@ -95,7 +103,8 @@
         "pages": [
           "doc/assembly/introduction",
           "doc/assembly/Buying_Guide",
-          "doc/assembly/Build_the_device"
+          "doc/assembly/Build_the_device",
+          "doc/get_started/Flash_device"
         ]
       },
       {

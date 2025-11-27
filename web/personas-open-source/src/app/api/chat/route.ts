@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     console.log('Formatted messages:', formattedMessages);
 
     // LLM model, use a better model for specific people
-    let llmModel = 'google/gemini-flash-1.5-8b';
+    let llmModel = 'google/gemini-2.5-flash-lite';
     if (isInfluencer) {
       llmModel = 'anthropic/claude-3.5-sonnet';
     }

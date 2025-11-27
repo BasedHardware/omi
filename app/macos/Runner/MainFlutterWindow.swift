@@ -300,9 +300,17 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     }
     
     @objc private func systemWillSleep() {
+        let wasRecording = audioManager.isRecording()
+        
+        // Explicitly stop recording before sleep to prevent SCStream crashes
+        if wasRecording {
+            print("DEBUG: Stopping recording before system sleep")
+            audioManager.stopCapture()
+        }
+        
         // Notify Flutter that system is going to sleep
         screenCaptureChannel.invokeMethod("systemWillSleep", arguments: [
-            "wasRecording": audioManager.isRecording()
+            "wasRecording": wasRecording
         ])
     }
     
@@ -579,8 +587,6 @@ extension MainFlutterWindow {
     @objc private func handleToggleFloatingButtonShortcut() {
         if floatingControlBar?.isVisible ?? false {
             hideFloatingControlBar()
-            // Also hide the AI conversation window when hiding the floating bar
-            FloatingChatWindowManager.shared.clearAndHideAIConversationWindow()
         } else {
             showFloatingControlBar()
         }

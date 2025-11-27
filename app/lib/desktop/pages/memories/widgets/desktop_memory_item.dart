@@ -85,8 +85,6 @@ class DesktopMemoryItem extends StatelessWidget {
                           fontSize: 15,
                           height: 1.4,
                         ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
                       ),
                       if (memory.isLocked) _buildLockedOverlay(context),
                     ],
@@ -247,6 +245,8 @@ class DesktopMemoryItem extends StatelessWidget {
         return ResponsiveHelper.purplePrimary;
       case MemoryCategory.system:
         return Colors.orange;
+      case MemoryCategory.manual:
+        return Colors.purple;
     }
   }
 
@@ -256,6 +256,8 @@ class DesktopMemoryItem extends StatelessWidget {
         return Icons.lightbulb_outline;
       case MemoryCategory.system:
         return Icons.settings_outlined;
+      case MemoryCategory.manual:
+        return Icons.edit_outlined;
     }
   }
 }

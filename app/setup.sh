@@ -62,6 +62,39 @@ echo ""
 API_BASE_URL=https://api.omiapi.com/
 
 ######################################
+# Generate device suffix from hostname
+######################################
+function generate_device_suffix() {
+  # Use hostname or a hash of it as suffix
+  HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
+  echo "${HOSTNAME}"
+}
+
+######################################
+# Generate custom configs for iOS
+######################################
+function generate_ios_custom_config() {
+  bash scripts/generate_ios_custom_config.sh ios/Config/Dev/GoogleService-Info.plist ios/Flutter \
+
+  # Custom bundle identifier
+  SUFFIX=$(generate_device_suffix)
+  CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
+  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "ios/Flutter/Custom.xcconfig"
+}
+
+######################################
+# Generate custom configs for macOS
+######################################
+function generate_macos_custom_config() {
+  echo "// This is a generated file; do not edit or check into version control." > "macos/Runner/Configs/Custom.xcconfig"
+
+  # Custom bundle identifier
+  SUFFIX=$(generate_device_suffix)
+  CUSTOM_BUNDLE="com.friend-app-with-wearable.macos-${SUFFIX}"
+  echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "macos/Runner/Configs/Custom.xcconfig"
+}
+
+######################################
 # Setup Firebase with prebuilt configs
 ######################################
 function setup_firebase() {
@@ -154,6 +187,8 @@ function setup_provisioning_profile_macos() {
 #################
 function setup_app_env() {
   echo API_BASE_URL=$API_BASE_URL > .dev.env
+  echo USE_WEB_AUTH=true >> .dev.env
+  echo USE_AUTH_CUSTOM_TOKEN=true >> .dev.env
 }
 
 # #######################
@@ -168,7 +203,8 @@ function setup_keystore_android() {
 # #####
 function run_build_android() {
   flutter pub get \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
@@ -177,34 +213,45 @@ function run_build_android() {
 function run_build_ios() {
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
-    && dart run build_runner build
+    && dart run build_runner build \
+    && flutter run --flavor dev
 }
 
 # #########
 # Build macOS
 # #########
 function run_build_macos() {
-  flutter pub get \
+  flutter clean \
+    && flutter pub get \
     && pushd macos && pod install --repo-update && popd \
-    && dart run build_runner build \
-    && flutter build macos --debug --flavor dev \
-    && open build/macos/Build/Products/Debug-dev/Omi.app
+    && dart run build_runner build
 
-  echo "Note: To run the app on your macOS device, we need to register your Mac's device ID to our provisioning profile. Please send us your device ID on Discord (http://discord.omi.me)."
+  echo ""
+  echo "Setup complete! Opening Xcode..."
+  echo ""
+  echo "NEXT STEPS:"
+  echo "1. Select 'Runner' target"
+  echo "2. Go to 'Signing & Capabilities'"
+  echo "3. Select your Development Team"
+  echo "4. Run \$ flutter run --flavor dev --debug"
+  echo ""
+  sleep 3
+
+  open macos/Runner.xcodeproj
 }
 
 
 case "${1}" in
   macos)
     setup_firebase \
+      && generate_macos_custom_config \
       && setup_app_env \
-      && setup_provisioning_profile_macos \
       && run_build_macos
     ;;
   ios)
-    setup_firebase \
+      setup_firebase \
+      && generate_ios_custom_config \
       && setup_app_env \
-      && setup_provisioning_profile \
       && run_build_ios
     ;;
   android)
@@ -212,12 +259,6 @@ case "${1}" in
       && setup_firebase \
       && setup_app_env \
       && run_build_android
-    ;;
-  macos)
-    setup_firebase \
-      && setup_app_env \
-      && setup_provisioning_profile \
-      && build_macos
     ;;
   *)
     error "Unexpected platform '${1}'"
