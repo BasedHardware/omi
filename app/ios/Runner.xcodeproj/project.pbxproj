@@ -136,8 +136,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		42A7BA352E788BD300138969 /* omiWatchApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = omiWatchApp;
 			sourceTree = "<group>";
 		};
@@ -558,8 +556,8 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-prod.entitlements";
-				DEVELOPMENT_TEAM = 9536L8KLMP;
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
@@ -577,8 +575,8 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-prod.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
@@ -595,8 +593,8 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-prod.entitlements";
-				DEVELOPMENT_TEAM = 9536L8KLMP;
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Runner;
@@ -612,8 +610,8 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerDebug-dev.entitlements";
-				DEVELOPMENT_TEAM = "";
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
 				PRODUCT_NAME = Runner;
@@ -629,8 +627,8 @@
 				BUILD_LIBRARY_FOR_DISTRIBUTION = NO;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerProfile-dev.entitlements";
-				DEVELOPMENT_TEAM = "";
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
 				PRODUCT_NAME = Runner;
@@ -648,8 +646,8 @@
 				CODE_SIGN_ENTITLEMENTS = "Runner/RunnerRelease-dev.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).development";
 				PRODUCT_NAME = Runner;
@@ -723,14 +721,14 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -773,7 +771,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -781,7 +779,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER).development";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -828,7 +826,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -836,7 +834,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -882,7 +880,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -890,7 +888,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -935,7 +933,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -943,7 +941,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -990,7 +988,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -998,7 +996,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1043,7 +1041,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1051,7 +1049,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER)";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1096,7 +1094,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1104,7 +1102,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER).development";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1150,7 +1148,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1158,7 +1156,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER).development";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1203,7 +1201,7 @@
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -1211,7 +1209,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "";
 				INFOPLIST_FILE = "omiWatchApp-Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "$(APP_BUNDLE_IDENTIFIER).development";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1510,14 +1508,14 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -1556,14 +1554,14 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9536L8KLMP;
+				DEVELOPMENT_TEAM = Z7TX8267J4;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Flutter",
 				);
 				INFOPLIST_FILE = Runner/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Omi;
+				INFOPLIST_KEY_CFBundleDisplayName = Nooto;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
