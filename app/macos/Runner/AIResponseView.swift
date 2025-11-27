@@ -53,12 +53,15 @@ private struct MainBackgroundStyle: ViewModifier {
     let cornerRadius: CGFloat
 
     func body(content: Content) -> some View {
-        content
-            .background(
-                ControlBarVisualEffectView(material: .menu, blendingMode: .withinWindow)
-                    .opacity(0.7)
-                    .cornerRadius(cornerRadius)
-            )
+        if #available(macOS 26.0, *) {
+            content.glassEffect(in: RoundedRectangle(cornerRadius: cornerRadius))
+        } else {
+            content
+                .background(
+                    ControlBarVisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
+                )
+                .cornerRadius(cornerRadius)
+        }
     }
 }
 
@@ -83,18 +86,18 @@ struct AIResponseView: View {
                         .clipShape(Circle())
                     Text("thinking")
                         .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white)
+                        .foregroundColor(.white.opacity(0.8))
                 } else {
-                    Text("Omi response")
+                    Text("AI response")
                         .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(.white)
+                        .foregroundColor(.white.opacity(0.8))
                 }
                 Spacer()
                 if !isLoading {
                     Button(action: { onAskFollowUp?() }) {
                         Text("Ask follow up")
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(Color.white.opacity(0.1))
@@ -120,10 +123,10 @@ struct AIResponseView: View {
                                 Image(systemName: "checkmark")
                                 Text("Copied")
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(.green)
                         } else {
                             Image(systemName: "square.on.square")
-                                .foregroundColor(.white)
+                                .foregroundColor(.secondary)
                         }
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -132,7 +135,7 @@ struct AIResponseView: View {
                 Button(action: { onClose?() }) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .regular))
-                        .foregroundColor(.white)
+                        .foregroundColor(.secondary)
                         .frame(width: 16, height: 16)
                         .overlay(
                             Circle()
@@ -159,7 +162,7 @@ struct AIResponseView: View {
                     // As per the screenshot, but this is a placeholder.
                     // A better icon could be used if available in assets.
                     Image(systemName: "questionmark.circle.fill")
-                        .foregroundColor(.white)
+                        .foregroundColor(.red)
                 }
 
                 Text(userInput)
@@ -186,26 +189,13 @@ struct AIResponseView: View {
             } else {
                 ScrollView {
                     Markdown(responseText)
-                        .markdownTextStyle {
-                            ForegroundColor(.white)
-                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+
             }
-            
-            // Resize handle indicator at the bottom
-            HStack {
-                Spacer()
-                Image(systemName: "chevron.compact.down")
-                    .foregroundColor(.white)
-                    .font(.system(size: 12))
-                Spacer()
-            }
-            .padding(.top, 4)
         }
         .padding()
-        .frame(width: width)
-        .frame(minHeight: 150, maxHeight: 800)
+        .frame(width: width, height: 300)
         .modifier(MainBackgroundStyle(cornerRadius: 20))
     }
 }
