@@ -102,6 +102,9 @@ class Recording: Identifiable {
         // Create a new file URL with the new filename
         let newFileURL = self.getDocumentsDirectory().appendingPathComponent(newFilename)
         
+        // Capture the old file URL before updating filename
+        let oldFileURL = self.fileURL
+        
         do {
             // Copy the contents from the current file URL to the new file URL
             try FileManager.default.copyItem(at: fileURL, to: newFileURL)
@@ -112,6 +115,11 @@ class Recording: Identifiable {
             // Update the recordingFile with the new file
             if let audioFormat = audioFormat {
                 recordingFile = try AVAudioFile(forWriting: newFileURL, settings: audioFormat.settings, commonFormat: .pcmFormatInt16, interleaved: false)
+            }
+            
+            // Delete the old file after successful creation of new file
+            if FileManager.default.fileExists(atPath: oldFileURL.path) {
+                try FileManager.default.removeItem(at: oldFileURL)
             }
             
         } catch {
