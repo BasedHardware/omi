@@ -1,0 +1,132 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: omi-redis
+    # Ports exposed only for local development
+    # Comment out for Coolify deployment (Traefik handles routing)
+    # ports:
+    #   - "6379:6379"
+    volumes:
+      - omi-redis-data:/data
+    command: >
+      sh -c "redis-server
+      --appendonly yes
+      --requirepass $${REDIS_DB_PASSWORD:-}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "$${REDIS_DB_PASSWORD:-}",
+          "ping",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # NOTE: Typesense - using external Typesense Cloud
+  # Set TYPESENSE_HOST, TYPESENSE_HOST_PORT, TYPESENSE_API_KEY in Coolify env vars
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omi-backend
+    # Ports exposed only for local development
+    # Comment out for Coolify deployment (Traefik handles routing)
+    # ports:
+    #   - "8000:8080"
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      # Google Cloud project ID (required for authorized_user credentials)
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+    volumes:
+      # Google credentials (optional) - can mount via Coolify storage
+      # In Coolify: Add storage volume mounting google-credentials.json to /app/google-credentials.json
+      # OR set SERVICE_ACCOUNT_JSON environment variable (backend creates file automatically)
+
+      # Persist temporary files across restarts
+      - omi-temp:/app/_temp
+      - omi-samples:/app/_samples
+      - omi-segments:/app/_segments
+      - omi-speech-profiles:/app/_speech_profiles
+
+      # Cache pretrained models (VAD, etc.) to avoid re-downloading on every restart
+      - omi-pretrained-models:/app/pretrained_models
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+  pusher:
+    build:
+      context: .
+      dockerfile: pusher/Dockerfile
+    container_name: omi-pusher
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      # Google Cloud credentials - either set SERVICE_ACCOUNT_JSON env var OR mount file
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      # Google Cloud project ID (required for authorized_user credentials)
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+    volumes:
+      # Google credentials (optional) - can mount via Coolify storage
+      # In Coolify: Add storage volume mounting google-credentials.json to /app/google-credentials.json
+      # OR set SERVICE_ACCOUNT_JSON environment variable (backend creates file automatically)
+
+      # Persist temporary files
+      - omi-temp:/app/_temp
+      - omi-samples:/app/_samples
+      - omi-segments:/app/_segments
+      - omi-speech-profiles:/app/_speech_profiles
+
+      # Cache pretrained models (VAD, etc.) to avoid re-downloading on every restart
+      - omi-pretrained-models:/app/pretrained_models
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+volumes:
+  omi-redis-data:
+    driver: local
+  omi-temp:
+    driver: local
+  omi-samples:
+    driver: local
+  omi-segments:
+    driver: local
+  omi-speech-profiles:
+    driver: local
+  omi-pretrained-models:
+    driver: local

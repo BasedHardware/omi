@@ -8,11 +8,11 @@
 #include? "Custom.xcconfig"
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = Omi
+PRODUCT_NAME = Nooto
 
 // The application's bundle identifier
 // This now uses APP_BUNDLE_IDENTIFIER which can be customized per developer via Custom.xcconfig
 PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2024 Omi AI. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2024 Togodynamics. All rights reserved.

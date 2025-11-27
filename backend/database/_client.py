@@ -6,12 +6,35 @@ import uuid
 from google.cloud import firestore
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
+    try:
+        service_account_info = json.loads(json_str)
+    except json.JSONDecodeError:
+        # Handle escaped JSON from Coolify (quotes are escaped as \")
+        cleaned = json_str.replace('\\', '')
+        service_account_info = json.loads(cleaned)
     # create google-credentials.json
     with open('google-credentials.json', 'w') as f:
         json.dump(service_account_info, f)
 
-db = firestore.Client()
+# Initialize Firestore client
+# For authorized_user credentials, we need to explicitly set the project
+project_id = os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('GCP_PROJECT_ID')
+
+# Extract project from credentials if not in env
+if not project_id and os.environ.get('SERVICE_ACCOUNT_JSON'):
+    try:
+        creds = json.loads(os.environ.get('SERVICE_ACCOUNT_JSON', '{}'))
+        project_id = creds.get('project_id') or creds.get('quota_project_id')
+    except:
+        pass
+
+print(f"Initializing Firestore with project_id: {project_id}")
+
+if project_id:
+    db = firestore.Client(project=project_id)
+else:
+    db = firestore.Client()
 
 
 def get_users_uid():

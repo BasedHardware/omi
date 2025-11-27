@@ -12,9 +12,23 @@ from utils import encryption
 from database import users as users_db
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = service_account.Credentials.from_service_account_info(service_account_info)
-    storage_client = storage.Client(credentials=credentials)
+    json_str = os.environ["SERVICE_ACCOUNT_JSON"]
+    try:
+        service_account_info = json.loads(json_str)
+    except json.JSONDecodeError:
+        # Handle escaped JSON from Coolify (quotes are escaped as \")
+        cleaned = json_str.replace('\\', '')
+        service_account_info = json.loads(cleaned)
+
+    # Check credential type and create appropriate credentials
+    cred_type = service_account_info.get('type')
+    if cred_type == 'service_account':
+        credentials = service_account.Credentials.from_service_account_info(service_account_info)
+        storage_client = storage.Client(credentials=credentials)
+    else:
+        # For authorized_user or other types, use default credentials from file
+        # The google-credentials.json file was already created by entrypoint or _client.py
+        storage_client = storage.Client()
 else:
     storage_client = storage.Client()
 
