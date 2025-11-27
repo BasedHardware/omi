@@ -423,28 +423,28 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 self.floatingControlBar = FloatingControlBar()
                 FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
                 self.menuBarManager?.observeFloatingControlBar(self.floatingControlBar!)
-                self.floatingControlBar?.onAskAI = {
-                    Task {
-                        let screenshotURL = await ScreenCaptureManager.captureScreen()
-                        FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
+                
+                self.floatingControlBar?.onAskAI = { fileUrl in
+                    let screenshot: URL?
+                    if let url = fileUrl {
+                        screenshot = url
+                    } else {
+                        screenshot = ScreenCaptureManager.captureScreen()
                     }
+                    FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: screenshot)
                 }
+                
                 self.floatingControlBar?.onPlayPause = { [weak self] in
                     self?.handlePlayPauseWithRetry()
                 }
-                self.floatingControlBar?.onMove = {
-                    FloatingChatWindowManager.shared.floatingButtonDidMove()
+                
+                self.floatingControlBar?.onSendQuery = { message, url in
+                    FloatingChatWindowManager.shared.sendAIQuery(message: message, url: url)
                 }
-                self.floatingControlBar?.onResize = { newWidth in
-                    FloatingChatWindowManager.shared.aiConversationWindowWidth = newWidth
-                    FloatingChatWindowManager.shared.positionAIConversationWindow()
-                }
+                
                 self.floatingControlBar?.onHide = { }
             }
             self.floatingControlBar?.makeKeyAndOrderFront(nil)
-            
-            // If AI conversation window was created before floating control bar, position it now
-            FloatingChatWindowManager.shared.positionAIConversationWindow()
         }
     }
 
@@ -557,10 +557,8 @@ extension MainFlutterWindow {
     }
     
     @objc private func handleMenuBarOpenChatWindow() {
-        Task {
-            let screenshotURL = await ScreenCaptureManager.captureScreen()
-            FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
-        }
+        let fileUrl = ScreenCaptureManager.captureScreen()
+        FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
     }
 
     private func handlePlayPauseWithRetry() {
@@ -571,11 +569,9 @@ extension MainFlutterWindow {
             attempts += 1
             
             floatingControlBarChannel.invokeMethod("togglePauseResume", arguments: nil) { result in
-                if let error = result as? FlutterError {
-                    if attempts < maxAttempts {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            attemptInvoke()
-                        }
+                if result is FlutterError, attempts < maxAttempts {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        attemptInvoke()
                     }
                 }
             }
@@ -593,9 +589,7 @@ extension MainFlutterWindow {
     }
 
     @objc private func handleAskAIShortcut() {
-        Task {
-            let screenshotURL = await ScreenCaptureManager.captureScreen()
-            FloatingChatWindowManager.shared.toggleAIConversationWindow(screenshotURL: screenshotURL)
-        }
+        let fileUrl = ScreenCaptureManager.captureScreen()
+        FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
     }
 }

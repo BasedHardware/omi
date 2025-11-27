@@ -37,11 +37,7 @@
 		CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */; };
 		CFD3F5612E86368F00CFA1AD /* FloatingControlBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */; };
 		CFD3F5632E868FD100CFA1AD /* ScreenCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */; };
-		CFD3F5692E8691C500CFA1AD /* AskAIInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5682E8691C500CFA1AD /* AskAIInputView.swift */; };
-		CFD3F56B2E8696CC00CFA1AD /* AIResponseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56A2E8696CC00CFA1AD /* AIResponseView.swift */; };
 		CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */; };
-		CFD3F56F2E86CA4E00CFA1AD /* AIConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */; };
-		CFD3F5712E86CCE700CFA1AD /* AIConversationWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */; };
 		CFD3F5742E87FAFF00CFA1AD /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = CFD3F5732E87FAFF00CFA1AD /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
@@ -109,11 +105,7 @@
 		CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingChatWindowManager.swift; sourceTree = "<group>"; };
 		CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingControlBar.swift; sourceTree = "<group>"; };
 		CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCaptureManager.swift; sourceTree = "<group>"; };
-		CFD3F5682E8691C500CFA1AD /* AskAIInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskAIInputView.swift; sourceTree = "<group>"; };
-		CFD3F56A2E8696CC00CFA1AD /* AIResponseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIResponseView.swift; sourceTree = "<group>"; };
 		CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
-		CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationView.swift; sourceTree = "<group>"; };
-		CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConversationWindow.swift; sourceTree = "<group>"; };
 		ECA12410D4472837013672C6 /* Pods-Runner.debug-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-prod.xcconfig"; sourceTree = "<group>"; };
 		F8DCBD7DD8AB67EE93F0458C /* Pods-Runner.profile-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-prod.xcconfig"; sourceTree = "<group>"; };
 		FBFF4BAE9914B1C75B63AB20 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
@@ -190,11 +182,7 @@
 		33FAB671232836740065AC1E /* Runner */ = {
 			isa = PBXGroup;
 			children = (
-				CFD3F5702E86CCE700CFA1AD /* AIConversationWindow.swift */,
-				CFD3F56E2E86CA4E00CFA1AD /* AIConversationView.swift */,
 				CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */,
-				CFD3F56A2E8696CC00CFA1AD /* AIResponseView.swift */,
-				CFD3F5682E8691C500CFA1AD /* AskAIInputView.swift */,
 				CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */,
 				CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */,
 				CFD3F5582E85968400CFA1AD /* FloatingChatWindowManager.swift */,
@@ -419,13 +407,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -440,13 +424,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -460,15 +440,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CFD3F56B2E8696CC00CFA1AD /* AIResponseView.swift in Sources */,
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */,
 				CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */,
 				CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */,
-				CFD3F5712E86CCE700CFA1AD /* AIConversationWindow.swift in Sources */,
 				33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */,
-				CFD3F56F2E86CA4E00CFA1AD /* AIConversationView.swift in Sources */,
-				CFD3F5692E8691C500CFA1AD /* AskAIInputView.swift in Sources */,
 				33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */,
 				33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
@@ -565,7 +541,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -738,7 +714,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
@@ -1201,7 +1177,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 307;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = Runner/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Omi;
