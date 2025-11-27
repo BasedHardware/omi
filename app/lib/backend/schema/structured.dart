@@ -64,7 +64,7 @@ class Structured {
   @override
   String toString() {
     var str = '';
-    str += '${getEmoji()} $title\n\n$overview\n\n'; // ($category)
+    str += '$title\n\n$overview\n\n'; // ($category)
     if (actionItems.isNotEmpty) {
       str += 'Action Items:\n';
       for (var item in actionItems) {

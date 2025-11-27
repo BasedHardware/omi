@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -188,7 +189,7 @@ class WalListItem extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          '${secondsToHumanReadable(wal.seconds)} • ${wal.deviceModel ?? "Omi Device"}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
+                                          '${secondsToHumanReadable(wal.seconds)} • ${wal.deviceModel ?? "${Env.appName} Device"}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
                                           style: TextStyle(
                                             color: Colors.grey.shade400,
                                             fontSize: 14,
@@ -1082,9 +1083,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
-                              'Your Omi device will automatically save audio recordings here. Once you have recordings, you can process them into readable conversations.',
-                              style: TextStyle(color: Colors.grey, fontSize: 14),
+                            Text(
+                              'Your ${Env.appName} device will automatically save audio recordings here. Once you have recordings, you can process them into readable conversations.',
+                              style: const TextStyle(color: Colors.grey, fontSize: 14),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 12),
@@ -1150,8 +1151,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                             const SizedBox(height: 8),
                             Text(
                               syncProvider.storageFilter == WalStorage.sdcard
-                                  ? 'No audio files found on your device\'s SD card. Make sure your Omi device has recorded audio to its SD card.'
-                                  : 'No audio files found in phone storage. Audio gets stored here when your Omi device transfers recordings to your phone.',
+                                  ? 'No audio files found on your device\'s SD card. Make sure your ${Env.appName} device has recorded audio to its SD card.'
+                                  : 'No audio files found in phone storage. Audio gets stored here when your ${Env.appName} device transfers recordings to your phone.',
                               style: const TextStyle(color: Colors.grey, fontSize: 14),
                               textAlign: TextAlign.center,
                             ),

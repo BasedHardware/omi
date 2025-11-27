@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -175,19 +176,19 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   Padding(
                     padding: EdgeInsets.fromLTRB(40, !provider.startedRecording ? 20 : 0, 40, 20),
                     child: !provider.startedRecording
-                        ? const Column(
+                        ? Column(
                             children: [
                               Text(
-                                'Omi needs to learn your voice to recognize you',
+                                '${Env.appName} needs to learn your voice to recognize you',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
                                   height: 1.4,
                                   fontWeight: FontWeight.w400,
                                 ),
                               ),
-                              SizedBox(height: 14),
+                              const SizedBox(height: 14),
                               //Text("Note: This only works in English", style: TextStyle(color: Colors.white)),
                             ],
                           )

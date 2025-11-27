@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/env/env.dart';
 
 class FirmwareUpdateStep {
   final String title;
@@ -42,12 +43,12 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
       'no_usb': FirmwareUpdateStep(
         title: 'No USB',
         description:
-            "Disconnect your Omi device from any USB connection. USB connection during updates may damage your device.",
+            "Disconnect your ${Env.appName} device from any USB connection. USB connection during updates may damage your device.",
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(
         title: 'Battery > 15%',
-        description: "Ensure your Omi device has at least 15% battery remaining for a safe update.",
+        description: "Ensure your ${Env.appName} device has at least 15% battery remaining for a safe update.",
         icon: Icons.battery_5_bar,
       ),
       'internet': FirmwareUpdateStep(

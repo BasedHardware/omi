@@ -474,6 +474,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                           MessageConversationStructured(
                             modifiedDetails.structured.title,
                             modifiedDetails.structured.emoji,
+                            category: modifiedDetails.structured.category,
                           ));
                       widget.messageMemories.clear();
                       widget.messageMemories.addAll(copy);
@@ -497,25 +498,38 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   color: const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(12.0),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        '${tryDecodeText(data.$2.structured.emoji)} ${data.$2.structured.title}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            data.$2.structured.title,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        conversationDetailLoading[data.$1]
+                            ? const SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ))
+                            : const Icon(Icons.chevron_right, size: 20)
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    conversationDetailLoading[data.$1]
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ))
-                        : const Icon(Icons.arrow_right_alt)
+                    const SizedBox(height: 4),
+                    Text(
+                      _getFormattedDate(data.$2.createdAt),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                    ),
                   ],
                 ),
               ),
@@ -524,6 +538,98 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         ],
       ],
     );
+  }
+
+  IconData _getCategoryIcon(String category) {
+    String cat = category.toLowerCase();
+
+    // Work & Business
+    if (cat.contains('work') || cat.contains('business')) {
+      return Icons.business_center_outlined;
+    } else if (cat.contains('meeting') || cat.contains('conference')) {
+      return Icons.calendar_today_outlined;
+    } else if (cat.contains('project')) {
+      return Icons.folder_outlined;
+    }
+    // Personal & Family
+    else if (cat.contains('personal') || cat.contains('life')) {
+      return Icons.person_outline;
+    } else if (cat.contains('family')) {
+      return Icons.people_outline;
+    }
+    // Health & Wellness
+    else if (cat.contains('health') || cat.contains('medical')) {
+      return Icons.favorite_outline;
+    } else if (cat.contains('fitness') || cat.contains('exercise') || cat.contains('workout')) {
+      return Icons.fitness_center_outlined;
+    }
+    // Finance & Shopping
+    else if (cat.contains('finance') || cat.contains('money') || cat.contains('banking')) {
+      return Icons.attach_money;
+    } else if (cat.contains('shopping') || cat.contains('purchase')) {
+      return Icons.shopping_bag_outlined;
+    }
+    // Entertainment & Leisure
+    else if (cat.contains('entertainment') || cat.contains('fun') || cat.contains('movie')) {
+      return Icons.movie_outlined;
+    } else if (cat.contains('music')) {
+      return Icons.music_note_outlined;
+    } else if (cat.contains('sports') || cat.contains('game')) {
+      return Icons.sports_outlined;
+    }
+    // Education & Technology
+    else if (cat.contains('education') || cat.contains('learning') || cat.contains('school')) {
+      return Icons.school_outlined;
+    } else if (cat.contains('technology') || cat.contains('tech') || cat.contains('coding')) {
+      return Icons.computer_outlined;
+    }
+    // Travel & Food
+    else if (cat.contains('travel') || cat.contains('trip') || cat.contains('vacation')) {
+      return Icons.flight_outlined;
+    } else if (cat.contains('food') || cat.contains('restaurant') || cat.contains('dining')) {
+      return Icons.restaurant_outlined;
+    }
+    // Home & Other
+    else if (cat.contains('home') || cat.contains('house')) {
+      return Icons.home_outlined;
+    } else if (cat.contains('task') || cat.contains('todo')) {
+      return Icons.check_box_outlined;
+    } else if (cat.contains('idea') || cat.contains('brainstorm')) {
+      return Icons.lightbulb_outline;
+    } else if (cat.contains('note')) {
+      return Icons.note_outlined;
+    } else if (cat.contains('event')) {
+      return Icons.event_outlined;
+    } else if (cat.contains('social') || cat.contains('friends')) {
+      return Icons.people_outline;
+    } else if (cat.contains('creative') || cat.contains('art')) {
+      return Icons.palette_outlined;
+    } else if (cat.contains('book') || cat.contains('reading')) {
+      return Icons.menu_book_outlined;
+    } else {
+      return Icons.chat_bubble_outline;
+    }
+  }
+
+  String _getFormattedDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final conversationDate = DateTime(date.year, date.month, date.day);
+    final difference = today.difference(conversationDate).inDays;
+
+    if (difference == 0) {
+      // Today - show time
+      final hour = date.hour > 12 ? date.hour - 12 : (date.hour == 0 ? 12 : date.hour);
+      final period = date.hour >= 12 ? 'PM' : 'AM';
+      final minute = date.minute.toString().padLeft(2, '0');
+      return '$hour:$minute $period';
+    } else if (difference == 1) {
+      return 'Yesterday';
+    } else if (difference < 7) {
+      return '$difference days ago';
+    } else {
+      return '${date.month}/${date.day}/${date.year}';
+    }
   }
 
   String tryDecodeText(String text) {

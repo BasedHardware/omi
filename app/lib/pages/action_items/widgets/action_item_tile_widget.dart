@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -18,6 +19,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/utils/colors.dart';
 
 import 'action_item_form_sheet.dart';
 
@@ -401,7 +403,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     // Create task in Todoist
     final success = await service.createTask(
       content: widget.actionItem.description,
-      description: 'From Omi',
+      description: 'From ${Env.appName}',
       dueDate: widget.actionItem.dueAt,
     );
 
@@ -509,7 +511,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     // Create task in Asana (workspace/project from settings, assignee is current user)
     final success = await service.createTask(
       name: widget.actionItem.description,
-      notes: 'From Omi',
+      notes: 'From ${Env.appName}',
       dueDate: widget.actionItem.dueAt,
     );
 
@@ -617,7 +619,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     // Create task in Google Tasks
     final success = await service.createTask(
       title: widget.actionItem.description,
-      notes: 'From Omi',
+      notes: 'From ${Env.appName}',
       dueDate: widget.actionItem.dueAt,
     );
 
@@ -705,7 +707,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     // Create task in ClickUp
     final success = await service.createTask(
       name: widget.actionItem.description,
-      description: 'From Omi',
+      description: 'From ${Env.appName}',
       dueDate: widget.actionItem.dueAt,
     );
 
@@ -822,7 +824,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     // Add to Apple Reminders
     final success = await service.addReminder(
       title: widget.actionItem.description,
-      notes: 'From Omi',
+      notes: 'From ${Env.appName}',
       dueDate: widget.actionItem.dueAt,
       listName: 'Reminders',
     );
@@ -894,10 +896,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: widget.isSelected ? Colors.deepPurpleAccent : Colors.grey.shade600,
+                            color: widget.isSelected ? AppColors.primary : Colors.grey.shade600,
                             width: 2,
                           ),
-                          color: widget.isSelected ? Colors.deepPurpleAccent : Colors.transparent,
+                          color: widget.isSelected ? AppColors.primary : Colors.transparent,
                         ),
                         child: widget.isSelected
                             ? const Icon(
@@ -921,12 +923,12 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: (widget.actionItem.completed || _isAnimating)
-                                  ? Colors.deepPurpleAccent
+                                  ? AppColors.primary
                                   : Colors.grey.shade600,
                               width: 2,
                             ),
                             color: (widget.actionItem.completed || _isAnimating)
-                                ? Colors.deepPurpleAccent
+                                ? AppColors.primary
                                 : Colors.transparent,
                           ),
                           child: (widget.actionItem.completed || _isAnimating)

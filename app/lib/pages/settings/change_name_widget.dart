@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/services/auth_service.dart';
 
@@ -34,7 +35,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
           padding: const EdgeInsets.all(8.0),
           child: Column(
             children: <Widget>[
-              const Text('How Omi should call you?'),
+              Text('How ${Env.appName} should call you?'),
               const SizedBox(height: 8),
               CupertinoTextField(
                 controller: nameController,
@@ -75,7 +76,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const Text('How Omi should call you?'),
+              Text('How ${Env.appName} should call you?'),
               const SizedBox(height: 8),
               TextField(
                 controller: nameController,

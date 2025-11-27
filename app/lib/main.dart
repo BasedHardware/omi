@@ -42,6 +42,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/theme_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -52,6 +53,7 @@ import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/theme/brand_colors.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -71,9 +73,9 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     [
       NotificationChannel(
         channelKey: 'channel',
-        channelName: 'Omi Notifications',
-        channelDescription: 'Notification channel for Omi',
-        defaultColor: const Color(0xFF9D50DD),
+        channelName: '${Env.appName} Notifications',
+        channelDescription: 'Notification channel for ${Env.appName}',
+        defaultColor: BrandColors.getColorsForFlavor().primary,
         ledColor: Colors.white,
       )
     ],
@@ -171,11 +173,11 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
-        WindowOptions windowOptions = const WindowOptions(
-          size: Size(1440, 900),
-          minimumSize: Size(1000, 650),
+        WindowOptions windowOptions = WindowOptions(
+          size: const Size(1440, 900),
+          minimumSize: const Size(1000, 650),
           center: true,
-          title: "Omi",
+          title: Env.appName,
           titleBarStyle: TitleBarStyle.hidden,
         );
         windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -324,8 +326,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
+          ChangeNotifierProvider(create: (context) => ThemeProvider()),
         ],
         builder: (context, child) {
+          final themeProvider = context.watch<ThemeProvider>();
           return WithForegroundTask(
             child: MaterialApp(
               debugShowCheckedModeBanner: F.env == Environment.dev,
@@ -337,31 +341,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 GlobalCupertinoLocalizations.delegate,
               ],
               supportedLocales: const [Locale('en')],
-              theme: ThemeData(
-                  useMaterial3: false,
-                  colorScheme: const ColorScheme.dark(
-                    primary: Colors.black,
-                    secondary: Colors.deepPurple,
-                    surface: Colors.black38,
-                  ),
-                  snackBarTheme: const SnackBarThemeData(
-                    backgroundColor: Color(0xFF1F1F25),
-                    contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-                  ),
-                  textTheme: TextTheme(
-                    titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                    titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                    bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                    labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-                  ),
-                  textSelectionTheme: const TextSelectionThemeData(
-                    cursorColor: Colors.white,
-                    selectionColor: Colors.deepPurple,
-                    selectionHandleColor: Colors.white,
-                  ),
-                  cupertinoOverrideTheme: const CupertinoThemeData(
-                    primaryColor: Colors.white, // Controls the selection handles on iOS
-                  )),
+              theme: themeProvider.themeData.copyWith(
+                snackBarTheme: const SnackBarThemeData(
+                  backgroundColor: Color(0xFF1F1F25),
+                  contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
+                ),
+                textSelectionTheme: TextSelectionThemeData(
+                  cursorColor: Colors.white,
+                  selectionColor: themeProvider.primaryColor,
+                  selectionHandleColor: Colors.white,
+                ),
+                cupertinoOverrideTheme: const CupertinoThemeData(
+                  primaryColor: Colors.white,
+                ),
+              ),
               themeMode: ThemeMode.dark,
               builder: (context, child) {
                 FlutterError.onError = (FlutterErrorDetails details) {

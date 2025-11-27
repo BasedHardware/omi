@@ -188,7 +188,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
         padding: const EdgeInsets.all(20),
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         decoration: BoxDecoration(
           color: AppStyles.backgroundSecondary,
           borderRadius: BorderRadius.circular(16),
@@ -247,7 +247,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
       baseColor: AppStyles.backgroundSecondary,
       highlightColor: AppStyles.backgroundTertiary,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
         child: Row(
           children: [
             Expanded(
@@ -543,7 +543,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 controller: widget.scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  const SliverToBoxAdapter(child: SizedBox(height: 4)),
                   SliverToBoxAdapter(
                     child: state.isLoading
                         ? _buildShimmerCreateButton()
@@ -559,7 +558,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                             },
                             child: Container(
                               padding: const EdgeInsets.all(20),
-                              margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                              margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.9),
                                 borderRadius: BorderRadius.circular(16),
@@ -618,7 +617,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                     child: state.isLoading
                         ? _buildShimmerSearchBar()
                         : Container(
-                            margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                            margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [

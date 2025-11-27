@@ -220,24 +220,63 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Title
         Text(
           structured.title.decodeString,
-          style: Theme.of(context).textTheme.titleLarge,
-          maxLines: 1,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+            color: Colors.white,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 8),
-        Stack(
-          children: [
-            Text(
-              structured.overview.decodeString,
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+        const SizedBox(height: 6),
+        // Overview/Description
+        Text(
+          structured.overview.decodeString,
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.3,
+            color: Colors.white.withOpacity(0.7),
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 12),
+        // Footer with time and duration as simple text
+        _buildFooter(),
+      ],
+    );
+  }
+
+  Widget _buildFooter() {
+    return Row(
+      children: [
+        // Time
+        Text(
+          dateTimeFormat(
+            'h:mm a',
+            widget.conversation.startedAt ?? widget.conversation.createdAt,
+          ),
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.white.withOpacity(0.5),
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(width: 12),
+        // Duration
+        if (_getConversationDuration().isNotEmpty)
+          Text(
+            _getConversationDuration(),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.5),
+              height: 1.3,
             ),
-            if (widget.conversation.isLocked) _buildLockedOverlay(),
-          ],
-        ),
-        const SizedBox(height: 8),
+          ),
       ],
     );
   }
@@ -268,87 +307,158 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: widget.conversation.getTagColor(),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+    final categoryColors = _getCategoryColors();
 
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration or New
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: isNew
-                ? const ConversationNewStatusIndicator(text: "New 🚀")
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        dateTimeFormat(
-                          'h:mm a',
-                          widget.conversation.startedAt ?? widget.conversation.createdAt,
-                        ),
-                        style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
-                        maxLines: 1,
-                      ),
-                      if (_getConversationDuration().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF35343B),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _getConversationDuration(),
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                              maxLines: 1,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+    return Row(
+      children: [
+        // Category Badge with Icon and colored background
+        Container(
+          decoration: BoxDecoration(
+            color: categoryColors['bgColor'],
+            borderRadius: BorderRadius.circular(4),
           ),
-        ],
-      ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _getCategoryIcon(),
+                size: 14,
+                color: categoryColors['color'],
+              ),
+              const SizedBox(width: 5),
+              Text(
+                widget.conversation.getTag(),
+                style: TextStyle(
+                  color: categoryColors['color'],
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Completion icon
+        if (widget.conversation.status == ConversationStatus.completed)
+          const Icon(
+            Icons.check_circle,
+            size: 10,
+            color: Color(0xFF34d399),
+          ),
+      ],
     );
+  }
+
+  Map<String, Color> _getCategoryColors() {
+    String category = widget.conversation.structured.category.toLowerCase();
+
+    // Dark mode colors matching the reference
+    if (category.contains('work') || category.contains('business') || category.contains('meeting') || category.contains('project')) {
+      return {'color': const Color(0xFF60a5fa), 'bgColor': const Color(0xFF1e3a5f)};
+    } else if (category.contains('personal') || category.contains('family')) {
+      return {'color': const Color(0xFFa78bfa), 'bgColor': const Color(0xFF2e1065)};
+    } else if (category.contains('health') || category.contains('fitness')) {
+      return {'color': const Color(0xFF34d399), 'bgColor': const Color(0xFF064e3b)};
+    } else if (category.contains('finance') || category.contains('shopping')) {
+      return {'color': const Color(0xFFfb923c), 'bgColor': const Color(0xFF431407)};
+    } else if (category.contains('entertainment') || category.contains('music') || category.contains('sports')) {
+      return {'color': const Color(0xFFf472b6), 'bgColor': const Color(0xFF4a044e)};
+    } else if (category.contains('technology') || category.contains('education')) {
+      return {'color': const Color(0xFF22d3ee), 'bgColor': const Color(0xFF164e63)};
+    } else if (category.contains('food') || category.contains('restaurant')) {
+      return {'color': const Color(0xFFfb923c), 'bgColor': const Color(0xFF431407)};
+    } else if (category.contains('travel')) {
+      return {'color': const Color(0xFF22d3ee), 'bgColor': const Color(0xFF164e63)};
+    } else {
+      // Default purple for "Personal"
+      return {'color': const Color(0xFFa78bfa), 'bgColor': const Color(0xFF2e1065)};
+    }
+  }
+
+  IconData _getCategoryIcon() {
+    // Map category names to icons (comprehensive mapping)
+    String category = widget.conversation.structured.category.toLowerCase();
+
+    // Work & Business
+    if (category.contains('work') || category.contains('business')) {
+      return Icons.business_center_outlined;
+    } else if (category.contains('meeting') || category.contains('conference')) {
+      return Icons.calendar_today_outlined;
+    } else if (category.contains('project')) {
+      return Icons.folder_outlined;
+    }
+
+    // Personal & Family
+    else if (category.contains('personal') || category.contains('life')) {
+      return Icons.person_outline;
+    } else if (category.contains('family')) {
+      return Icons.people_outline;
+    }
+
+    // Health & Wellness
+    else if (category.contains('health') || category.contains('medical')) {
+      return Icons.favorite_outline;
+    } else if (category.contains('fitness') || category.contains('exercise') || category.contains('workout')) {
+      return Icons.fitness_center_outlined;
+    }
+
+    // Finance & Shopping
+    else if (category.contains('finance') || category.contains('money') || category.contains('banking')) {
+      return Icons.attach_money;
+    } else if (category.contains('shopping') || category.contains('purchase')) {
+      return Icons.shopping_bag_outlined;
+    }
+
+    // Entertainment & Leisure
+    else if (category.contains('entertainment') || category.contains('fun') || category.contains('movie')) {
+      return Icons.movie_outlined;
+    } else if (category.contains('music')) {
+      return Icons.music_note_outlined;
+    } else if (category.contains('sports') || category.contains('game')) {
+      return Icons.sports_outlined;
+    }
+
+    // Education & Technology
+    else if (category.contains('education') || category.contains('learning') || category.contains('school')) {
+      return Icons.school_outlined;
+    } else if (category.contains('technology') || category.contains('tech') || category.contains('coding')) {
+      return Icons.computer_outlined;
+    }
+
+    // Travel & Food
+    else if (category.contains('travel') || category.contains('trip') || category.contains('vacation')) {
+      return Icons.flight_outlined;
+    } else if (category.contains('food') || category.contains('restaurant') || category.contains('dining')) {
+      return Icons.restaurant_outlined;
+    }
+
+    // Home & Other
+    else if (category.contains('home') || category.contains('house')) {
+      return Icons.home_outlined;
+    } else if (category.contains('task') || category.contains('todo')) {
+      return Icons.check_box_outlined;
+    } else if (category.contains('idea') || category.contains('brainstorm')) {
+      return Icons.lightbulb_outline;
+    } else if (category.contains('note')) {
+      return Icons.note_outlined;
+    } else if (category.contains('event')) {
+      return Icons.event_outlined;
+    } else if (category.contains('social') || category.contains('friends')) {
+      return Icons.people_outline;
+    } else if (category.contains('creative') || category.contains('art')) {
+      return Icons.palette_outlined;
+    } else if (category.contains('car') || category.contains('vehicle') || category.contains('transport')) {
+      return Icons.directions_car_outlined;
+    } else if (category.contains('pet') || category.contains('animal')) {
+      return Icons.pets_outlined;
+    } else if (category.contains('book') || category.contains('reading')) {
+      return Icons.menu_book_outlined;
+    } else if (category.contains('photo') || category.contains('camera')) {
+      return Icons.photo_camera_outlined;
+    } else {
+      return Icons.chat_bubble_outline; // Default icon
+    }
   }
 
   String _getConversationDuration() {
@@ -357,43 +467,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
     return secondsToCompactDuration(durationSeconds);
   }
-}
 
-class ConversationNewStatusIndicator extends StatefulWidget {
-  final String text;
+  String _getTimeAgo() {
+    final now = DateTime.now();
+    final conversationTime = widget.conversation.startedAt ?? widget.conversation.createdAt;
+    final difference = now.difference(conversationTime);
 
-  const ConversationNewStatusIndicator({super.key, required this.text});
-
-  @override
-  State<ConversationNewStatusIndicator> createState() => _ConversationNewStatusIndicatorState();
-}
-
-class _ConversationNewStatusIndicatorState extends State<ConversationNewStatusIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1000), // Blink every half second
-      vsync: this,
-    )..repeat(reverse: true);
-    _opacityAnim = Tween<double>(begin: 1.0, end: 0.2).animate(_controller);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _opacityAnim,
-      child: Text(widget.text),
-    );
+    if (difference.inDays > 7) {
+      final weeks = (difference.inDays / 7).floor();
+      return '${weeks}w ago';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m ago';
+    } else {
+      return 'Just now';
+    }
   }
 }

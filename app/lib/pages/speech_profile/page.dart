@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
@@ -235,21 +236,21 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(40, 40, 40, 48),
                     child: !provider.startedRecording
-                        ? const Column(
+                        ? Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                               Text(
-                                'Omi needs to learn your voice to be able to recognise you.',
+                                '${Env.appName} needs to learn your voice to be able to recognise you.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
                                   height: 1.4,
                                   fontWeight: FontWeight.w400,
                                 ),
                               ),
-                              SizedBox(height: 20),
+                              const SizedBox(height: 20),
                               //Text("Note: This only works in English",
                               //    style: TextStyle(color: Colors.white, fontSize: 16)),
                             ],

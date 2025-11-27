@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
@@ -217,9 +218,9 @@ class _DesktopLanguageScreenState extends State<DesktopLanguageScreen> with Tick
                     textAlign: TextAlign.center,
                   ),
                   SizedBox(height: responsive.spacing(baseSpacing: 8)),
-                  const Text(
-                    'Select your preferred language for the best Omi experience',
-                    style: TextStyle(
+                  Text(
+                    'Select your preferred language for the best ${Env.appName} experience',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
                       color: Color(0xFF9CA3AF),

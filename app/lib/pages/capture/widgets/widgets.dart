@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -48,28 +49,28 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         }
                       },
                       child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.all(Radius.circular(12)),
-                        ),
-                        margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
-                        padding: const EdgeInsets.all(16),
-                        child: const Row(
+                        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: Row(
                                 children: [
-                                  Icon(Icons.multitrack_audio),
-                                  SizedBox(width: 16),
+                                  const Icon(Icons.multitrack_audio, size: 18, color: Colors.white60),
+                                  const SizedBox(width: 12),
                                   Text(
-                                    'Teach Omi your voice',
-                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                    'Teach ${Env.appName} your voice',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                            const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 14),
                           ],
                         ),
                       ),
@@ -110,22 +111,22 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                       ),
                       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       padding: const EdgeInsets.all(16),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
                             child: Row(
                               children: [
-                                Icon(Icons.upload),
-                                SizedBox(width: 16),
+                                const Icon(Icons.upload),
+                                const SizedBox(width: 16),
                                 Text(
-                                  'Update omi firmware',
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                  'Update ${Env.appName} firmware',
+                                  style: const TextStyle(color: Colors.white, fontSize: 16),
                                 ),
                               ],
                             ),
                           ),
-                          Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+                          const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
                         ],
                       ),
                     ),

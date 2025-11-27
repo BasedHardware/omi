@@ -3,6 +3,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/page.dart';
@@ -288,7 +289,7 @@ class _AppsListState extends State<_AppsList> {
           isSelected: widget.currentAppId == null,
           onTap: () => _handleAutoAppTap(context),
           trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
-          subtitle: 'Let Omi automatically choose the best app for this summary.',
+          subtitle: 'Let ${Env.appName} automatically choose the best app for this summary.',
           provider: widget.provider,
         ),
 

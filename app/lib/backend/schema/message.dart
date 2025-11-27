@@ -20,17 +20,23 @@ enum MessageType {
 class MessageConversationStructured {
   String title;
   String emoji;
+  String category;
 
-  MessageConversationStructured(this.title, this.emoji);
+  MessageConversationStructured(this.title, this.emoji, {this.category = 'other'});
 
   static MessageConversationStructured fromJson(Map<String, dynamic> json) {
-    return MessageConversationStructured(json['title'], json['emoji']);
+    return MessageConversationStructured(
+      json['title'],
+      json['emoji'],
+      category: json['category'] ?? 'other',
+    );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'title': title,
       'emoji': emoji,
+      'category': category,
     };
   }
 }

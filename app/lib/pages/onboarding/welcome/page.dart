@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -222,9 +223,9 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Text(
-                                              'Connect Omi / OmiGlass',
-                                              style: TextStyle(
+                                            Text(
+                                              'Connect ${Env.appName} / ${Env.appName}Glass',
+                                              style: const TextStyle(
                                                 color: Colors.black87,
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.w600,
