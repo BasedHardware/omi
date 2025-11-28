@@ -870,11 +870,30 @@ workflows:
           echo "Re-signing with Developer ID: $DEVELOPER_ID_CERT"
           
           # Find the Release entitlements file
-          ENTITLEMENTS_FILE=$(find $(pwd)/macos/Runner -name "Release.entitlements" | head -1)
-          if [ -z "$ENTITLEMENTS_FILE" ]; then
-            ENTITLEMENTS_FILE=$(find $(pwd)/macos -name "*.entitlements" | head -1)
+          ORIGINAL_ENTITLEMENTS=$(find $(pwd)/macos/Runner -name "Release.entitlements" | head -1)
+          if [ -z "$ORIGINAL_ENTITLEMENTS" ]; then
+            ORIGINAL_ENTITLEMENTS=$(find $(pwd)/macos -name "*.entitlements" | head -1)
           fi
-          echo "Using entitlements: $ENTITLEMENTS_FILE"
+          
+          # Create a clean entitlements file for Developer ID (without App Store-only capabilities)
+          # Sign in with Apple and Push Notifications are App Store-only and will cause immediate termination
+          ENTITLEMENTS_FILE="/tmp/DeveloperID.entitlements"
+          
+          if [ -n "$ORIGINAL_ENTITLEMENTS" ]; then
+            echo "Original entitlements: $ORIGINAL_ENTITLEMENTS"
+            # Copy and remove App Store-only entitlements
+            cp "$ORIGINAL_ENTITLEMENTS" "$ENTITLEMENTS_FILE"
+            
+            # Remove Sign in with Apple (com.apple.developer.applesignin)
+            # These are App Store-only and cause immediate termination in Developer ID apps
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.aps-environment" "$ENTITLEMENTS_FILE" 2>/dev/null || true
+            
+            echo "Cleaned entitlements for Developer ID distribution:"
+            cat "$ENTITLEMENTS_FILE"
+          else
+            echo "WARNING: No entitlements file found, signing without entitlements"
+            ENTITLEMENTS_FILE=""
+          fi
           
           # Re-sign everything with Developer ID and hardened runtime
           # --force removes existing signature and applies new one
@@ -883,10 +902,16 @@ workflows:
           # --timestamp adds secure timestamp (required for notarization)
           
           echo "Re-signing app bundle with Developer ID..."
-          codesign --force --deep --options runtime --timestamp \
-            --entitlements "$ENTITLEMENTS_FILE" \
-            --sign "$DEVELOPER_ID_CERT" \
-            "$APP_PATH"
+          if [ -n "$ENTITLEMENTS_FILE" ]; then
+            codesign --force --deep --options runtime --timestamp \
+              --entitlements "$ENTITLEMENTS_FILE" \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$APP_PATH"
+          else
+            codesign --force --deep --options runtime --timestamp \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$APP_PATH"
+          fi
           
           # Verify the signature
           echo "Verifying signature..."
