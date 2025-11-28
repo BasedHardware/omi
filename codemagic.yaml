@@ -689,6 +689,9 @@ workflows:
     integrations:
       app_store_connect: codemagic_v4
     environment:
+      macos_signing:
+        certificates:
+          - MAC_APP_DIRECT
       groups:
         - app_env
         - firebase
@@ -798,11 +801,11 @@ workflows:
 
       - name: Fetch signing files
         script: |
-          # Fetch Developer ID signing certificate for DMG distribution (MAC_APP_DIRECT = Developer ID for direct distribution)
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --platform MAC_OS \
-            --type MAC_APP_DIRECT \
-            --create
+          # Developer ID certificate is manually uploaded to Codemagic as MAC_APP_DIRECT
+          # For Developer ID distribution, we don't need provisioning profiles - just the certificate
+          # The certificate will be added to keychain in the next step via macos_signing configuration
+          echo "Using manually uploaded Developer ID Application certificate (MAC_APP_DIRECT)"
+          echo "Skipping app-store-connect fetch since Developer ID doesn't require provisioning profiles"
 
       - name: Add certificates to keychain
         script: |
@@ -810,7 +813,22 @@ workflows:
 
       - name: Set up code signing settings
         script: |
-          xcode-project use-profiles
+          # For Developer ID distribution, we don't use provisioning profiles
+          # List available signing identities to verify the certificate is in keychain
+          echo "Available signing identities:"
+          security find-identity -v -p codesigning
+          
+          # Find the Developer ID Application certificate
+          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Found Developer ID cert: $DEVELOPER_ID_CERT"
+          
+          if [ -z "$DEVELOPER_ID_CERT" ]; then
+            echo "ERROR: Developer ID Application certificate not found in keychain"
+            exit 1
+          fi
+          
+          # Export for use in later steps
+          echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
 
       - name: Flutter build macOS
         script: |
@@ -821,6 +839,27 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
+
+      - name: Sign app with Developer ID
+        script: |
+          # Find the app bundle
+          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          echo "Found app at: $APP_PATH"
+          
+          echo "Signing with: $DEVELOPER_ID_CERT"
+          
+          # Sign all nested components first (frameworks, dylibs, etc.)
+          find "$APP_PATH" -type f \( -name "*.dylib" -o -name "*.framework" \) -exec \
+            codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_CERT" {} \;
+          
+          # Sign the main app bundle with hardened runtime (required for notarization)
+          codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID_CERT" "$APP_PATH"
+          
+          # Verify the signature
+          echo "Verifying signature..."
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          
+          echo "App signed successfully with Developer ID"
 
       - name: Package app for notarization
         script: |
