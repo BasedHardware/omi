@@ -844,12 +844,7 @@ class CaptureProvider extends ChangeNotifier
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           onMicrophoneStatus: _onMicrophoneStatus,
-          onStoppedAutomatically: () {
-            debugPrint('CaptureProvider: Recording stopped automatically (meeting ended)');
-            // Don't auto-resume after this - meeting is over
-            _shouldAutoResumeAfterWake = false;
-            forceProcessingCurrentConversation();
-          },
+          onStoppedAutomatically: null,
         );
   }
 
@@ -1006,10 +1001,33 @@ class CaptureProvider extends ChangeNotifier
       case 'recordingStartedFromNub':
         await _handleRecordingStartedFromNub();
         return null;
+      case 'recordingStoppedAutomatically':
+        await _handleRecordingStoppedAutomatically();
+        return null;
       default:
         Logger.debug('ScreenCaptureChannel: Unhandled method ${call.method}');
         return null;
     }
+  }
+
+  Future<void> _handleRecordingStoppedAutomatically() async {
+    debugPrint('CaptureProvider: Recording stopped automatically (meeting ended)');
+    // Don't auto-resume after this - meeting is over
+    _shouldAutoResumeAfterWake = false;
+
+    // Stop the Flutter-side recording state
+    if (PlatformService.isDesktop) {
+      _isAutoReconnecting = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      _isPaused = false;
+      _stopRecordingTimer();
+      updateRecordingState(RecordingState.stop);
+      await _socket?.stop(reason: 'meeting ended - auto stop');
+      await _cleanupCurrentState();
+    }
+
+    await forceProcessingCurrentConversation();
   }
 
   Future<void> _handleRecordingStartedFromNub() async {
