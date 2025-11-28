@@ -886,7 +886,7 @@ workflows:
             
             # Remove Sign in with Apple (com.apple.developer.applesignin)
             # These are App Store-only and cause immediate termination in Developer ID apps
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.aps-environment" "$ENTITLEMENTS_FILE" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$ENTITLEMENTS_FILE" 2>/dev/null || true
             
             echo "Cleaned entitlements for Developer ID distribution:"
             cat "$ENTITLEMENTS_FILE"
