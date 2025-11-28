@@ -854,11 +854,31 @@ workflows:
           
           # Export for use in later steps
           echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
+          
+          # Disable automatic signing in Xcode project for Developer ID distribution
+          # This allows us to build without provisioning profiles and sign manually after
+          XCODEPROJ="macos/Runner.xcodeproj/project.pbxproj"
+          
+          echo "Disabling automatic code signing for Developer ID distribution..."
+          
+          # Set CODE_SIGN_STYLE to Manual
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' "$XCODEPROJ"
+          
+          # Remove provisioning profile requirements
+          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = ".*"/PROVISIONING_PROFILE_SPECIFIER = ""/g' "$XCODEPROJ"
+          
+          # Set signing identity to Developer ID (will be applied during manual signing step)
+          # For build, we'll use ad-hoc signing then re-sign properly
+          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = ".*"/"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-"/g' "$XCODEPROJ"
+          sed -i '' 's/CODE_SIGN_IDENTITY = ".*Developer.*"/CODE_SIGN_IDENTITY = "-"/g' "$XCODEPROJ"
+          
+          echo "Code signing configured for Developer ID distribution"
 
       - name: Flutter build macOS
         script: |
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
 
+          # Build without code signing (we'll sign manually after)
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
