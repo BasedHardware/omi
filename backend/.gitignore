@@ -1,0 +1,39 @@
+# Service Account Keys - DO NOT COMMIT!
+*-service-account-key.json
+google-credentials.json
+
+# Environment files with secrets
+.env.*
+!.env.template
+!.env.docker
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Temporary files
+_temp/
+_samples/
+_segments/
+_speech_profiles/
+pretrained_models/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
