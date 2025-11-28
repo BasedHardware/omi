@@ -127,12 +127,57 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Future<void> _loadFromBackend() async {
-    await context.read<IntegrationProvider>().loadFromBackend();
-    // Also refresh the service's connection status
-    await GoogleCalendarService().refreshConnectionStatus();
-    await WhoopService().refreshConnectionStatus();
-    await NotionService().refreshConnectionStatus();
-    await TwitterService().refreshConnectionStatus();
+    // Capture provider before async operations to avoid context issues
+    if (!mounted) return;
+    final integrationProvider = context.read<IntegrationProvider>();
+
+    try {
+      await integrationProvider.loadFromBackend();
+    } catch (e, stackTrace) {
+      debugPrint('Error loading integrations from backend: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to load integrations. Please try again.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      // Continue to refresh connection status even if backend load fails
+    }
+
+    // Refresh each service's connection status independently
+    // Each wrapped in its own try/catch so one failure doesn't stop others
+    try {
+      await GoogleCalendarService().refreshConnectionStatus();
+    } catch (e, stackTrace) {
+      debugPrint('Error refreshing Google Calendar connection status: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // Don't show snackbar for individual service failures to avoid spam
+    }
+
+    try {
+      await WhoopService().refreshConnectionStatus();
+    } catch (e, stackTrace) {
+      debugPrint('Error refreshing Whoop connection status: $e');
+      debugPrint('Stack trace: $stackTrace');
+    }
+
+    try {
+      await NotionService().refreshConnectionStatus();
+    } catch (e, stackTrace) {
+      debugPrint('Error refreshing Notion connection status: $e');
+      debugPrint('Stack trace: $stackTrace');
+    }
+
+    try {
+      await TwitterService().refreshConnectionStatus();
+    } catch (e, stackTrace) {
+      debugPrint('Error refreshing Twitter connection status: $e');
+      debugPrint('Stack trace: $stackTrace');
+    }
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
