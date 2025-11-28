@@ -3,6 +3,7 @@ Tools for accessing Twitter/X data.
 """
 
 import os
+import base64
 import contextvars
 from datetime import datetime, timezone
 from typing import Optional
@@ -19,6 +20,88 @@ try:
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def refresh_twitter_token(uid: str, integration: Optional[dict] = None) -> Optional[str]:
+    """
+    Refresh Twitter access token using refresh token.
+
+    Args:
+        uid: User ID
+        integration: Optional integration dict. If not provided, will reload from database.
+
+    Returns:
+        New access token or None if refresh failed
+    """
+    # Reload integration from database to ensure we have the latest refresh_token
+    if integration is None:
+        integration = users_db.get_integration(uid, 'twitter')
+
+    if not integration:
+        print(f"🔄 Twitter token refresh failed: No integration found")
+        return None
+
+    refresh_token = integration.get('refresh_token')
+    if not refresh_token:
+        print(f"🔄 Twitter token refresh failed: No refresh token found in integration")
+        return None
+
+    client_id = os.getenv('TWITTER_CLIENT_ID')
+    client_secret = os.getenv('TWITTER_CLIENT_SECRET')
+
+    if not all([client_id, client_secret]):
+        print(f"🔄 Twitter token refresh failed: Missing client credentials")
+        return None
+
+    try:
+        print(f"🔄 Attempting to refresh Twitter token for user {uid}")
+
+        # Twitter OAuth 2.0 uses Basic Auth with base64-encoded credentials
+        credentials = f'{client_id}:{client_secret}'
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+        response = requests.post(
+            'https://api.twitter.com/2/oauth2/token',
+            headers={
+                'Authorization': f'Basic {encoded_credentials}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            data={
+                'refresh_token': refresh_token,
+                'grant_type': 'refresh_token',
+            },
+            timeout=10.0,
+        )
+
+        print(f"🔄 Twitter token refresh response status: {response.status_code}")
+
+        if response.status_code == 200:
+            token_data = response.json()
+            new_access_token = token_data.get('access_token')
+
+            if new_access_token:
+                # Update stored token
+                integration['access_token'] = new_access_token
+                # Twitter may return a new refresh token - update if provided
+                if 'refresh_token' in token_data:
+                    integration['refresh_token'] = token_data.get('refresh_token')
+                users_db.set_integration(uid, 'twitter', integration)
+                print(f"✅ Twitter token refreshed successfully")
+                return new_access_token
+            else:
+                print(f"🔄 Twitter token refresh failed: No access token in response")
+        else:
+            error_body = response.text[:500] if response.text else "No error body"
+            print(f"🔄 Twitter token refresh failed with HTTP {response.status_code}: {error_body}")
+    except requests.exceptions.RequestException as e:
+        print(f"🔄 Network error refreshing Twitter token: {e}")
+    except Exception as e:
+        print(f"🔄 Error refreshing Twitter token: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+    return None
 
 
 def get_twitter_user_id(access_token: str, username: Optional[str] = None) -> Optional[str]:
@@ -50,6 +133,9 @@ def get_twitter_user_id(access_token: str, username: Optional[str] = None) -> Op
             data = response.json()
             if 'data' in data:
                 return data['data'].get('id')
+        elif response.status_code == 401:
+            print(f"❌ Twitter User API 401 - token expired or invalid")
+            raise Exception("Authentication failed - token may be expired or invalid")
         elif response.status_code == 404:
             return None
         else:
@@ -58,6 +144,9 @@ def get_twitter_user_id(access_token: str, username: Optional[str] = None) -> Op
             return None
     except Exception as e:
         print(f"❌ Error fetching Twitter user ID: {e}")
+        # Re-raise authentication errors so they can be handled by caller
+        if "Authentication failed" in str(e):
+            raise
         return None
 
 
@@ -245,7 +334,36 @@ def get_twitter_tweets_tool(
             import traceback
 
             traceback.print_exc()
-            return f"Error fetching tweets: {error_msg}"
+
+            # Try to refresh token if authentication failed
+            if "Authentication failed" in error_msg or "401" in error_msg or "token may be expired" in error_msg:
+                print(f"🔄 Attempting to refresh Twitter token...")
+                # Reload integration to get latest refresh_token before refreshing
+                integration = users_db.get_integration(uid, 'twitter')
+                new_token = refresh_twitter_token(uid, integration)
+                if new_token:
+                    print(f"✅ Token refreshed, retrying...")
+                    try:
+                        tweets_data = get_twitter_tweets(
+                            access_token=new_token,
+                            username=username,
+                            max_results=max_results,
+                            start_time=start_time,
+                            end_time=end_time,
+                        )
+                        print(f"✅ Successfully fetched Twitter tweets after token refresh")
+                    except Exception as retry_error:
+                        print(f"❌ Error after token refresh: {str(retry_error)}")
+                        import traceback
+
+                        traceback.print_exc()
+                        return f"Error fetching tweets: {str(retry_error)}"
+                else:
+                    print(f"❌ Token refresh failed")
+                    return "Twitter authentication expired. Please reconnect your Twitter account from settings to restore access."
+            else:
+                print(f"❌ Non-auth error: {error_msg}")
+                return f"Error fetching tweets: {error_msg}"
 
         tweets = tweets_data.get('data', [])
         users = tweets_data.get('includes', {}).get('users', [])
