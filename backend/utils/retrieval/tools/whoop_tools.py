@@ -14,6 +14,12 @@ from langchain_core.runnables import RunnableConfig
 import database.users as users_db
 import database.notifications as notification_db
 import requests
+from utils.retrieval.tools.integration_base import (
+    ensure_capped,
+    parse_iso_with_tz,
+    prepare_access,
+    retry_on_auth,
+)
 
 # Import the context variable from agentic module
 try:
@@ -401,66 +407,24 @@ def get_whoop_sleep_tool(
     """
     print(f"🔧 get_whoop_sleep_tool called - start_date: {start_date}, " f"end_date: {end_date}, limit: {limit}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 get_whoop_sleep_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ get_whoop_sleep_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ get_whoop_sleep_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ get_whoop_sleep_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ get_whoop_sleep_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'whoop',
+        'Whoop',
+        'Whoop is not connected. Please connect your Whoop account from settings to view your sleep data.',
+        'Whoop access token not found. Please reconnect your Whoop account from settings.',
+        'Error checking Whoop connection',
+    )
+    if access_err:
+        print(f"❌ get_whoop_sleep_tool - {access_err}")
+        return access_err
 
     print(f"✅ get_whoop_sleep_tool - uid: {uid}, limit: {limit}")
 
     try:
-        # Cap at 25 per call
-        if limit > 25:
-            print(f"⚠️ get_whoop_sleep_tool - limit capped from {limit} to 25")
-            limit = 25
+        limit = ensure_capped(limit, 25, "⚠️ get_whoop_sleep_tool - limit capped from {} to {}")
 
-        # Check if user has Whoop connected
         print(f"🛌 Checking Whoop connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'whoop')
-            print(f"🛌 Integration data retrieved: {integration is not None}")
-            if integration:
-                print(f"🛌 Integration connected status: {integration.get('connected')}")
-                print(f"🛌 Integration has access_token: {bool(integration.get('access_token'))}")
-            else:
-                print(f"❌ No integration found for user {uid}")
-                return (
-                    "Whoop is not connected. Please connect your Whoop account from settings to view your sleep data."
-                )
-        except Exception as e:
-            print(f"❌ Error checking Whoop integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Whoop connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Whoop not connected for user {uid}")
-            return "Whoop is not connected. Please connect your Whoop account from settings to view your sleep data."
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Whoop access token not found. Please reconnect your Whoop account from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
@@ -468,69 +432,44 @@ def get_whoop_sleep_tool(
         time_start = None
         time_end = None
 
-        if start_date:
-            try:
-                time_start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if time_start.tzinfo is None:
-                    return f"Error: start_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T00:00:00-08:00'): {start_date}"
-                print(f"🛌 Parsed start_date '{start_date}' as {time_start.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            except ValueError as e:
-                return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date} - {str(e)}"
-
-        if end_date:
-            try:
-                time_end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if time_end.tzinfo is None:
-                    return f"Error: end_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-27T23:59:59-08:00'): {end_date}"
-                print(f"🛌 Parsed end_date '{end_date}' as {time_end.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            except ValueError as e:
-                return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date} - {str(e)}"
+        time_start, err = parse_iso_with_tz(
+            'start_date',
+            start_date,
+            "in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T00:00:00-08:00')",
+        )
+        if err:
+            return err
+        time_end, err = parse_iso_with_tz(
+            'end_date',
+            end_date,
+            "in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-27T23:59:59-08:00')",
+        )
+        if err:
+            return err
 
         # Fetch sleep data
-        try:
-            sleep_data = get_whoop_sleep_data(
-                access_token=access_token,
-                start=time_start,
-                end=time_end,
-                limit=limit,
-            )
-
-            print(f"✅ Successfully fetched sleep data")
-        except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Error fetching sleep data: {error_msg}")
-            import traceback
-
-            traceback.print_exc()
-
-            # Try to refresh token if authentication failed
-            if "Authentication failed" in error_msg or "401" in error_msg:
-                print(f"🔄 Attempting to refresh Whoop token...")
-                # Reload integration to get latest refresh_token before refreshing
-                integration = users_db.get_integration(uid, 'whoop')
-                new_token = refresh_whoop_token(uid, integration)
-                if new_token:
-                    print(f"✅ Token refreshed, retrying...")
-                    try:
-                        sleep_data = get_whoop_sleep_data(
-                            access_token=new_token,
-                            start=time_start,
-                            end=time_end,
-                            limit=limit,
-                        )
-                        print(f"✅ Successfully fetched sleep data after token refresh")
-                    except Exception as retry_error:
-                        print(f"❌ Error after token refresh: {str(retry_error)}")
-                        import traceback
-
-                        traceback.print_exc()
-                        return f"Error fetching sleep data: {str(retry_error)}"
-                else:
-                    print(f"❌ Token refresh failed")
-                    return "Whoop authentication expired. Please reconnect your Whoop account from settings to restore access."
-            else:
-                print(f"❌ Non-auth error: {error_msg}")
-                return f"Error fetching sleep data: {error_msg}"
+        sleep_data, err = retry_on_auth(
+            get_whoop_sleep_data,
+            {
+                'access_token': access_token,
+                'start': time_start,
+                'end': time_end,
+                'limit': limit,
+            },
+            refresh_whoop_token,
+            uid,
+            users_db.get_integration(uid, 'whoop'),
+            "Whoop authentication expired. Please reconnect your Whoop account from settings to restore access.",
+            (
+                "Authentication failed",
+                "401",
+                "token may be expired",
+            ),
+        )
+        if err:
+            print(f"❌ {err}")
+            return err
+        print(f"✅ Successfully fetched sleep data")
 
         records = sleep_data.get('records', [])
         records_count = len(records) if records else 0
@@ -684,97 +623,57 @@ def get_whoop_recovery_tool(
     """
     print(f"🔧 get_whoop_recovery_tool called - start_date: {start_date}, " f"end_date: {end_date}, limit: {limit}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 get_whoop_recovery_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ get_whoop_recovery_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ get_whoop_recovery_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ get_whoop_recovery_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ get_whoop_recovery_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'whoop',
+        'Whoop',
+        'Whoop is not connected. Please connect your Whoop account from settings to view your recovery data.',
+        'Whoop access token not found. Please reconnect your Whoop account from settings.',
+        'Error checking Whoop connection',
+    )
+    if access_err:
+        print(f"❌ get_whoop_recovery_tool - {access_err}")
+        return access_err
 
     print(f"✅ get_whoop_recovery_tool - uid: {uid}, limit: {limit}")
 
     try:
-        # Cap at 25 per call
-        if limit > 25:
-            print(f"⚠️ get_whoop_recovery_tool - limit capped from {limit} to 25")
-            limit = 25
+        limit = ensure_capped(limit, 25, "⚠️ get_whoop_recovery_tool - limit capped from {} to {}")
 
-        # Check if user has Whoop connected
         print(f"💚 Checking Whoop connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'whoop')
-            if not integration or not integration.get('connected'):
-                return "Whoop is not connected. Please connect your Whoop account from settings to view your recovery data."
-        except Exception as e:
-            print(f"❌ Error checking Whoop integration: {e}")
-            return f"Error checking Whoop connection: {str(e)}"
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            return "Whoop access token not found. Please reconnect your Whoop account from settings."
 
         # Parse dates if provided
         time_start = None
         time_end = None
 
-        if start_date:
-            try:
-                time_start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if time_start.tzinfo is None:
-                    return f"Error: start_date must include timezone: {start_date}"
-            except ValueError as e:
-                return f"Error: Invalid start_date format: {start_date} - {str(e)}"
-
-        if end_date:
-            try:
-                time_end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if time_end.tzinfo is None:
-                    return f"Error: end_date must include timezone: {end_date}"
-            except ValueError as e:
-                return f"Error: Invalid end_date format: {end_date} - {str(e)}"
+        time_start, err = parse_iso_with_tz('start_date', start_date, "(with timezone)")
+        if err:
+            return err
+        time_end, err = parse_iso_with_tz('end_date', end_date, "(with timezone)")
+        if err:
+            return err
 
         # Fetch recovery data
-        try:
-            recovery_data = get_whoop_recovery_data(
-                access_token=access_token,
-                start=time_start,
-                end=time_end,
-                limit=limit,
-            )
-        except Exception as e:
-            error_msg = str(e)
-            if "Authentication failed" in error_msg or "401" in error_msg:
-                # Reload integration to get latest refresh_token before refreshing
-                integration = users_db.get_integration(uid, 'whoop')
-                new_token = refresh_whoop_token(uid, integration)
-                if new_token:
-                    recovery_data = get_whoop_recovery_data(
-                        access_token=new_token,
-                        start=time_start,
-                        end=time_end,
-                        limit=limit,
-                    )
-                else:
-                    return "Whoop authentication expired. Please reconnect your Whoop account from settings."
-            else:
-                return f"Error fetching recovery data: {error_msg}"
+        recovery_data, err = retry_on_auth(
+            get_whoop_recovery_data,
+            {
+                'access_token': access_token,
+                'start': time_start,
+                'end': time_end,
+                'limit': limit,
+            },
+            refresh_whoop_token,
+            uid,
+            users_db.get_integration(uid, 'whoop'),
+            "Whoop authentication expired. Please reconnect your Whoop account from settings.",
+            (
+                "Authentication failed",
+                "401",
+                "token may be expired",
+            ),
+        )
+        if err:
+            return err
 
         records = recovery_data.get('records', [])
         if not records:
@@ -869,99 +768,57 @@ def get_whoop_workout_tool(
     """
     print(f"🔧 get_whoop_workout_tool called - start_date: {start_date}, " f"end_date: {end_date}, limit: {limit}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 get_whoop_workout_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ get_whoop_workout_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ get_whoop_workout_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ get_whoop_workout_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ get_whoop_workout_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'whoop',
+        'Whoop',
+        'Whoop is not connected. Please connect your Whoop account from settings to view your workout data.',
+        'Whoop access token not found. Please reconnect your Whoop account from settings.',
+        'Error checking Whoop connection',
+    )
+    if access_err:
+        print(f"❌ get_whoop_workout_tool - {access_err}")
+        return access_err
 
     print(f"✅ get_whoop_workout_tool - uid: {uid}, limit: {limit}")
 
     try:
-        # Cap at 25 per call
-        if limit > 25:
-            print(f"⚠️ get_whoop_workout_tool - limit capped from {limit} to 25")
-            limit = 25
+        limit = ensure_capped(limit, 25, "⚠️ get_whoop_workout_tool - limit capped from {} to {}")
 
-        # Check if user has Whoop connected
         print(f"🏃 Checking Whoop connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'whoop')
-            if not integration or not integration.get('connected'):
-                return (
-                    "Whoop is not connected. Please connect your Whoop account from settings to view your workout data."
-                )
-        except Exception as e:
-            print(f"❌ Error checking Whoop integration: {e}")
-            return f"Error checking Whoop connection: {str(e)}"
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            return "Whoop access token not found. Please reconnect your Whoop account from settings."
 
         # Parse dates if provided
         time_start = None
         time_end = None
 
-        if start_date:
-            try:
-                time_start = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if time_start.tzinfo is None:
-                    return f"Error: start_date must include timezone: {start_date}"
-            except ValueError as e:
-                return f"Error: Invalid start_date format: {start_date} - {str(e)}"
-
-        if end_date:
-            try:
-                time_end = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if time_end.tzinfo is None:
-                    return f"Error: end_date must include timezone: {end_date}"
-            except ValueError as e:
-                return f"Error: Invalid end_date format: {end_date} - {str(e)}"
+        time_start, err = parse_iso_with_tz('start_date', start_date, "(with timezone)")
+        if err:
+            return err
+        time_end, err = parse_iso_with_tz('end_date', end_date, "(with timezone)")
+        if err:
+            return err
 
         # Fetch workout data
-        try:
-            workout_data = get_whoop_workout_data(
-                access_token=access_token,
-                start=time_start,
-                end=time_end,
-                limit=limit,
-            )
-        except Exception as e:
-            error_msg = str(e)
-            if "Authentication failed" in error_msg or "401" in error_msg:
-                # Reload integration to get latest refresh_token before refreshing
-                integration = users_db.get_integration(uid, 'whoop')
-                new_token = refresh_whoop_token(uid, integration)
-                if new_token:
-                    workout_data = get_whoop_workout_data(
-                        access_token=new_token,
-                        start=time_start,
-                        end=time_end,
-                        limit=limit,
-                    )
-                else:
-                    return "Whoop authentication expired. Please reconnect your Whoop account from settings."
-            else:
-                return f"Error fetching workout data: {error_msg}"
+        workout_data, err = retry_on_auth(
+            get_whoop_workout_data,
+            {
+                'access_token': access_token,
+                'start': time_start,
+                'end': time_end,
+                'limit': limit,
+            },
+            refresh_whoop_token,
+            uid,
+            users_db.get_integration(uid, 'whoop'),
+            "Whoop authentication expired. Please reconnect your Whoop account from settings.",
+            (
+                "Authentication failed",
+                "401",
+                "token may be expired",
+            ),
+        )
+        if err:
+            return err
 
         records = workout_data.get('records', [])
         if not records:

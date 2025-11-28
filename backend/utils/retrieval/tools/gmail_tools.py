@@ -11,6 +11,11 @@ from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
 import requests
+from utils.retrieval.tools.integration_base import (
+    ensure_capped,
+    prepare_access,
+    retry_on_auth,
+)
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
@@ -215,65 +220,23 @@ def get_gmail_messages_tool(
     """
     print(f"🔧 get_gmail_messages_tool called - query: {query}, " f"max_results: {max_results}, label: {label}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 get_gmail_messages_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ get_gmail_messages_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ get_gmail_messages_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(
-            f"❌ get_gmail_messages_tool - error accessing config: {e}, config keys: {list(config.keys()) if isinstance(config, dict) else 'not a dict'}"
-        )
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ get_gmail_messages_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'google_calendar',
+        'Google',
+        'Google is not connected. Please connect your Google account from settings to view your emails.',
+        'Google access token not found. Please reconnect your Google account from settings.',
+        'Error checking Google connection',
+    )
+    if access_err:
+        print(f"❌ get_gmail_messages_tool - {access_err}")
+        return access_err
     print(f"✅ get_gmail_messages_tool - uid: {uid}, max_results: {max_results}")
 
     try:
-        # Cap at 50 per call
-        if max_results > 50:
-            print(f"⚠️ get_gmail_messages_tool - max_results capped from {max_results} to 50")
-            max_results = 50
+        max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")
 
-        # Check if user has Google Calendar connected (which includes Gmail access)
         print(f"📧 Checking Google connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'google_calendar')
-            print(f"📧 Integration data retrieved: {integration is not None}")
-            if integration:
-                print(f"📧 Integration connected status: {integration.get('connected')}")
-                print(f"📧 Integration has access_token: {bool(integration.get('access_token'))}")
-            else:
-                print(f"❌ No integration found for user {uid}")
-                return "Google is not connected. Please connect your Google account from settings to view your emails."
-        except Exception as e:
-            print(f"❌ Error checking Google integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Google connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Google not connected for user {uid}")
-            return "Google is not connected. Please connect your Google account from settings to view your emails."
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Google access token not found. Please reconnect your Google account from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
@@ -293,48 +256,28 @@ def get_gmail_messages_tool(
                 label_ids = [label_upper]
 
         # Fetch messages
-        try:
-            messages = get_gmail_messages(
-                access_token=access_token,
-                query=query,
-                max_results=max_results,
-                label_ids=label_ids,
-            )
-
-            print(f"✅ Successfully fetched {len(messages)} messages")
-        except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Error fetching Gmail messages: {error_msg}")
-            import traceback
-
-            traceback.print_exc()
-
-            # Try to refresh token if authentication failed
-            if "Authentication failed" in error_msg or "401" in error_msg:
-                print(f"🔄 Attempting to refresh Google token...")
-                new_token = refresh_google_token(uid, integration)
-                if new_token:
-                    print(f"✅ Token refreshed, retrying...")
-                    try:
-                        messages = get_gmail_messages(
-                            access_token=new_token,
-                            query=query,
-                            max_results=max_results,
-                            label_ids=label_ids,
-                        )
-                        print(f"✅ Successfully fetched {len(messages)} messages after token refresh")
-                    except Exception as retry_error:
-                        print(f"❌ Error after token refresh: {str(retry_error)}")
-                        import traceback
-
-                        traceback.print_exc()
-                        return f"Error fetching Gmail messages: {str(retry_error)}"
-                else:
-                    print(f"❌ Token refresh failed")
-                    return "Google authentication expired. Please reconnect your Google account from settings."
-            else:
-                print(f"❌ Non-auth error: {error_msg}")
-                return f"Error fetching Gmail messages: {error_msg}"
+        messages, err = retry_on_auth(
+            get_gmail_messages,
+            {
+                'access_token': access_token,
+                'query': query,
+                'max_results': max_results,
+                'label_ids': label_ids,
+            },
+            refresh_google_token,
+            uid,
+            integration,
+            "Google authentication expired. Please reconnect your Google account from settings.",
+            (
+                "Authentication failed",
+                "401",
+                "token may be expired",
+            ),
+        )
+        if err:
+            print(f"❌ {err}")
+            return err
+        print(f"✅ Successfully fetched {len(messages)} messages")
 
         messages_count = len(messages) if messages else 0
         print(f"📊 get_gmail_messages_tool - found {messages_count} messages")

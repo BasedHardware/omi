@@ -12,6 +12,12 @@ from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
 import requests
+from utils.retrieval.tools.integration_base import (
+    resolve_config_uid,
+    get_integration_checked,
+    get_access_token_checked,
+    cap_limit,
+)
 
 # Import the context variable from agentic module
 try:
@@ -327,64 +333,37 @@ def search_notion_pages_tool(
     """
     print(f"🔧 search_notion_pages_tool called - query: {query}, " f"page_size: {page_size}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 search_notion_pages_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ search_notion_pages_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ search_notion_pages_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ search_notion_pages_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ search_notion_pages_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, uid_err = resolve_config_uid(config)
+    if uid_err:
+        print(f"❌ search_notion_pages_tool - {uid_err}")
+        return uid_err
 
     print(f"✅ search_notion_pages_tool - uid: {uid}, page_size: {page_size}")
 
     try:
-        # Cap at 100 per call
         if page_size > 100:
             print(f"⚠️ search_notion_pages_tool - page_size capped from {page_size} to 100")
-            page_size = 100
+        page_size = cap_limit(page_size, 100)
 
-        # Check if user has Notion connected
         print(f"📝 Checking Notion connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'notion')
-            print(f"📝 Integration data retrieved: {integration is not None}")
-            if integration:
-                print(f"📝 Integration connected status: {integration.get('connected')}")
-                print(f"📝 Integration has access_token: {bool(integration.get('access_token'))}")
-            else:
-                print(f"❌ No integration found for user {uid}")
-                return "Notion is not connected. Please connect your Notion account from settings to view your pages."
-        except Exception as e:
-            print(f"❌ Error checking Notion integration: {e}")
-            import traceback
+        integration, int_err = get_integration_checked(
+            uid,
+            'notion',
+            'Notion',
+            'Notion is not connected. Please connect your Notion account from settings to view your pages.',
+            'Error checking Notion connection',
+        )
+        if int_err:
+            print(f"❌ {int_err}")
+            return int_err
 
-            traceback.print_exc()
-            return f"Error checking Notion connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Notion not connected for user {uid}")
-            return "Notion is not connected. Please connect your Notion account from settings to view your pages."
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Notion access token not found. Please reconnect your Notion account from settings."
+        access_token, token_err = get_access_token_checked(
+            integration,
+            'Notion access token not found. Please reconnect your Notion account from settings.',
+        )
+        if token_err:
+            print(f"❌ {token_err}")
+            return token_err
 
         print(f"✅ Access token found")
 

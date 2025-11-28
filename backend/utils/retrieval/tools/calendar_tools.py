@@ -13,6 +13,11 @@ from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
 import requests
+from utils.retrieval.tools.integration_base import (
+    ensure_capped,
+    parse_iso_with_tz,
+    prepare_access,
+)
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
@@ -608,65 +613,23 @@ def get_calendar_events_tool(
         f"end_date: {end_date}, max_results: {max_results}, search_query: {search_query}"
     )
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 get_calendar_events_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ get_calendar_events_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ get_calendar_events_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(
-            f"❌ get_calendar_events_tool - error accessing config: {e}, config keys: {list(config.keys()) if isinstance(config, dict) else 'not a dict'}"
-        )
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ get_calendar_events_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'google_calendar',
+        'Google Calendar',
+        'Google Calendar is not connected. Please connect your Google Calendar from settings to view your events.',
+        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+        'Error checking Google Calendar connection',
+    )
+    if access_err:
+        print(f"❌ get_calendar_events_tool - {access_err}")
+        return access_err
     print(f"✅ get_calendar_events_tool - uid: {uid}, max_results: {max_results}")
 
     try:
-        # Cap at 50 per call
-        if max_results > 50:
-            print(f"⚠️ get_calendar_events_tool - max_results capped from {max_results} to 50")
-            max_results = 50
+        max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
 
-        # Check if user has Google Calendar connected
         print(f"📅 Checking Google Calendar connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'google_calendar')
-            print(f"📅 Integration data retrieved: {integration is not None}")
-            if integration:
-                print(f"📅 Integration connected status: {integration.get('connected')}")
-                print(f"📅 Integration has access_token: {bool(integration.get('access_token'))}")
-            else:
-                print(f"❌ No integration found for user {uid}")
-                return "Google Calendar is not connected. Please connect your Google Calendar from settings to view your events."
-        except Exception as e:
-            print(f"❌ Error checking calendar integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Google Calendar connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Google Calendar not connected for user {uid}")
-            return "Google Calendar is not connected. Please connect your Google Calendar from settings to view your events."
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Google Calendar access token not found. Please reconnect your Google Calendar from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
@@ -674,23 +637,20 @@ def get_calendar_events_tool(
         time_min = None
         time_max = None
 
-        if start_date:
-            try:
-                time_min = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if time_min.tzinfo is None:
-                    return f"Error: start_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T00:00:00-08:00'): {start_date}"
-                print(f"📅 Parsed start_date '{start_date}' as {time_min.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            except ValueError as e:
-                return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date} - {str(e)}"
-
-        if end_date:
-            try:
-                time_max = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if time_max.tzinfo is None:
-                    return f"Error: end_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-27T23:59:59-08:00'): {end_date}"
-                print(f"📅 Parsed end_date '{end_date}' as {time_max.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            except ValueError as e:
-                return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date} - {str(e)}"
+        time_min, err = parse_iso_with_tz(
+            'start_date',
+            start_date,
+            "in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T00:00:00-08:00')",
+        )
+        if err:
+            return err
+        time_max, err = parse_iso_with_tz(
+            'end_date',
+            end_date,
+            "in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-27T23:59:59-08:00')",
+        )
+        if err:
+            return err
 
         # If search_query is provided, expand date range to ensure we don't miss events
         # Default to searching back 1 year if no dates provided, or expand range if dates are too narrow
@@ -963,57 +923,22 @@ def create_calendar_event_tool(
         f"start_time: {start_time}, end_time: {end_time}, location: {location}"
     )
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 create_calendar_event_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ create_calendar_event_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ create_calendar_event_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ create_calendar_event_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ create_calendar_event_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'google_calendar',
+        'Google Calendar',
+        'Google Calendar is not connected. Please connect your Google Calendar from settings to create events.',
+        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+        'Error checking Google Calendar connection',
+    )
+    if access_err:
+        print(f"❌ create_calendar_event_tool - {access_err}")
+        return access_err
 
     print(f"✅ create_calendar_event_tool - uid: {uid}")
 
     try:
-        # Check if user has Google Calendar connected
         print(f"📅 Checking Google Calendar connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'google_calendar')
-            if not integration:
-                print(f"❌ No integration found for user {uid}")
-                return "Google Calendar is not connected. Please connect your Google Calendar from settings to create events."
-        except Exception as e:
-            print(f"❌ Error checking calendar integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Google Calendar connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Google Calendar not connected for user {uid}")
-            return (
-                "Google Calendar is not connected. Please connect your Google Calendar from settings to create events."
-            )
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Google Calendar access token not found. Please reconnect your Google Calendar from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
@@ -1199,57 +1124,22 @@ def delete_calendar_event_tool(
         f"start_date: {start_date}, end_date: {end_date}, event_id: {event_id}"
     )
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 delete_calendar_event_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ delete_calendar_event_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ delete_calendar_event_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ delete_calendar_event_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ delete_calendar_event_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'google_calendar',
+        'Google Calendar',
+        'Google Calendar is not connected. Please connect your Google Calendar from settings to delete events.',
+        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+        'Error checking Google Calendar connection',
+    )
+    if access_err:
+        print(f"❌ delete_calendar_event_tool - {access_err}")
+        return access_err
 
     print(f"✅ delete_calendar_event_tool - uid: {uid}")
 
     try:
-        # Check if user has Google Calendar connected
         print(f"📅 Checking Google Calendar connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'google_calendar')
-            if not integration:
-                print(f"❌ No integration found for user {uid}")
-                return "Google Calendar is not connected. Please connect your Google Calendar from settings to delete events."
-        except Exception as e:
-            print(f"❌ Error checking calendar integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Google Calendar connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Google Calendar not connected for user {uid}")
-            return (
-                "Google Calendar is not connected. Please connect your Google Calendar from settings to delete events."
-            )
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Google Calendar access token not found. Please reconnect your Google Calendar from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
@@ -1288,23 +1178,20 @@ def delete_calendar_event_tool(
         time_min = None
         time_max = None
 
-        if start_date:
-            try:
-                time_min = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                if time_min.tzinfo is None:
-                    return f"Error: start_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T18:00:00-08:00'): {start_date}"
-                print(f"📅 Parsed start_date '{start_date}' as {time_min.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            except ValueError as e:
-                return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date} - {str(e)}"
-
-        if end_date:
-            try:
-                time_max = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                if time_max.tzinfo is None:
-                    return f"Error: end_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T19:00:00-08:00'): {end_date}"
-                print(f"📅 Parsed end_date '{end_date}' as {time_max.strftime('%Y-%m-%d %H:%M:%S %Z')}")
-            except ValueError as e:
-                return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date} - {str(e)}"
+        time_min, err = parse_iso_with_tz(
+            'start_date',
+            start_date,
+            "in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T18:00:00-08:00')",
+        )
+        if err:
+            return err
+        time_max, err = parse_iso_with_tz(
+            'end_date',
+            end_date,
+            "in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T19:00:00-08:00')",
+        )
+        if err:
+            return err
 
         # If only start_date provided, set end_date to 1 day later
         if time_min and not time_max:
@@ -1523,57 +1410,22 @@ def update_calendar_event_tool(
         f"add_attendees: {add_attendees}, remove_attendees: {remove_attendees}, set_attendees: {set_attendees}"
     )
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 update_calendar_event_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ update_calendar_event_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ update_calendar_event_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ update_calendar_event_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ update_calendar_event_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'google_calendar',
+        'Google Calendar',
+        'Google Calendar is not connected. Please connect your Google Calendar from settings to update events.',
+        'Google Calendar access token not found. Please reconnect your Google Calendar from settings.',
+        'Error checking Google Calendar connection',
+    )
+    if access_err:
+        print(f"❌ update_calendar_event_tool - {access_err}")
+        return access_err
 
     print(f"✅ update_calendar_event_tool - uid: {uid}")
 
     try:
-        # Check if user has Google Calendar connected
         print(f"📅 Checking Google Calendar connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'google_calendar')
-            if not integration:
-                print(f"❌ No integration found for user {uid}")
-                return "Google Calendar is not connected. Please connect your Google Calendar from settings to update events."
-        except Exception as e:
-            print(f"❌ Error checking calendar integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Google Calendar connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Google Calendar not connected for user {uid}")
-            return (
-                "Google Calendar is not connected. Please connect your Google Calendar from settings to update events."
-            )
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Google Calendar access token not found. Please reconnect your Google Calendar from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
@@ -1587,25 +1439,12 @@ def update_calendar_event_tool(
             time_min = None
             time_max = None
 
-            if start_date:
-                try:
-                    time_min = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
-                    if time_min.tzinfo is None:
-                        return (
-                            f"Error: start_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date}"
-                        )
-                except ValueError as e:
-                    return (
-                        f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_date} - {str(e)}"
-                    )
-
-            if end_date:
-                try:
-                    time_max = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
-                    if time_max.tzinfo is None:
-                        return f"Error: end_date must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date}"
-                except ValueError as e:
-                    return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_date} - {str(e)}"
+            time_min, err = parse_iso_with_tz('start_date', start_date, "(with timezone)")
+            if err:
+                return err
+            time_max, err = parse_iso_with_tz('end_date', end_date, "(with timezone)")
+            if err:
+                return err
 
             # If only start_date provided, set end_date to 1 day later
             if time_min and not time_max:

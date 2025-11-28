@@ -13,6 +13,11 @@ from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
 import requests
+from utils.retrieval.tools.integration_base import (
+    ensure_capped,
+    prepare_access,
+    retry_on_auth,
+)
 
 # Import the context variable from agentic module
 try:
@@ -256,114 +261,52 @@ def get_twitter_tweets_tool(
     """
     print(f"🔧 get_twitter_tweets_tool called - username: {username}, max_results: {max_results}")
 
-    # Get config from parameter or context variable
-    if config is None:
-        try:
-            config = agent_config_context.get()
-            if config:
-                print(f"🔧 get_twitter_tweets_tool - got config from context variable")
-        except LookupError:
-            print(f"❌ get_twitter_tweets_tool - config not found in context variable")
-            config = None
-
-    if config is None:
-        print(f"❌ get_twitter_tweets_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        uid = config['configurable'].get('user_id')
-    except (KeyError, TypeError) as e:
-        print(f"❌ get_twitter_tweets_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        print(f"❌ get_twitter_tweets_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
+    uid, integration, access_token, access_err = prepare_access(
+        config,
+        'twitter',
+        'Twitter',
+        'Twitter is not connected. Please connect your Twitter account from settings to view tweets.',
+        'Twitter access token not found. Please reconnect your Twitter account from settings.',
+        'Error checking Twitter connection',
+    )
+    if access_err:
+        print(f"❌ get_twitter_tweets_tool - {access_err}")
+        return access_err
 
     print(f"✅ get_twitter_tweets_tool - uid: {uid}, max_results: {max_results}")
 
     try:
-        # Cap at 100 per call
-        if max_results > 100:
-            print(f"⚠️ get_twitter_tweets_tool - max_results capped from {max_results} to 100")
-            max_results = 100
+        max_results = ensure_capped(max_results, 100, "⚠️ get_twitter_tweets_tool - max_results capped from {} to {}")
 
-        # Check if user has Twitter connected
         print(f"🐦 Checking Twitter connection for user {uid}...")
-        try:
-            integration = users_db.get_integration(uid, 'twitter')
-            print(f"🐦 Integration data retrieved: {integration is not None}")
-            if integration:
-                print(f"🐦 Integration connected status: {integration.get('connected')}")
-                print(f"🐦 Integration has access_token: {bool(integration.get('access_token'))}")
-            else:
-                print(f"❌ No integration found for user {uid}")
-                return "Twitter is not connected. Please connect your Twitter account from settings to view tweets."
-        except Exception as e:
-            print(f"❌ Error checking Twitter integration: {e}")
-            import traceback
-
-            traceback.print_exc()
-            return f"Error checking Twitter connection: {str(e)}"
-
-        if not integration or not integration.get('connected'):
-            print(f"❌ Twitter not connected for user {uid}")
-            return "Twitter is not connected. Please connect your Twitter account from settings to view tweets."
-
-        access_token = integration.get('access_token')
-        if not access_token:
-            print(f"❌ No access token found in integration data")
-            return "Twitter access token not found. Please reconnect your Twitter account from settings."
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
         # Fetch tweets
-        try:
-            tweets_data = get_twitter_tweets(
-                access_token=access_token,
-                username=username,
-                max_results=max_results,
-                start_time=start_time,
-                end_time=end_time,
-            )
-
-            print(f"✅ Successfully fetched Twitter tweets")
-        except Exception as e:
-            error_msg = str(e)
-            print(f"❌ Error fetching Twitter tweets: {error_msg}")
-            import traceback
-
-            traceback.print_exc()
-
-            # Try to refresh token if authentication failed
-            if "Authentication failed" in error_msg or "401" in error_msg or "token may be expired" in error_msg:
-                print(f"🔄 Attempting to refresh Twitter token...")
-                # Reload integration to get latest refresh_token before refreshing
-                integration = users_db.get_integration(uid, 'twitter')
-                new_token = refresh_twitter_token(uid, integration)
-                if new_token:
-                    print(f"✅ Token refreshed, retrying...")
-                    try:
-                        tweets_data = get_twitter_tweets(
-                            access_token=new_token,
-                            username=username,
-                            max_results=max_results,
-                            start_time=start_time,
-                            end_time=end_time,
-                        )
-                        print(f"✅ Successfully fetched Twitter tweets after token refresh")
-                    except Exception as retry_error:
-                        print(f"❌ Error after token refresh: {str(retry_error)}")
-                        import traceback
-
-                        traceback.print_exc()
-                        return f"Error fetching tweets: {str(retry_error)}"
-                else:
-                    print(f"❌ Token refresh failed")
-                    return "Twitter authentication expired. Please reconnect your Twitter account from settings to restore access."
-            else:
-                print(f"❌ Non-auth error: {error_msg}")
-                return f"Error fetching tweets: {error_msg}"
+        tweets_data, err = retry_on_auth(
+            get_twitter_tweets,
+            {
+                'access_token': access_token,
+                'username': username,
+                'max_results': max_results,
+                'start_time': start_time,
+                'end_time': end_time,
+            },
+            refresh_twitter_token,
+            uid,
+            users_db.get_integration(uid, 'twitter'),
+            "Twitter authentication expired. Please reconnect your Twitter account from settings to restore access.",
+            (
+                "Authentication failed",
+                "401",
+                "token may be expired",
+                "token may be expired or invalid",
+            ),
+        )
+        if err:
+            print(f"❌ {err}")
+            return err
+        print(f"✅ Successfully fetched Twitter tweets")
 
         tweets = tweets_data.get('data', [])
         users = tweets_data.get('includes', {}).get('users', [])
