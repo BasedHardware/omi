@@ -386,7 +386,7 @@ def search_notion_pages_tool(
             print(f"❌ No access token found in integration data")
             return "Notion access token not found. Please reconnect your Notion account from settings."
 
-        print(f"✅ Access token found, length: {len(access_token)}")
+        print(f"✅ Access token found")
 
         # Search Notion pages
         # If query contains common page references, try to find the specific page first
