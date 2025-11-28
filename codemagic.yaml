@@ -796,120 +796,108 @@ workflows:
         script: |
           keychain initialize
 
-      - name: Fetch signing files
+      - name: Fetch Mac App Store signing files (for build)
         script: |
-          # Developer ID certificate is manually uploaded to Codemagic as MAC_APP_DIRECT
-          # For Developer ID distribution, we don't need provisioning profiles - just the certificate
-          # The certificate will be added to keychain in the next step via macos_signing configuration
-          echo "Using manually uploaded Developer ID Application certificate (MAC_APP_DIRECT)"
-          echo "Skipping app-store-connect fetch since Developer ID doesn't require provisioning profiles"
+          # Use Mac App Store profile to build (satisfies Xcode capability requirements)
+          # We'll re-sign with Developer ID afterwards for DMG distribution
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform MAC_OS \
+            --type MAC_APP_STORE \
+            --create
 
       - name: Add certificates to keychain
         script: |
-          # Import Developer ID Application certificate from environment variable
-          # Store your .p12 as base64 in MACOS_DEVELOPER_ID_P12 variable (in appstore_credentials group)
-          # Store the password in MACOS_DEVELOPER_ID_P12_PASSWORD variable
+          keychain add-certificates
+
+      - name: Import Developer ID certificate (for re-signing)
+        script: |
+          # Import Developer ID Application certificate for DMG distribution
+          # This cert is used to re-sign the app after building
           
           if [ -n "$MACOS_DEVELOPER_ID_P12" ]; then
             echo "Importing Developer ID Application certificate..."
             echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
             
-            # Initialize keychain if not already done
-            keychain initialize || true
-            
-            # Password can be empty if exported without password
+            KEYCHAIN_PATH=$(keychain get-default)
             security import /tmp/developer_id.p12 \
-              -k $(keychain get-default || echo ~/Library/Keychains/login.keychain-db) \
+              -k "$KEYCHAIN_PATH" \
               -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
               -T /usr/bin/codesign \
               -T /usr/bin/security
             
-            # Allow codesign to access the key without prompting
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" $(keychain get-default || echo ~/Library/Keychains/login.keychain-db) 2>/dev/null || true
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
             
             rm /tmp/developer_id.p12
-            echo "Certificate imported successfully"
+            echo "Developer ID certificate imported successfully"
           else
             echo "ERROR: MACOS_DEVELOPER_ID_P12 environment variable not set"
             echo "Please add your Developer ID Application certificate as base64 to the appstore_credentials group"
-            echo "Run: base64 -i your_certificate.p12 | pbcopy"
             exit 1
           fi
+          
+          # Find and export the Developer ID cert name for later
+          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Found Developer ID cert: $DEVELOPER_ID_CERT"
+          echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
 
       - name: Set up code signing settings
         script: |
-          # For Developer ID distribution, we don't use provisioning profiles
-          # List available signing identities to verify the certificate is in keychain
-          echo "Available signing identities:"
-          security find-identity -v -p codesigning
-          
-          # Find the Developer ID Application certificate
-          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
-          echo "Found Developer ID cert: $DEVELOPER_ID_CERT"
-          
-          if [ -z "$DEVELOPER_ID_CERT" ]; then
-            echo "ERROR: Developer ID Application certificate not found in keychain"
-            exit 1
-          fi
-          
-          # Export for use in later steps
-          echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
-          
-          # Disable automatic signing in Xcode project for Developer ID distribution
-          # This allows us to build without provisioning profiles and sign manually after
-          XCODEPROJ="macos/Runner.xcodeproj/project.pbxproj"
-          
-          echo "Disabling automatic code signing for Developer ID distribution..."
-          
-          # Set CODE_SIGN_STYLE to Manual
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' "$XCODEPROJ"
-          
-          # Remove provisioning profile requirements
-          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = ".*"/PROVISIONING_PROFILE_SPECIFIER = ""/g' "$XCODEPROJ"
-          
-          # Set signing identity to Developer ID (will be applied during manual signing step)
-          # For build, we'll use ad-hoc signing then re-sign properly
-          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = ".*"/"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-"/g' "$XCODEPROJ"
-          sed -i '' 's/CODE_SIGN_IDENTITY = ".*Developer.*"/CODE_SIGN_IDENTITY = "-"/g' "$XCODEPROJ"
-          
-          echo "Code signing configured for Developer ID distribution"
+          xcode-project use-profiles
 
       - name: Flutter build macOS
         script: |
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
 
-          # Build without code signing (we'll sign manually after)
+          # Build with Mac App Store signing (satisfies Xcode requirements)
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
 
-      - name: Sign app with Developer ID
+      - name: Re-sign app with Developer ID
         script: |
-          # Find the app bundle
-          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          # Find the app bundle (built with Mac App Store signing)
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
           
-          echo "Signing with: $DEVELOPER_ID_CERT"
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Could not find Omi.app"
+            find $(pwd)/build/macos -type d -name "*.app"
+            exit 1
+          fi
           
-          # Sign all nested components first (frameworks, dylibs, etc.)
-          find "$APP_PATH" -type f \( -name "*.dylib" -o -name "*.framework" \) -exec \
-            codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_CERT" {} \;
+          echo "Re-signing with Developer ID: $DEVELOPER_ID_CERT"
           
-          # Sign the main app bundle with hardened runtime (required for notarization)
-          codesign --force --deep --options runtime --timestamp --sign "$DEVELOPER_ID_CERT" "$APP_PATH"
+          # Find the Release entitlements file
+          ENTITLEMENTS_FILE=$(find $(pwd)/macos/Runner -name "Release.entitlements" | head -1)
+          if [ -z "$ENTITLEMENTS_FILE" ]; then
+            ENTITLEMENTS_FILE=$(find $(pwd)/macos -name "*.entitlements" | head -1)
+          fi
+          echo "Using entitlements: $ENTITLEMENTS_FILE"
+          
+          # Re-sign everything with Developer ID and hardened runtime
+          # --force removes existing signature and applies new one
+          # --deep signs all nested code
+          # --options runtime enables hardened runtime (required for notarization)
+          # --timestamp adds secure timestamp (required for notarization)
+          
+          echo "Re-signing app bundle with Developer ID..."
+          codesign --force --deep --options runtime --timestamp \
+            --entitlements "$ENTITLEMENTS_FILE" \
+            --sign "$DEVELOPER_ID_CERT" \
+            "$APP_PATH"
           
           # Verify the signature
           echo "Verifying signature..."
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           
-          echo "App signed successfully with Developer ID"
+          echo "App re-signed successfully with Developer ID"
 
       - name: Package app for notarization
         script: |
           # Find the app bundle
-          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
 
           # Create a zip archive for notarization
@@ -985,7 +973,7 @@ workflows:
 
           echo ""
           echo "=== Stapling Notarization Ticket ==="
-          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "App path: $APP_PATH"
           xcrun stapler staple "$APP_PATH"
 
@@ -1001,7 +989,7 @@ workflows:
           echo "Creating DMG for version: $VERSION"
 
           # Find the notarized app bundle
-          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
 
           # Create DMG output directory
