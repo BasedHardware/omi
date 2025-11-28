@@ -844,9 +844,9 @@ workflows:
 
           echo "Submitting app for notarization..."
           xcrun notarytool submit "$APP_ZIP" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key "$PRIVATE_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --wait
 
           # Staple the notarization ticket to the app
@@ -904,9 +904,9 @@ workflows:
 
           # Submit DMG for notarization
           xcrun notarytool submit "$DMG_PATH" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key "$PRIVATE_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --wait
 
           # Staple the notarization ticket to the DMG
