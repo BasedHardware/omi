@@ -805,13 +805,17 @@ workflows:
             --type MAC_APP_STORE \
             --create
 
-      - name: Fetch Developer ID signing files
+      - name: Verify Developer ID provisioning profile
         script: |
-          # Fetch Developer ID provisioning profile for DMG distribution
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --platform MAC_OS \
-            --type MAC_APP_DIRECT \
-            --create
+          # Codemagic should have already installed the uploaded provisioning profile
+          echo "Checking for available provisioning profiles..."
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" || echo "No profiles directory found"
+
+          # List all profiles to verify mac_dmg_v1 was installed
+          if [ -d "$HOME/Library/MobileDevice/Provisioning Profiles/" ]; then
+            echo "Available provisioning profiles:"
+            find "$HOME/Library/MobileDevice/Provisioning Profiles/" -name "*.provisionprofile" -exec basename {} \;
+          fi
 
       - name: Add certificates to keychain
         script: |
@@ -883,25 +887,46 @@ workflows:
 
           # Find and embed Developer ID provisioning profile
           echo "Finding Developer ID provisioning profile..."
-          DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f -exec grep -l "MAC_APP_DIRECT" {} \; 2>/dev/null | head -1)
 
-          if [ -z "$DEVELOPER_ID_PROFILE" ]; then
-            # Try alternative search for Developer ID profile
-            DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f | while read profile; do
-              if /usr/libexec/PlistBuddy -c "Print :ProvisionsAllDevices" "$profile" 2>/dev/null | grep -q "true"; then
+          # List all available profiles for debugging
+          echo "Available provisioning profiles:"
+          find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f 2>/dev/null | while read profile; do
+            echo "  Profile: $(basename "$profile")"
+            /usr/libexec/PlistBuddy -c "Print :Name" "$profile" 2>/dev/null | head -1 || echo "  (could not read name)"
+          done
+
+          # Search for Developer ID profile (try multiple methods)
+          DEVELOPER_ID_PROFILE=""
+
+          # Method 1: Search for ProvisionsAllDevices (Developer ID profiles provision all devices)
+          DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f | while read profile; do
+            if /usr/libexec/PlistBuddy -c "Print :ProvisionsAllDevices" "$profile" 2>/dev/null | grep -q "true"; then
+              # Verify it's for our bundle ID
+              PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:com.apple.application-identifier" "$profile" 2>/dev/null)
+              if [[ "$PROFILE_APP_ID" == *"$BUNDLE_ID"* ]]; then
                 echo "$profile"
                 break
               fi
-            done)
+            fi
+          done)
+
+          # Method 2: If not found, try searching by Name or get the newest one
+          if [ -z "$DEVELOPER_ID_PROFILE" ]; then
+            DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f -print0 | xargs -0 ls -t | head -1)
           fi
 
           if [ -n "$DEVELOPER_ID_PROFILE" ]; then
-            echo "Embedding Developer ID profile: $DEVELOPER_ID_PROFILE"
+            echo "Found Developer ID profile: $DEVELOPER_ID_PROFILE"
+            echo "Profile details:"
+            /usr/libexec/PlistBuddy -c "Print :Name" "$DEVELOPER_ID_PROFILE" 2>/dev/null || echo "  (no name)"
+            /usr/libexec/PlistBuddy -c "Print :TeamName" "$DEVELOPER_ID_PROFILE" 2>/dev/null || echo "  (no team)"
+
+            echo "Embedding Developer ID profile into app bundle..."
             cp "$DEVELOPER_ID_PROFILE" "$APP_PATH/Contents/embedded.provisionprofile"
+            echo "Profile embedded successfully"
           else
             echo "WARNING: No Developer ID provisioning profile found, continuing without profile"
-            echo "Available profiles:"
-            ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" || echo "No profiles directory"
+            echo "This may cause entitlement validation to fail!"
           fi
 
           # Find the Release entitlements file
