@@ -837,17 +837,25 @@ workflows:
         script: |
           APP_ZIP="build/macos/Omi.zip"
 
+          # Create App Store Connect API key file
+          mkdir -p ~/private_keys
+          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+
           echo "Submitting app for notarization..."
           xcrun notarytool submit "$APP_ZIP" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --key "$PRIVATE_KEY_PATH" \
             --wait
 
           # Staple the notarization ticket to the app
           APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
           echo "Stapling notarization ticket to app..."
           xcrun stapler staple "$APP_PATH"
+
+          # Clean up private key
+          rm "$PRIVATE_KEY_PATH"
 
           echo "App notarization complete!"
 
@@ -889,16 +897,24 @@ workflows:
           DMG_PATH=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
           echo "Notarizing DMG: $DMG_PATH"
 
+          # Create App Store Connect API key file
+          mkdir -p ~/private_keys
+          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+
           # Submit DMG for notarization
           xcrun notarytool submit "$DMG_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --key "$PRIVATE_KEY_PATH" \
             --wait
 
           # Staple the notarization ticket to the DMG
           echo "Stapling notarization ticket to DMG..."
           xcrun stapler staple "$DMG_PATH"
+
+          # Clean up private key
+          rm "$PRIVATE_KEY_PATH"
 
           echo "DMG notarization complete!"
           echo "DMG is fully signed and notarized: $DMG_PATH"
