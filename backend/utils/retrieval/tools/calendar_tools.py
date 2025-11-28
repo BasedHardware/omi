@@ -18,6 +18,7 @@ from utils.retrieval.tools.integration_base import (
     parse_iso_with_tz,
     prepare_access,
 )
+from utils.retrieval.tools.google_utils import google_api_request
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
@@ -243,39 +244,13 @@ def create_google_calendar_event(
 
     print(f"📅 Creating Google Calendar event: {summary} from {start_time_str} to {end_time_str}")
 
-    try:
-        response = requests.post(
-            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-            headers={
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-            },
-            json=event_body,
-            timeout=10.0,
-        )
-
-        print(f"📅 Google Calendar API create response status: {response.status_code}")
-
-        if response.status_code == 200:
-            event_data = response.json()
-            print(f"✅ Successfully created calendar event: {event_data.get('id')}")
-            return event_data
-        elif response.status_code == 401:
-            print(f"❌ Google Calendar API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        elif response.status_code == 403:
-            print(f"❌ Google Calendar API 403 - insufficient permissions")
-            raise Exception("Insufficient permissions - calendar write access required")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
-            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error creating Google Calendar event: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error creating Google Calendar event: {e}")
-        raise
+    event = google_api_request(
+        "POST",
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        access_token,
+        body=event_body,
+    )
+    return event
 
 
 def get_google_calendar_event(access_token: str, event_id: str) -> dict:
@@ -291,38 +266,12 @@ def get_google_calendar_event(access_token: str, event_id: str) -> dict:
     """
     print(f"📅 Getting Google Calendar event: {event_id}")
 
-    try:
-        response = requests.get(
-            f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10.0,
-        )
-
-        print(f"📅 Google Calendar API get response status: {response.status_code}")
-
-        if response.status_code == 200:
-            event_data = response.json()
-            print(f"✅ Successfully retrieved calendar event: {event_data.get('id')}")
-            return event_data
-        elif response.status_code == 401:
-            print(f"❌ Google Calendar API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        elif response.status_code == 403:
-            print(f"❌ Google Calendar API 403 - insufficient permissions")
-            raise Exception("Insufficient permissions - calendar read access required")
-        elif response.status_code == 404:
-            print(f"❌ Google Calendar API 404 - event not found")
-            raise Exception(f"Event not found: {event_id}")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
-            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error getting Google Calendar event: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error getting Google Calendar event: {e}")
-        raise
+    event_data = google_api_request(
+        "GET",
+        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        access_token,
+    )
+    return event_data
 
 
 def update_google_calendar_event(
@@ -395,42 +344,13 @@ def update_google_calendar_event(
 
     print(f"📅 Updating event with fields: {list(event_body.keys())}")
 
-    try:
-        response = requests.patch(
-            f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
-            headers={
-                'Authorization': f'Bearer {access_token}',
-                'Content-Type': 'application/json',
-            },
-            json=event_body,
-            timeout=10.0,
-        )
-
-        print(f"📅 Google Calendar API update response status: {response.status_code}")
-
-        if response.status_code == 200:
-            event_data = response.json()
-            print(f"✅ Successfully updated calendar event: {event_data.get('id')}")
-            return event_data
-        elif response.status_code == 401:
-            print(f"❌ Google Calendar API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        elif response.status_code == 403:
-            print(f"❌ Google Calendar API 403 - insufficient permissions")
-            raise Exception("Insufficient permissions - calendar write access required")
-        elif response.status_code == 404:
-            print(f"❌ Google Calendar API 404 - event not found")
-            raise Exception(f"Event not found: {event_id}")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
-            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error updating Google Calendar event: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error updating Google Calendar event: {e}")
-        raise
+    updated = google_api_request(
+        "PATCH",
+        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        access_token,
+        body=event_body,
+    )
+    return updated
 
 
 def delete_google_calendar_event(access_token: str, event_id: str) -> bool:
@@ -446,37 +366,13 @@ def delete_google_calendar_event(access_token: str, event_id: str) -> bool:
     """
     print(f"🗑️ Deleting Google Calendar event: {event_id}")
 
-    try:
-        response = requests.delete(
-            f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
-            headers={'Authorization': f'Bearer {access_token}'},
-            timeout=10.0,
-        )
-
-        print(f"📅 Google Calendar API delete response status: {response.status_code}")
-
-        if response.status_code == 204:
-            print(f"✅ Successfully deleted calendar event: {event_id}")
-            return True
-        elif response.status_code == 401:
-            print(f"❌ Google Calendar API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        elif response.status_code == 403:
-            print(f"❌ Google Calendar API 403 - insufficient permissions")
-            raise Exception("Insufficient permissions - calendar write access required")
-        elif response.status_code == 404:
-            print(f"❌ Google Calendar API 404 - event not found")
-            raise Exception(f"Event not found: {event_id}")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
-            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error deleting Google Calendar event: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error deleting Google Calendar event: {e}")
-        raise
+    google_api_request(
+        "DELETE",
+        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        access_token,
+        allow_204=True,
+    )
+    return True
 
 
 def get_google_calendar_events(
@@ -499,72 +395,47 @@ def get_google_calendar_events(
     Returns:
         List of calendar events
     """
-    if time_min is None:
-        time_min = datetime.now(timezone.utc)
-    if time_max is None:
-        time_max = time_min + timedelta(days=7)
-
-    # Convert to UTC if timezone-aware, otherwise assume UTC
-    if time_min.tzinfo is not None:
-        time_min_utc = time_min.astimezone(timezone.utc)
-    else:
-        time_min_utc = time_min.replace(tzinfo=timezone.utc)
-
-    if time_max.tzinfo is not None:
-        time_max_utc = time_max.astimezone(timezone.utc)
-    else:
-        time_max_utc = time_max.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    time_min = (time_min or now).astimezone(timezone.utc)
+    time_max = (time_max or (time_min + timedelta(days=7))).astimezone(timezone.utc)
 
     # Format times in RFC3339 format (UTC)
-    time_min_str = time_min_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
-    time_max_str = time_max_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+    time_min_str = time_min.strftime('%Y-%m-%dT%H:%M:%SZ')
+    time_max_str = time_max.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     params = {
         'timeMin': time_min_str,
         'timeMax': time_max_str,
-        'maxResults': max_results,
         'singleEvents': 'true',
         'orderBy': 'startTime',
+        'maxResults': 2500,
     }
-
-    # Add search query if provided
     if search_query:
         params['q'] = search_query
-        print(
-            f"📅 Calling Google Calendar API with timeMin={time_min_str}, timeMax={time_max_str}, search_query='{search_query}'"
-        )
-    else:
-        print(f"📅 Calling Google Calendar API with timeMin={time_min_str}, timeMax={time_max_str}")
 
-    try:
-        response = requests.get(
+    events = []
+    page = None
+
+    while True:
+        if page:
+            params['pageToken'] = page
+
+        data = google_api_request(
+            "GET",
             'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-            headers={'Authorization': f'Bearer {access_token}'},
+            access_token,
             params=params,
-            timeout=10.0,
         )
+        events.extend(data.get('items', []))
 
-        print(f"📅 Google Calendar API response status: {response.status_code}")
+        if len(events) >= max_results:
+            return events[:max_results]
 
-        if response.status_code == 200:
-            data = response.json()
-            events = data.get('items', [])
-            print(f"📅 Google Calendar API returned {len(events)} events")
-            return events
-        elif response.status_code == 401:
-            # Token might be expired
-            print(f"❌ Google Calendar API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Google Calendar API error {response.status_code}: {error_body}")
-            raise Exception(f"Google Calendar API error: {response.status_code} - {error_body}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error fetching Google Calendar events: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error fetching Google Calendar events: {e}")
-        raise
+        page = data.get('nextPageToken')
+        if not page:
+            break
+
+    return events[:max_results]
 
 
 @tool

@@ -10,7 +10,6 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
-import requests
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
     prepare_access,
@@ -18,7 +17,7 @@ from utils.retrieval.tools.integration_base import (
 )
 
 # Import shared Google utilities
-from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.retrieval.tools.google_utils import refresh_google_token, google_api_request
 
 # Import the context variable from agentic module
 try:
@@ -55,57 +54,31 @@ def get_gmail_messages(
 
     # Gmail API expects labelIds as a comma-separated string
     if label_ids:
-        params['labelIds'] = ','.join(label_ids)
+        params['labelIds'] = label_ids
 
-    print(f"📧 Calling Gmail API with query: {query}, max_results: {max_results}")
+    print(f"Calling Gmail API with query: {query}, max_results: {max_results}")
 
-    try:
-        response = requests.get(
-            'https://www.googleapis.com/gmail/v1/users/me/messages',
-            headers={'Authorization': f'Bearer {access_token}'},
-            params=params,
-            timeout=10.0,
+    data = google_api_request(
+        "GET",
+        'https://www.googleapis.com/gmail/v1/users/me/messages',
+        access_token,
+        params=params,
+    )
+
+    message_ids = [msg['id'] for msg in data.get('messages', [])]
+    print(f"Gmail API returned {len(message_ids)} message IDs")
+
+    messages = []
+    for msg_id in message_ids[:max_results]:
+        msg_data = google_api_request(
+            "GET",
+            f'https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}',
+            access_token,
+            params={'format': 'full'},
         )
+        messages.append(msg_data)
 
-        print(f"📧 Gmail API response status: {response.status_code}")
-
-        if response.status_code == 200:
-            data = response.json()
-            message_ids = [msg['id'] for msg in data.get('messages', [])]
-            print(f"📧 Gmail API returned {len(message_ids)} message IDs")
-
-            # Fetch full message details for each message ID
-            messages = []
-            for msg_id in message_ids[:max_results]:
-                try:
-                    msg_response = requests.get(
-                        f'https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}',
-                        headers={'Authorization': f'Bearer {access_token}'},
-                        params={'format': 'full'},
-                        timeout=10.0,
-                    )
-
-                    if msg_response.status_code == 200:
-                        messages.append(msg_response.json())
-                    else:
-                        print(f"⚠️ Failed to fetch message {msg_id}: {msg_response.status_code}")
-                except Exception as e:
-                    print(f"⚠️ Error fetching message {msg_id}: {e}")
-
-            return messages
-        elif response.status_code == 401:
-            print(f"❌ Gmail API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Gmail API error {response.status_code}: {error_body}")
-            raise Exception(f"Gmail API error: {response.status_code} - {error_body}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error fetching Gmail messages: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error fetching Gmail messages: {e}")
-        raise
+    return messages
 
 
 def parse_gmail_message(message: dict) -> dict:
@@ -222,11 +195,11 @@ def get_gmail_messages_tool(
 
     uid, integration, access_token, access_err = prepare_access(
         config,
-        'google_calendar',
-        'Google',
-        'Google is not connected. Please connect your Google account from settings to view your emails.',
-        'Google access token not found. Please reconnect your Google account from settings.',
-        'Error checking Google connection',
+        'google_gmail',
+        'Gmail',
+        'Gmail is not connected. Please connect your Google account from settings to view your emails.',
+        'Gmail access token not found. Please reconnect your Google account from settings.',
+        'Error checking Gmail connection',
     )
     if access_err:
         print(f"❌ get_gmail_messages_tool - {access_err}")

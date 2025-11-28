@@ -56,3 +56,34 @@ def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
         print(f"Error refreshing Google token: {e}")
 
     return None
+
+
+def google_api_request(
+    method: str,
+    url: str,
+    access_token: str,
+    params: dict | None = None,
+    body: dict | None = None,
+    allow_204: bool = False,
+):
+    print(f"🌐 Google API {method.upper()} {url}")
+
+    r = requests.request(
+        method=method,
+        url=url,
+        headers={"Authorization": f"Bearer {access_token}"},
+        json=body,
+        params=params,
+        timeout=10,
+    )
+
+    print(f"🔎 Status {r.status_code}")
+
+    if allow_204 and r.status_code == 204:
+        return None
+
+    if r.status_code != 200:
+        snippet = r.text[:200] if r.text else "No error body"
+        raise Exception(f"Google API error {r.status_code}: {snippet}")
+
+    return r.json()
