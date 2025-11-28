@@ -922,149 +922,40 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod
 
-      - name: Re-sign app with Developer ID
+      - name: Verify app signature
         script: |
-          # Find the app bundle (built with Mac App Store signing)
+          # Find the app bundle
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
-          
+
           if [ -z "$APP_PATH" ]; then
             echo "ERROR: Could not find Omi.app"
             find $(pwd)/build/macos -type d -name "*.app"
             exit 1
           fi
-          
-          echo "Re-signing with Developer ID: $DEVELOPER_ID_CERT"
 
-          # CRITICAL: Replace Mac App Store profile with Developer ID profile
-          echo "Removing Mac App Store provisioning profile..."
-          rm -f "$APP_PATH/Contents/embedded.provisionprofile"
+          echo "Verifying app was built with correct profile and entitlements..."
 
-          # Find and embed Developer ID provisioning profile
-          echo "Finding Developer ID provisioning profile..."
-
-          # List all available profiles for debugging
-          echo "Available provisioning profiles:"
-          find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f 2>/dev/null | while read profile; do
-            echo "  Profile: $(basename "$profile")"
-            /usr/libexec/PlistBuddy -c "Print :Name" "$profile" 2>/dev/null | head -1 || echo "  (could not read name)"
-          done
-
-          # Search for Developer ID profile (try multiple methods)
-          DEVELOPER_ID_PROFILE=""
-
-          # Method 1: Search for ProvisionsAllDevices (Developer ID profiles provision all devices)
-          DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f | while read profile; do
-            if /usr/libexec/PlistBuddy -c "Print :ProvisionsAllDevices" "$profile" 2>/dev/null | grep -q "true"; then
-              # Verify it's for our bundle ID
-              PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:com.apple.application-identifier" "$profile" 2>/dev/null)
-              if [[ "$PROFILE_APP_ID" == *"$BUNDLE_ID"* ]]; then
-                echo "$profile"
-                break
-              fi
-            fi
-          done)
-
-          # Method 2: If not found, try searching by Name or get the newest one
-          if [ -z "$DEVELOPER_ID_PROFILE" ]; then
-            DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f -print0 | xargs -0 ls -t | head -1)
-          fi
-
-          if [ -n "$DEVELOPER_ID_PROFILE" ]; then
-            echo "Found Developer ID profile: $DEVELOPER_ID_PROFILE"
-            echo "Profile details:"
-            /usr/libexec/PlistBuddy -c "Print :Name" "$DEVELOPER_ID_PROFILE" 2>/dev/null || echo "  (no name)"
-            /usr/libexec/PlistBuddy -c "Print :TeamName" "$DEVELOPER_ID_PROFILE" 2>/dev/null || echo "  (no team)"
-
-            echo "Embedding Developer ID profile into app bundle..."
-            cp "$DEVELOPER_ID_PROFILE" "$APP_PATH/Contents/embedded.provisionprofile"
-            echo "Profile embedded successfully"
+          # Check the embedded provisioning profile
+          if [ -f "$APP_PATH/Contents/embedded.provisionprofile" ]; then
+            echo "Embedded provisioning profile found:"
+            /usr/libexec/PlistBuddy -c "Print :Name" "$APP_PATH/Contents/embedded.provisionprofile" 2>/dev/null || echo "Could not read profile name"
           else
-            echo "WARNING: No Developer ID provisioning profile found, continuing without profile"
-            echo "This may cause entitlement validation to fail!"
+            echo "WARNING: No embedded provisioning profile found!"
           fi
 
-          # Find the Release entitlements file
-          ORIGINAL_ENTITLEMENTS=$(find $(pwd)/macos/Runner -name "Release.entitlements" | head -1)
-          if [ -z "$ORIGINAL_ENTITLEMENTS" ]; then
-            ORIGINAL_ENTITLEMENTS=$(find $(pwd)/macos -name "*.entitlements" | head -1)
-          fi
+          # Verify code signature
+          echo ""
+          echo "Code signature details:"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | head -20
 
-          # Create a clean entitlements file for Developer ID
-          # Developer ID apps need real Team ID values, not $(AppIdentifierPrefix) placeholders
-          ENTITLEMENTS_FILE="/tmp/DeveloperID.entitlements"
-          TEAM_ID="9536L8KLMP"
-          BUNDLE_ID="com.friend-app-with-wearable.ios12"
+          # Check entitlements
+          echo ""
+          echo "App entitlements:"
+          codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -A 50 "<dict>"
 
-          if [ -n "$ORIGINAL_ENTITLEMENTS" ]; then
-            echo "Original entitlements: $ORIGINAL_ENTITLEMENTS"
-            cp "$ORIGINAL_ENTITLEMENTS" "$ENTITLEMENTS_FILE"
-
-            # Remove App Store-only entitlements
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$ENTITLEMENTS_FILE" 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$ENTITLEMENTS_FILE" 2>/dev/null || true
-
-            # Add required Developer ID entitlements
-            /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string ${TEAM_ID}.${BUNDLE_ID}" "$ENTITLEMENTS_FILE" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :com.apple.application-identifier ${TEAM_ID}.${BUNDLE_ID}" "$ENTITLEMENTS_FILE"
-
-            /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string ${TEAM_ID}" "$ENTITLEMENTS_FILE" 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Set :com.apple.developer.team-identifier ${TEAM_ID}" "$ENTITLEMENTS_FILE"
-
-            # Replace $(AppIdentifierPrefix) placeholders in keychain-access-groups with real Team ID
-            # First, get the count of items in the array
-            KEYCHAIN_COUNT=$(/usr/libexec/PlistBuddy -c "Print :keychain-access-groups" "$ENTITLEMENTS_FILE" 2>/dev/null | grep -c "^    " || echo "0")
-
-            if [ "$KEYCHAIN_COUNT" != "0" ]; then
-              # Delete the old array
-              /usr/libexec/PlistBuddy -c "Delete :keychain-access-groups" "$ENTITLEMENTS_FILE" 2>/dev/null || true
-              # Add new array with resolved values
-              /usr/libexec/PlistBuddy -c "Add :keychain-access-groups array" "$ENTITLEMENTS_FILE"
-              /usr/libexec/PlistBuddy -c "Add :keychain-access-groups:0 string ${TEAM_ID}.com.google.GIDSignIn" "$ENTITLEMENTS_FILE"
-              /usr/libexec/PlistBuddy -c "Add :keychain-access-groups:1 string ${TEAM_ID}.${BUNDLE_ID}" "$ENTITLEMENTS_FILE"
-            fi
-
-            echo "Cleaned entitlements for Developer ID distribution:"
-            cat "$ENTITLEMENTS_FILE"
-          else
-            echo "WARNING: No entitlements file found, signing without entitlements"
-            ENTITLEMENTS_FILE=""
-          fi
-          
-          # Re-sign with Developer ID - sign from inside-out (frameworks first, then app)
-          # DO NOT use --deep flag as it breaks nested signatures
-          # --force removes existing signature and applies new one
-          # --options runtime enables hardened runtime (required for notarization)
-          # --timestamp adds secure timestamp (required for notarization)
-
-          echo "Re-signing nested frameworks with Developer ID..."
-          # Find and sign all nested frameworks from innermost to outermost
-          find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d -depth | while read framework; do
-            echo "Signing framework: $(basename "$framework")"
-            codesign --force --options runtime --timestamp \
-              --sign "$DEVELOPER_ID_CERT" \
-              "$framework" || echo "Warning: Failed to sign $framework"
-          done
-
-          echo "Re-signing main app bundle with Developer ID..."
-          if [ -n "$ENTITLEMENTS_FILE" ]; then
-            codesign --force --options runtime --timestamp \
-              --entitlements "$ENTITLEMENTS_FILE" \
-              --sign "$DEVELOPER_ID_CERT" \
-              "$APP_PATH"
-          else
-            echo "ERROR: No entitlements file found - app will not have entitlements!"
-            codesign --force --options runtime --timestamp \
-              --sign "$DEVELOPER_ID_CERT" \
-              "$APP_PATH"
-          fi
-
-          # Verify the signature
-          echo "Verifying signature..."
-          codesign --verify --strict --verbose=2 "$APP_PATH"
-          codesign -dv --verbose=4 "$APP_PATH"
-
-          echo "App re-signed successfully with Developer ID"
+          # Note: We're NOT re-signing because the app was built with Developer ID profile from the start
+          # Re-signing corrupts Firebase/Google Utilities frameworks and breaks Objective-C runtime
 
       - name: Package app for notarization
         script: |
