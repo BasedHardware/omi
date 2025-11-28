@@ -196,7 +196,7 @@ def get_twitter_tweets(
     }
 
     params = {
-        'max_results': min(max_results, 100),  # Twitter API max is 100
+        'max_results': max(5, min(max_results, 100)),
         'tweet.fields': 'created_at,author_id,public_metrics,text',
         'expansions': 'author_id',
         'user.fields': 'username,name',
@@ -207,12 +207,12 @@ def get_twitter_tweets(
     if end_time:
         params['end_time'] = end_time
 
-    print(f"🐦 Calling Twitter Tweets API for user_id={user_id}, max_results={params['max_results']}")
+    print(f"Calling Twitter Tweets API for user_id={user_id}, max_results={params['max_results']}")
 
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10.0)
 
-        print(f"🐦 Twitter Tweets API response status: {response.status_code}")
+        print(f"Twitter Tweets API response status: {response.status_code}")
 
         if response.status_code == 200:
             data = response.json()
@@ -276,9 +276,9 @@ def get_twitter_tweets_tool(
     print(f"✅ get_twitter_tweets_tool - uid: {uid}, max_results: {max_results}")
 
     try:
-        max_results = ensure_capped(max_results, 100, "⚠️ get_twitter_tweets_tool - max_results capped from {} to {}")
+        max_results = max(5, ensure_capped(max_results, 100, "get_twitter_tweets_tool - max_results capped from {} to {}"))
 
-        print(f"🐦 Checking Twitter connection for user {uid}...")
+        print(f"Checking Twitter connection for user {uid}...")
 
         print(f"✅ Access token found, length: {len(access_token)}")
 
