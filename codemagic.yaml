@@ -686,14 +686,18 @@ workflows:
     name: Release macOS Desktop Update (DMG)
     instance_type: mac_mini_m2
     max_build_duration: 120
+    integrations:
+      app_store_connect: codemagic_v4
     environment:
       groups:
         - app_env
         - firebase
         - google_play
+        - appstore_credentials
       vars:
         GCS_BUCKET: "gs://omi_macos_updates"
         PLATFORM: "macos"
+        BUNDLE_ID: "com.friend-app-with-wearable.ios12"
       flutter: 3.35.3
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -788,6 +792,26 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
+      - name: Set up keychain for code signing
+        script: |
+          keychain initialize
+
+      - name: Fetch signing files
+        script: |
+          # Fetch Developer ID signing certificate for DMG distribution
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform MAC_OS \
+            --type MAC_APP_DEVELOPMENT \
+            --create
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set up code signing settings
+        script: |
+          xcode-project use-profiles
+
       - name: Flutter build macOS
         script: |
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
@@ -798,11 +822,40 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod
 
+      - name: Package app for notarization
+        script: |
+          # Find the app bundle
+          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          echo "Found app at: $APP_PATH"
+
+          # Create a zip archive for notarization
+          APP_ZIP="build/macos/Omi.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
+          echo "Created zip for notarization: $APP_ZIP"
+
+      - name: Notarize app
+        script: |
+          APP_ZIP="build/macos/Omi.zip"
+
+          echo "Submitting app for notarization..."
+          xcrun notarytool submit "$APP_ZIP" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --wait
+
+          # Staple the notarization ticket to the app
+          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          echo "Stapling notarization ticket to app..."
+          xcrun stapler staple "$APP_PATH"
+
+          echo "App notarization complete!"
+
       - name: Create DMG installer
         script: |
           echo "Creating DMG for version: $VERSION"
 
-          # Find the app bundle
+          # Find the notarized app bundle
           APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
           echo "Found app at: $APP_PATH"
 
@@ -830,6 +883,25 @@ workflows:
 
           echo "DMG created at: $DMG_PATH"
           ls -lh "$DMG_PATH"
+
+      - name: Notarize DMG
+        script: |
+          DMG_PATH=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
+          echo "Notarizing DMG: $DMG_PATH"
+
+          # Submit DMG for notarization
+          xcrun notarytool submit "$DMG_PATH" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --wait
+
+          # Staple the notarization ticket to the DMG
+          echo "Stapling notarization ticket to DMG..."
+          xcrun stapler staple "$DMG_PATH"
+
+          echo "DMG notarization complete!"
+          echo "DMG is fully signed and notarized: $DMG_PATH"
 
       - name: Generate desktop_updater release files
         script: |
