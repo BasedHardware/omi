@@ -798,10 +798,10 @@ workflows:
 
       - name: Fetch signing files
         script: |
-          # Fetch Developer ID signing certificate for DMG distribution (notarization requires Developer ID, not Mac App Development)
+          # Fetch Developer ID signing certificate for DMG distribution (MAC_APP_DIRECT = Developer ID for direct distribution)
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform MAC_OS \
-            --type DEVELOPER_ID_APPLICATION \
+            --type MAC_APP_DIRECT \
             --create
 
       - name: Add certificates to keychain
