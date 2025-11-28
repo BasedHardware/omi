@@ -835,29 +835,62 @@ workflows:
 
       - name: Notarize app
         script: |
+          set -e  # Exit on error
+
+          echo "=== Starting App Notarization ==="
           APP_ZIP="build/macos/Omi.zip"
+          echo "App ZIP: $APP_ZIP"
+          ls -lh "$APP_ZIP"
 
-          # Create App Store Connect API key file
-          mkdir -p ~/private_keys
-          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+          echo ""
+          echo "=== App Store Connect Credentials ==="
+          echo "Key ID: $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
+          echo "Private Key variable type: $(if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then echo "File Path"; else echo "Content"; fi)"
 
-          echo "Submitting app for notarization..."
+          # Check if APP_STORE_CONNECT_PRIVATE_KEY is a file path or content
+          if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
+            # It's a file path reference
+            PRIVATE_KEY_PATH="${APP_STORE_CONNECT_PRIVATE_KEY#@file:}"
+            echo "Using existing private key from: $PRIVATE_KEY_PATH"
+            if [ -f "$PRIVATE_KEY_PATH" ]; then
+              echo "✓ Private key file exists"
+              ls -lh "$PRIVATE_KEY_PATH"
+            else
+              echo "✗ ERROR: Private key file not found at $PRIVATE_KEY_PATH"
+              exit 1
+            fi
+          else
+            # It's the actual key content, write to file
+            mkdir -p ~/private_keys
+            PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+            echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+            echo "Created private key file at: $PRIVATE_KEY_PATH"
+            ls -lh "$PRIVATE_KEY_PATH"
+            echo "First 2 lines of key file:"
+            head -n 2 "$PRIVATE_KEY_PATH"
+          fi
+
+          echo ""
+          echo "=== Submitting to Apple Notary Service ==="
           xcrun notarytool submit "$APP_ZIP" \
             --key "$PRIVATE_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --wait
 
-          # Staple the notarization ticket to the app
+          echo ""
+          echo "=== Stapling Notarization Ticket ==="
           APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
-          echo "Stapling notarization ticket to app..."
+          echo "App path: $APP_PATH"
           xcrun stapler staple "$APP_PATH"
 
-          # Clean up private key
-          rm "$PRIVATE_KEY_PATH"
+          echo ""
+          echo "=== Verifying Notarization ==="
+          spctl -a -vv -t install "$APP_PATH"
 
-          echo "App notarization complete!"
+          echo ""
+          echo "✓ App notarization complete!"
 
       - name: Create DMG installer
         script: |
@@ -894,29 +927,60 @@ workflows:
 
       - name: Notarize DMG
         script: |
+          set -e  # Exit on error
+
+          echo "=== Starting DMG Notarization ==="
           DMG_PATH=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
-          echo "Notarizing DMG: $DMG_PATH"
+          echo "DMG Path: $DMG_PATH"
+          ls -lh "$DMG_PATH"
 
-          # Create App Store Connect API key file
-          mkdir -p ~/private_keys
-          PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
-          echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+          echo ""
+          echo "=== App Store Connect Credentials ==="
+          echo "Key ID: $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
+          echo "Private Key variable type: $(if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then echo "File Path"; else echo "Content"; fi)"
 
-          # Submit DMG for notarization
+          # Check if APP_STORE_CONNECT_PRIVATE_KEY is a file path or content
+          if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
+            # It's a file path reference
+            PRIVATE_KEY_PATH="${APP_STORE_CONNECT_PRIVATE_KEY#@file:}"
+            echo "Using existing private key from: $PRIVATE_KEY_PATH"
+            if [ -f "$PRIVATE_KEY_PATH" ]; then
+              echo "✓ Private key file exists"
+              ls -lh "$PRIVATE_KEY_PATH"
+            else
+              echo "✗ ERROR: Private key file not found at $PRIVATE_KEY_PATH"
+              exit 1
+            fi
+          else
+            # It's the actual key content, write to file
+            mkdir -p ~/private_keys
+            PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
+            echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
+            echo "Created private key file at: $PRIVATE_KEY_PATH"
+            ls -lh "$PRIVATE_KEY_PATH"
+            echo "First 2 lines of key file:"
+            head -n 2 "$PRIVATE_KEY_PATH"
+          fi
+
+          echo ""
+          echo "=== Submitting to Apple Notary Service ==="
           xcrun notarytool submit "$DMG_PATH" \
             --key "$PRIVATE_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --wait
 
-          # Staple the notarization ticket to the DMG
-          echo "Stapling notarization ticket to DMG..."
+          echo ""
+          echo "=== Stapling Notarization Ticket ==="
           xcrun stapler staple "$DMG_PATH"
 
-          # Clean up private key
-          rm "$PRIVATE_KEY_PATH"
+          echo ""
+          echo "=== Verifying DMG Notarization ==="
+          spctl -a -vv -t install "$DMG_PATH"
 
-          echo "DMG notarization complete!"
+          echo ""
+          echo "✓ DMG notarization complete!"
           echo "DMG is fully signed and notarized: $DMG_PATH"
 
       - name: Generate desktop_updater release files
