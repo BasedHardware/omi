@@ -805,6 +805,14 @@ workflows:
             --type MAC_APP_STORE \
             --create
 
+      - name: Fetch Developer ID signing files
+        script: |
+          # Fetch Developer ID provisioning profile for DMG distribution
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform MAC_OS \
+            --type MAC_APP_DIRECT \
+            --create
+
       - name: Add certificates to keychain
         script: |
           keychain add-certificates
@@ -869,9 +877,32 @@ workflows:
           
           echo "Re-signing with Developer ID: $DEVELOPER_ID_CERT"
 
-          # CRITICAL: Remove embedded provisioning profile (Developer ID apps must not have profiles)
-          echo "Removing embedded provisioning profile..."
+          # CRITICAL: Replace Mac App Store profile with Developer ID profile
+          echo "Removing Mac App Store provisioning profile..."
           rm -f "$APP_PATH/Contents/embedded.provisionprofile"
+
+          # Find and embed Developer ID provisioning profile
+          echo "Finding Developer ID provisioning profile..."
+          DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f -exec grep -l "MAC_APP_DIRECT" {} \; 2>/dev/null | head -1)
+
+          if [ -z "$DEVELOPER_ID_PROFILE" ]; then
+            # Try alternative search for Developer ID profile
+            DEVELOPER_ID_PROFILE=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.provisionprofile" -type f | while read profile; do
+              if /usr/libexec/PlistBuddy -c "Print :ProvisionsAllDevices" "$profile" 2>/dev/null | grep -q "true"; then
+                echo "$profile"
+                break
+              fi
+            done)
+          fi
+
+          if [ -n "$DEVELOPER_ID_PROFILE" ]; then
+            echo "Embedding Developer ID profile: $DEVELOPER_ID_PROFILE"
+            cp "$DEVELOPER_ID_PROFILE" "$APP_PATH/Contents/embedded.provisionprofile"
+          else
+            echo "WARNING: No Developer ID provisioning profile found, continuing without profile"
+            echo "Available profiles:"
+            ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" || echo "No profiles directory"
+          fi
 
           # Find the Release entitlements file
           ORIGINAL_ENTITLEMENTS=$(find $(pwd)/macos/Runner -name "Release.entitlements" | head -1)
@@ -920,28 +951,39 @@ workflows:
             ENTITLEMENTS_FILE=""
           fi
           
-          # Re-sign everything with Developer ID and hardened runtime
+          # Re-sign with Developer ID - sign from inside-out (frameworks first, then app)
+          # DO NOT use --deep flag as it breaks nested signatures
           # --force removes existing signature and applies new one
-          # --deep signs all nested code
           # --options runtime enables hardened runtime (required for notarization)
           # --timestamp adds secure timestamp (required for notarization)
-          
-          echo "Re-signing app bundle with Developer ID..."
+
+          echo "Re-signing nested frameworks with Developer ID..."
+          # Find and sign all nested frameworks from innermost to outermost
+          find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d -depth | while read framework; do
+            echo "Signing framework: $(basename "$framework")"
+            codesign --force --options runtime --timestamp \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$framework" || echo "Warning: Failed to sign $framework"
+          done
+
+          echo "Re-signing main app bundle with Developer ID..."
           if [ -n "$ENTITLEMENTS_FILE" ]; then
-            codesign --force --deep --options runtime --timestamp \
+            codesign --force --options runtime --timestamp \
               --entitlements "$ENTITLEMENTS_FILE" \
               --sign "$DEVELOPER_ID_CERT" \
               "$APP_PATH"
           else
-            codesign --force --deep --options runtime --timestamp \
+            echo "ERROR: No entitlements file found - app will not have entitlements!"
+            codesign --force --options runtime --timestamp \
               --sign "$DEVELOPER_ID_CERT" \
               "$APP_PATH"
           fi
-          
+
           # Verify the signature
           echo "Verifying signature..."
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-          
+          codesign --verify --strict --verbose=2 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH"
+
           echo "App re-signed successfully with Developer ID"
 
       - name: Package app for notarization
