@@ -14,56 +14,15 @@ from langchain_core.runnables import RunnableConfig
 import database.users as users_db
 import requests
 
+# Import shared Google utilities
+from utils.retrieval.tools.google_utils import refresh_google_token
+
 # Import the context variable from agentic module
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
-
-
-def refresh_google_calendar_token(uid: str, integration: dict) -> Optional[str]:
-    """
-    Refresh Google Calendar access token using refresh token.
-
-    Returns:
-        New access token or None if refresh failed
-    """
-    refresh_token = integration.get('refresh_token')
-    if not refresh_token:
-        return None
-
-    client_id = os.getenv('GOOGLE_CLIENT_ID')
-    client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
-
-    if not all([client_id, client_secret]):
-        return None
-
-    try:
-        response = requests.post(
-            'https://oauth2.googleapis.com/token',
-            data={
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'refresh_token': refresh_token,
-                'grant_type': 'refresh_token',
-            },
-            timeout=10.0,
-        )
-
-        if response.status_code == 200:
-            token_data = response.json()
-            new_access_token = token_data.get('access_token')
-
-            if new_access_token:
-                # Update stored token
-                integration['access_token'] = new_access_token
-                users_db.set_integration(uid, 'google_calendar', integration)
-                return new_access_token
-    except Exception as e:
-        print(f"Error refreshing Google Calendar token: {e}")
-
-    return None
 
 
 def search_google_contacts(access_token: str, query: str) -> Optional[str]:
@@ -865,7 +824,7 @@ def get_calendar_events_tool(
             # Try to refresh token if authentication failed
             if "Authentication failed" in error_msg or "401" in error_msg:
                 print(f"🔄 Attempting to refresh Google Calendar token...")
-                new_token = refresh_google_calendar_token(uid, integration)
+                new_token = refresh_google_token(uid, integration)
                 if new_token:
                     print(f"✅ Token refreshed, retrying...")
                     try:
@@ -1143,7 +1102,7 @@ def create_calendar_event_tool(
             # Try to refresh token if authentication failed
             if "Authentication failed" in error_msg or "401" in error_msg:
                 print(f"🔄 Attempting to refresh Google Calendar token...")
-                new_token = refresh_google_calendar_token(uid, integration)
+                new_token = refresh_google_token(uid, integration)
                 if new_token:
                     print(f"✅ Token refreshed, retrying...")
                     try:
@@ -1306,7 +1265,7 @@ def delete_calendar_event_tool(
                 # Try to refresh token if authentication failed
                 if "Authentication failed" in error_msg or "401" in error_msg:
                     print(f"🔄 Attempting to refresh Google Calendar token...")
-                    new_token = refresh_google_calendar_token(uid, integration)
+                    new_token = refresh_google_token(uid, integration)
                     if new_token:
                         print(f"✅ Token refreshed, retrying...")
                         try:
@@ -1450,7 +1409,7 @@ def delete_calendar_event_tool(
             # Try to refresh token if authentication failed
             if "Authentication failed" in error_msg or "401" in error_msg:
                 print(f"🔄 Attempting to refresh Google Calendar token...")
-                new_token = refresh_google_calendar_token(uid, integration)
+                new_token = refresh_google_token(uid, integration)
                 if new_token:
                     print(f"✅ Token refreshed, retrying...")
                     try:
@@ -1694,7 +1653,7 @@ def update_calendar_event_tool(
             # Try to refresh token if authentication failed
             if "Authentication failed" in error_msg or "401" in error_msg:
                 print(f"🔄 Attempting to refresh Google Calendar token...")
-                new_token = refresh_google_calendar_token(uid, integration)
+                new_token = refresh_google_token(uid, integration)
                 if new_token:
                     print(f"✅ Token refreshed, retrying...")
                     try:
@@ -1805,7 +1764,7 @@ def update_calendar_event_tool(
             # Try to refresh token if authentication failed
             if "Authentication failed" in error_msg or "401" in error_msg:
                 print(f"🔄 Attempting to refresh Google Calendar token...")
-                new_token = refresh_google_calendar_token(uid, integration)
+                new_token = refresh_google_token(uid, integration)
                 if new_token:
                     print(f"✅ Token refreshed, retrying...")
                     try:
