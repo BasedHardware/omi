@@ -35,7 +35,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
-    implements ITransctipSegmentSocketServiceListener {
+    implements ITransctiptSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;

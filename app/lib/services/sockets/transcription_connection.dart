@@ -11,7 +11,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
-abstract interface class ITransctipSegmentSocketServiceListener {
+abstract interface class ITransctiptSegmentSocketServiceListener {
   void onMessageEventReceived(MessageEvent event);
 
   void onSegmentReceived(List<TranscriptSegment> segments);
@@ -40,7 +40,7 @@ enum SocketServiceState {
 
 class TranscriptSegmentSocketService implements IPureSocketListener {
   late PureSocket _socket;
-  final Map<Object, ITransctipSegmentSocketServiceListener> _listeners = {};
+  final Map<Object, ITransctiptSegmentSocketServiceListener> _listeners = {};
 
   SocketServiceState get state =>
       _socket.status == PureSocketStatus.connected ? SocketServiceState.connected : SocketServiceState.disconnected;
@@ -73,7 +73,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _socket.setListener(this);
   }
 
-  void subscribe(Object context, ITransctipSegmentSocketServiceListener listener) {
+  void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
     _listeners.remove(context.hashCode);
     _listeners.putIfAbsent(context.hashCode, () => listener);
   }
