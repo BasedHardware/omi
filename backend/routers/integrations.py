@@ -169,14 +169,15 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
     if not state_data_str:
         return None
 
-    # Delete immediately to prevent replay
-    redis_db.r.delete(state_key)
-
     try:
         state_data = json.loads(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
+        # Delete after successful parse to prevent replay
+        redis_db.r.delete(state_key)
         return state_data
     except Exception as e:
         print(f"Error parsing state data: {e}")
+        # Delete invalid state to prevent repeated parse failures
+        redis_db.r.delete(state_key)
         return None
 
 
@@ -231,7 +232,7 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     if not success:
         raise HTTPException(status_code=404, detail="Integration not found")
 
-    return {"status": "ok"}
+    return None
 
 
 # *****************************
@@ -280,6 +281,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         redirect_uri = f"{base_url_clean}{cfg['redirect_path']}"
 
         from urllib.parse import urlencode
+
         params = {
             'client_id': client_id,
             'redirect_uri': redirect_uri,
@@ -288,8 +290,10 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         params.update(cfg['query'])
 
         if cfg.get('requires_pkce'):
-            code_verifier = state_token[:43]
-            code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+            code_verifier = secrets.token_urlsafe(32)
+            code_challenge = (
+                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+            )
             verifier_key = f"oauth_code_verifier:{state_token}"
             redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
             params['code_challenge'] = code_challenge
@@ -386,8 +390,7 @@ async def handle_oauth_callback(
 
             if not access_token:
                 print(f'{app_key}: No access token received in response')
-                deep_link = f'omi://{app_key}/callback?error=no_access_token'
-                return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+                return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
             # Debug: Log token response keys for Whoop
             if app_key == 'whoop':
@@ -420,8 +423,7 @@ async def handle_oauth_callback(
                 print(f'{app_key}: Successfully stored tokens for user {uid}')
             except Exception as e:
                 print(f'{app_key}: Error storing tokens in Firebase: {e}')
-                deep_link = f'omi://{app_key}/callback?error=storage_failed'
-                return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+                return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
             deep_link = f'omi://{app_key}/callback?success=true'
 
@@ -430,13 +432,11 @@ async def handle_oauth_callback(
             error_body = token_response.text[:500] if token_response.text else "No error body"
             print(f'{app_key}: Token exchange failed with HTTP {token_response.status_code}')
             print(f'{app_key}: Error response: {error_body}')
-            deep_link = f'omi://{app_key}/callback?error=token_exchange_failed'
-            return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+            return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
     except Exception as e:
         print(f'{app_key}: Unexpected error during OAuth callback: {e}')
-        deep_link = f'omi://{app_key}/callback?error=server_error'
-        return render_oauth_response(request, app_key, success=True, redirect_url=deep_link)
+        return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
 
 @router.get(
