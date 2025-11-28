@@ -817,9 +817,10 @@ workflows:
             # Initialize keychain if not already done
             keychain initialize || true
             
+            # Password can be empty if exported without password
             security import /tmp/developer_id.p12 \
               -k $(keychain get-default || echo ~/Library/Keychains/login.keychain-db) \
-              -P "$MACOS_DEVELOPER_ID_P12_PASSWORD" \
+              -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
               -T /usr/bin/codesign \
               -T /usr/bin/security
             
