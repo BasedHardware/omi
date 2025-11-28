@@ -682,6 +682,266 @@ workflows:
           success: true
           failure: false
 
+  macos-desktop-release:
+    name: Release macOS Desktop Update (DMG)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      groups:
+        - app_env
+        - firebase
+        - google_play
+      vars:
+        GCS_BUCKET: "gs://omi_macos_updates"
+        PLATFORM: "macos"
+      flutter: 3.35.3
+      xcode: 26.0.1
+      cocoapods: 1.16.2
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*-desktop-cm"
+          include: true
+        - pattern: "v*-macos-cm"
+          include: true
+    working_directory: app
+    scripts:
+      - name: Set up Firebase
+        script: |
+          dart pub global activate flutterfire_cli
+
+          # https://github.com/invertase/flutterfire_cli/issues/233
+          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_prod.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
+            --macos-out=macos/Config/Prod \
+            --service-account="./firebase_key.json" \
+            --project="based-hardware" \
+            --macos-target="Runner" \
+            --yes
+
+          # DEV, should remove
+          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
+          flutterfire config \
+            --platforms="macos" \
+            --out=lib/firebase_options_dev.dart \
+            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+            --macos-out=macos/Config/Dev/ \
+            --service-account="./firebase_dev_key.json" \
+            --project="based-hardware-dev" \
+            --macos-target="Runner" \
+            --yes
+
+      - name: Set up Google Service Info
+        script: |
+          # Copy GoogleService-Info.plist
+          cp macos/Config/Prod/GoogleService-Info.plist macos/GoogleService-Info.plist
+
+      - name: Set up App .env
+        script: |
+          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
+          echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
+          echo MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN >> .env
+          echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
+          echo API_BASE_URL=$API_BASE_URL >> .env
+          echo GROWTHBOOK_API_KEY=$GROWTHBOOK_API_KEY >> .env
+          echo GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY >> .env
+          echo INTERCOM_APP_ID=$INTERCOM_APP_ID >> .env
+          echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
+          echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
+          echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
+          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Run build runner
+        script: |
+          dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install pods
+        script: |
+          cd macos && pod install --repo-update
+
+      - name: Flutter build macOS
+        script: |
+          # Extract version from tag (supports both -desktop-cm and -macos-cm)
+          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+
+          echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
+
+          flutter build macos \
+            --release \
+            --build-name=$BUILD_NAME \
+            --build-number=$BUILD_NUMBER \
+            --flavor prod
+
+      - name: Create DMG installer
+        script: |
+          # Extract version from tag
+          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          VERSION="${BUILD_NAME}+${BUILD_NUMBER}"
+
+          # Find the app bundle
+          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
+          echo "Found app at: $APP_PATH"
+
+          # Create DMG output directory
+          mkdir -p build/macos/dmg
+
+          # Create DMG using hdiutil
+          DMG_NAME="Omi-${VERSION}.dmg"
+          DMG_PATH="build/macos/dmg/${DMG_NAME}"
+
+          echo "Creating DMG: $DMG_NAME"
+
+          # Create a temporary directory for DMG contents
+          TMP_DMG_DIR=$(mktemp -d)
+          cp -R "$APP_PATH" "$TMP_DMG_DIR/"
+
+          # Create DMG
+          hdiutil create -volname "Omi ${VERSION}" \
+            -srcfolder "$TMP_DMG_DIR" \
+            -ov -format UDZO \
+            "$DMG_PATH"
+
+          # Clean up
+          rm -rf "$TMP_DMG_DIR"
+
+          echo "DMG created at: $DMG_PATH"
+          ls -lh "$DMG_PATH"
+
+      - name: Generate desktop_updater release files
+        script: |
+          echo "Generating desktop_updater release files for macOS..."
+          dart run desktop_updater:release macos
+
+      - name: Create desktop_updater archive
+        script: |
+          echo "Creating desktop_updater archive..."
+          dart run desktop_updater:archive macos
+
+          # List the generated files
+          echo "Generated files in dist/:"
+          ls -lh dist/
+
+      - name: Set up Google Cloud SDK
+        script: |
+          # Install gcloud if not already installed
+          if ! command -v gcloud &> /dev/null; then
+            echo "Installing Google Cloud SDK..."
+            curl https://sdk.cloud.google.com | bash
+            exec -l $SHELL
+            source $HOME/google-cloud-sdk/path.bash.inc
+          fi
+
+          # Authenticate with service account (reuse Play Store credentials)
+          echo "$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS" > /tmp/gcp-key.json
+          gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
+
+          echo "GCloud authenticated successfully"
+
+      - name: Upload to Google Cloud Storage
+        script: |
+          # Extract version from tag
+          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          VERSION="${BUILD_NAME}+${BUILD_NUMBER}"
+          FOLDER_NAME="${VERSION}-${PLATFORM}"
+
+          echo "Uploading $FOLDER_NAME to GCS bucket: $GCS_BUCKET"
+
+          # Upload the entire folder
+          gsutil -m cp -r "dist/${FOLDER_NAME}" "${GCS_BUCKET}/"
+
+          # Verify upload
+          echo "Verifying upload..."
+          gsutil ls "${GCS_BUCKET}/${FOLDER_NAME}/"
+
+          # Make files publicly accessible
+          echo "Setting public read permissions..."
+          gsutil -m acl ch -r -u AllUsers:R "${GCS_BUCKET}/${FOLDER_NAME}"
+
+          echo "Upload complete! Files available at: https://storage.googleapis.com/omi_macos_updates/${FOLDER_NAME}/"
+
+      - name: Create GitHub Release
+        script: |
+          # Extract version from tag
+          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          VERSION="${BUILD_NAME}+${BUILD_NUMBER}"
+
+          # Get the recent commits for changelog
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 $CM_TAG^ 2>/dev/null || echo "")
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$CM_TAG | grep -v "Merge" | head -20)
+          else
+            CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
+          fi
+
+          # Create release notes
+          cat > /tmp/release_notes.md <<EOF
+          ## What's Changed
+
+          $CHANGELOG
+
+          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${CM_TAG}
+
+          <!-- KEY_VALUE_START
+          changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
+          mandatory: false
+          minimum_app_version: 1.0.70
+          KEY_VALUE_END -->
+          EOF
+
+          # Find the DMG file
+          DMG_FILE=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
+
+          # Create GitHub release with DMG attachment
+          echo "Creating GitHub release for $CM_TAG..."
+          if [ -f "$DMG_FILE" ]; then
+            echo "Uploading DMG file: $DMG_FILE"
+            gh release create "$CM_TAG" \
+              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
+              --notes-file /tmp/release_notes.md \
+              --repo BasedHardware/omi \
+              "$DMG_FILE"
+          else
+            echo "Warning: DMG file not found, creating release without DMG"
+            gh release create "$CM_TAG" \
+              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
+              --notes-file /tmp/release_notes.md \
+              --repo BasedHardware/omi
+          fi
+
+          echo "GitHub release created successfully!"
+
+    artifacts:
+      - dist/**/*
+      - build/macos/**/*.app
+      - build/macos/dmg/*.dmg
+    publishing:
+      email:
+        recipients:
+          - ngocthinhdp@gmail.com
+          - joan@basedhardware.com
+          - nik@basedhardware.com
+          - mohsin.lp710@gmail.com
+        notify:
+          success: true
+          failure: false
+
   android-prod-patch:
     name: Patch Android to Production
     instance_type: mac_mini_m2
