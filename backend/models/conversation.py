@@ -228,6 +228,7 @@ class ConversationSource(str, Enum):
     workflow = 'workflow'
     sdcard = 'sdcard'
     external_integration = 'external_integration'
+    pocket = 'pocket'
 
 
 class ConversationVisibility(str, Enum):
