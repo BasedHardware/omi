@@ -759,6 +759,23 @@ workflows:
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
           echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
 
+      - name: Extract version from tag
+        script: |
+          # TESTING: Hardcoded version
+          BUILD_NAME="1.0.78"
+          BUILD_NUMBER="474"
+
+          # Extract version from tag (supports both -desktop-cm and -macos-cm)
+          # BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          # BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+
+          # Export to environment for all subsequent steps
+          echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
+          echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
+          echo VERSION="${BUILD_NAME}+${BUILD_NUMBER}" >> $CM_ENV
+
+          echo "Version set to: ${BUILD_NAME}+${BUILD_NUMBER}"
+
       - name: Get Flutter packages
         script: |
           flutter pub get
@@ -773,10 +790,6 @@ workflows:
 
       - name: Flutter build macOS
         script: |
-          # Extract version from tag (supports both -desktop-cm and -macos-cm)
-          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
 
           flutter build macos \
@@ -787,10 +800,7 @@ workflows:
 
       - name: Create DMG installer
         script: |
-          # Extract version from tag
-          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          VERSION="${BUILD_NAME}+${BUILD_NUMBER}"
+          echo "Creating DMG for version: $VERSION"
 
           # Find the app bundle
           APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-Prod -name "Omi.app" | head -1)
@@ -853,10 +863,6 @@ workflows:
 
       - name: Upload to Google Cloud Storage
         script: |
-          # Extract version from tag
-          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          VERSION="${BUILD_NAME}+${BUILD_NUMBER}"
           FOLDER_NAME="${VERSION}-${PLATFORM}"
 
           echo "Uploading $FOLDER_NAME to GCS bucket: $GCS_BUCKET"
@@ -876,10 +882,7 @@ workflows:
 
       - name: Create GitHub Release
         script: |
-          # Extract version from tag
-          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          VERSION="${BUILD_NAME}+${BUILD_NUMBER}"
+          echo "Creating GitHub release for version: $VERSION"
 
           # Get the recent commits for changelog
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 $CM_TAG^ 2>/dev/null || echo "")
