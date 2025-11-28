@@ -798,10 +798,10 @@ workflows:
 
       - name: Fetch signing files
         script: |
-          # Fetch Developer ID signing certificate for DMG distribution
+          # Fetch Developer ID signing certificate for DMG distribution (notarization requires Developer ID, not Mac App Development)
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --platform MAC_OS \
-            --type MAC_APP_DEVELOPMENT \
+            --type DEVELOPER_ID_APPLICATION \
             --create
 
       - name: Add certificates to keychain
@@ -873,11 +873,31 @@ workflows:
 
           echo ""
           echo "=== Submitting to Apple Notary Service ==="
-          xcrun notarytool submit "$APP_ZIP" \
+          RESULT=$(xcrun notarytool submit "$APP_ZIP" \
             --key "$PRIVATE_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --wait
+            --wait \
+            --output-format json)
+          
+          echo "Notarization result:"
+          echo "$RESULT"
+          
+          SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
+          STATUS=$(echo "$RESULT" | jq -r '.status')
+          
+          echo "Submission ID: $SUBMISSION_ID"
+          echo "Status: $STATUS"
+          
+          if [ "$STATUS" != "Accepted" ]; then
+            echo ""
+            echo "=== Notarization Failed - Fetching Detailed Log ==="
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+            exit 1
+          fi
 
           echo ""
           echo "=== Stapling Notarization Ticket ==="
@@ -965,11 +985,31 @@ workflows:
 
           echo ""
           echo "=== Submitting to Apple Notary Service ==="
-          xcrun notarytool submit "$DMG_PATH" \
+          RESULT=$(xcrun notarytool submit "$DMG_PATH" \
             --key "$PRIVATE_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --wait
+            --wait \
+            --output-format json)
+          
+          echo "Notarization result:"
+          echo "$RESULT"
+          
+          SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
+          STATUS=$(echo "$RESULT" | jq -r '.status')
+          
+          echo "Submission ID: $SUBMISSION_ID"
+          echo "Status: $STATUS"
+          
+          if [ "$STATUS" != "Accepted" ]; then
+            echo ""
+            echo "=== DMG Notarization Failed - Fetching Detailed Log ==="
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$PRIVATE_KEY_PATH" \
+              --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+              --issuer "$APP_STORE_CONNECT_ISSUER_ID"
+            exit 1
+          fi
 
           echo ""
           echo "=== Stapling Notarization Ticket ==="
