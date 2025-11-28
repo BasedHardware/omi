@@ -1204,6 +1204,11 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
 
     public func updateAIResponse(type: String, text: String) {
         DispatchQueue.main.async {
+            // Only process AI responses if the AI conversation is still visible
+            guard self.state.showingAIConversation else {
+                return
+            }
+            
             switch type {
             case "data":
                 if self.state.isAILoading {
@@ -1281,7 +1286,7 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
 
         // Batch resize requests
         resizeWorkItem = DispatchWorkItem { [weak self] in
-            self?.resizeAnchored(to: size, makeResizable: true, animated: animated)
+            self?.resizeAnchored(to: size, makeResizable: false, animated: animated)
         }
 
         if let workItem = resizeWorkItem {
