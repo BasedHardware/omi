@@ -689,9 +689,6 @@ workflows:
     integrations:
       app_store_connect: codemagic_v4
     environment:
-      macos_signing:
-        certificates:
-          - MAC_APP_DIRECT
       groups:
         - app_env
         - firebase
@@ -809,7 +806,34 @@ workflows:
 
       - name: Add certificates to keychain
         script: |
-          keychain add-certificates
+          # Import Developer ID Application certificate from environment variable
+          # Store your .p12 as base64 in MACOS_DEVELOPER_ID_P12 variable (in appstore_credentials group)
+          # Store the password in MACOS_DEVELOPER_ID_P12_PASSWORD variable
+          
+          if [ -n "$MACOS_DEVELOPER_ID_P12" ]; then
+            echo "Importing Developer ID Application certificate..."
+            echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
+            
+            # Initialize keychain if not already done
+            keychain initialize || true
+            
+            security import /tmp/developer_id.p12 \
+              -k $(keychain get-default || echo ~/Library/Keychains/login.keychain-db) \
+              -P "$MACOS_DEVELOPER_ID_P12_PASSWORD" \
+              -T /usr/bin/codesign \
+              -T /usr/bin/security
+            
+            # Allow codesign to access the key without prompting
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" $(keychain get-default || echo ~/Library/Keychains/login.keychain-db) 2>/dev/null || true
+            
+            rm /tmp/developer_id.p12
+            echo "Certificate imported successfully"
+          else
+            echo "ERROR: MACOS_DEVELOPER_ID_P12 environment variable not set"
+            echo "Please add your Developer ID Application certificate as base64 to the appstore_credentials group"
+            echo "Run: base64 -i your_certificate.p12 | pbcopy"
+            exit 1
+          fi
 
       - name: Set up code signing settings
         script: |
