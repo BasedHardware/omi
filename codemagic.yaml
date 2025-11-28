@@ -988,7 +988,7 @@ workflows:
         script: |
           echo "Creating DMG for version: $VERSION"
 
-          # Find the notarized app bundle
+          # Find the signed app bundle
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
 
@@ -1014,7 +1014,15 @@ workflows:
           # Clean up
           rm -rf "$TMP_DMG_DIR"
 
-          echo "DMG created at: $DMG_PATH"
+          # Sign the DMG with Developer ID
+          echo "Signing DMG with Developer ID..."
+          codesign --force --sign "$DEVELOPER_ID_CERT" "$DMG_PATH"
+          
+          # Verify DMG signature
+          echo "Verifying DMG signature..."
+          codesign --verify --verbose "$DMG_PATH"
+
+          echo "DMG created and signed at: $DMG_PATH"
           ls -lh "$DMG_PATH"
 
       - name: Notarize DMG
