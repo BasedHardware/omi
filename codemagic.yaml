@@ -870,7 +870,7 @@ workflows:
           # Sign in with Apple is Mac App Store-only and not supported in Developer ID profiles
           # We need to remove it from ALL entitlements files
 
-          echo "Removing Mac App Store-only capabilities from all entitlements files..."
+          echo "Removing Mac App Store-only and debug capabilities from all entitlements files..."
 
           # Remove from ALL entitlements files
           find macos -name "*.entitlements" -type f | while read entitlements_file; do
@@ -884,6 +884,11 @@ workflows:
             # Remove App Sandbox (Mac App Store-only, causes immediate termination in Developer ID apps)
             if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
               /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" && echo "  ✓ Removed App Sandbox" || echo "  ✗ Failed to remove App Sandbox"
+            fi
+
+            # Remove get-task-allow (DEBUG-only entitlement, forbidden in notarization)
+            if grep -q "com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null; then
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" && echo "  ✓ Removed get-task-allow (debug)" || echo "  ✗ Failed to remove get-task-allow"
             fi
           done
 
@@ -922,7 +927,7 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod
 
-      - name: Verify app signature
+      - name: Re-sign app for notarization
         script: |
           # Find the app bundle
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
@@ -934,28 +939,63 @@ workflows:
             exit 1
           fi
 
-          echo "Verifying app was built with correct profile and entitlements..."
+          # Create hardened runtime entitlements for notarization (without debug entitlement)
+          cat > /tmp/notarization.entitlements <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.allow-jit</key>
+            <true/>
+            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+            <true/>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+            <key>com.apple.security.device.audio-input</key>
+            <true/>
+            <key>com.apple.security.device.bluetooth</key>
+            <true/>
+            <key>com.apple.security.network.client</key>
+            <true/>
+            <key>com.apple.security.personal-information.calendars</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
 
-          # Check the embedded provisioning profile
-          if [ -f "$APP_PATH/Contents/embedded.provisionprofile" ]; then
-            echo "Embedded provisioning profile found:"
-            /usr/libexec/PlistBuddy -c "Print :Name" "$APP_PATH/Contents/embedded.provisionprofile" 2>/dev/null || echo "Could not read profile name"
-          else
-            echo "WARNING: No embedded provisioning profile found!"
-          fi
+          echo "Created notarization entitlements:"
+          cat /tmp/notarization.entitlements
 
-          # Verify code signature
+          # Re-sign only the main executable with --timestamp (required for notarization)
           echo ""
-          echo "Code signature details:"
+          echo "Re-signing main executable with timestamp and hardened runtime..."
+          codesign --force --deep --timestamp --options runtime \
+            --sign "$DEVELOPER_ID_CERT" \
+            --entitlements /tmp/notarization.entitlements \
+            "$APP_PATH/Contents/MacOS/Omi"
+
+          # Re-sign the entire app bundle with timestamp
+          echo ""
+          echo "Re-signing app bundle with timestamp..."
+          codesign --force --deep --timestamp --options runtime \
+            --sign "$DEVELOPER_ID_CERT" \
+            --entitlements /tmp/notarization.entitlements \
+            "$APP_PATH"
+
+          # Verify the signature
+          echo ""
+          echo "Verifying signature..."
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | head -20
 
-          # Check entitlements
+          # Check entitlements (should NOT have get-task-allow)
           echo ""
-          echo "App entitlements:"
-          codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -A 50 "<dict>"
+          echo "Final entitlements (should NOT have get-task-allow):"
+          codesign -d --entitlements :- "$APP_PATH" 2>&1
 
-          # Note: We're NOT re-signing because the app was built with Developer ID profile from the start
-          # Re-signing corrupts Firebase/Google Utilities frameworks and breaks Objective-C runtime
+          # Verify with spctl
+          echo ""
+          echo "Verifying with spctl..."
+          spctl -a -vv "$APP_PATH" 2>&1 || echo "spctl check skipped (may fail before notarization)"
 
       - name: Package app for notarization
         script: |
