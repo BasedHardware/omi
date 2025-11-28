@@ -15,12 +15,12 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
 import 'package:omi/services/wals.dart';
@@ -40,6 +40,7 @@ class CaptureProvider extends ChangeNotifier
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
+  CalendarProvider? calendarProvider;
 
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
@@ -108,6 +109,7 @@ class CaptureProvider extends ChangeNotifier
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
+        _screenCaptureChannel.setMethodCallHandler(_handleScreenCaptureMethodCall);
       });
     }
   }
@@ -126,7 +128,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _handleAppResumed() async {
     if (!PlatformService.isDesktop || !_shouldAutoResumeAfterWake) return;
-    
+
     try {
       final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
 
@@ -134,7 +136,7 @@ class CaptureProvider extends ChangeNotifier
         updateRecordingState(RecordingState.stop);
         await _socket?.stop(reason: 'native recording stopped during sleep');
       }
-      
+
       if (!nativeRecording && recordingState == RecordingState.stop) {
         await Future.delayed(const Duration(seconds: 2));
         await streamSystemAudioRecording();
@@ -811,11 +813,11 @@ class CaptureProvider extends ChangeNotifier
           },
           onSystemDidWake: (nativeIsRecording) async {
             debugPrint('[SystemWake] Native recording: $nativeIsRecording, Flutter state: $recordingState');
-            
+
             if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
               // Native stopped, sync Flutter state
               updateRecordingState(RecordingState.stop);
-              
+
               // Auto-resume based on session flag (was recording before sleep?)
               if (_shouldAutoResumeAfterWake) {
                 debugPrint('[SystemWake] Auto-resuming recording (was recording before sleep)...');
@@ -842,6 +844,7 @@ class CaptureProvider extends ChangeNotifier
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           onMicrophoneStatus: _onMicrophoneStatus,
+          onStoppedAutomatically: null,
         );
   }
 
@@ -876,7 +879,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _onMicrophoneDeviceChanged() async {
     final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
     if (!nativeRecording) return;
-    
+
     _isAutoReconnecting = true;
     _reconnectCountdown = 5;
     notifyListeners();
@@ -926,24 +929,27 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    
+
     // User manually stopped - don't auto-resume after wake
     _shouldAutoResumeAfterWake = false;
-    
+
     _isAutoReconnecting = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    
+
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false;
     _stopRecordingTimer();
     await _socket?.stop(reason: 'manual stop');
     await _cleanupCurrentState();
+
+    // Tell native to reset recording source since user explicitly stopped
+    _screenCaptureChannel.invokeMethod('resetRecordingSource');
   }
 
   Future<void> pauseSystemAudioRecording({bool isAuto = false}) async {
     if (!PlatformService.isDesktop) return;
-    
+
     if (!isAuto) {
       // User manually paused - don't auto-resume after wake
       _shouldAutoResumeAfterWake = false;
@@ -960,7 +966,7 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    
+
     // User wants to resume - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
     _isPaused = false;
@@ -984,6 +990,67 @@ class CaptureProvider extends ChangeNotifier
       default:
         Logger.debug('FloatingControlBarChannel: Unhandled method ${call.method}');
     }
+  }
+
+  Future<dynamic> _handleScreenCaptureMethodCall(MethodCall call) async {
+    if (!PlatformService.isDesktop) return null;
+
+    switch (call.method) {
+      case 'isRecordingPaused':
+        return isPaused;
+      case 'recordingStartedFromNub':
+        await _handleRecordingStartedFromNub();
+        return null;
+      case 'recordingStoppedAutomatically':
+        await _handleRecordingStoppedAutomatically();
+        return null;
+      default:
+        Logger.debug('ScreenCaptureChannel: Unhandled method ${call.method}');
+        return null;
+    }
+  }
+
+  Future<void> _handleRecordingStoppedAutomatically() async {
+    debugPrint('CaptureProvider: Recording stopped automatically (meeting ended)');
+    // Don't auto-resume after this - meeting is over
+    _shouldAutoResumeAfterWake = false;
+
+    // Stop the Flutter-side recording state
+    if (PlatformService.isDesktop) {
+      _isAutoReconnecting = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      _isPaused = false;
+      _stopRecordingTimer();
+      updateRecordingState(RecordingState.stop);
+      await _socket?.stop(reason: 'meeting ended - auto stop');
+      await _cleanupCurrentState();
+    }
+
+    await forceProcessingCurrentConversation();
+  }
+
+  Future<void> _handleRecordingStartedFromNub() async {
+    debugPrint('CaptureProvider: Recording started from nub - stopping any existing recording and starting fresh');
+
+    // Reset all recording state to ensure clean start
+    _isPaused = false;
+    _stopRecordingTimer();
+
+    // Stop any existing recording and CLEAR CALLBACKS immediately
+    ServiceManager.instance().systemAudio.stopAndClearCallbacks();
+    await _socket?.stop(reason: 'nub start - reset');
+
+    // Reset state to stop and broadcast immediately so control bar shows correct state
+    recordingState = RecordingState.stop;
+    notifyListeners();
+    _broadcastRecordingState();
+
+    // Small delay to ensure native stop completes before starting new recording
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // Start fresh recording
+    await streamSystemAudioRecording();
   }
 
   @override
@@ -1289,7 +1356,7 @@ class CaptureProvider extends ChangeNotifier
       }
       await _loadInProgressConversation();
     }
-    
+
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
     hasTranscripts = true;
