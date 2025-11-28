@@ -865,6 +865,21 @@ workflows:
           echo "Found Developer ID cert: $DEVELOPER_ID_CERT"
           echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
 
+      - name: Remove Sign in with Apple capability for Developer ID
+        script: |
+          # Sign in with Apple is Mac App Store-only and not supported in Developer ID profiles
+          ENTITLEMENTS_FILE="macos/Runner/Release.entitlements"
+
+          if [ -f "$ENTITLEMENTS_FILE" ]; then
+            echo "Removing Sign in with Apple from entitlements..."
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$ENTITLEMENTS_FILE" 2>/dev/null || echo "Sign in with Apple not present"
+
+            echo "Updated entitlements:"
+            cat "$ENTITLEMENTS_FILE"
+          else
+            echo "Entitlements file not found at $ENTITLEMENTS_FILE"
+          fi
+
       - name: Set up code signing settings
         script: |
           xcode-project use-profiles
@@ -873,7 +888,7 @@ workflows:
         script: |
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
 
-          # Build with Mac App Store signing (satisfies Xcode requirements)
+          # Build with Developer ID profile (already set up by xcode-project use-profiles)
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
