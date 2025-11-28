@@ -21,9 +21,6 @@ import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/services/google_calendar_service.dart';
-import 'package:omi/services/notion_service.dart';
-import 'package:omi/services/whoop_service.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -145,7 +142,8 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _handleOAuthCallback(Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
+  Future<void> _handleOAuthCallback(
+      Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
     final error = uri.queryParameters['error'];
     if (error != null) {
       debugPrint('$oauthLogName OAuth error: $error');
@@ -252,15 +250,21 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     try {
-      // Refresh connection status from backend
-      await NotionService().refreshConnectionStatus();
-      await context.read<IntegrationProvider>().loadFromBackend();
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
 
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
       debugPrint('✓ Notion authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to Notion!');
     } catch (e) {
       debugPrint('Error handling Notion callback: $e');
-      AppSnackbar.showSnackbarError('Failed to refresh Notion connection status.');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh Notion connection status.');
+      }
     }
   }
 
@@ -268,15 +272,21 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     try {
-      // Refresh connection status from backend
-      await GoogleCalendarService().refreshConnectionStatus();
-      await context.read<IntegrationProvider>().loadFromBackend();
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
 
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
       debugPrint('✓ Google authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to Google!');
     } catch (e) {
       debugPrint('Error handling Google Calendar callback: $e');
-      AppSnackbar.showSnackbarError('Failed to refresh Google connection status.');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh Google connection status.');
+      }
     }
   }
 
@@ -284,15 +294,21 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     try {
-      // Refresh connection status from backend
-      await WhoopService().refreshConnectionStatus();
-      await context.read<IntegrationProvider>().loadFromBackend();
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
 
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
       debugPrint('✓ Whoop authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to Whoop!');
     } catch (e) {
       debugPrint('Error handling Whoop callback: $e');
-      AppSnackbar.showSnackbarError('Failed to refresh Whoop connection status.');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh Whoop connection status.');
+      }
     }
   }
 

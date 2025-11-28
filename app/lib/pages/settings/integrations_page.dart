@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/google_calendar_service.dart';
 import 'package:omi/services/notion_service.dart';
@@ -127,57 +126,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Future<void> _loadFromBackend() async {
-    // Capture provider before async operations to avoid context issues
-    if (!mounted) return;
-    final integrationProvider = context.read<IntegrationProvider>();
-
-    try {
-      await integrationProvider.loadFromBackend();
-    } catch (e, stackTrace) {
-      debugPrint('Error loading integrations from backend: $e');
-      debugPrint('Stack trace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to load integrations. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-      // Continue to refresh connection status even if backend load fails
-    }
-
-    // Refresh each service's connection status independently
-    // Each wrapped in its own try/catch so one failure doesn't stop others
-    try {
-      await GoogleCalendarService().refreshConnectionStatus();
-    } catch (e, stackTrace) {
-      debugPrint('Error refreshing Google Calendar connection status: $e');
-      debugPrint('Stack trace: $stackTrace');
-      // Don't show snackbar for individual service failures to avoid spam
-    }
-
-    try {
-      await WhoopService().refreshConnectionStatus();
-    } catch (e, stackTrace) {
-      debugPrint('Error refreshing Whoop connection status: $e');
-      debugPrint('Stack trace: $stackTrace');
-    }
-
-    try {
-      await NotionService().refreshConnectionStatus();
-    } catch (e, stackTrace) {
-      debugPrint('Error refreshing Notion connection status: $e');
-      debugPrint('Stack trace: $stackTrace');
-    }
-
-    try {
-      await TwitterService().refreshConnectionStatus();
-    } catch (e, stackTrace) {
-      debugPrint('Error refreshing Twitter connection status: $e');
-      debugPrint('Stack trace: $stackTrace');
-    }
+    // IntegrationProvider.loadFromBackend() already fetches all connection statuses
+    // and syncs SharedPreferences for backward compatibility with services
+    await context.read<IntegrationProvider>().loadFromBackend();
   }
 
   Future<void> _connectApp(IntegrationApp app) async {
@@ -215,10 +166,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final shouldAuth = await _showAuthDialog(app);
     if (shouldAuth == true) {
+      // Capture ScaffoldMessenger before async operation to avoid use_build_context_synchronously
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+
       final success = await authenticate();
       if (success) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             const SnackBar(
               content: Text('Please complete authentication in your browser. Once done, return to the app.'),
               duration: Duration(seconds: 5),
@@ -229,7 +183,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         debugPrint('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          scaffoldMessenger.showSnackBar(
             SnackBar(
               content: Text('Failed to start ${app.displayName} authentication'),
               backgroundColor: Colors.red,
@@ -293,13 +247,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
+    // Capture instances before async operation to avoid use_build_context_synchronously
+    final integrationProvider = context.read<IntegrationProvider>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     final success = await disconnect();
     if (success) {
       if (mounted) {
-        await context.read<IntegrationProvider>().deleteConnection(app.key);
+        await integrationProvider.deleteConnection(app.key);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
             content: Text('Disconnected from ${app.displayName}'),
             duration: const Duration(seconds: 2),
@@ -308,7 +266,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           const SnackBar(
             content: Text('Failed to disconnect'),
             backgroundColor: Colors.red,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/integrations.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 
 class IntegrationProvider extends ChangeNotifier {
@@ -20,6 +21,13 @@ class IntegrationProvider extends ChangeNotifier {
       _integrations['whoop'] = responses[1]?.connected ?? false;
       _integrations['notion'] = responses[2]?.connected ?? false;
       _integrations['twitter'] = responses[3]?.connected ?? false;
+
+      // Sync SharedPreferences for backward compatibility with services
+      // This ensures services that read from SharedPreferences stay in sync
+      await SharedPreferencesUtil().saveBool('google_calendar_connected', _integrations['google_calendar'] ?? false);
+      await SharedPreferencesUtil().saveBool('whoop_connected', _integrations['whoop'] ?? false);
+      await SharedPreferencesUtil().saveBool('notion_connected', _integrations['notion'] ?? false);
+      await SharedPreferencesUtil().saveBool('twitter_connected', _integrations['twitter'] ?? false);
 
       notifyListeners();
     } catch (e) {
