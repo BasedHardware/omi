@@ -30,7 +30,6 @@ from database.apps import (
     search_apps_db,
 )
 from database.auth import get_user_from_uid
-from database.notifications import get_token_only
 from database.redis_db import (
     delete_generic_cache,
     get_generic_cache,
@@ -155,6 +154,8 @@ def get_apps_v2(
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
     approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
+    # Always exclude persona type apps
+    approved_apps = [a for a in approved_apps if not a.is_a_persona()]
 
     # Category-specific response
     if category:
@@ -235,7 +236,8 @@ def search_apps(
 
         apps.append(App(**app_dict))
 
-    filtered_apps = apps
+    # Always exclude persona type apps from results
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
 
     # Apply text search filter
     if q and q.strip():
@@ -280,12 +282,16 @@ def search_apps(
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[App])
 def get_approved_apps(include_reviews: bool = False):
-    return get_approved_available_apps(include_reviews=include_reviews)
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    # Always exclude persona type apps
+    return [app for app in apps if not app.is_a_persona()]
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[App])
 def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
-    return get_popular_apps()
+    apps = get_popular_apps()
+    # Always exclude persona type apps
+    return [app for app in apps if not app.is_a_persona()]
 
 
 @router.post('/v1/apps', tags=['v1'])
@@ -1116,13 +1122,11 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     change_app_approval_status(app_id, True)
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
-    token = get_token_only(uid)
-    if token:
-        send_notification(
-            token,
-            'App Approved 🎉',
-            f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
-        )
+    send_notification(
+        uid,
+        'App Approved 🎉',
+        f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
+    )
     return {'status': 'ok'}
 
 
@@ -1133,14 +1137,12 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     change_app_approval_status(app_id, False)
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
-    token = get_token_only(uid)
-    if token:
-        # TODO: Add reason for rejection in payload and also redirect to the app page
-        send_notification(
-            token,
-            'App Rejected 😔',
-            f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
-        )
+    # TODO: Add reason for rejection in payload and also redirect to the app page
+    send_notification(
+        uid,
+        'App Rejected 😔',
+        f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
+    )
     return {'status': 'ok'}
 
 

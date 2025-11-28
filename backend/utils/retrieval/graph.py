@@ -42,8 +42,8 @@ from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 from utils.retrieval.agentic import execute_agentic_chat_stream
 
-model = ChatOpenAI(model="gpt-4o-mini")
-llm_medium_stream = ChatOpenAI(model='gpt-4o', streaming=True)
+model = ChatOpenAI(model="gpt-4.1-mini")
+llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
 
 
 class StructuredFilters(TypedDict):
@@ -130,25 +130,13 @@ def determine_conversation_type(
 ) -> Literal[
     "no_context_conversation",
     "agentic_context_dependent_conversation",
-    # "omi_question",
-    "file_chat_question",
     "persona_question",
 ]:
-    # chat with files by attachments on the last message
     print("determine_conversation_type")
-    messages = state.get("messages", [])
-    if len(messages) > 0 and len(messages[-1].files_id) > 0:
-        return "file_chat_question"
 
     # persona
     app: App = state.get("plugin_selected")
     if app and app.is_a_persona():
-        # file
-        question = state.get("parsed_question", "")
-        is_file_question = retrieve_is_file_question(question)
-        if is_file_question:
-            return "file_chat_question"
-
         return "persona_question"
 
     # chat
@@ -156,15 +144,6 @@ def determine_conversation_type(
     question = state.get("parsed_question", "")
     if not question or len(question) == 0:
         return "no_context_conversation"
-
-    # determine the follow-up question is chatting with files or not
-    is_file_question = retrieve_is_file_question(question)
-    if is_file_question:
-        return "file_chat_question"
-
-    # is_omi_question = retrieve_is_an_omi_question(question)
-    # if is_omi_question:
-    #     return "omi_question"
 
     requires = requires_context(question)
     if requires:
@@ -466,13 +445,13 @@ workflow.add_node("no_context_conversation", no_context_conversation)
 # workflow.add_node("omi_question", omi_question)
 # workflow.add_node("context_dependent_conversation", context_dependent_conversation)
 workflow.add_node("agentic_context_dependent_conversation", agentic_context_dependent_conversation)
-workflow.add_node("file_chat_question", file_chat_question)
+# workflow.add_node("file_chat_question", file_chat_question)
 workflow.add_node("persona_question", persona_question)
 
 workflow.add_edge("no_context_conversation", END)
 # workflow.add_edge("omi_question", END)
 workflow.add_edge("persona_question", END)
-workflow.add_edge("file_chat_question", END)
+# workflow.add_edge("file_chat_question", END)
 workflow.add_edge("agentic_context_dependent_conversation", END)
 # workflow.add_edge("context_dependent_conversation", "retrieve_topics_filters")
 # workflow.add_edge("context_dependent_conversation", "retrieve_date_filters")

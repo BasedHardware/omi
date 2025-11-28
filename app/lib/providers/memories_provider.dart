@@ -170,25 +170,29 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  void createMemory(String content,
+  Future<bool> createMemory(String content,
       [MemoryVisibility visibility = MemoryVisibility.public,
       MemoryCategory category = MemoryCategory.interesting]) async {
-    final newMemory = Memory(
-      id: const Uuid().v4(),
-      uid: SharedPreferencesUtil().uid,
-      content: content,
-      category: category,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      conversationId: null,
-      reviewed: false,
-      manuallyAdded: true,
-      visibility: visibility,
-    );
+    final success = await createMemoryServer(content, visibility.name, category.name);
 
-    await createMemoryServer(content, visibility.name);
-    _memories.add(newMemory);
-    _setCategories();
+    if (success) {
+      final newMemory = Memory(
+        id: const Uuid().v4(),
+        uid: SharedPreferencesUtil().uid,
+        content: content,
+        category: category,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        conversationId: null,
+        reviewed: false,
+        manuallyAdded: true,
+        visibility: visibility,
+      );
+      _memories.add(newMemory);
+      _setCategories();
+    }
+
+    return success;
   }
 
   Future<void> updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
@@ -206,27 +210,31 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
-  void editMemory(Memory memory, String value, [MemoryCategory? category]) async {
-    await editMemoryServer(memory.id, value);
+  Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {
+    final success = await editMemoryServer(memory.id, value);
 
-    final idx = _memories.indexWhere((m) => m.id == memory.id);
-    if (idx != -1) {
-      memory.content = value;
-      if (category != null) {
-        memory.category = category;
+    if (success) {
+      final idx = _memories.indexWhere((m) => m.id == memory.id);
+      if (idx != -1) {
+        memory.content = value;
+        if (category != null) {
+          memory.category = category;
+        }
+        memory.updatedAt = DateTime.now();
+        memory.edited = true;
+        _memories[idx] = memory;
+
+        // Remove from unreviewed if it was there
+        final unreviewedIdx = _unreviewed.indexWhere((m) => m.id == memory.id);
+        if (unreviewedIdx != -1) {
+          _unreviewed.removeAt(unreviewedIdx);
+        }
+
+        _setCategories();
       }
-      memory.updatedAt = DateTime.now();
-      memory.edited = true;
-      _memories[idx] = memory;
-
-      // Remove from unreviewed if it was there
-      final unreviewedIdx = _unreviewed.indexWhere((m) => m.id == memory.id);
-      if (unreviewedIdx != -1) {
-        _unreviewed.removeAt(unreviewedIdx);
-      }
-
-      _setCategories();
     }
+
+    return success;
   }
 
   void reviewMemory(Memory memory, bool approved, String source) async {
