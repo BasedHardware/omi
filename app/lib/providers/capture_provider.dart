@@ -733,6 +733,15 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     debugPrint("streamDeviceRecording $device");
+    
+    // Prevent device recording if system audio is active (desktop only)
+    if (PlatformService.isDesktop && 
+        recordingState == RecordingState.systemAudioRecord) {
+      debugPrint("Skipping device recording - system audio is active");
+      if (device != null) _updateRecordingDevice(device);  // Still track device
+      return;
+    }
+    
     if (device != null) _updateRecordingDevice(device);
 
     bool wasPaused = _isPaused;
@@ -760,6 +769,11 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    // Stop device recording if active
+    if (recordingState == RecordingState.deviceRecord && _recordingDevice != null) {
+      debugPrint("Stopping device recording to start system audio");
+      await stopStreamDeviceRecording(cleanDevice: false);
+    }
     // User wants to record - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
 
