@@ -868,17 +868,44 @@ workflows:
       - name: Remove Sign in with Apple capability for Developer ID
         script: |
           # Sign in with Apple is Mac App Store-only and not supported in Developer ID profiles
-          ENTITLEMENTS_FILE="macos/Runner/Release.entitlements"
+          # We need to remove it from ALL entitlements files
 
-          if [ -f "$ENTITLEMENTS_FILE" ]; then
-            echo "Removing Sign in with Apple from entitlements..."
-            /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$ENTITLEMENTS_FILE" 2>/dev/null || echo "Sign in with Apple not present"
+          echo "Removing Mac App Store-only capabilities from all entitlements files..."
 
-            echo "Updated entitlements:"
-            cat "$ENTITLEMENTS_FILE"
-          else
-            echo "Entitlements file not found at $ENTITLEMENTS_FILE"
+          # Remove from ALL entitlements files
+          find macos -name "*.entitlements" -type f | while read entitlements_file; do
+            echo "Processing: $entitlements_file"
+
+            # Remove Sign in with Apple (Mac App Store-only)
+            if grep -q "applesignin" "$entitlements_file" 2>/dev/null; then
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$entitlements_file" && echo "  ✓ Removed Sign in with Apple" || echo "  ✗ Failed to remove Sign in with Apple"
+            fi
+
+            # Remove App Sandbox (Mac App Store-only, causes immediate termination in Developer ID apps)
+            if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" && echo "  ✓ Removed App Sandbox" || echo "  ✗ Failed to remove App Sandbox"
+            fi
+          done
+
+          echo ""
+          echo "Final Release.entitlements:"
+          cat macos/Runner/Release.entitlements 2>/dev/null || echo "Release.entitlements not found"
+
+          # Also disable Sign in with Apple capability in Xcode project settings
+          echo ""
+          echo "Disabling Sign in with Apple capability in Xcode project..."
+          cd macos
+
+          # Remove Sign in with Apple from project.pbxproj
+          if grep -q "com.apple.developer.applesignin" Runner.xcodeproj/project.pbxproj; then
+            echo "Found Sign in with Apple in project.pbxproj, attempting to remove..."
+            # This is a workaround - ideally we'd use a proper plist editor, but project.pbxproj is complex
+            # For now, just warn that it exists
+            echo "WARNING: Sign in with Apple capability is enabled in Xcode project"
+            echo "The build may fail if the provisioning profile doesn't support it"
           fi
+
+          cd ..
 
       - name: Set up code signing settings
         script: |
