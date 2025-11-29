@@ -867,9 +867,16 @@ workflows:
           # Install the profile
           echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile"
 
+          # Get the profile UUID for later use
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null)
+          echo "Profile UUID: $PROFILE_UUID"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
+
           # Verify
-          echo "Profile installed. Details:"
+          echo ""
+          echo "Profile details:"
           /usr/libexec/PlistBuddy -c "Print :Name" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null || echo "Could not read profile name"
+          /usr/libexec/PlistBuddy -c "Print :TeamName" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null || echo "Could not read team name"
 
           # List all profiles
           echo ""
@@ -880,11 +887,17 @@ workflows:
         script: |
           cd macos
 
-          # Set code signing identity and provisioning profile in Xcode project
-          # This tells Xcode to use our Developer ID cert and profile during build
+          echo "Configuring Xcode project to use Developer ID certificate and provisioning profile..."
+
+          # Disable automatic signing and set manual signing for Release configuration
           xcrun xcodebuild -project Runner.xcodeproj \
             -target Runner \
-            -showBuildSettings | grep -i "code_sign"
+            -configuration Release \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$DEVELOPER_ID_CERT" \
+            DEVELOPMENT_TEAM="9536L8KLMP" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            -showBuildSettings | grep -E "CODE_SIGN|PROVISIONING_PROFILE|DEVELOPMENT_TEAM"
 
           cd ..
 
@@ -892,8 +905,13 @@ workflows:
         script: |
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER with Developer ID signing"
 
-          # Build with release configuration
-          # Xcode will use the Developer ID certificate and provisioning profile we installed
+          # Build with release configuration using Developer ID certificate and provisioning profile
+          # Pass code signing settings via environment variables that xcodebuild will use
+          export CODE_SIGN_STYLE=Manual
+          export CODE_SIGN_IDENTITY="$DEVELOPER_ID_CERT"
+          export DEVELOPMENT_TEAM=9536L8KLMP
+          export PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID"
+
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
