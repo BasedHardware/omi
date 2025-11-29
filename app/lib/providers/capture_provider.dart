@@ -20,13 +20,11 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
@@ -126,7 +124,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _handleAppResumed() async {
     if (!PlatformService.isDesktop || !_shouldAutoResumeAfterWake) return;
-    
+
     try {
       final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
 
@@ -134,7 +132,7 @@ class CaptureProvider extends ChangeNotifier
         updateRecordingState(RecordingState.stop);
         await _socket?.stop(reason: 'native recording stopped during sleep');
       }
-      
+
       if (!nativeRecording && recordingState == RecordingState.stop) {
         await Future.delayed(const Duration(seconds: 2));
         await streamSystemAudioRecording();
@@ -811,11 +809,11 @@ class CaptureProvider extends ChangeNotifier
           },
           onSystemDidWake: (nativeIsRecording) async {
             debugPrint('[SystemWake] Native recording: $nativeIsRecording, Flutter state: $recordingState');
-            
+
             if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
               // Native stopped, sync Flutter state
               updateRecordingState(RecordingState.stop);
-              
+
               // Auto-resume based on session flag (was recording before sleep?)
               if (_shouldAutoResumeAfterWake) {
                 debugPrint('[SystemWake] Auto-resuming recording (was recording before sleep)...');
@@ -876,7 +874,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _onMicrophoneDeviceChanged() async {
     final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
     if (!nativeRecording) return;
-    
+
     _isAutoReconnecting = true;
     _reconnectCountdown = 5;
     notifyListeners();
@@ -926,14 +924,14 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    
+
     // User manually stopped - don't auto-resume after wake
     _shouldAutoResumeAfterWake = false;
-    
+
     _isAutoReconnecting = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    
+
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false;
     _stopRecordingTimer();
@@ -943,7 +941,7 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> pauseSystemAudioRecording({bool isAuto = false}) async {
     if (!PlatformService.isDesktop) return;
-    
+
     if (!isAuto) {
       // User manually paused - don't auto-resume after wake
       _shouldAutoResumeAfterWake = false;
@@ -960,7 +958,7 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    
+
     // User wants to resume - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
     _isPaused = false;
@@ -1289,7 +1287,7 @@ class CaptureProvider extends ChangeNotifier
       }
       await _loadInProgressConversation();
     }
-    
+
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
     hasTranscripts = true;
