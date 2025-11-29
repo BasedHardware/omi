@@ -809,6 +809,11 @@ workflows:
             if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
               /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed App Sandbox" || true
             fi
+            
+            # Remove get-task-allow (debug-only, blocks notarization)
+            if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null; then
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed get-task-allow" || true
+            fi
 
             # Add hardened runtime entitlements (if not present)
             /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || true
