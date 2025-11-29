@@ -900,14 +900,19 @@ workflows:
 
           echo "Configuring Xcode project to use Developer ID certificate and provisioning profile..."
 
-          # Disable automatic signing and set manual signing for Release configuration
+          # Use Codemagic's xcode-project tool to configure manual signing
+          # This modifies the project.pbxproj file directly
+          xcode-project use-profiles \
+            --project Runner.xcodeproj \
+            --code-sign-identity="$DEVELOPER_ID_CERT" \
+            --profile-uuid="$PROFILE_UUID"
+
+          # Verify the configuration
+          echo ""
+          echo "Verifying build settings after configuration:"
           xcrun xcodebuild -project Runner.xcodeproj \
             -target Runner \
-            -configuration Release \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$DEVELOPER_ID_CERT" \
-            DEVELOPMENT_TEAM="9536L8KLMP" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            -configuration Release-prod \
             -showBuildSettings | grep -E "CODE_SIGN|PROVISIONING_PROFILE|DEVELOPMENT_TEAM"
 
           cd ..
