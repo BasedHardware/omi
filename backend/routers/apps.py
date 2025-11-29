@@ -1193,7 +1193,8 @@ def get_conversation_categories_analytics(secret_key: str = Header(...)):
         conversations_ref = user_doc.reference.collection('conversations')
         for conv_doc in conversations_ref.stream():
             conv_data = conv_doc.to_dict()
-            category = conv_data.get('category', 'other')
+            structured = conv_data.get('structured', {})
+            category = structured.get('category', 'other') if structured else 'other'
             if category:
                 categories_count[category] += 1
             else:
