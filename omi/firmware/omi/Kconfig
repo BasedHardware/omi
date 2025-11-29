@@ -56,4 +56,11 @@ config OMI_ENABLE_RFSW_CTRL
         "Enable RFSwitch Control support."
     default y
 
+config OMI_ENABLE_MONITOR
+    bool "Enable monitoring/metrics system"
+    help
+        "Enable the monitoring system for debugging and metrics collection.
+         Disable in production to save power, RAM, and flash space."
+    default n
+
 endmenu

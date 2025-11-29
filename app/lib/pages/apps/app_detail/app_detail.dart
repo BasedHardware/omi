@@ -57,6 +57,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _setupCheckTimer;
   late App app;
 
+  String _getPricingText(App app) {
+    if (!app.isPaid || app.price == null || app.price == 0) {
+      return 'Free';
+    }
+    if (app.paymentPlan == 'monthly_recurring') {
+      return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)} / mo';
+    }
+    return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)}';
+  }
+
   checkSetupCompleted() {
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
@@ -700,13 +710,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     Column(
                       children: [
                         Text(
-                          app.private ? 'Private' : 'Public',
+                          _getPricingText(app),
                           style: const TextStyle(
                             fontSize: 16,
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text("app"),
+                        const Text("pricing"),
                       ],
                     ),
                     const Spacer(),

@@ -66,12 +66,12 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 
 ## In this repo:
 
-- [omi device](omi) *nrf\* chips, zephyr (c/c++)*
-- [omi glass](omiglass) *esp32-s3, c/c++*
-- [omi app](app) *flutter*
-- [omi backend](backend) *python (fastapi, firebase, pinecone, deepgram, openai, silero vad)*
-- [SDKs](sdks) *react native, swift, python*
-- [ai personas (web)](web/personas-open-source) *nextjs*
+- [omi device](omi) - nRF chips, zephyr, c/c++
+- [omi glass](omiglass) esp32-s3, c/c++
+- [omi app](app) - flutter
+- [omi backend](backend) - python, fastapi, firebase, pinecone, redis, deepgram, speechmatic, soniox, openai-compatible apis, langchain, silero vad
+- [SDKs](sdks) - react native, swift, python
+- [ai personas (web)](web/personas-open-source) - nextjs
 
 ## Documentation:
 

@@ -1,8 +1,7 @@
-have_fun: true
+# https://developers.google.com/gemini-code-assist/docs/customize-gemini-behavior-github
+have_fun: false
 code_review:
-  disable: false
   comment_severity_threshold: HIGH
-  max_review_comments: 10
   pull_request_opened:
     help: false
     summary: false
@@ -10,42 +9,10 @@ code_review:
     include_drafts: true
 ignore_patterns: []
 
-
-# https://github.com/BasedHardware/omi/pull/3370#issuecomment-3495084696
 review_preferences:
-  # minimum_severity: (string) Specifies the lowest severity level of issues to report.
-  # Valid values: "critical", "high", "medium", "low".
-  # Issues with severity lower than this threshold will not be included in the review.
-  # Default: "low" (all issues are reported).
   minimum_severity: "high"
-
-  # include_code_suggestions: (boolean) Determines whether to include inline code suggestions
-  # in the review comments. If set to `false`, I will describe issues but not provide
-  # specific code changes.
-  # Default: true
   include_code_suggestions: true
-
-  # focus_areas: (list of strings) Directs the review to prioritize specific aspects of the code.
-  # I will pay closer attention to these areas. If omitted, I will consider all areas.
-  # Valid values include:
-  # - "correctness": Focus on logical errors, edge cases, data validation, API usage.
-  # - "efficiency": Focus on performance bottlenecks, resource usage, algorithmic complexity.
-  # - "maintainability": Focus on readability, modularity, adherence to best practices, naming.
-  # - "security": Focus on potential vulnerabilities and secure coding practices.
-  # - "testing": Focus on test coverage, quality, and edge case handling.
-  # - "performance": (Similar to efficiency, but can also include broader system performance).
-  # - "scalability": Focus on how the code will handle growth in users or data.
-  # - "modularity": Focus on code organization and reusability.
-  # - "error_logging": Focus on effective error logging and monitoring mechanisms.
-  # Default: ["correctness", "efficiency", "maintainability", "security"]
   focus_areas:
     - "correctness"
     - "security"
-
-  # style_guide_path: (string) Path to a custom style guide file (e.g., `.gemini/my_style_guide.md`).
-  # If provided, I will use this document as a reference for stylistic and best practice
-  # recommendations specific to your project. The file should be in Markdown format.
-  # Default: Uses commonly accepted language-specific style guides (e.g., PEP 8 for Python).
   # style_guide_path: ".gemini/my_custom_style_guide.md"
-
-# You can add other top-level configurations here in the future as new features are introduced.
