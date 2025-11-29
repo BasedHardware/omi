@@ -792,78 +792,41 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
-      - name: Set up keychain for code signing
+      - name: Set up keychain and Developer ID signing
         script: |
+          # Initialize keychain
           keychain initialize
-
-      - name: Fetch Mac App Store signing files (for build)
-        script: |
-          # Use Mac App Store profile to build (satisfies Xcode capability requirements)
-          # We'll re-sign with Developer ID afterwards for DMG distribution
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --platform MAC_OS \
-            --type MAC_APP_STORE \
-            --create
-
-      - name: Install Developer ID provisioning profile
-        script: |
-          # Install Developer ID provisioning profile from environment variable
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-
-          if [ -n "$MACOS_DEVELOPER_ID_PROFILE" ]; then
-            echo "Installing Developer ID provisioning profile from environment variable..."
-            echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/mac_dmg_developer_id.provisionprofile"
-            echo "Developer ID profile installed successfully"
-
-            # Verify the profile
-            echo "Profile details:"
-            /usr/libexec/PlistBuddy -c "Print :Name" "$HOME/Library/MobileDevice/Provisioning Profiles/mac_dmg_developer_id.provisionprofile" 2>/dev/null || echo "Could not read profile name"
-            /usr/libexec/PlistBuddy -c "Print :TeamName" "$HOME/Library/MobileDevice/Provisioning Profiles/mac_dmg_developer_id.provisionprofile" 2>/dev/null || echo "Could not read team name"
-          else
-            echo "WARNING: MACOS_DEVELOPER_ID_PROFILE environment variable not set!"
-            echo "Please add your Developer ID provisioning profile as base64 to the appstore_credentials group"
-            echo "Without this, the app will not have a valid provisioning profile for DMG distribution"
-          fi
-
-          # List all available profiles
-          echo ""
-          echo "Available provisioning profiles:"
-          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/" | grep -E "(developer|mac_dmg|DIRECT)" || echo "No Developer ID profiles found"
-
-      - name: Add certificates to keychain
-        script: |
-          keychain add-certificates
-
-      - name: Import Developer ID certificate (for re-signing)
-        script: |
-          # Import Developer ID Application certificate for DMG distribution
-          # This cert is used to re-sign the app after building
           
-          if [ -n "$MACOS_DEVELOPER_ID_P12" ]; then
-            echo "Importing Developer ID Application certificate..."
-            echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
-            
-            KEYCHAIN_PATH=$(keychain get-default)
-            security import /tmp/developer_id.p12 \
-              -k "$KEYCHAIN_PATH" \
-              -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
-              -T /usr/bin/codesign \
-              -T /usr/bin/security
-            
-            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
-            
-            rm /tmp/developer_id.p12
-            echo "Developer ID certificate imported successfully"
-          else
+          # Import Developer ID Application certificate
+          if [ -z "$MACOS_DEVELOPER_ID_P12" ]; then
             echo "ERROR: MACOS_DEVELOPER_ID_P12 environment variable not set"
-            echo "Please add your Developer ID Application certificate as base64 to the appstore_credentials group"
             exit 1
           fi
           
-          # Find and export the Developer ID cert name for later
-          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
-          echo "Found Developer ID cert: $DEVELOPER_ID_CERT"
+          echo "Importing Developer ID Application certificate..."
+          echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
+          
+          KEYCHAIN_PATH=$(keychain get-default)
+          security import /tmp/developer_id.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm /tmp/developer_id.p12
+          
+          # Get the certificate name
+          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Developer ID cert: $DEVELOPER_ID_CERT"
           echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
+          
+          # Install Developer ID provisioning profile
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          if [ -n "$MACOS_DEVELOPER_ID_PROFILE" ]; then
+            echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile"
+            echo "Developer ID profile installed"
+          fi
 
       - name: Remove Sign in with Apple capability for Developer ID
         script: |
@@ -912,90 +875,75 @@ workflows:
 
           cd ..
 
-      - name: Set up code signing settings
+      - name: Configure Xcode for Developer ID signing
         script: |
-          xcode-project use-profiles
+          cd macos
+          
+          # Configure Xcode project to use Developer ID certificate directly
+          # This ensures the build produces correctly signed binaries with timestamps
+          
+          # Get team ID from certificate
+          TEAM_ID=$(security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -subject | grep -oE 'OU=[A-Z0-9]+' | head -1 | cut -d= -f2)
+          echo "Team ID: $TEAM_ID"
+          
+          # Update project.pbxproj to use Developer ID
+          # Set CODE_SIGN_STYLE to Manual and specify the certificate
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
+          
+          # Add OTHER_CODE_SIGN_FLAGS for timestamp (required for notarization)
+          # This makes Xcode include --timestamp during signing
+          if ! grep -q "OTHER_CODE_SIGN_FLAGS" Runner.xcodeproj/project.pbxproj; then
+            sed -i '' '/CODE_SIGN_IDENTITY/a\
+\				OTHER_CODE_SIGN_FLAGS = "--timestamp";
+' Runner.xcodeproj/project.pbxproj
+          fi
+          
+          cd ..
+          
+          echo "Xcode project configured for Developer ID signing"
 
       - name: Flutter build macOS
         script: |
           echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
-
-          # Build with Developer ID profile (already set up by xcode-project use-profiles)
+          
+          # Build with Developer ID - Xcode will sign with timestamp automatically
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            --dart-define=CODESIGN_IDENTITY="$DEVELOPER_ID_CERT"
 
-      - name: Re-sign app for notarization
+      - name: Verify and fix app signature
         script: |
-          # Find the app bundle
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
-
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: Could not find Omi.app"
-            find $(pwd)/build/macos -type d -name "*.app"
-            exit 1
-          fi
-
-          # Create hardened runtime entitlements for notarization (without debug entitlement)
-          cat > /tmp/notarization.entitlements <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>com.apple.security.cs.allow-jit</key>
-            <true/>
-            <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-            <true/>
-            <key>com.apple.security.cs.disable-library-validation</key>
-            <true/>
-            <key>com.apple.security.device.audio-input</key>
-            <true/>
-            <key>com.apple.security.device.bluetooth</key>
-            <true/>
-            <key>com.apple.security.network.client</key>
-            <true/>
-            <key>com.apple.security.personal-information.calendars</key>
-            <true/>
-          </dict>
-          </plist>
-          EOF
-
-          echo "Created notarization entitlements:"
-          cat /tmp/notarization.entitlements
-
-          # Re-sign only the main executable with --timestamp (required for notarization)
-          echo ""
-          echo "Re-signing main executable with timestamp and hardened runtime..."
-          codesign --force --deep --timestamp --options runtime \
-            --sign "$DEVELOPER_ID_CERT" \
-            --entitlements /tmp/notarization.entitlements \
-            "$APP_PATH/Contents/MacOS/Omi"
-
-          # Re-sign the entire app bundle with timestamp
-          echo ""
-          echo "Re-signing app bundle with timestamp..."
-          codesign --force --deep --timestamp --options runtime \
-            --sign "$DEVELOPER_ID_CERT" \
-            --entitlements /tmp/notarization.entitlements \
-            "$APP_PATH"
-
-          # Verify the signature
-          echo ""
-          echo "Verifying signature..."
+          
+          # Check if app has timestamp
+          echo "Checking signature..."
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | head -20
-
-          # Check entitlements (should NOT have get-task-allow)
+          
+          # Check for get-task-allow (debug) entitlement
+          if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "get-task-allow"; then
+            echo "WARNING: get-task-allow found, re-signing main executable only..."
+            
+            # Only re-sign the main executable to remove debug entitlement
+            # Do NOT re-sign frameworks (they're fine)
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$APP_PATH/Contents/MacOS/Omi"
+            
+            # Re-sign app bundle wrapper
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$APP_PATH"
+          fi
+          
+          # Final verification
           echo ""
-          echo "Final entitlements (should NOT have get-task-allow):"
+          echo "Final signature:"
+          codesign -dv --verbose=2 "$APP_PATH" 2>&1
           codesign -d --entitlements :- "$APP_PATH" 2>&1
-
-          # Verify with spctl
-          echo ""
-          echo "Verifying with spctl..."
-          spctl -a -vv "$APP_PATH" 2>&1 || echo "spctl check skipped (may fail before notarization)"
 
       - name: Package app for notarization
         script: |
