@@ -998,7 +998,7 @@ workflows:
           # DO NOT re-sign frameworks - they're already properly signed
           echo ""
           echo "=== Signing app bundle for notarization ==="
-          codesign --force --timestamp --options runtime \
+          codesign --timestamp --options runtime \
             --sign "$DEVELOPER_ID_CERT" \
             --entitlements /tmp/notarization.entitlements \
             "$APP_PATH" 2>&1
