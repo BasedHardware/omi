@@ -5,6 +5,7 @@ Tools for accessing user conversations.
 from datetime import datetime, timezone
 from typing import List, Optional
 from zoneinfo import ZoneInfo
+import contextvars
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
@@ -16,6 +17,13 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.search import search_conversations
 from utils.llm.clients import embeddings
+
+# Import agent_config_context for fallback config access
+try:
+    from utils.retrieval.agentic import agent_config_context
+except ImportError:
+    # Fallback if import fails
+    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
 @tool
@@ -90,7 +98,26 @@ def get_conversations_tool(
     print(f"   include_timestamps: {include_timestamps}")
     # print(f"   config: {config}")
 
-    uid = config['configurable'].get('user_id')
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 get_conversations_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ get_conversations_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ get_conversations_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ get_conversations_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
     if not uid:
         print(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -296,7 +323,27 @@ def search_conversations_tool(
         summaries, action items, events, and pagination info.
     """
     print(f"🔧 search_conversations_tool called - query: {query}, config: {config}")
-    uid = config['configurable'].get('user_id')
+
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 search_conversations_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ search_conversations_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ search_conversations_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ search_conversations_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
     if not uid:
         print(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -502,7 +549,27 @@ def vector_search_conversations_tool(
         summaries, action items, events, and metadata.
     """
     print(f"🔧 vector_search_conversations_tool called with query: {query}")
-    uid = config['configurable'].get('user_id')
+
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 vector_search_conversations_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ vector_search_conversations_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ vector_search_conversations_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ vector_search_conversations_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
     if not uid:
         print(f"❌ vector_search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
@@ -26,6 +27,32 @@ import 'package:shimmer/shimmer.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'markdown_message_widget.dart';
+
+IconData? _getThinkingIcon(String thinkingText) {
+  final text = thinkingText.toLowerCase();
+  if (text.contains('thinking')) {
+    return Icons.psychology; // Brain icon
+  } else if (text.contains('notion')) {
+    return Icons.note;
+  } else if (text.contains('whoop')) {
+    return Icons.favorite; // Heart icon for Whoop
+  } else if (text.contains('calendar')) {
+    return Icons.calendar_today;
+  } else if (text.contains('searching the web') || text.contains('searching web')) {
+    return Icons.search;
+  } else if (text.contains('conversations')) {
+    return Icons.chat;
+  } else if (text.contains('memories')) {
+    return Icons.memory;
+  } else if (text.contains('action item')) {
+    return Icons.checklist;
+  } else if (text.contains('product info')) {
+    return Icons.info;
+  } else if (text.contains('search')) {
+    return Icons.search;
+  }
+  return Icons.psychology; // Default brain icon
+}
 
 class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
@@ -250,7 +277,7 @@ class DaySummaryWidget extends StatelessWidget {
   }
 }
 
-class NormalMessageWidget extends StatelessWidget {
+class NormalMessageWidget extends StatefulWidget {
   final bool showTypingIndicator;
   final String messageText;
   final List<String> thinkings;
@@ -269,21 +296,56 @@ class NormalMessageWidget extends StatelessWidget {
   });
 
   @override
+  State<NormalMessageWidget> createState() => _NormalMessageWidgetState();
+}
+
+class _NormalMessageWidgetState extends State<NormalMessageWidget> {
+  bool _showDots = true;
+  Timer? _dotsTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showTypingIndicator && widget.messageText.isEmpty && widget.message.thinkings.isEmpty) {
+      _dotsTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          setState(() {
+            _showDots = false;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _dotsTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    var previousThinkingText = message.thinkings.length > 1
-        ? message.thinkings
-            .sublist(message.thinkings.length - 2 >= 0 ? message.thinkings.length - 2 : 0)
+    var previousThinkingText = widget.message.thinkings.length > 1
+        ? widget.message.thinkings
+            .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
             .first
             .decodeString
         : null;
-    var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
+    var thinkingText = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+
+    // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
+    bool shouldShowThinking =
+        thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText.isEmpty);
+    String displayThinkingText = thinkingText ?? 'Thinking';
+    IconData? thinkingIcon = _getThinkingIcon(displayThinkingText);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        FilesHandlerWidget(message: message),
-        showTypingIndicator && messageText.isEmpty
+        FilesHandlerWidget(message: widget.message),
+        widget.showTypingIndicator && widget.messageText.isEmpty
             ? Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
@@ -299,30 +361,58 @@ class NormalMessageWidget extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    thinkingText != null
+                    shouldShowThinking
                         ? Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
                                 previousThinkingText != null
-                                    ? Text(
-                                        overflow: TextOverflow.fade,
-                                        maxLines: 1,
-                                        softWrap: false,
-                                        previousThinkingText,
-                                        style: const TextStyle(color: Colors.white60, fontSize: 15),
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _getThinkingIcon(previousThinkingText) ?? Icons.psychology,
+                                            size: 15,
+                                            color: Colors.white60,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              overflow: TextOverflow.fade,
+                                              maxLines: 1,
+                                              softWrap: false,
+                                              previousThinkingText,
+                                              style: const TextStyle(color: Colors.white60, fontSize: 15),
+                                            ),
+                                          ),
+                                        ],
                                       )
                                     : const SizedBox.shrink(),
                                 Shimmer.fromColors(
                                   baseColor: Colors.white,
                                   highlightColor: Colors.grey,
-                                  child: Text(
-                                    overflow: TextOverflow.fade,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                    thinkingText,
-                                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (thinkingIcon != null) ...[
+                                        Icon(
+                                          thinkingIcon,
+                                          size: 15,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      Flexible(
+                                        child: Text(
+                                          overflow: TextOverflow.fade,
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          displayThinkingText,
+                                          style: const TextStyle(color: Colors.white, fontSize: 15),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 )
                               ],
@@ -344,7 +434,7 @@ class NormalMessageWidget extends StatelessWidget {
         //         ),
         //       )
         //     : const SizedBox.shrink(),
-        messageText.isEmpty
+        widget.messageText.isEmpty
             ? const SizedBox.shrink()
             : Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -357,7 +447,7 @@ class NormalMessageWidget extends StatelessWidget {
                     bottomLeft: Radius.circular(16.0),
                   ),
                 ),
-                child: getMarkdownWidget(context, messageText),
+                child: getMarkdownWidget(context, widget.messageText),
               ),
       ],
     );
@@ -390,15 +480,46 @@ class MemoriesMessageWidget extends StatefulWidget {
 
 class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   late List<bool> conversationDetailLoading;
+  bool _showDots = true;
+  Timer? _dotsTimer;
 
   @override
   void initState() {
     conversationDetailLoading = List.filled(widget.messageMemories.length, false);
+    if (widget.showTypingIndicator && widget.messageText == '...' && widget.message.thinkings.isEmpty) {
+      _dotsTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          setState(() {
+            _showDots = false;
+          });
+        }
+      });
+    }
     super.initState();
   }
 
   @override
+  void dispose() {
+    _dotsTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    var previousThinkingText = widget.message.thinkings.length > 1
+        ? widget.message.thinkings
+            .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
+            .first
+            .decodeString
+        : null;
+    var thinkingText = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+
+    // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
+    bool shouldShowThinking =
+        thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText == '...');
+    String displayThinkingText = thinkingText ?? 'Thinking';
+    IconData? thinkingIcon = _getThinkingIcon(displayThinkingText);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -412,18 +533,94 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         //     ),
         //   ),
         // ),
-        widget.showTypingIndicator
-            ? const Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  SizedBox(width: 4),
-                  TypingIndicator(),
-                  Spacer(),
-                ],
-              )
-            : getMarkdownWidget(context, widget.messageText),
+        widget.showTypingIndicator && widget.messageText == '...'
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1f1f25),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4.0),
+                    topRight: Radius.circular(16.0),
+                    bottomRight: Radius.circular(16.0),
+                    bottomLeft: Radius.circular(16.0),
+                  ),
+                ),
+                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    shouldShowThinking
+                        ? Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              children: [
+                                previousThinkingText != null
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _getThinkingIcon(previousThinkingText) ?? Icons.psychology,
+                                            size: 15,
+                                            color: Colors.white60,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Flexible(
+                                            child: Text(
+                                              overflow: TextOverflow.fade,
+                                              maxLines: 1,
+                                              softWrap: false,
+                                              previousThinkingText,
+                                              style: const TextStyle(color: Colors.white60, fontSize: 15),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : const SizedBox.shrink(),
+                                Shimmer.fromColors(
+                                  baseColor: Colors.white,
+                                  highlightColor: Colors.grey,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (thinkingIcon != null) ...[
+                                        Icon(
+                                          thinkingIcon,
+                                          size: 15,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      Flexible(
+                                        child: Text(
+                                          overflow: TextOverflow.fade,
+                                          maxLines: 1,
+                                          softWrap: false,
+                                          displayThinkingText,
+                                          style: const TextStyle(color: Colors.white, fontSize: 15),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              ],
+                            ),
+                          )
+                        : const TypingIndicator(),
+                  ],
+                ))
+            : widget.showTypingIndicator
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      SizedBox(width: 4),
+                      TypingIndicator(),
+                      Spacer(),
+                    ],
+                  )
+                : getMarkdownWidget(context, widget.messageText),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
