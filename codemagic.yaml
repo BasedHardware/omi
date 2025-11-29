@@ -796,34 +796,17 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
-      - name: Import Sparkle signing key
+      - name: Verify Sparkle signing key
         script: |
-          echo "Importing Sparkle EdDSA private key into Keychain..."
+          echo "Verifying SPARKLE_PRIVATE_KEY environment variable..."
 
-          # The private key should be stored in Codemagic environment variables as SPARKLE_PRIVATE_KEY
-          # Import it into the Keychain using Sparkle's tool
-          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-            # Write private key to temporary file
-            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key.txt
-
-            # Import using -f flag (not --import-private-key)
-            /Users/builder/clone/app/macos/Pods/Sparkle/bin/generate_keys -f /tmp/sparkle_private_key.txt
-
-            # Clean up temp file
-            rm /tmp/sparkle_private_key.txt
-
-            # Verify import
-            if security find-generic-password -s "Sparkle EdDSA Private Key" 2>/dev/null; then
-              echo "✓ Sparkle private key imported successfully"
-            else
-              echo "ERROR: Failed to import Sparkle private key"
-              exit 1
-            fi
-          else
-            echo "⚠ WARNING: SPARKLE_PRIVATE_KEY environment variable not set"
+          if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "⚠ ERROR: SPARKLE_PRIVATE_KEY environment variable not set"
             echo "Signing will fail without this key!"
             exit 1
           fi
+
+          echo "✓ SPARKLE_PRIVATE_KEY is set (will be used during ZIP signing)"
 
       - name: Clean up entitlements (remove Mac App Store-only capabilities)
         script: |
@@ -1315,8 +1298,10 @@ workflows:
             exit 1
           fi
 
-          # Run signing (capture full output for debugging)
-          SIGN_OUTPUT=$(dart run auto_updater:sign_update "$DIST_DIR/$ZIP_NAME" 2>&1)
+          # Sign using Sparkle's sign_update with private key from environment variable
+          # Pass key via stdin using --ed-key-file - flag (no Keychain needed!)
+          echo "Signing with private key from environment variable..."
+          SIGN_OUTPUT=$(echo "$SPARKLE_PRIVATE_KEY" | macos/Pods/Sparkle/bin/sign_update --ed-key-file - "$DIST_DIR/$ZIP_NAME" 2>&1)
           echo "Sign output: $SIGN_OUTPUT"
 
           # Extract the signature value from sparkle:edSignature="VALUE" format
