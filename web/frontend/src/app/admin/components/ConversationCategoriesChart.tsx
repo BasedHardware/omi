@@ -9,46 +9,40 @@ import {
   getConversationCategoriesAnalytics,
   ConversationCategoriesAnalytics,
 } from '@/src/lib/api/admin';
+import {
+  Treemap,
+  ResponsiveContainer,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
 
 interface ConversationCategoriesChartProps {
   adminKey: string;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  personal: 'bg-blue-500',
-  education: 'bg-green-500',
-  health: 'bg-red-500',
-  finance: 'bg-yellow-500',
-  legal: 'bg-purple-500',
-  philosophy: 'bg-indigo-500',
-  spiritual: 'bg-pink-500',
-  science: 'bg-cyan-500',
-  entrepreneurship: 'bg-orange-500',
-  parenting: 'bg-rose-500',
-  romantic: 'bg-fuchsia-500',
-  travel: 'bg-teal-500',
-  inspiration: 'bg-amber-500',
-  technology: 'bg-violet-500',
-  business: 'bg-emerald-500',
-  social: 'bg-sky-500',
-  work: 'bg-slate-500',
-  sports: 'bg-lime-500',
-  politics: 'bg-red-600',
-  literature: 'bg-amber-600',
-  history: 'bg-stone-500',
-  architecture: 'bg-zinc-500',
-  music: 'bg-purple-600',
-  weather: 'bg-blue-400',
-  news: 'bg-gray-500',
-  entertainment: 'bg-pink-600',
-  psychology: 'bg-indigo-600',
-  real: 'bg-green-600',
-  design: 'bg-fuchsia-600',
-  family: 'bg-rose-600',
-  economics: 'bg-yellow-600',
-  environment: 'bg-emerald-600',
-  other: 'bg-neutral-500',
-};
+const COLORS = [
+  '#3B82F6', // blue
+  '#EF4444', // red
+  '#10B981', // green
+  '#F59E0B', // amber
+  '#8B5CF6', // purple
+  '#EC4899', // pink
+  '#06B6D4', // cyan
+  '#F97316', // orange
+  '#6366F1', // indigo
+  '#14B8A6', // teal
+  '#84CC16', // lime
+  '#A855F7', // violet
+  '#22C55E', // emerald
+  '#0EA5E9', // sky
+  '#64748B', // slate
+  '#78716C', // stone
+  '#71717A', // zinc
+  '#737373', // neutral
+];
 
 function formatCategoryName(category: string): string {
   return category
@@ -56,6 +50,78 @@ function formatCategoryName(category: string): string {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    payload: {
+      name: string;
+      value: number;
+      percentage: string;
+    };
+  }>;
+}
+
+const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="rounded-lg border bg-white p-3 shadow-lg">
+        <p className="font-semibold">{data.name}</p>
+        <p className="text-sm text-neutral-600">
+          Count: <span className="font-medium">{data.value.toLocaleString()}</span>
+        </p>
+        <p className="text-sm text-neutral-600">
+          Percentage: <span className="font-medium">{data.percentage}%</span>
+        </p>
+      </div>
+    );
+  }
+  return null;
+};
+
+const RADIAN = Math.PI / 180;
+
+interface LabelProps {
+  cx: number;
+  cy: number;
+  midAngle: number;
+  innerRadius: number;
+  outerRadius: number;
+  percent: number;
+  name: string;
+  value: number;
+}
+
+const renderCustomizedLabel = ({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+  name,
+  value,
+}: LabelProps) => {
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  if (percent < 0.05) return null; // Don't show label for small slices
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="white"
+      textAnchor="middle"
+      dominantBaseline="central"
+      className="text-xs font-medium"
+    >
+      {value}
+    </text>
+  );
+};
 
 export default function ConversationCategoriesChart({
   adminKey,
@@ -85,7 +151,12 @@ export default function ConversationCategoriesChart({
     loadData();
   }, []);
 
-  const maxCount = data?.categories[0]?.count || 1;
+  const chartData = data?.categories.map((item, index) => ({
+    name: formatCategoryName(item.category),
+    value: item.count,
+    percentage: ((item.count / (data?.total || 1)) * 100).toFixed(1),
+    fill: COLORS[index % COLORS.length],
+  })) || [];
 
   return (
     <div>
@@ -134,53 +205,72 @@ export default function ConversationCategoriesChart({
       {data ? (
         <Card className="p-6">
           <h3 className="mb-6 text-lg font-semibold">Categories Breakdown</h3>
-          <div className="flex flex-wrap justify-center gap-4">
-            {data.categories.map((item) => {
-              const percentage = ((item.count / data.total) * 100).toFixed(1);
-              // Scale bubble size: min 60px, max 160px based on percentage
-              const minSize = 60;
-              const maxSize = 160;
-              const sizeRatio = item.count / maxCount;
-              const bubbleSize = Math.max(minSize, Math.min(maxSize, minSize + sizeRatio * (maxSize - minSize)));
-              const colorClass = CATEGORY_COLORS[item.category] || 'bg-neutral-500';
 
-              return (
-                <div
-                  key={item.category}
-                  className="group relative flex flex-col items-center"
+          {/* Pie Chart */}
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={renderCustomizedLabel}
+                  outerRadius={150}
+                  dataKey="value"
                 >
-                  <div
-                    className={`flex items-center justify-center rounded-full ${colorClass} text-white font-bold shadow-lg hover:scale-110 transition-transform duration-300 cursor-pointer`}
-                    style={{
-                      width: `${bubbleSize}px`,
-                      height: `${bubbleSize}px`,
-                      fontSize: `${Math.max(12, bubbleSize / 5)}px`,
-                    }}
-                    title={`${formatCategoryName(item.category)}: ${item.count.toLocaleString()} (${percentage}%)`}
-                  >
-                    {item.count}
-                  </div>
-                  <span className="mt-2 text-xs font-medium text-neutral-600 text-center max-w-[100px] truncate">
-                    {formatCategoryName(item.category)}
-                  </span>
-                  <span className="text-xs text-neutral-400">{percentage}%</span>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  layout="horizontal"
+                  verticalAlign="bottom"
+                  align="center"
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  formatter={(value, entry) => {
+                    const item = chartData.find((d) => d.name === value);
+                    return (
+                      <span className="text-sm">
+                        {value} ({item?.percentage}%)
+                      </span>
+                    );
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Stats Table */}
+          <div className="mt-8 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {chartData.slice(0, 9).map((item, index) => (
+              <div
+                key={item.name}
+                className="flex items-center gap-3 rounded-lg border p-3"
+              >
+                <div
+                  className="h-4 w-4 rounded-full"
+                  style={{ backgroundColor: item.fill }}
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{item.name}</p>
+                  <p className="text-xs text-neutral-500">
+                    {item.value.toLocaleString()} conversations
+                  </p>
                 </div>
-              );
-            })}
+                <span className="text-sm font-semibold">{item.percentage}%</span>
+              </div>
+            ))}
           </div>
         </Card>
       ) : (
         <Card className="p-6">
-          <div className="flex flex-wrap justify-center gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="flex flex-col items-center">
-                <div
-                  className="animate-pulse rounded-full bg-neutral-200"
-                  style={{ width: `${80 + i * 10}px`, height: `${80 + i * 10}px` }}
-                />
-                <div className="mt-2 h-3 w-16 animate-pulse rounded bg-neutral-200"></div>
-              </div>
-            ))}
+          <div className="flex h-[400px] items-center justify-center">
+            <div className="text-center">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-neutral-400" />
+              <p className="mt-2 text-sm text-neutral-500">Loading chart data...</p>
+            </div>
           </div>
         </Card>
       )}
