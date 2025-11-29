@@ -1139,6 +1139,43 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
+@router.get('/v1/admin/analytics', tags=['v1'])
+def get_platform_analytics(secret_key: str = Header(...)):
+    """Get platform-wide analytics statistics."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    from database._client import db
+
+    # Get total users count
+    users_ref = db.collection('users')
+    users_count = sum(1 for _ in users_ref.stream())
+
+    # Get total memories count across all users
+    memories_count = 0
+    for user_doc in users_ref.stream():
+        memories_ref = user_doc.reference.collection('memories')
+        memories_count += sum(1 for _ in memories_ref.stream())
+
+    # Get total conversations count across all users
+    conversations_count = 0
+    users_ref_conv = db.collection('users')
+    for user_doc in users_ref_conv.stream():
+        conversations_ref = user_doc.reference.collection('conversations')
+        conversations_count += sum(1 for _ in conversations_ref.stream())
+
+    # Get total apps count
+    apps_ref = db.collection('apps')
+    apps_count = sum(1 for _ in apps_ref.stream())
+
+    return {
+        'users_count': users_count,
+        'memories_count': memories_count,
+        'conversations_count': conversations_count,
+        'apps_count': apps_count,
+    }
+
+
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
