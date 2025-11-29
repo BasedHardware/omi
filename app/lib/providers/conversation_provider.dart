@@ -505,6 +505,42 @@ class ConversationProvider extends ChangeNotifier {
       }
     });
   }
+Future<void> restoreConversationLocally(ServerConversation conversation, int index, DateTime date) async {
+    // 1. Call API first. Do not mutate local state yet.
+    final restoredConversation = await restoreConversation(conversation.id);
+
+    if (restoredConversation != null) {
+      // 2. Update Global List
+      // Find the index dynamically in case the list shifted during the async call
+      int globalIndex = conversations.indexWhere((c) => c.id == conversation.id);
+      if (globalIndex != -1) {
+        conversations[globalIndex] = restoredConversation;
+      }
+
+      // 3. Update Grouped List
+      if (groupedConversations.containsKey(date)) {
+        // We check if the index still points to the correct ID to be safe against race conditions
+        if (index < groupedConversations[date]!.length && 
+            groupedConversations[date]![index].id == conversation.id) {
+          groupedConversations[date]![index] = restoredConversation;
+        } else {
+          // Fallback: Find the new index if the list order changed
+          int groupIndex = groupedConversations[date]!.indexWhere((c) => c.id == conversation.id);
+          if (groupIndex != -1) {
+            groupedConversations[date]![groupIndex] = restoredConversation;
+          }
+        }
+      }
+
+      // 4. Track Analytics
+      MixpanelManager().track('Conversation Restored', properties: {
+        'conversationId': restoredConversation.id,
+        'discardedReason': restoredConversation.discardedReason ?? 'unknown',
+      });
+
+      notifyListeners();
+    }
+  }
 
   void deleteConversationOnServer(String conversationId) {
     deleteConversationServer(conversationId);

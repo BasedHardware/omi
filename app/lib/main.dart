@@ -151,14 +151,16 @@ Future _init() async {
       SharedPreferencesUtil().uid,
     );
   }
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-  };
+  if (PlatformService.isCrashlyticsSupported) {
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
 
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
 
   await ServiceManager.instance().start();
   return;
@@ -188,11 +190,14 @@ void main() {
       await _init();
       runApp(const MyApp());
     },
-    (error, stack) => FirebaseCrashlytics.instance.recordError(
-      error,
-      stack,
-      fatal: true,
-    ),
+    (error, stack) {
+      if (PlatformService.isCrashlyticsSupported) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      } else {
+        // Fallback logging for unsupported platforms (web/windows)
+        debugPrint('Unhandled error: $error');
+      }
+    },
   );
 }
 
