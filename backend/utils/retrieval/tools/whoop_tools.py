@@ -147,25 +147,39 @@ def get_whoop_sleep_data(
     print(f"🛌 Calling Whoop Sleep API with start={start_str}, end={end_str}, limit={params['limit']}")
 
     try:
-        response = requests.get(
-            'https://api.prod.whoop.com/developer/v2/activity/sleep',
-            headers={'Authorization': f'Bearer {access_token}'},
-            params=params,
-            timeout=10.0,
-        )
+        all_records = []
+        next_token = None
+        while True:
+            page_params = dict(params)
+            if next_token:
+                page_params['next_token'] = next_token
 
-        print(f"🛌 Whoop Sleep API response status: {response.status_code}")
+            response = requests.get(
+                'https://api.prod.whoop.com/developer/v2/activity/sleep',
+                headers={'Authorization': f'Bearer {access_token}'},
+                params=page_params,
+                timeout=10.0,
+            )
 
-        if response.status_code == 200:
-            data = response.json()
-            return data
-        elif response.status_code == 401:
-            print(f"❌ Whoop Sleep API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Whoop Sleep API error {response.status_code}: {error_body}")
-            raise Exception(f"Whoop Sleep API error: {response.status_code} - {error_body}")
+            print(f"🛌 Whoop Sleep API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                all_records.extend(data.get('records', []))
+                if len(all_records) >= limit:
+                    break
+                next_token = data.get('next_token')
+                if not next_token:
+                    break
+            elif response.status_code == 401:
+                print(f"❌ Whoop Sleep API 401 - token expired")
+                raise Exception("Authentication failed - token may be expired")
+            else:
+                error_body = response.text[:200] if response.text else "No error body"
+                print(f"❌ Whoop Sleep API error {response.status_code}: {error_body}")
+                raise Exception(f"Whoop Sleep API error: {response.status_code} - {error_body}")
+
+        return {'records': all_records[:limit]}
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error fetching Whoop sleep data: {e}")
         raise
@@ -210,25 +224,39 @@ def get_whoop_recovery_data(
     print(f"💚 Calling Whoop Recovery API with start={start_str}, end={end_str}, limit={params['limit']}")
 
     try:
-        response = requests.get(
-            'https://api.prod.whoop.com/developer/v2/recovery',
-            headers={'Authorization': f'Bearer {access_token}'},
-            params=params,
-            timeout=10.0,
-        )
+        all_records = []
+        next_token = None
+        while True:
+            page_params = dict(params)
+            if next_token:
+                page_params['next_token'] = next_token
 
-        print(f"💚 Whoop Recovery API response status: {response.status_code}")
+            response = requests.get(
+                'https://api.prod.whoop.com/developer/v2/recovery',
+                headers={'Authorization': f'Bearer {access_token}'},
+                params=page_params,
+                timeout=10.0,
+            )
 
-        if response.status_code == 200:
-            data = response.json()
-            return data
-        elif response.status_code == 401:
-            print(f"❌ Whoop Recovery API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Whoop Recovery API error {response.status_code}: {error_body}")
-            raise Exception(f"Whoop Recovery API error: {response.status_code} - {error_body}")
+            print(f"💚 Whoop Recovery API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                all_records.extend(data.get('records', []))
+                if len(all_records) >= limit:
+                    break
+                next_token = data.get('next_token')
+                if not next_token:
+                    break
+            elif response.status_code == 401:
+                print(f"❌ Whoop Recovery API 401 - token expired")
+                raise Exception("Authentication failed - token may be expired")
+            else:
+                error_body = response.text[:200] if response.text else "No error body"
+                print(f"❌ Whoop Recovery API error {response.status_code}: {error_body}")
+                raise Exception(f"Whoop Recovery API error: {response.status_code} - {error_body}")
+
+        return {'records': all_records[:limit]}
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error fetching Whoop recovery data: {e}")
         raise
@@ -273,25 +301,39 @@ def get_whoop_workout_data(
     print(f"🏃 Calling Whoop Workout API with start={start_str}, end={end_str}, limit={params['limit']}")
 
     try:
-        response = requests.get(
-            'https://api.prod.whoop.com/developer/v2/activity/workout',
-            headers={'Authorization': f'Bearer {access_token}'},
-            params=params,
-            timeout=10.0,
-        )
+        all_records = []
+        next_token = None
+        while True:
+            page_params = dict(params)
+            if next_token:
+                page_params['next_token'] = next_token
 
-        print(f"🏃 Whoop Workout API response status: {response.status_code}")
+            response = requests.get(
+                'https://api.prod.whoop.com/developer/v2/activity/workout',
+                headers={'Authorization': f'Bearer {access_token}'},
+                params=page_params,
+                timeout=10.0,
+            )
 
-        if response.status_code == 200:
-            data = response.json()
-            return data
-        elif response.status_code == 401:
-            print(f"❌ Whoop Workout API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Whoop Workout API error {response.status_code}: {error_body}")
-            raise Exception(f"Whoop Workout API error: {response.status_code} - {error_body}")
+            print(f"🏃 Whoop Workout API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                all_records.extend(data.get('records', []))
+                if len(all_records) >= limit:
+                    break
+                next_token = data.get('next_token')
+                if not next_token:
+                    break
+            elif response.status_code == 401:
+                print(f"❌ Whoop Workout API 401 - token expired")
+                raise Exception("Authentication failed - token may be expired")
+            else:
+                error_body = response.text[:200] if response.text else "No error body"
+                print(f"❌ Whoop Workout API error {response.status_code}: {error_body}")
+                raise Exception(f"Whoop Workout API error: {response.status_code} - {error_body}")
+
+        return {'records': all_records[:limit]}
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error fetching Whoop workout data: {e}")
         raise
@@ -336,25 +378,39 @@ def get_whoop_cycle_data(
     print(f"🔄 Calling Whoop Cycle API with start={start_str}, end={end_str}, limit={params['limit']}")
 
     try:
-        response = requests.get(
-            'https://api.prod.whoop.com/developer/v2/cycle',
-            headers={'Authorization': f'Bearer {access_token}'},
-            params=params,
-            timeout=10.0,
-        )
+        all_records = []
+        next_token = None
+        while True:
+            page_params = dict(params)
+            if next_token:
+                page_params['next_token'] = next_token
 
-        print(f"🔄 Whoop Cycle API response status: {response.status_code}")
+            response = requests.get(
+                'https://api.prod.whoop.com/developer/v2/cycle',
+                headers={'Authorization': f'Bearer {access_token}'},
+                params=page_params,
+                timeout=10.0,
+            )
 
-        if response.status_code == 200:
-            data = response.json()
-            return data
-        elif response.status_code == 401:
-            print(f"❌ Whoop Cycle API 401 - token expired")
-            raise Exception("Authentication failed - token may be expired")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Whoop Cycle API error {response.status_code}: {error_body}")
-            raise Exception(f"Whoop Cycle API error: {response.status_code} - {error_body}")
+            print(f"🔄 Whoop Cycle API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                all_records.extend(data.get('records', []))
+                if len(all_records) >= limit:
+                    break
+                next_token = data.get('next_token')
+                if not next_token:
+                    break
+            elif response.status_code == 401:
+                print(f"❌ Whoop Cycle API 401 - token expired")
+                raise Exception("Authentication failed - token may be expired")
+            else:
+                error_body = response.text[:200] if response.text else "No error body"
+                print(f"❌ Whoop Cycle API error {response.status_code}: {error_body}")
+                raise Exception(f"Whoop Cycle API error: {response.status_code} - {error_body}")
+
+        return {'records': all_records[:limit]}
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error fetching Whoop cycle data: {e}")
         raise

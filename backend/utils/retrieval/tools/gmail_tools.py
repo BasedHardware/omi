@@ -58,18 +58,36 @@ def get_gmail_messages(
 
     print(f"Calling Gmail API with query: {query}, max_results: {max_results}")
 
-    data = google_api_request(
-        "GET",
-        'https://www.googleapis.com/gmail/v1/users/me/messages',
-        access_token,
-        params=params,
-    )
+    message_ids = []
+    page_token = None
 
-    message_ids = [msg['id'] for msg in data.get('messages', [])]
+    while True:
+        page_params = dict(params)
+        if page_token:
+            page_params['pageToken'] = page_token
+
+        data = google_api_request(
+            "GET",
+            'https://www.googleapis.com/gmail/v1/users/me/messages',
+            access_token,
+            params=page_params,
+        )
+
+        ids = [msg['id'] for msg in data.get('messages', [])]
+        message_ids.extend(ids)
+
+        if len(message_ids) >= max_results:
+            message_ids = message_ids[:max_results]
+            break
+
+        page_token = data.get('nextPageToken')
+        if not page_token:
+            break
+
     print(f"Gmail API returned {len(message_ids)} message IDs")
 
     messages = []
-    for msg_id in message_ids[:max_results]:
+    for msg_id in message_ids:
         msg_data = google_api_request(
             "GET",
             f'https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}',

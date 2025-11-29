@@ -5,6 +5,7 @@ Tools for accessing Twitter/X data.
 import os
 import base64
 import contextvars
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -210,20 +211,56 @@ def get_twitter_tweets(
     print(f"Calling Twitter Tweets API for user_id={user_id}, max_results={params['max_results']}")
 
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=10.0)
+        all_tweets = []
+        all_users = {}
+        pagination_token = None
+        last_meta = {}
 
-        print(f"Twitter Tweets API response status: {response.status_code}")
+        while True:
+            page_params = dict(params)
+            if pagination_token:
+                page_params['pagination_token'] = pagination_token
 
-        if response.status_code == 200:
-            data = response.json()
-            return data
-        elif response.status_code == 401:
-            print(f"❌ Twitter Tweets API 401 - token expired or invalid")
-            raise Exception("Authentication failed - token may be expired or invalid")
-        else:
-            error_body = response.text[:200] if response.text else "No error body"
-            print(f"❌ Twitter Tweets API error {response.status_code}: {error_body}")
-            raise Exception(f"Twitter Tweets API error: {response.status_code} - {error_body}")
+            response = requests.get(url, headers=headers, params=page_params, timeout=10.0)
+
+            print(f"Twitter Tweets API response status: {response.status_code}")
+
+            if response.status_code == 200:
+                data = response.json()
+                tweets = data.get('data', [])
+                all_tweets.extend(tweets)
+
+                includes_users = data.get('includes', {}).get('users', [])
+                for user in includes_users:
+                    uid_key = user.get('id')
+                    if uid_key:
+                        all_users[uid_key] = user
+
+                last_meta = data.get('meta', {})
+
+                if len(all_tweets) >= max_results:
+                    break
+
+                pagination_token = last_meta.get('next_token')
+                if not pagination_token:
+                    break
+            elif response.status_code == 401:
+                print(f"❌ Twitter Tweets API 401 - token expired or invalid")
+                raise Exception("Authentication failed - token may be expired or invalid")
+            elif response.status_code == 429:
+                print(f"⚠️ Twitter API rate limited (429). Retrying in 1 second.")
+                time.sleep(1)
+                continue
+            else:
+                error_body = response.text[:200] if response.text else "No error body"
+                print(f"❌ Twitter Tweets API error {response.status_code}: {error_body}")
+                raise Exception(f"Twitter Tweets API error: {response.status_code} - {error_body}")
+
+        return {
+            'data': all_tweets[:max_results],
+            'includes': {'users': list(all_users.values())},
+            'meta': last_meta,
+        }
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error fetching Twitter tweets: {e}")
         raise
