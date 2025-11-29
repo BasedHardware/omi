@@ -792,232 +792,244 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
-      - name: Set up keychain and Developer ID signing
+      - name: Clean up entitlements (remove Mac App Store-only capabilities)
+        script: |
+          echo "Cleaning up entitlements files before build..."
+
+          # Process all Release entitlements files
+          find macos -name "*Release*.entitlements" -type f | while read entitlements_file; do
+            echo "Processing: $entitlements_file"
+
+            # Remove Sign in with Apple (if present)
+            if grep -q "applesignin" "$entitlements_file" 2>/dev/null; then
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed Sign in with Apple" || true
+            fi
+
+            # Remove App Sandbox (if present)
+            if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed App Sandbox" || true
+            fi
+
+            # Add hardened runtime entitlements (if not present)
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || true
+
+            echo "  Final entitlements:"
+            cat "$entitlements_file"
+            echo ""
+          done
+
+      - name: Set up keychain and import Developer ID certificate
         script: |
           # Initialize keychain
           keychain initialize
-          
+
           # Import Developer ID Application certificate
-          if [ -z "$MACOS_DEVELOPER_ID_P12" ]; then
-            echo "ERROR: MACOS_DEVELOPER_ID_P12 environment variable not set"
-            exit 1
-          fi
-          
           echo "Importing Developer ID Application certificate..."
           echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
-          
+
           KEYCHAIN_PATH=$(keychain get-default)
+          echo "Keychain path: $KEYCHAIN_PATH"
+
           security import /tmp/developer_id.p12 \
             -k "$KEYCHAIN_PATH" \
             -P "${MACOS_DEVELOPER_ID_P12_PASSWORD:-}" \
             -T /usr/bin/codesign \
             -T /usr/bin/security
-          
+
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN_PATH" 2>/dev/null || true
+
           rm /tmp/developer_id.p12
-          
-          # Get the certificate name
-          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
-          echo "Developer ID cert: $DEVELOPER_ID_CERT"
+
+          # List all code signing identities
+          echo ""
+          echo "=== All available code signing identities ==="
+          security find-identity -v -p codesigning
+
+          # Find and export the Developer ID cert name
+          DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo ""
+          echo "Selected Developer ID cert: $DEVELOPER_ID_CERT"
+
+          if [ -z "$DEVELOPER_ID_CERT" ]; then
+            echo "ERROR: No Developer ID Application certificate found!"
+            exit 1
+          fi
+
           echo "DEVELOPER_ID_CERT=$DEVELOPER_ID_CERT" >> $CM_ENV
-          
-          # Install Developer ID provisioning profile with UUID filename (Xcode requirement)
+
+      - name: Install Developer ID provisioning profile
+        script: |
+          echo "Installing Developer ID provisioning profile..."
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          if [ -n "$MACOS_DEVELOPER_ID_PROFILE" ]; then
-            echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > /tmp/developer_id.provisionprofile
-            # Extract UUID from profile (Xcode expects filename to be UUID.provisionprofile)
-            PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/developer_id.provisionprofile 2>/dev/null || echo "")
-            if [ -n "$PROFILE_UUID" ]; then
-              cp /tmp/developer_id.provisionprofile "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.provisionprofile"
-              echo "Developer ID profile installed: $PROFILE_UUID"
-            else
-              # Fallback: use generic name
-              cp /tmp/developer_id.provisionprofile "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile"
-              echo "Developer ID profile installed (UUID not found)"
-            fi
-            rm /tmp/developer_id.provisionprofile
-          else
-            echo "WARNING: MACOS_DEVELOPER_ID_PROFILE not set"
-          fi
 
-      - name: Remove Sign in with Apple capability for Developer ID
+          # Install the profile
+          echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile"
+
+          # Verify
+          echo "Profile installed. Details:"
+          /usr/libexec/PlistBuddy -c "Print :Name" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null || echo "Could not read profile name"
+
+          # List all profiles
+          echo ""
+          echo "Available provisioning profiles:"
+          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+      - name: Configure Xcode project for Developer ID signing
         script: |
-          # Sign in with Apple is Mac App Store-only and not supported in Developer ID profiles
-          # We need to remove it from ALL entitlements files
-
-          echo "Removing Mac App Store-only and debug capabilities from all entitlements files..."
-
-          # Remove from ALL entitlements files
-          find macos -name "*.entitlements" -type f | while read entitlements_file; do
-            echo "Processing: $entitlements_file"
-
-            # Remove Sign in with Apple (Mac App Store-only)
-            if grep -q "applesignin" "$entitlements_file" 2>/dev/null; then
-              /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$entitlements_file" && echo "  ✓ Removed Sign in with Apple" || echo "  ✗ Failed to remove Sign in with Apple"
-            fi
-
-            # Remove App Sandbox (Mac App Store-only, causes immediate termination in Developer ID apps)
-            if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
-              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" && echo "  ✓ Removed App Sandbox" || echo "  ✗ Failed to remove App Sandbox"
-            fi
-
-            # Remove get-task-allow (DEBUG-only entitlement, forbidden in notarization)
-            if grep -q "com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null; then
-              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" && echo "  ✓ Removed get-task-allow (debug)" || echo "  ✗ Failed to remove get-task-allow"
-            fi
-          done
-
-          echo ""
-          echo "Final Release.entitlements:"
-          cat macos/Runner/Release.entitlements 2>/dev/null || echo "Release.entitlements not found"
-
-          # Also disable Sign in with Apple capability in Xcode project settings
-          echo ""
-          echo "Disabling Sign in with Apple capability in Xcode project..."
           cd macos
 
-          # Remove Sign in with Apple from project.pbxproj
-          if grep -q "com.apple.developer.applesignin" Runner.xcodeproj/project.pbxproj; then
-            echo "Found Sign in with Apple in project.pbxproj, attempting to remove..."
-            # This is a workaround - ideally we'd use a proper plist editor, but project.pbxproj is complex
-            # For now, just warn that it exists
-            echo "WARNING: Sign in with Apple capability is enabled in Xcode project"
-            echo "The build may fail if the provisioning profile doesn't support it"
-          fi
+          # Set code signing identity and provisioning profile in Xcode project
+          # This tells Xcode to use our Developer ID cert and profile during build
+          xcrun xcodebuild -project Runner.xcodeproj \
+            -target Runner \
+            -showBuildSettings | grep -i "code_sign"
 
           cd ..
-
-      - name: Configure Xcode signing with Developer ID profile
-        script: |
-          # Use Codemagic's xcode-project tool to automatically match the Developer ID profile
-          # This handles all the Xcode project configuration automatically
-          xcode-project use-profiles
-          
-          # Add --timestamp flag for notarization (required)
-          cd macos
-          if ! grep -q "OTHER_CODE_SIGN_FLAGS" Runner.xcodeproj/project.pbxproj; then
-            # Add timestamp flag to all build configurations
-            awk '/CODE_SIGN_IDENTITY/ && !/OTHER_CODE_SIGN_FLAGS/ {print; print "\t\t\t\tOTHER_CODE_SIGN_FLAGS = \"--timestamp\";"; next} 1' \
-              Runner.xcodeproj/project.pbxproj > /tmp/project.pbxproj.tmp && \
-              mv /tmp/project.pbxproj.tmp Runner.xcodeproj/project.pbxproj
-          fi
-          cd ..
-          
-          echo "Xcode signing configured with Developer ID profile"
 
       - name: Flutter build macOS
         script: |
-          echo "Building version: $BUILD_NAME+$BUILD_NUMBER"
-          
-          # Build with Developer ID - Xcode will sign with timestamp automatically
+          echo "Building version: $BUILD_NAME+$BUILD_NUMBER with Developer ID signing"
+
+          # Build with release configuration
+          # Xcode will use the Developer ID certificate and provisioning profile we installed
           flutter build macos \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod \
-            --dart-define=CODESIGN_IDENTITY="$DEVELOPER_ID_CERT"
+            --flavor prod
 
-      - name: Verify and fix app signature
+      - name: Sign app for notarization
         script: |
+          # Find the built app
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
-          
-          # Check if app has timestamp
-          echo "Checking signature..."
-          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | head -20
-          
-          # Check for get-task-allow (debug) entitlement
-          if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "get-task-allow"; then
-            echo "WARNING: get-task-allow found, re-signing main executable only..."
-            
-            # Only re-sign the main executable to remove debug entitlement
-            # Do NOT re-sign frameworks (they're fine)
-            codesign --force --timestamp --options runtime \
-              --sign "$DEVELOPER_ID_CERT" \
-              "$APP_PATH/Contents/MacOS/Omi"
-            
-            # Re-sign app bundle wrapper
-            codesign --force --timestamp --options runtime \
-              --sign "$DEVELOPER_ID_CERT" \
-              "$APP_PATH"
-          fi
-          
-          # Final verification
+
+          # Log current signing status before re-signing
           echo ""
-          echo "Final signature:"
-          codesign -dv --verbose=2 "$APP_PATH" 2>&1
+          echo "=== Current app signature before re-signing ==="
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 || echo "App not signed yet"
+
+          echo ""
+          echo "=== Current entitlements before re-signing ==="
+          codesign -d --entitlements :- "$APP_PATH" 2>&1 || echo "No entitlements"
+
+          echo ""
+          echo "=== Checking Firebase frameworks signatures ==="
+          find "$APP_PATH/Contents/Frameworks" -name "Firebase*.framework" -type d | head -3 | while read fw; do
+            echo "Framework: $(basename $fw)"
+            codesign -dv "$fw" 2>&1 | head -3
+          done
+
+          # Create hardened runtime entitlements for notarization
+          cat > /tmp/notarization.entitlements << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <key>com.apple.security.device.bluetooth</key>
+  <true/>
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <key>com.apple.security.network.server</key>
+  <true/>
+  <key>com.apple.security.personal-information.calendars</key>
+  <true/>
+  <key>com.apple.security.files.user-selected.read-only</key>
+  <true/>
+  <key>com.apple.developer.aps-environment</key>
+  <string>production</string>
+  <key>keychain-access-groups</key>
+  <array>
+    <string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
+    <string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
+  </array>
+</dict>
+</plist>
+EOF
+
+          echo ""
+          echo "=== Notarization entitlements file ==="
+          cat /tmp/notarization.entitlements
+
+          # Sign ONLY the top-level app bundle with hardened runtime
+          # DO NOT re-sign frameworks - they're already properly signed
+          echo ""
+          echo "=== Signing app bundle for notarization ==="
+          codesign --force --timestamp --options runtime \
+            --sign "$DEVELOPER_ID_CERT" \
+            --entitlements /tmp/notarization.entitlements \
+            "$APP_PATH" 2>&1
+
+          # Verify signature
+          echo ""
+          echo "=== Verifying signature after signing ==="
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | head -20
+
+          echo ""
+          echo "=== Final entitlements ==="
           codesign -d --entitlements :- "$APP_PATH" 2>&1
 
-      - name: Package app for notarization
-        script: |
-          # Find the app bundle
-          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
-          echo "Found app at: $APP_PATH"
+          echo ""
+          echo "=== Checking for get-task-allow (should NOT be present) ==="
+          if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "get-task-allow"; then
+            echo "ERROR: get-task-allow found!"
+            exit 1
+          else
+            echo "✓ No get-task-allow entitlement"
+          fi
 
-          # Create a zip archive for notarization
-          APP_ZIP="build/macos/Omi.zip"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
-          echo "Created zip for notarization: $APP_ZIP"
+          echo ""
+          echo "=== Verifying Firebase frameworks are still signed ==="
+          find "$APP_PATH/Contents/Frameworks" -name "Firebase*.framework" -type d | head -3 | while read fw; do
+            echo "Verifying: $(basename $fw)"
+            codesign --verify --verbose "$fw" 2>&1 && echo "✓ Valid signature" || echo "✗ INVALID SIGNATURE"
+          done
 
       - name: Notarize app
         script: |
-          set -e  # Exit on error
+          set -e
 
-          echo "=== Starting App Notarization ==="
+          echo "Creating zip for notarization..."
+          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           APP_ZIP="build/macos/Omi.zip"
-          echo "App ZIP: $APP_ZIP"
-          ls -lh "$APP_ZIP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
 
           echo ""
-          echo "=== App Store Connect Credentials ==="
-          echo "Key ID: $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
-          echo "Private Key variable type: $(if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then echo "File Path"; else echo "Content"; fi)"
+          echo "Submitting to Apple Notary Service..."
 
-          # Check if APP_STORE_CONNECT_PRIVATE_KEY is a file path or content
+          # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
-            # It's a file path reference
             PRIVATE_KEY_PATH="${APP_STORE_CONNECT_PRIVATE_KEY#@file:}"
-            echo "Using existing private key from: $PRIVATE_KEY_PATH"
-            if [ -f "$PRIVATE_KEY_PATH" ]; then
-              echo "✓ Private key file exists"
-              ls -lh "$PRIVATE_KEY_PATH"
-            else
-              echo "✗ ERROR: Private key file not found at $PRIVATE_KEY_PATH"
-              exit 1
-            fi
           else
-            # It's the actual key content, write to file
             mkdir -p ~/private_keys
             PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
             echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-            echo "Created private key file at: $PRIVATE_KEY_PATH"
-            ls -lh "$PRIVATE_KEY_PATH"
-            echo "First 2 lines of key file:"
-            head -n 2 "$PRIVATE_KEY_PATH"
           fi
 
-          echo ""
-          echo "=== Submitting to Apple Notary Service ==="
           RESULT=$(xcrun notarytool submit "$APP_ZIP" \
             --key "$PRIVATE_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --wait \
             --output-format json)
-          
-          echo "Notarization result:"
+
           echo "$RESULT"
-          
+
           SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
           STATUS=$(echo "$RESULT" | jq -r '.status')
-          
-          echo "Submission ID: $SUBMISSION_ID"
-          echo "Status: $STATUS"
-          
+
           if [ "$STATUS" != "Accepted" ]; then
-            echo ""
-            echo "=== Notarization Failed - Fetching Detailed Log ==="
+            echo "Notarization failed! Fetching log..."
             xcrun notarytool log "$SUBMISSION_ID" \
               --key "$PRIVATE_KEY_PATH" \
               --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
@@ -1025,37 +1037,22 @@ workflows:
             exit 1
           fi
 
-          echo ""
-          echo "=== Stapling Notarization Ticket ==="
-          APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
-          echo "App path: $APP_PATH"
+          echo "Stapling notarization ticket..."
           xcrun stapler staple "$APP_PATH"
 
-          echo ""
-          echo "=== Verifying Notarization ==="
-          spctl -a -vv -t install "$APP_PATH"
-
-          echo ""
-          echo "✓ App notarization complete!"
+          echo "✓ App notarized successfully!"
 
       - name: Create DMG installer
         script: |
           echo "Creating DMG for version: $VERSION"
 
-          # Find the signed app bundle
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
-          echo "Found app at: $APP_PATH"
 
-          # Create DMG output directory
           mkdir -p build/macos/dmg
-
-          # Create DMG using hdiutil
           DMG_NAME="Omi-${VERSION}.dmg"
           DMG_PATH="build/macos/dmg/${DMG_NAME}"
 
-          echo "Creating DMG: $DMG_NAME"
-
-          # Create a temporary directory for DMG contents
+          # Create temporary directory for DMG contents
           TMP_DMG_DIR=$(mktemp -d)
           cp -R "$APP_PATH" "$TMP_DMG_DIR/"
 
@@ -1065,79 +1062,48 @@ workflows:
             -ov -format UDZO \
             "$DMG_PATH"
 
-          # Clean up
           rm -rf "$TMP_DMG_DIR"
 
-          # Sign the DMG with Developer ID
-          echo "Signing DMG with Developer ID..."
+          # Sign DMG
+          echo "Signing DMG..."
           codesign --force --sign "$DEVELOPER_ID_CERT" "$DMG_PATH"
-          
+
           # Verify DMG signature
-          echo "Verifying DMG signature..."
           codesign --verify --verbose "$DMG_PATH"
 
-          echo "DMG created and signed at: $DMG_PATH"
+          echo "✓ DMG created and signed: $DMG_PATH"
           ls -lh "$DMG_PATH"
 
       - name: Notarize DMG
         script: |
-          set -e  # Exit on error
+          set -e
 
-          echo "=== Starting DMG Notarization ==="
           DMG_PATH=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
-          echo "DMG Path: $DMG_PATH"
-          ls -lh "$DMG_PATH"
+          echo "Notarizing DMG: $DMG_PATH"
 
-          echo ""
-          echo "=== App Store Connect Credentials ==="
-          echo "Key ID: $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
-          echo "Private Key variable type: $(if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then echo "File Path"; else echo "Content"; fi)"
-
-          # Check if APP_STORE_CONNECT_PRIVATE_KEY is a file path or content
+          # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
-            # It's a file path reference
             PRIVATE_KEY_PATH="${APP_STORE_CONNECT_PRIVATE_KEY#@file:}"
-            echo "Using existing private key from: $PRIVATE_KEY_PATH"
-            if [ -f "$PRIVATE_KEY_PATH" ]; then
-              echo "✓ Private key file exists"
-              ls -lh "$PRIVATE_KEY_PATH"
-            else
-              echo "✗ ERROR: Private key file not found at $PRIVATE_KEY_PATH"
-              exit 1
-            fi
           else
-            # It's the actual key content, write to file
             mkdir -p ~/private_keys
             PRIVATE_KEY_PATH=~/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_IDENTIFIER}.p8
             echo -e "$APP_STORE_CONNECT_PRIVATE_KEY" > "$PRIVATE_KEY_PATH"
-            echo "Created private key file at: $PRIVATE_KEY_PATH"
-            ls -lh "$PRIVATE_KEY_PATH"
-            echo "First 2 lines of key file:"
-            head -n 2 "$PRIVATE_KEY_PATH"
           fi
 
-          echo ""
-          echo "=== Submitting to Apple Notary Service ==="
           RESULT=$(xcrun notarytool submit "$DMG_PATH" \
             --key "$PRIVATE_KEY_PATH" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --wait \
             --output-format json)
-          
-          echo "Notarization result:"
+
           echo "$RESULT"
-          
+
           SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
           STATUS=$(echo "$RESULT" | jq -r '.status')
-          
-          echo "Submission ID: $SUBMISSION_ID"
-          echo "Status: $STATUS"
-          
+
           if [ "$STATUS" != "Accepted" ]; then
-            echo ""
-            echo "=== DMG Notarization Failed - Fetching Detailed Log ==="
+            echo "DMG notarization failed! Fetching log..."
             xcrun notarytool log "$SUBMISSION_ID" \
               --key "$PRIVATE_KEY_PATH" \
               --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
@@ -1145,17 +1111,10 @@ workflows:
             exit 1
           fi
 
-          echo ""
-          echo "=== Stapling Notarization Ticket ==="
+          echo "Stapling notarization ticket to DMG..."
           xcrun stapler staple "$DMG_PATH"
 
-          echo ""
-          echo "=== Verifying DMG Notarization ==="
-          spctl -a -vv -t install "$DMG_PATH"
-
-          echo ""
-          echo "✓ DMG notarization complete!"
-          echo "DMG is fully signed and notarized: $DMG_PATH"
+          echo "✓ DMG notarized successfully!"
 
       - name: Generate desktop_updater release files
         script: |
@@ -1167,7 +1126,6 @@ workflows:
           echo "Creating desktop_updater archive..."
           dart run desktop_updater:archive macos
 
-          # List the generated files
           echo "Generated files in dist/:"
           ls -lh dist/
 
