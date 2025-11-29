@@ -11,6 +11,12 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
+export 'package:omi/services/sockets/pure_polling.dart';
+export 'package:omi/services/sockets/transcription_polling_service.dart';
+export 'package:omi/services/sockets/stt_result.dart';
+export 'package:omi/services/sockets/stt_response_schema.dart';
+export 'package:omi/services/sockets/audio_transcoder.dart';
+
 abstract interface class ITransctiptSegmentSocketServiceListener {
   void onMessageEventReceived(MessageEvent event);
 
@@ -39,7 +45,7 @@ enum SocketServiceState {
 }
 
 class TranscriptSegmentSocketService implements IPureSocketListener {
-  late PureSocket _socket;
+  late IPureSocket _socket;
   final Map<Object, ITransctiptSegmentSocketServiceListener> _listeners = {};
 
   SocketServiceState get state =>
@@ -51,6 +57,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool includeSpeechProfile;
   String? source;
 
+  /// Create with default WebSocket connection
   TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec,
@@ -70,6 +77,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
 
     _socket = PureSocket(url);
+    _socket.setListener(this);
+  }
+
+  /// Create with custom socket (e.g., PurePollingSocket for HTTP-based STT)
+  TranscriptSegmentSocketService.withSocket(
+    this.sampleRate,
+    this.codec,
+    this.language,
+    IPureSocket socket, {
+    this.includeSpeechProfile = false,
+    this.source,
+  }) {
+    _socket = socket;
     _socket.setListener(this);
   }
 

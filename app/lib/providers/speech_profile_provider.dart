@@ -18,7 +18,7 @@ import 'package:omi/utils/audio/wav_bytes.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
-    implements IDeviceServiceSubsciption, ITransctipSegmentSocketServiceListener {
+    implements IDeviceServiceSubsciption, ITransctiptSegmentSocketServiceListener {
   DeviceProvider? deviceProvider;
   bool? permissionEnabled;
   bool loading = false;
