@@ -792,6 +792,20 @@ workflows:
         script: |
           cd macos && pod install --repo-update
 
+      - name: Import Sparkle signing key
+        script: |
+          echo "Importing Sparkle EdDSA private key into Keychain..."
+
+          # The private key should be stored in Codemagic environment variables as SPARKLE_PRIVATE_KEY
+          # Import it into the Keychain using Sparkle's tool
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "$SPARKLE_PRIVATE_KEY" | /Users/builder/clone/app/macos/Pods/Sparkle/bin/generate_keys --import-private-key
+            echo "✓ Sparkle private key imported successfully"
+          else
+            echo "⚠ WARNING: SPARKLE_PRIVATE_KEY environment variable not set"
+            echo "Signing will fail without this key!"
+          fi
+
       - name: Clean up entitlements (remove Mac App Store-only capabilities)
         script: |
           echo "Cleaning up entitlements files before build..."
@@ -1191,18 +1205,36 @@ workflows:
 
           echo "✓ DMG notarized successfully!"
 
-      - name: Generate desktop_updater release files
+      - name: Create and sign Sparkle-compatible ZIP
         script: |
-          echo "Generating desktop_updater release files for macOS..."
-          dart run desktop_updater:release macos
+          echo "Creating Sparkle ZIP for version: $VERSION"
 
-      - name: Create desktop_updater archive
-        script: |
-          echo "Creating desktop_updater archive..."
-          dart run desktop_updater:archive macos
+          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release -name "Omi.app" -type d | head -1)
+          ZIP_NAME="${VERSION}-macos.zip"
+          DIST_DIR="dist/${VERSION}-macos"
+          WORKING_DIR=$(pwd)
 
-          echo "Generated files in dist/:"
-          ls -lh dist/
+          mkdir -p "$DIST_DIR"
+
+          # Create ZIP that Sparkle can use (must contain just the app)
+          cd "$(dirname "$APP_PATH")"
+          ditto -c -k --sequesterRsrc --keepParent "Omi.app" "$(pwd)/$ZIP_NAME"
+
+          # Move to dist folder
+          mv "$ZIP_NAME" "$DIST_DIR/"
+
+          echo "Created Sparkle ZIP: $DIST_DIR/$ZIP_NAME"
+
+          # Sign the ZIP file for Sparkle
+          cd "$WORKING_DIR"
+          echo "Signing ZIP with Sparkle..."
+          SIGNATURE=$(dart run auto_updater:sign_update "$DIST_DIR/$ZIP_NAME" 2>&1 | tail -1)
+
+          # Save signature to a file (will be used by backend or can be manually added)
+          echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
+          echo "EdDSA Signature: $SIGNATURE"
+
+          ls -lh "$DIST_DIR"
 
       - name: Set up Google Cloud SDK
         script: |
@@ -1252,6 +1284,9 @@ workflows:
             CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
           fi
 
+          # Read the EdDSA signature for Sparkle
+          SIGNATURE=$(cat "dist/${VERSION}-${PLATFORM}/signature.txt" 2>/dev/null || echo "")
+
           # Create release notes
           cat > /tmp/release_notes.md <<EOF
           ## What's Changed
@@ -1264,6 +1299,7 @@ workflows:
           changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
           mandatory: false
           minimum_app_version: 1.0.70
+          edSignature: $SIGNATURE
           KEY_VALUE_END -->
           EOF
 

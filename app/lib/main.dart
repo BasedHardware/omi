@@ -161,9 +161,9 @@ Future _init() async {
     return true;
   };
 
-  // Initialize desktop updater for desktop platforms
+  // Initialize desktop updater
   if (PlatformService.isDesktop) {
-    DesktopUpdateService().initialize();
+    await DesktopUpdateService().initialize();
   }
 
   await ServiceManager.instance().start();

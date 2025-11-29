@@ -1,19 +1,18 @@
 import 'dart:io';
-import 'package:desktop_updater/desktop_updater.dart';
-import 'package:desktop_updater/updater_controller.dart';
+import 'package:auto_updater/auto_updater.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-/// Service to manage desktop application updates for macOS/Windows/Linux
+/// Service to manage desktop application updates using auto_updater
+/// Uses native Sparkle (macOS) and WinSparkle (Windows)
 class DesktopUpdateService {
   static final DesktopUpdateService _instance = DesktopUpdateService._internal();
   factory DesktopUpdateService() => _instance;
   DesktopUpdateService._internal();
 
-  DesktopUpdaterController? _controller;
+  bool _initialized = false;
 
-  /// Get the platform name for the current OS
   String get _platform {
     if (Platform.isMacOS) return 'macos';
     if (Platform.isWindows) return 'windows';
@@ -21,50 +20,47 @@ class DesktopUpdateService {
     return 'unknown';
   }
 
-  /// Initialize the desktop updater controller
-  /// Should be called once during app initialization
-  void initialize() {
-    // Only initialize on desktop platforms
+  /// Initialize auto_updater
+  Future<void> initialize() async {
     if (!PlatformService.isDesktop) {
       Logger.debug('Desktop updater not supported on this platform');
       return;
     }
 
+    if (_initialized) {
+      Logger.debug('Desktop updater already initialized');
+      return;
+    }
+
     try {
       final baseUrl = Env.apiBaseUrl;
-      final updateUrl = Uri.parse('$baseUrl/v2/desktop/app-archive.json?platform=$_platform');
+      final feedURL = '${baseUrl}v2/desktop/appcast.xml?platform=$_platform';
 
-      _controller = DesktopUpdaterController(
-        appArchiveUrl: updateUrl,
-        localization: const DesktopUpdateLocalization(
-          updateAvailableText: 'A new version of Omi is available',
-          newVersionAvailableText: 'New Version Available',
-          newVersionLongText: 'A new version of Omi is available. Would you like to update now?',
-          restartText: 'Restart Now',
-          warningTitleText: 'Update Required',
-          restartWarningText: 'This update requires the app to restart. Any unsaved changes will be lost.',
-          warningCancelText: 'Later',
-          warningConfirmText: 'Update Now',
-          skipThisVersionText: 'Skip This Version',
-          downloadText: 'Download Update',
-        ),
-      );
+      // Configure auto_updater
+      await autoUpdater.setFeedURL(feedURL);
+      await autoUpdater.checkForUpdates();
+      await autoUpdater.setScheduledCheckInterval(21600); // 6 hours
 
-      Logger.debug('Desktop updater initialized for platform: $_platform');
+      _initialized = true;
+      Logger.info('Auto updater initialized: $feedURL');
     } catch (e, stackTrace) {
-      Logger.handle(e, stackTrace, message: 'Failed to initialize desktop updater');
+      Logger.handle(e, stackTrace, message: 'Failed to initialize auto updater');
     }
   }
 
-  /// Get the updater controller
-  /// Returns null if not initialized or not on a desktop platform
-  DesktopUpdaterController? get controller => _controller;
+  /// Manually check for updates
+  Future<void> checkForUpdates() async {
+    if (!_initialized) {
+      Logger.warning('Auto updater not initialized');
+      return;
+    }
 
-  /// Check if desktop updates are available
-  bool get isAvailable => _controller != null;
-
-  /// Dispose the controller when no longer needed
-  void dispose() {
-    _controller = null;
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (e, stackTrace) {
+      Logger.handle(e, stackTrace, message: 'Failed to check for updates');
+    }
   }
+
+  bool get isAvailable => _initialized;
 }
