@@ -864,23 +864,34 @@ workflows:
           echo "Installing Developer ID provisioning profile..."
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
 
-          # Install the profile
-          echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile"
+          # Decode and save the provisioning profile
+          echo "$MACOS_DEVELOPER_ID_PROFILE" | base64 --decode > /tmp/developer_id.provisionprofile
 
-          # Get the profile UUID for later use
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null)
+          # Extract the plist from the CMS-signed provisioning profile
+          security cms -D -i /tmp/developer_id.provisionprofile > /tmp/profile.plist
+
+          # Get the profile UUID
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
           echo "Profile UUID: $PROFILE_UUID"
+
+          # Now install it with the UUID as the filename (this is what Xcode expects)
+          cp /tmp/developer_id.provisionprofile "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
+
+          # Export UUID for later use
           echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
 
-          # Verify
+          # Display profile details
           echo ""
           echo "Profile details:"
-          /usr/libexec/PlistBuddy -c "Print :Name" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null || echo "Could not read profile name"
-          /usr/libexec/PlistBuddy -c "Print :TeamName" "$HOME/Library/MobileDevice/Provisioning Profiles/developer_id.provisionprofile" 2>/dev/null || echo "Could not read team name"
+          echo "Name: $(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist)"
+          echo "TeamName: $(/usr/libexec/PlistBuddy -c "Print :TeamName" /tmp/profile.plist)"
+          echo "TeamIdentifier: $(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/profile.plist)"
+          echo "AppIDName: $(/usr/libexec/PlistBuddy -c "Print :AppIDName" /tmp/profile.plist)"
+          echo "Expiration: $(/usr/libexec/PlistBuddy -c "Print :ExpirationDate" /tmp/profile.plist)"
 
-          # List all profiles
+          # List installed profiles
           echo ""
-          echo "Available provisioning profiles:"
+          echo "Installed provisioning profiles:"
           ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
 
       - name: Configure Xcode project for Developer ID signing
