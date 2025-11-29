@@ -30,6 +30,7 @@ from routers import (
     task_integrations,
     other,
     developer,
+    updates,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -62,6 +63,7 @@ app.include_router(trends.router)
 app.include_router(other.router)
 
 app.include_router(firmware.router)
+app.include_router(updates.router)
 app.include_router(sync.router)
 
 app.include_router(apps.router)
