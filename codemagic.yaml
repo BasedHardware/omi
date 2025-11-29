@@ -983,15 +983,15 @@ workflows:
             <string>production</string>
             <key>keychain-access-groups</key>
             <array>
-              <string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
-              <string>$(AppIdentifierPrefix)com.friend-app-with-wearable.ios12</string>
+              <string>9536L8KLMP.com.google.GIDSignIn</string>
+              <string>9536L8KLMP.com.friend-app-with-wearable.ios12</string>
             </array>
           </dict>
           </plist>
           ENTITLEMENTS_EOF
 
           echo ""
-          echo "=== Notarization entitlements file ==="
+          echo "=== Notarization entitlements file (with Team ID hardcoded) ==="
           cat /tmp/notarization.entitlements
 
           # Sign ONLY the top-level app bundle with hardened runtime
