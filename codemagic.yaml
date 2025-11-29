@@ -882,24 +882,18 @@ workflows:
           # Configure Xcode project to use Developer ID certificate directly
           # This ensures the build produces correctly signed binaries with timestamps
           
-          # Get team ID from certificate
-          TEAM_ID=$(security find-certificate -c "Developer ID Application" -p | openssl x509 -noout -subject | grep -oE 'OU=[A-Z0-9]+' | head -1 | cut -d= -f2)
-          echo "Team ID: $TEAM_ID"
-          
           # Update project.pbxproj to use Developer ID
-          # Set CODE_SIGN_STYLE to Manual and specify the certificate
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
           
           # Add OTHER_CODE_SIGN_FLAGS for timestamp (required for notarization)
-          # This makes Xcode include --timestamp during signing
           if ! grep -q "OTHER_CODE_SIGN_FLAGS" Runner.xcodeproj/project.pbxproj; then
-            sed -i '' '/CODE_SIGN_IDENTITY/a\
-\				OTHER_CODE_SIGN_FLAGS = "--timestamp";
-' Runner.xcodeproj/project.pbxproj
+            # Use awk to add after CODE_SIGN_IDENTITY lines
+            awk '/CODE_SIGN_IDENTITY/ && !/OTHER_CODE_SIGN_FLAGS/ {print; print "\t\t\t\tOTHER_CODE_SIGN_FLAGS = \"--timestamp\";"; next} 1' \
+              Runner.xcodeproj/project.pbxproj > /tmp/project.pbxproj.tmp && \
+              mv /tmp/project.pbxproj.tmp Runner.xcodeproj/project.pbxproj
           fi
           
           cd ..
-          
           echo "Xcode project configured for Developer ID signing"
 
       - name: Flutter build macOS
