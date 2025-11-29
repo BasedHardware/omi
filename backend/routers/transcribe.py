@@ -1193,6 +1193,7 @@ async def _listen(
                 elif message.get("text") is not None:
                     try:
                         json_data = json.loads(message.get("text"))
+                        print(json_data)
                         if json_data.get('type') == 'image_chunk':
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers

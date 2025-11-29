@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/services/sockets/composite_transcription_socket.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
 enum SttRequestBodyType {
@@ -305,8 +307,306 @@ class SchemaBasedSttProvider implements ISttProvider {
   }
 }
 
-class PollingTranscriptServiceFactory {
-  static PurePollingSocket _createSocket(
+class TranscriptServiceFactory {
+  TranscriptServiceFactory._();
+
+  static TranscriptSegmentSocketService createDefault(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    bool includeSpeechProfile = true,
+    String? source,
+  }) {
+    return ConversationTranscriptSegmentSocketService.create(
+      sampleRate,
+      codec,
+      language,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createSpeechProfile(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    String? source,
+  }) {
+    return SpeechProfileTranscriptSegmentSocketService.create(
+      sampleRate,
+      codec,
+      language,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createOpenAI(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiKey,
+    String model = 'whisper-1',
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    return _createPollingService(
+      sampleRate,
+      codec,
+      language,
+      _createOpenAISocket(sampleRate, codec, language,
+          apiKey: apiKey, model: model, bufferDuration: bufferDuration, transcoder: transcoder),
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createDeepgram(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiKey,
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    return _createPollingService(
+      sampleRate,
+      codec,
+      language,
+      _createDeepgramSocket(sampleRate, codec, language,
+          apiKey: apiKey, bufferDuration: bufferDuration, transcoder: transcoder),
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createFalAI(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiKey,
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    return _createPollingService(
+      sampleRate,
+      codec,
+      language,
+      _createFalAISocket(sampleRate, codec, language,
+          apiKey: apiKey, bufferDuration: bufferDuration, transcoder: transcoder),
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createGemini(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiKey,
+    String model = 'gemini-2.0-flash',
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    return _createPollingService(
+      sampleRate,
+      codec,
+      language,
+      _createGeminiSocket(sampleRate, codec, language,
+          apiKey: apiKey, model: model, bufferDuration: bufferDuration, transcoder: transcoder),
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createSchemaBased(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiUrl,
+    required SttResponseSchema schema,
+    Map<String, String> headers = const {},
+    Map<String, String> fields = const {},
+    String audioFieldName = 'audio',
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    return _createPollingService(
+      sampleRate,
+      codec,
+      language,
+      _createSchemaBasedSocket(
+        sampleRate,
+        codec,
+        apiUrl: apiUrl,
+        schema: schema,
+        headers: headers,
+        fields: fields,
+        audioFieldName: audioFieldName,
+        bufferDuration: bufferDuration,
+        transcoder: transcoder,
+      ),
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createCompositeWithOpenAI(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String openAiApiKey,
+    String openAiModel = 'whisper-1',
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    final primarySocket = _createOpenAISocket(
+      sampleRate,
+      codec,
+      language,
+      apiKey: openAiApiKey,
+      model: openAiModel,
+      bufferDuration: bufferDuration,
+      transcoder: transcoder,
+    );
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: primarySocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createCompositeWithDeepgram(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String deepgramApiKey,
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    final primarySocket = _createDeepgramSocket(
+      sampleRate,
+      codec,
+      language,
+      apiKey: deepgramApiKey,
+      bufferDuration: bufferDuration,
+      transcoder: transcoder,
+    );
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: primarySocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createCompositeCustom(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required IPureSocket primarySocket,
+    required IPureSocket secondarySocket,
+    bool includeSpeechProfile = false,
+    String? source,
+    String? suggestedTranscriptType = 'suggested_transcript',
+  }) {
+    final compositeSocket = CompositeTranscriptionSocket(
+      primarySocket: primarySocket,
+      secondarySocket: secondarySocket,
+      suggestedTranscriptType: suggestedTranscriptType,
+    );
+    return TranscriptSegmentSocketService.withSocket(
+      sampleRate,
+      codec,
+      language,
+      compositeSocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createWithSocket(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language,
+    IPureSocket socket, {
+    bool includeSpeechProfile = false,
+    String? source,
+  }) {
+    return TranscriptSegmentSocketService.withSocket(
+      sampleRate,
+      codec,
+      language,
+      socket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService _createCompositeService(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required IPureSocket primarySocket,
+    bool includeSpeechProfile = false,
+    String? source,
+  }) {
+    final secondaryService = ConversationTranscriptSegmentSocketService.create(
+      sampleRate,
+      codec,
+      language,
+      source: source,
+    );
+    final compositeSocket = CompositeTranscriptionSocket(
+      primarySocket: primarySocket,
+      secondarySocket: secondaryService.socket,
+    );
+    return TranscriptSegmentSocketService.withSocket(
+      sampleRate,
+      codec,
+      language,
+      compositeSocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService _createPollingService(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language,
+    PurePollingSocket socket, {
+    bool includeSpeechProfile = false,
+    String? source,
+  }) {
+    return TranscriptSegmentSocketService.withSocket(
+      sampleRate,
+      codec,
+      language,
+      socket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static PurePollingSocket _createPollingSocket(
     int sampleRate,
     BleAudioCodec codec,
     ISttProvider provider, {
@@ -325,25 +625,7 @@ class PollingTranscriptServiceFactory {
     );
   }
 
-  static TranscriptSegmentSocketService _createService(
-    int sampleRate,
-    BleAudioCodec codec,
-    String language,
-    PurePollingSocket socket, {
-    bool includeSpeechProfile = false,
-    String? source,
-  }) {
-    return TranscriptSegmentSocketService.withSocket(
-      sampleRate,
-      codec,
-      language,
-      socket,
-      includeSpeechProfile: includeSpeechProfile,
-      source: source,
-    );
-  }
-
-  static PurePollingSocket createOpenAISocket(
+  static PurePollingSocket _createOpenAISocket(
     int sampleRate,
     BleAudioCodec codec,
     String language, {
@@ -352,7 +634,7 @@ class PollingTranscriptServiceFactory {
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
   }) =>
-      _createSocket(
+      _createPollingSocket(
         sampleRate,
         codec,
         SchemaBasedSttProvider.openAI(apiKey: apiKey, model: model, language: language),
@@ -361,28 +643,7 @@ class PollingTranscriptServiceFactory {
         transcoder: transcoder,
       );
 
-  static TranscriptSegmentSocketService createOpenAIService(
-    int sampleRate,
-    BleAudioCodec codec,
-    String language, {
-    required String apiKey,
-    String model = 'whisper-1',
-    bool includeSpeechProfile = false,
-    String? source,
-    Duration bufferDuration = const Duration(seconds: 5),
-    IAudioTranscoder? transcoder,
-  }) =>
-      _createService(
-        sampleRate,
-        codec,
-        language,
-        createOpenAISocket(sampleRate, codec, language,
-            apiKey: apiKey, model: model, bufferDuration: bufferDuration, transcoder: transcoder),
-        includeSpeechProfile: includeSpeechProfile,
-        source: source,
-      );
-
-  static PurePollingSocket createDeepgramSocket(
+  static PurePollingSocket _createDeepgramSocket(
     int sampleRate,
     BleAudioCodec codec,
     String language, {
@@ -390,7 +651,7 @@ class PollingTranscriptServiceFactory {
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
   }) =>
-      _createSocket(
+      _createPollingSocket(
         sampleRate,
         codec,
         SchemaBasedSttProvider.deepgram(apiKey: apiKey, language: language),
@@ -399,27 +660,7 @@ class PollingTranscriptServiceFactory {
         transcoder: transcoder,
       );
 
-  static TranscriptSegmentSocketService createDeepgramService(
-    int sampleRate,
-    BleAudioCodec codec,
-    String language, {
-    required String apiKey,
-    bool includeSpeechProfile = false,
-    String? source,
-    Duration bufferDuration = const Duration(seconds: 5),
-    IAudioTranscoder? transcoder,
-  }) =>
-      _createService(
-        sampleRate,
-        codec,
-        language,
-        createDeepgramSocket(sampleRate, codec, language,
-            apiKey: apiKey, bufferDuration: bufferDuration, transcoder: transcoder),
-        includeSpeechProfile: includeSpeechProfile,
-        source: source,
-      );
-
-  static PurePollingSocket createFalAISocket(
+  static PurePollingSocket _createFalAISocket(
     int sampleRate,
     BleAudioCodec codec,
     String language, {
@@ -427,7 +668,7 @@ class PollingTranscriptServiceFactory {
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
   }) =>
-      _createSocket(
+      _createPollingSocket(
         sampleRate,
         codec,
         SchemaBasedSttProvider.falAI(apiKey: apiKey, language: language),
@@ -436,27 +677,7 @@ class PollingTranscriptServiceFactory {
         transcoder: transcoder,
       );
 
-  static TranscriptSegmentSocketService createFalAIService(
-    int sampleRate,
-    BleAudioCodec codec,
-    String language, {
-    required String apiKey,
-    bool includeSpeechProfile = false,
-    String? source,
-    Duration bufferDuration = const Duration(seconds: 5),
-    IAudioTranscoder? transcoder,
-  }) =>
-      _createService(
-        sampleRate,
-        codec,
-        language,
-        createFalAISocket(sampleRate, codec, language,
-            apiKey: apiKey, bufferDuration: bufferDuration, transcoder: transcoder),
-        includeSpeechProfile: includeSpeechProfile,
-        source: source,
-      );
-
-  static PurePollingSocket createGeminiSocket(
+  static PurePollingSocket _createGeminiSocket(
     int sampleRate,
     BleAudioCodec codec,
     String language, {
@@ -465,7 +686,7 @@ class PollingTranscriptServiceFactory {
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
   }) =>
-      _createSocket(
+      _createPollingSocket(
         sampleRate,
         codec,
         SchemaBasedSttProvider.gemini(apiKey: apiKey, model: model, language: language),
@@ -474,28 +695,7 @@ class PollingTranscriptServiceFactory {
         transcoder: transcoder,
       );
 
-  static TranscriptSegmentSocketService createGeminiService(
-    int sampleRate,
-    BleAudioCodec codec,
-    String language, {
-    required String apiKey,
-    String model = 'gemini-2.0-flash',
-    bool includeSpeechProfile = false,
-    String? source,
-    Duration bufferDuration = const Duration(seconds: 5),
-    IAudioTranscoder? transcoder,
-  }) =>
-      _createService(
-        sampleRate,
-        codec,
-        language,
-        createGeminiSocket(sampleRate, codec, language,
-            apiKey: apiKey, model: model, bufferDuration: bufferDuration, transcoder: transcoder),
-        includeSpeechProfile: includeSpeechProfile,
-        source: source,
-      );
-
-  static PurePollingSocket createSchemaBasedSocket(
+  static PurePollingSocket _createSchemaBasedSocket(
     int sampleRate,
     BleAudioCodec codec, {
     required String apiUrl,
@@ -506,7 +706,7 @@ class PollingTranscriptServiceFactory {
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
   }) =>
-      _createSocket(
+      _createPollingSocket(
         sampleRate,
         codec,
         SchemaBasedSttProvider(
@@ -519,38 +719,5 @@ class PollingTranscriptServiceFactory {
         serviceId: apiUrl,
         bufferDuration: bufferDuration,
         transcoder: transcoder,
-      );
-
-  static TranscriptSegmentSocketService createSchemaBasedService(
-    int sampleRate,
-    BleAudioCodec codec,
-    String language, {
-    required String apiUrl,
-    required SttResponseSchema schema,
-    Map<String, String> headers = const {},
-    Map<String, String> fields = const {},
-    String audioFieldName = 'audio',
-    bool includeSpeechProfile = false,
-    String? source,
-    Duration bufferDuration = const Duration(seconds: 5),
-    IAudioTranscoder? transcoder,
-  }) =>
-      _createService(
-        sampleRate,
-        codec,
-        language,
-        createSchemaBasedSocket(
-          sampleRate,
-          codec,
-          apiUrl: apiUrl,
-          schema: schema,
-          headers: headers,
-          fields: fields,
-          audioFieldName: audioFieldName,
-          bufferDuration: bufferDuration,
-          transcoder: transcoder,
-        ),
-        includeSpeechProfile: includeSpeechProfile,
-        source: source,
       );
 }

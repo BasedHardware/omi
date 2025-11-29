@@ -62,7 +62,7 @@ class SocketServicePool extends ISocketService {
       // new socket
       await _socket?.stop();
 
-      _socket = ConversationTranscriptSegmentSocketService.create(sampleRate, codec, language, source: source);
+      _socket = TranscriptServiceFactory.createDefault(sampleRate, codec, language, source: source);
       await _socket?.start();
       if (_socket?.state != SocketServiceState.connected) {
         return null;
