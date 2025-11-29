@@ -1274,7 +1274,7 @@ workflows:
 
           ZIP_NAME="${VERSION}-macos.zip"
           DIST_DIR="dist/${VERSION}-macos"
-          WORKING_DIR=$(pwd)
+          APP_DIR=$(pwd)
 
           mkdir -p "$DIST_DIR"
 
@@ -1282,17 +1282,39 @@ workflows:
           cd "$(dirname "$APP_PATH")"
           ditto -c -k --sequesterRsrc --keepParent "Omi.app" "$(pwd)/$ZIP_NAME"
 
-          # Move to dist folder
-          mv "$ZIP_NAME" "$DIST_DIR/"
+          # Move to dist folder (using absolute path)
+          mv "$ZIP_NAME" "$APP_DIR/$DIST_DIR/"
 
-          echo "Created Sparkle ZIP: $DIST_DIR/$ZIP_NAME"
+          echo "Created Sparkle ZIP: $APP_DIR/$DIST_DIR/$ZIP_NAME"
 
           # Sign the ZIP file for Sparkle
-          cd "$WORKING_DIR"
+          # IMPORTANT: Must run from app directory where macos/Pods/Sparkle exists
+          cd "$APP_DIR"
           echo "Signing ZIP with Sparkle..."
-          SIGNATURE=$(dart run auto_updater:sign_update "$DIST_DIR/$ZIP_NAME" 2>&1 | tail -1)
 
-          # Save signature to a file (will be used by backend or can be manually added)
+          # Verify Sparkle binary exists
+          if [ ! -f "macos/Pods/Sparkle/bin/sign_update" ]; then
+            echo "ERROR: Sparkle sign_update binary not found at macos/Pods/Sparkle/bin/sign_update"
+            echo "Current directory: $(pwd)"
+            ls -la macos/Pods/Sparkle/bin/ || true
+            exit 1
+          fi
+
+          # Run signing (capture full output for debugging)
+          SIGN_OUTPUT=$(dart run auto_updater:sign_update "$DIST_DIR/$ZIP_NAME" 2>&1)
+          echo "Sign output: $SIGN_OUTPUT"
+
+          # Extract the signature value from sparkle:edSignature="VALUE" format
+          # Expected format: sparkle:edSignature="ABC123..." length="12345"
+          SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -oE 'sparkle:edSignature="[^"]+"' | sed 's/sparkle:edSignature="//;s/"$//')
+
+          if [ -z "$SIGNATURE" ]; then
+            echo "ERROR: Failed to extract signature from sign_update output"
+            echo "Full output was: $SIGN_OUTPUT"
+            exit 1
+          fi
+
+          # Save signature to a file
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
           echo "EdDSA Signature: $SIGNATURE"
 
