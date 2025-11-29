@@ -13,18 +13,18 @@ enum SttRequestBodyType {
 }
 
 class SttFileUploadConfig {
-  final String initiateUrl;
-  final Map<String, String> initiateHeaders;
-  final Map<String, dynamic> initiateBody;
+  final String fileUploadUrl;
+  final Map<String, String> fileUploadHeaders;
+  final Map<String, dynamic> fileUploadBody;
   final String uploadUrlPath;
   final String fileUrlPath;
   final String uploadContentType;
   final String uploadMethod;
 
   const SttFileUploadConfig({
-    required this.initiateUrl,
-    required this.initiateHeaders,
-    required this.initiateBody,
+    required this.fileUploadUrl,
+    required this.fileUploadHeaders,
+    required this.fileUploadBody,
     this.uploadUrlPath = 'upload_url',
     this.fileUrlPath = 'file_url',
     this.uploadContentType = 'audio/wav',
@@ -33,12 +33,12 @@ class SttFileUploadConfig {
 
   static SttFileUploadConfig falAI({required String apiKey}) {
     return SttFileUploadConfig(
-      initiateUrl: 'https://rest.alpha.fal.ai/storage/upload/initiate',
-      initiateHeaders: {
+      fileUploadUrl: 'https://rest.alpha.fal.ai/storage/upload/initiate',
+      fileUploadHeaders: {
         'Authorization': 'Key $apiKey',
         'Content-Type': 'application/json',
       },
-      initiateBody: {
+      fileUploadBody: {
         'content_type': 'audio/wav',
         'file_name': 'audio.wav',
       },
@@ -51,9 +51,9 @@ class SttFileUploadConfig {
 
   factory SttFileUploadConfig.fromJson(Map<String, dynamic> json) {
     return SttFileUploadConfig(
-      initiateUrl: json['initiate_url'] as String,
-      initiateHeaders: Map<String, String>.from(json['initiate_headers'] ?? {}),
-      initiateBody: Map<String, dynamic>.from(json['initiate_body'] ?? {}),
+      fileUploadUrl: json['file_upload_url'] as String,
+      fileUploadHeaders: Map<String, String>.from(json['file_upload_headers'] ?? {}),
+      fileUploadBody: Map<String, dynamic>.from(json['file_upload_body'] ?? {}),
       uploadUrlPath: json['upload_url_path'] as String? ?? 'upload_url',
       fileUrlPath: json['file_url_path'] as String? ?? 'file_url',
       uploadContentType: json['upload_content_type'] as String? ?? 'audio/wav',
@@ -62,9 +62,9 @@ class SttFileUploadConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'initiate_url': initiateUrl,
-        'initiate_headers': initiateHeaders,
-        'initiate_body': initiateBody,
+        'file_upload_url': fileUploadUrl,
+        'file_upload_headers': fileUploadHeaders,
+        'file_upload_body': fileUploadBody,
         'upload_url_path': uploadUrlPath,
         'file_url_path': fileUrlPath,
         'upload_content_type': uploadContentType,
@@ -198,12 +198,12 @@ class SchemaBasedSttProvider implements ISttProvider {
     if (fileUploadConfig == null) return null;
 
     try {
-      // Step 1: Initiate upload to get presigned URL
+      // Step 1: Upload to get presigned URL
       final initResponse = await _client
           .post(
-            Uri.parse(fileUploadConfig!.initiateUrl),
-            headers: fileUploadConfig!.initiateHeaders,
-            body: jsonEncode(fileUploadConfig!.initiateBody),
+            Uri.parse(fileUploadConfig!.fileUploadUrl),
+            headers: fileUploadConfig!.fileUploadHeaders,
+            body: jsonEncode(fileUploadConfig!.fileUploadBody),
           )
           .timeout(const Duration(seconds: 30));
 
