@@ -796,7 +796,21 @@ workflows:
         script: |
           echo "Cleaning up entitlements files before build..."
 
-          # Process all Release entitlements files
+          # List all entitlements files found
+          echo "Searching for Release entitlements files..."
+          find macos -name "*Release*.entitlements" -type f
+          echo ""
+
+          # Explicitly check for prod entitlements file (used by prod flavor)
+          PROD_ENTITLEMENTS="macos/Runner/RunnerRelease-prod.entitlements"
+          if [ -f "$PROD_ENTITLEMENTS" ]; then
+            echo "✓ Found prod entitlements file: $PROD_ENTITLEMENTS"
+          else
+            echo "⚠ WARNING: Prod entitlements file not found: $PROD_ENTITLEMENTS"
+          fi
+          echo ""
+
+          # Process all Release entitlements files (including -prod variants)
           find macos -name "*Release*.entitlements" -type f | while read entitlements_file; do
             echo "Processing: $entitlements_file"
 
@@ -815,10 +829,13 @@ workflows:
               /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed get-task-allow" || true
             fi
 
-            # Add hardened runtime entitlements (if not present)
-            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || true
+            # Add hardened runtime entitlements (Set instead of Add to handle existing keys)
+            /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || true
 
             echo "  Final entitlements:"
             cat "$entitlements_file"
