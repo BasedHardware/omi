@@ -10,13 +10,14 @@ import {
   ConversationCategoriesAnalytics,
 } from '@/src/lib/api/admin';
 import {
-  Treemap,
   ResponsiveContainer,
   Tooltip,
-  PieChart,
-  Pie,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Cell,
-  Legend,
 } from 'recharts';
 
 interface ConversationCategoriesChartProps {
@@ -80,48 +81,6 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
   return null;
 };
 
-const RADIAN = Math.PI / 180;
-
-interface LabelProps {
-  cx: number;
-  cy: number;
-  midAngle: number;
-  innerRadius: number;
-  outerRadius: number;
-  percent: number;
-  name: string;
-  value: number;
-}
-
-const renderCustomizedLabel = ({
-  cx,
-  cy,
-  midAngle,
-  innerRadius,
-  outerRadius,
-  percent,
-  name,
-  value,
-}: LabelProps) => {
-  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-  if (percent < 0.05) return null; // Don't show label for small slices
-
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="white"
-      textAnchor="middle"
-      dominantBaseline="central"
-      className="text-xs font-medium"
-    >
-      {value}
-    </text>
-  );
-};
 
 export default function ConversationCategoriesChart({
   adminKey,
@@ -206,62 +165,30 @@ export default function ConversationCategoriesChart({
         <Card className="p-6">
           <h3 className="mb-6 text-lg font-semibold">Categories Breakdown</h3>
 
-          {/* Pie Chart */}
-          <div className="h-[400px] w-full">
+          {/* Horizontal Bar Chart */}
+          <div style={{ height: `${Math.max(400, chartData.length * 40)}px` }} className="w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={renderCustomizedLabel}
-                  outerRadius={150}
-                  dataKey="value"
-                >
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                <XAxis type="number" />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={90}
+                  tick={{ fontSize: 12 }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend
-                  layout="horizontal"
-                  verticalAlign="bottom"
-                  align="center"
-                  wrapperStyle={{ paddingTop: '20px' }}
-                  formatter={(value, entry) => {
-                    const item = chartData.find((d) => d.name === value);
-                    return (
-                      <span className="text-sm">
-                        {value} ({item?.percentage}%)
-                      </span>
-                    );
-                  }}
-                />
-              </PieChart>
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-          </div>
-
-          {/* Stats Table */}
-          <div className="mt-8 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {chartData.slice(0, 9).map((item, index) => (
-              <div
-                key={item.name}
-                className="flex items-center gap-3 rounded-lg border p-3"
-              >
-                <div
-                  className="h-4 w-4 rounded-full"
-                  style={{ backgroundColor: item.fill }}
-                />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{item.name}</p>
-                  <p className="text-xs text-neutral-500">
-                    {item.value.toLocaleString()} conversations
-                  </p>
-                </div>
-                <span className="text-sm font-semibold">{item.percentage}%</span>
-              </div>
-            ))}
           </div>
         </Card>
       ) : (
