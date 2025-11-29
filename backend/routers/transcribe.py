@@ -78,8 +78,12 @@ router = APIRouter()
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 
 
+class CustomSttMode(str, Enum):
+    disabled = "disabled"
+    enabled = "enabled"
+
+
 class AACDecoder:
-    """AAC decoder with persistent codec context for true streaming."""
 
     def __init__(self, uid: str = '', session_id: str = '', sample_rate: int = 16000, channels: int = 1):
         self.uid = uid
@@ -145,6 +149,7 @@ async def _listen(
     stt_service: Optional[STTService] = None,
     conversation_timeout: int = 120,
     source: Optional[str] = None,
+    custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
 ):
     session_id = str(uuid.uuid4())
     print(
@@ -157,7 +162,10 @@ async def _listen(
         include_speech_profile,
         stt_service,
         conversation_timeout,
+        f'custom_stt={custom_stt_mode}',
     )
+
+    use_custom_stt = custom_stt_mode == CustomSttMode.enabled
 
     try:
         await websocket.accept()
@@ -169,9 +177,8 @@ async def _listen(
         await websocket.close(code=1008, reason="Bad uid")
         return
 
-    user_has_credits = has_transcription_credits(uid)
+    user_has_credits = True if use_custom_stt else has_transcription_credits(uid)
     if not user_has_credits:
-        # Send credit limit notification (with Redis caching to prevent spam)
         try:
             await send_credit_limit_notification(uid)
         except Exception as e:
@@ -234,7 +241,9 @@ async def _listen(
             if not websocket_active:
                 break
 
-            # Record usages
+            if use_custom_stt:
+                continue
+
             if last_usage_record_timestamp:
                 current_time = time.time()
                 transcription_seconds = int(current_time - last_usage_record_timestamp)
@@ -246,15 +255,13 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            # Send credit limit notification
-            if not has_transcription_credits(uid):
+            if not use_custom_stt and not has_transcription_credits(uid):
                 user_has_credits = False
                 try:
                     await send_credit_limit_notification(uid)
                 except Exception as e:
                     print(f"Error sending credit limit notification: {e}", uid, session_id)
 
-                # Lock the in-progress conversation if credit limit is reached
                 if current_conversation_id and current_conversation_id not in locked_conversation_ids:
                     conversation = conversations_db.get_conversation(uid, current_conversation_id)
                     if conversation and conversation['status'] == ConversationStatus.in_progress:
@@ -262,7 +269,7 @@ async def _listen(
                         print(f"Locking conversation {conversation_id} due to transcription limit.", uid, session_id)
                         conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
                         locked_conversation_ids.add(conversation_id)
-            else:
+            elif not use_custom_stt:
                 user_has_credits = True
 
             # Silence notification logic for basic plan users
@@ -589,8 +596,13 @@ async def _listen(
         nonlocal speech_profile_duration
         nonlocal speech_profile_processed
         try:
+            if use_custom_stt:
+                speech_profile_processed = True
+                speech_profile_duration = 0
+                print(f"Custom STT mode enabled - using suggested transcripts from app", uid, session_id)
+                return
+
             file_path, speech_profile_duration = None, 0
-            # Thougts: how bee does for recognizing other languages speech profile?
             if (
                 (language == 'en' or language == 'auto')
                 and (codec == 'opus' or codec == 'pcm16')
@@ -1160,32 +1172,33 @@ async def _listen(
                             )
                             continue
 
-                    if soniox_socket is not None:
-                        elapsed_seconds = time.time() - timer_start
-                        if elapsed_seconds > speech_profile_duration or not soniox_socket2:
-                            await soniox_socket.send(data)
-                            if soniox_socket2:
-                                print('Killing soniox_socket2', uid, session_id)
-                                await soniox_socket2.close()
-                                soniox_socket2 = None
-                                speech_profile_processed = True
-                        else:
-                            await soniox_socket2.send(data)
+                    if not use_custom_stt:
+                        if soniox_socket is not None:
+                            elapsed_seconds = time.time() - timer_start
+                            if elapsed_seconds > speech_profile_duration or not soniox_socket2:
+                                await soniox_socket.send(data)
+                                if soniox_socket2:
+                                    print('Killing soniox_socket2', uid, session_id)
+                                    await soniox_socket2.close()
+                                    soniox_socket2 = None
+                                    speech_profile_processed = True
+                            else:
+                                await soniox_socket2.send(data)
 
-                    if speechmatics_socket1 is not None:
-                        await speechmatics_socket1.send(data)
+                        if speechmatics_socket1 is not None:
+                            await speechmatics_socket1.send(data)
 
-                    if dg_socket1 is not None:
-                        elapsed_seconds = time.time() - timer_start
-                        if elapsed_seconds > speech_profile_duration or not dg_socket2:
-                            dg_socket1.send(data)
-                            if dg_socket2:
-                                print('Killing deepgram_socket2', uid, session_id)
-                                dg_socket2.finish()
-                                dg_socket2 = None
-                                speech_profile_processed = True
-                        else:
-                            dg_socket2.send(data)
+                        if dg_socket1 is not None:
+                            elapsed_seconds = time.time() - timer_start
+                            if elapsed_seconds > speech_profile_duration or not dg_socket2:
+                                dg_socket1.send(data)
+                                if dg_socket2:
+                                    print('Killing deepgram_socket2', uid, session_id)
+                                    dg_socket2.finish()
+                                    dg_socket2 = None
+                                    speech_profile_processed = True
+                            else:
+                                dg_socket2.send(data)
 
                     if audio_bytes_send is not None:
                         audio_bytes_send(data)
@@ -1193,11 +1206,15 @@ async def _listen(
                 elif message.get("text") is not None:
                     try:
                         json_data = json.loads(message.get("text"))
-                        print(json_data)
                         if json_data.get('type') == 'image_chunk':
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
+                        elif json_data.get('type') == 'suggested_transcript':
+                            if use_custom_stt:
+                                suggested_segments = json_data.get('segments', [])
+                                if suggested_segments:
+                                    stream_transcript(suggested_segments)
                         elif json_data.get('type') == 'speaker_assigned':
                             segment_ids = json_data.get('segment_ids', [])
                             can_assign = False
@@ -1283,7 +1300,7 @@ async def _listen(
     except Exception as e:
         print(f"Error during WebSocket operation: {e}", uid, session_id)
     finally:
-        if last_usage_record_timestamp:
+        if not use_custom_stt and last_usage_record_timestamp:
             transcription_seconds = int(time.time() - last_usage_record_timestamp)
             words_to_record = words_transcribed_since_last_record
             if transcription_seconds > 0 or words_to_record > 0:
@@ -1348,7 +1365,9 @@ async def listen_handler(
     stt_service: Optional[STTService] = None,
     conversation_timeout: int = 120,
     source: Optional[str] = None,
+    custom_stt: str = 'disabled',
 ):
+    custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     await _listen(
         websocket,
         uid,
@@ -1360,4 +1379,5 @@ async def listen_handler(
         None,
         conversation_timeout=conversation_timeout,
         source=source,
+        custom_stt_mode=custom_stt_mode,
     )

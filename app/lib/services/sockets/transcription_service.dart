@@ -32,13 +32,20 @@ abstract interface class ITransctiptSegmentSocketServiceListener {
 }
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language, {super.source})
+  SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language,
+      {super.source, super.customSttMode})
       : super.create(includeSpeechProfile: false);
 }
 
 class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  ConversationTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language, {super.source})
+  ConversationTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language,
+      {super.source, super.customSttMode})
       : super.create(includeSpeechProfile: true);
+}
+
+class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
+  CustomSttTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language, {super.source})
+      : super.create(includeSpeechProfile: true, customSttMode: true);
 }
 
 enum SocketServiceState {
@@ -61,14 +68,15 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String language;
   bool includeSpeechProfile;
   String? source;
+  bool customSttMode;
 
-  /// Create with default WebSocket connection
   TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec,
     this.language, {
     this.includeSpeechProfile = false,
     this.source,
+    this.customSttMode = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -78,6 +86,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       params += '&source=${Uri.encodeComponent(source!)}';
     }
 
+    if (customSttMode) {
+      params += '&custom_stt=enabled';
+    }
+
     String url =
         Env.apiBaseUrl!.replaceFirst('https://', 'wss://').replaceFirst('http://', 'ws://') + 'v4/listen$params';
 
@@ -85,7 +97,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _socket.setListener(this);
   }
 
-  /// Create with custom socket (e.g., PurePollingSocket for HTTP-based STT)
   TranscriptSegmentSocketService.withSocket(
     this.sampleRate,
     this.codec,
@@ -93,6 +104,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     IPureSocket socket, {
     this.includeSpeechProfile = false,
     this.source,
+    this.customSttMode = false,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -497,7 +509,7 @@ class TranscriptSocketServiceFactory {
     bool includeSpeechProfile = false,
     String? source,
   }) {
-    final secondaryService = ConversationTranscriptSegmentSocketService.create(
+    final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
       codec,
       language,
@@ -514,6 +526,7 @@ class TranscriptSocketServiceFactory {
       compositeSocket,
       includeSpeechProfile: includeSpeechProfile,
       source: source,
+      customSttMode: true,
     );
   }
 
