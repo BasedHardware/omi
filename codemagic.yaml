@@ -1048,6 +1048,49 @@ workflows:
               "$dylib"
           done
 
+          # Sign Sparkle framework and its components first
+          echo ""
+          echo "=== Signing Sparkle framework components ==="
+          SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+
+          if [ -d "$SPARKLE_FW" ]; then
+            echo "Found Sparkle framework, signing all components..."
+
+            # Sign XPC services
+            find "$SPARKLE_FW" -name "*.xpc" -type d | while read xpc; do
+              echo "Signing XPC: $(basename $xpc)"
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" \
+                "$xpc"
+            done
+
+            # Sign Updater.app
+            if [ -d "$SPARKLE_FW/Versions/B/Updater.app" ]; then
+              echo "Signing Updater.app..."
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" \
+                "$SPARKLE_FW/Versions/B/Updater.app"
+            fi
+
+            # Sign Autoupdate binary
+            if [ -f "$SPARKLE_FW/Versions/B/Autoupdate" ]; then
+              echo "Signing Autoupdate binary..."
+              codesign --force --timestamp --options runtime \
+                --sign "$DEVELOPER_ID_CERT" \
+                "$SPARKLE_FW/Versions/B/Autoupdate"
+            fi
+
+            # Sign the framework itself
+            echo "Signing Sparkle.framework..."
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$SPARKLE_FW"
+
+            echo "✓ Sparkle framework signed successfully"
+          else
+            echo "⚠ Sparkle framework not found at $SPARKLE_FW"
+          fi
+
           # Now sign the app bundle with --force to update entitlements
           echo ""
           echo "=== Signing app bundle for notarization ==="
