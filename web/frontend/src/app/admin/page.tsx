@@ -9,6 +9,7 @@ import { Shield, Users, DollarSign, BarChart3, Package } from 'lucide-react';
 import AppsReview from './components/AppsReview';
 import UsersManagement from './components/UsersManagement';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import ConversationCategoriesChart from './components/ConversationCategoriesChart';
 
 export default function AdminDashboard() {
   const [adminKey, setAdminKey] = useState('');
@@ -136,8 +137,9 @@ export default function AdminDashboard() {
           </TabsContent>
 
           {/* Analytics Tab */}
-          <TabsContent value="analytics" className="space-y-4">
+          <TabsContent value="analytics" className="space-y-8">
             <AnalyticsDashboard adminKey={adminKey} />
+            <ConversationCategoriesChart adminKey={adminKey} />
           </TabsContent>
         </Tabs>
       </div>

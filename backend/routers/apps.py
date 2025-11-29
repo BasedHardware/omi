@@ -1176,6 +1176,43 @@ def get_platform_analytics(secret_key: str = Header(...)):
     }
 
 
+@router.get('/v1/admin/analytics/conversations/categories', tags=['v1'])
+def get_conversation_categories_analytics(secret_key: str = Header(...)):
+    """Get conversation categories distribution."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+    from database._client import db
+    from collections import defaultdict
+
+    categories_count = defaultdict(int)
+    total_conversations = 0
+
+    users_ref = db.collection('users')
+    for user_doc in users_ref.stream():
+        conversations_ref = user_doc.reference.collection('conversations')
+        for conv_doc in conversations_ref.stream():
+            conv_data = conv_doc.to_dict()
+            category = conv_data.get('category', 'other')
+            if category:
+                categories_count[category] += 1
+            else:
+                categories_count['other'] += 1
+            total_conversations += 1
+
+    # Sort by count descending
+    sorted_categories = sorted(
+        [{'category': k, 'count': v} for k, v in categories_count.items()],
+        key=lambda x: x['count'],
+        reverse=True
+    )
+
+    return {
+        'categories': sorted_categories,
+        'total': total_conversations,
+    }
+
+
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):

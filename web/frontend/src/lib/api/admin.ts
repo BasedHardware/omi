@@ -13,6 +13,16 @@ export interface PlatformAnalytics {
   apps_count: number;
 }
 
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
+export interface ConversationCategoriesAnalytics {
+  categories: CategoryCount[];
+  total: number;
+}
+
 /**
  * Get all unapproved public apps (admin only)
  * Uses Next.js API proxy to avoid CORS issues
@@ -135,6 +145,33 @@ export async function getPlatformAnalytics(adminKey: string): Promise<PlatformAn
     }
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to fetch analytics: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get conversation categories analytics (admin only)
+ * Uses Next.js API proxy to avoid CORS issues
+ */
+export async function getConversationCategoriesAnalytics(
+  adminKey: string
+): Promise<ConversationCategoriesAnalytics> {
+  const response = await fetch('/api/admin/analytics/conversations/categories', {
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 401) {
+      throw new Error('Unauthorized: Invalid admin key');
+    }
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.error || `Failed to fetch conversation categories: ${response.statusText}`
+    );
   }
 
   return response.json();
