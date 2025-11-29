@@ -901,11 +901,10 @@ workflows:
           echo "Configuring Xcode project to use Developer ID certificate and provisioning profile..."
 
           # Use Codemagic's xcode-project tool to configure manual signing
-          # This modifies the project.pbxproj file directly
+          # It automatically finds provisioning profiles in ~/Library/MobileDevice/Provisioning Profiles/
           xcode-project use-profiles \
             --project Runner.xcodeproj \
-            --code-sign-identity="$DEVELOPER_ID_CERT" \
-            --profile-uuid="$PROFILE_UUID"
+            --code-signing-setup-verbose-logging
 
           # Verify the configuration
           echo ""
