@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Mulish } from 'next/font/google';
 import './globals.css';
 import AppHeader from '../components/shared/app-header';
-import Footer from '../components/shared/footer';
+import ConditionalFooter from '../components/shared/conditional-footer';
 import envConfig from '../constants/envConfig';
 import { GleapInit } from '@/src/components/shared/gleap';
 import { GoogleAnalytics } from '@/src/components/shared/google-analytics';
@@ -39,7 +39,7 @@ export default function RootLayout({
         <main className="flex min-h-screen flex-col">
           <div className="w-full flex-grow">{children}</div>
         </main>
-        <Footer />
+        <ConditionalFooter />
       </body>
       <GleapInit />
       <GoogleAnalytics />

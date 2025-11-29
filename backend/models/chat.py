@@ -77,7 +77,10 @@ class Message(BaseModel):
 
     @staticmethod
     def get_messages_as_string(
-        messages: List['Message'], use_user_name_if_available: bool = False, use_plugin_name_if_available: bool = False
+        messages: List['Message'],
+        use_user_name_if_available: bool = False,
+        use_plugin_name_if_available: bool = False,
+        include_file_info: bool = False,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
 
@@ -90,16 +93,27 @@ class Message(BaseModel):
             #         return plugin.name RESTORE ME
             return message.sender.upper()  # TODO: use app id
 
-        formatted_messages = [
-            f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
-            for message in sorted_messages
-        ]
+        formatted_messages = []
+        for message in sorted_messages:
+            msg_text = (
+                f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
+            )
+
+            # Add file info if requested and files exist
+            if include_file_info and message.files_id and len(message.files_id) > 0:
+                file_info = f" [Files attached: {len(message.files_id)} file(s), IDs: {', '.join(message.files_id)}]"
+                msg_text += file_info
+
+            formatted_messages.append(msg_text)
 
         return '\n'.join(formatted_messages)
 
     @staticmethod
     def get_messages_as_xml(
-        messages: List['Message'], use_user_name_if_available: bool = False, use_plugin_name_if_available: bool = False
+        messages: List['Message'],
+        use_user_name_if_available: bool = False,
+        use_plugin_name_if_available: bool = False,
+        include_file_info: bool = False,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
 
@@ -112,27 +126,35 @@ class Message(BaseModel):
             #         return plugin.name RESTORE ME
             return message.sender.upper()  # TODO: use app id
 
-        formatted_messages = [
-            f"""
-                <message>
-                <created_at>
-                    {message.created_at.strftime('%d %b %Y at %H:%M UTC')}
-                </created_at>
-                <sender>
-                    {get_sender_name(message)}
-                </sender>
-                <content>
-                    {message.text}
-                </content>
-                {('<attachments>' + ''.join(f"<file>{file.name}</file>" for file in message.files) + '</attachments>') if message.files and len(message.files) > 0 else ''}
-                </message>
-            """.replace(
-                '    ', ''
-            )
-            .replace('\n\n\n', '\n\n')
-            .strip()
-            for message in sorted_messages
-        ]
+        formatted_messages = []
+        for message in sorted_messages:
+            # Build file section if requested
+            file_section = ""
+            if include_file_info and message.files and len(message.files) > 0:
+                file_section = '<attachments>\n'
+                for file in message.files:
+                    file_section += f'  <file id="{file.id}" name="{file.name}" type="{file.mime_type}"/>\n'
+                file_section += '</attachments>'
+            elif include_file_info and message.files_id and len(message.files_id) > 0:
+                # Fallback if files not loaded but IDs exist
+                file_section = '<attachments>\n'
+                for file_id in message.files_id:
+                    file_section += f'  <file id="{file_id}"/>\n'
+                file_section += '</attachments>'
+            elif message.files and len(message.files) > 0:
+                # Original behavior when include_file_info is False
+                file_section = (
+                    '<attachments>' + ''.join(f"<file>{file.name}</file>" for file in message.files) + '</attachments>'
+                )
+
+            msg = f"""<message>
+<created_at>{message.created_at.strftime('%d %b %Y at %H:%M UTC')}</created_at>
+<sender>{get_sender_name(message)}</sender>
+<content>{message.text}</content>
+{file_section}
+</message>"""
+
+            formatted_messages.append(msg.replace('    ', '').strip())
 
         return '\n'.join(formatted_messages)
 

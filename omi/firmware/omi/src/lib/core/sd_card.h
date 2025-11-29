@@ -3,7 +3,55 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/types.h>
 #include <zephyr/kernel.h>
+
+#define MAX_STORAGE_BYTES 0x1E000000 // 480MB
+#define MAX_WRITE_SIZE 440
+
+/* Request types for the SD worker */
+typedef enum {
+    REQ_CLEAR_AUDIO_DIR,
+    REQ_WRITE_DATA,
+    REQ_READ_DATA,
+    REQ_SAVE_OFFSET,
+    REQ_READ_OFFSET
+} sd_req_type_t;
+
+/* Read request response object */
+struct read_resp {
+    struct k_sem sem;
+    int res;
+    ssize_t read_bytes;
+};
+
+/* Generic request message passed to worker */
+typedef struct {
+    sd_req_type_t type;
+    union {
+        struct {
+            uint8_t buf[MAX_WRITE_SIZE];
+            size_t len;
+            struct read_resp *resp;
+        } write;
+        struct {
+            uint32_t offset;
+            uint32_t length;
+            uint8_t *out_buf;
+            struct read_resp *resp;
+        } read;
+        struct {
+            uint32_t offset_value;
+        } info;
+        struct {
+            struct read_resp *resp;
+            uint32_t *out_offset;
+        } offset;
+        struct {
+            struct read_resp *resp;
+        } clear_dir;
+    } u;
+} sd_req_t;
 
 /**
  * @brief Initialize the SD card module interface.
@@ -24,10 +72,6 @@ int app_sd_off(void);
 
 // Maximum number of audio files supported
 #define MAX_AUDIO_FILES 24
-
-// Global variables for offline storage
-extern uint8_t file_count;
-extern uint32_t file_num_array[MAX_AUDIO_FILES];
 
 /**
  * @brief Create a file
@@ -62,7 +106,7 @@ int initialize_audio_file(uint8_t num);
  * @param length Number of bytes to write
  * @return number of bytes written
  */
-int write_to_file(uint8_t *data, uint32_t length);
+uint32_t write_to_file(uint8_t *data, uint32_t length);
 
 /**
  * @brief Read from the current audio file specified by the read pointer
@@ -76,35 +120,9 @@ int read_audio_data(uint8_t *buf, int amount, int offset);
 
 /**
  * @brief Get the size of the specified audio file number
- *
- * @param num Audio file number
  * @return size of the file in bytes
  */
-uint32_t get_file_size(uint8_t num);
-
-/**
- * @brief Move the read pointer to the specified audio file position
- *
- * @param num Audio file number
- * @return 0 if successful, negative errno code if error
- */
-int move_read_pointer(uint8_t num);
-
-/**
- * @brief Move the write pointer to the specified audio file position
- *
- * @param num Audio file number
- * @return 0 if successful, negative errno code if error
- */
-int move_write_pointer(uint8_t num);
-
-/**
- * @brief Clear the specified audio file
- *
- * @param num Audio file number
- * @return 0 if successful, negative errno code if error
- */
-int clear_audio_file(uint8_t num);
+uint32_t get_file_size();
 
 /**
  * @brief Clear the audio directory.
@@ -128,7 +146,7 @@ int save_offset(uint32_t offset);
  *
  * @return offset value, or negative errno code if error
  */
-int get_offset(void);
+uint32_t get_offset(void);
 
 /**
  * @brief Turn on SD card power

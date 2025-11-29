@@ -103,8 +103,7 @@ def process_voice_message_segment(path: str, uid: str):
     ai_message_resp['ask_for_nps'] = ask_for_nps
 
     # send notification
-    token = notification_db.get_token_only(uid)
-    send_chat_message_notification(token, "omi", "omi", ai_message.text, ai_message.id)
+    send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
 
     return [message.dict(), ai_message_resp]
 
@@ -207,13 +206,12 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
                 yield f"done: {data}\n\n"
 
                 # send notification
-                token = notification_db.get_token_only(uid)
-                send_chat_message_notification(token, "omi", "omi", ai_message.text, ai_message.id)
+                send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
 
     return
 
 
-def send_chat_message_notification(token: str, app_name: str, app_id: str, message: str, message_id: str):
+def send_chat_message_notification(user_id: str, app_name: str, app_id: str, message: str, message_id: str):
     ai_message = NotificationMessage(
         id=message_id,
         text=message,
@@ -223,4 +221,4 @@ def send_chat_message_notification(token: str, app_name: str, app_id: str, messa
         notification_type='plugin',
         navigate_to=f'/chat/{app_id}',
     )
-    send_notification(token, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))

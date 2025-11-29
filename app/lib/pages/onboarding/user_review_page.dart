@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:in_app_review/in_app_review.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UserReviewPage extends StatefulWidget {
   final VoidCallback goNext;
@@ -16,45 +16,32 @@ class UserReviewPage extends StatefulWidget {
 
 class _UserReviewPageState extends State<UserReviewPage> {
   bool _isLoading = false;
-  final InAppReview _inAppReview = InAppReview.instance;
 
   Future<void> _requestReview() async {
     setState(() {
       _isLoading = true;
     });
 
-    try {
-      HapticFeedback.mediumImpact();
+    HapticFeedback.mediumImpact();
 
-      // Check if the in-app review is available
-      if (await _inAppReview.isAvailable()) {
-        // Request the review and wait for completion
-        await _inAppReview.requestReview();
-        MixpanelManager().track('App Review Requested', properties: {'source': 'onboarding'});
+    final Uri reviewUrl = Platform.isIOS
+        ? Uri.parse('https://apps.apple.com/app/id6502156163?action=write-review')
+        : Uri.parse('https://play.google.com/store/apps/details?id=com.friend.ios');
 
-        // Add a small delay to ensure the review dialog has been processed
-        await Future.delayed(const Duration(milliseconds: 1000));
-      } else {
-        // Fallback to opening the store directly
-        await _inAppReview.openStoreListing(
-          appStoreId: Platform.isIOS ? '6651027111' : null, // Replace with actual App Store ID
-        );
-        MixpanelManager().track('App Store Opened', properties: {'source': 'onboarding'});
-
-        // Add delay for store opening
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-    } catch (e) {
-      debugPrint('Error requesting review: $e');
-      // Show a friendly message or continue silently
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-
-      // Continue to next page after review interaction is complete
-      widget.goNext();
+    if (await canLaunchUrl(reviewUrl)) {
+      await launchUrl(reviewUrl, mode: LaunchMode.externalApplication);
+      MixpanelManager().track('App Review Opened', properties: {'source': 'onboarding'});
+      await Future.delayed(const Duration(milliseconds: 500));
+    } else {
+      debugPrint('Could not launch review URL');
     }
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    // Continue to next page after review interaction is complete
+    widget.goNext();
   }
 
   Future<void> _skipReview() async {

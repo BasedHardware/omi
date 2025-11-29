@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -79,6 +80,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           if (context.mounted) {
                             final provider = Provider.of<ConversationProvider>(context, listen: false);
                             await provider.filterConversationsByDate(selectedDate);
+                            MixpanelManager().calendarFilterApplied(selectedDate);
                           }
                         },
                         child: const Text(
@@ -127,10 +129,17 @@ class _SearchWidgetState extends State<SearchWidget> {
             child: TextFormField(
               controller: searchController,
               focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
+              onTap: () {
+                MixpanelManager().searchBarFocused();
+              },
               onChanged: (value) {
                 var provider = Provider.of<ConversationProvider>(context, listen: false);
                 _debouncer.run(() async {
                   await provider.searchConversations(value);
+                  if (value.isNotEmpty) {
+                    // Track search query with results count
+                    MixpanelManager().searchQueryEntered(value, provider.searchedConversations.length);
+                  }
                 });
                 setShowClearButton();
               },
@@ -159,6 +168,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           await provider.searchConversations(""); // clear
                           searchController.clear();
                           setShowClearButton();
+                          MixpanelManager().searchQueryCleared();
                         },
                         child: const Icon(
                           Icons.close,
@@ -189,6 +199,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                     if (convoProvider.selectedDate != null) {
                       // Clear date filter
                       await convoProvider.clearDateFilter();
+                      MixpanelManager().calendarFilterCleared();
                     } else {
                       // Open date picker
                       await _selectDate(context);
@@ -221,6 +232,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 onPressed: () {
                   HapticFeedback.mediumImpact();
                   convoProvider.toggleDiscardConversations();
+                  MixpanelManager().deletedConversationsFilterToggled(!convoProvider.showDiscardedConversations);
                 },
                 icon: Icon(
                   FontAwesomeIcons.trashCan,

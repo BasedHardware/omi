@@ -1,4 +1,4 @@
-enum MemoryCategory { interesting, system }
+enum MemoryCategory { interesting, system, manual }
 
 enum MemoryVisibility { private, public }
 

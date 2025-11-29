@@ -11,19 +11,19 @@ export default function Summary({ memory }: SummaryProps) {
   return (
     <div className="flex flex-col gap-12">
       {memory.apps_results.length > 0 && (
-        <div className="mt-8 px-6 md:mt-10 md:px-12">
+        <div className="mt-8 md:mt-10">
           <Plugins apps={memory.apps_results} />
         </div>
       )}
 
       {memory?.structured?.events?.length > 0 && (
-        <div className="px-6 md:px-12">
+        <div>
           <MemoryEvents events={memory.structured.events} />
         </div>
       )}
 
       {memory?.structured?.action_items?.length > 0 && (
-        <div className="px-6 md:px-12">
+        <div>
           <ActionItems items={memory.structured.action_items} />
         </div>
       )}

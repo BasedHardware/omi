@@ -67,20 +67,14 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     }
     
     private func audioCharacteristicUpdated(data: Data) {
-//        log.debug("Received packet of size \(data.count)")
         guard data.count >= 3 else {
             log.warning("### Received a packet of size \(data.count)")
             return
         }
-        
-        // Starts at 0 on first notification, continues the sequence after a pause but I have seen a small gap
+
         let packetNumber = UInt16(littleEndian: data.withUnsafeBytes { $0.load(as: UInt16.self) })
-        // Starts at 0
         let index = UInt8(littleEndian: data.advanced(by: 2).withUnsafeBytes {$0.load(as: UInt8.self) })
-        
-//        log.debug("Packet number \(packetNumber)")
-//        log.debug("Index \(index)")
-        
+
         do {
             try packetCounter.checkPacketNumber(packetNumber)
         } catch {
@@ -113,13 +107,16 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     func start(recording: Recording) {
         self.recording = recording
 
-        guard let audioCodec = try? codec?.codec else { return }
+        guard let audioCodec = try? codec?.codec else {
+            log.error("No codec available for recording")
+            return
+        }
         if recording.startRecording(usingCodec: audioCodec) {
             isRecording = true
             bleManager.setNotify(enabled: true, forCharacteristics: Friend.audioCharacteristicUUID)
         }
         else {
-            print("failed to start recording")
+            log.error("Failed to start recording")
         }
     }
     
@@ -137,9 +134,7 @@ class Friend : WearableDevice, BatteryInformation, AudioRecordingDevice {
     }
     
     func flushRecordingBuffer() {
-        if packetsBuffer.isEmpty {
-            return
-        }
+        guard !packetsBuffer.isEmpty else { return }
         recording?.append(packets: packetsBuffer)
         packetsBuffer.removeAll()
     }

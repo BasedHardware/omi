@@ -12,6 +12,7 @@ class MemoryCategory(str, Enum):
     # New primary categories
     interesting = "interesting"
     system = "system"
+    manual = "manual"
 
     # Legacy categories for backward compatibility
     core = "core"
@@ -29,6 +30,7 @@ class MemoryCategory(str, Enum):
 CATEGORY_BOOSTS = {
     MemoryCategory.interesting.value: 1,
     MemoryCategory.system.value: 0,
+    MemoryCategory.manual.value: 1,
     # Map legacy categories to appropriate new categories
     MemoryCategory.core.value: 1,
     MemoryCategory.hobbies.value: 1,
@@ -69,7 +71,7 @@ class Memory(BaseModel):
 
         if isinstance(v, str):
             # If it's already one of our main categories, use it directly
-            if v in ['interesting', 'system']:
+            if v in ['interesting', 'system', 'manual']:
                 return v
 
             # For legacy categories, map them to new ones

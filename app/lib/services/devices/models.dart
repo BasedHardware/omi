@@ -46,9 +46,9 @@ const String manufacturerNameCharacteristicUuid = '00002a29-0000-1000-8000-00805
 
 const String frameServiceUuid = "7A230001-5475-A6A4-654C-8431F6AD49C4";
 
-const String xorServiceUuid = "00001910-0000-1000-8000-00805f9b34fb";
-const String xorWriteCharUuid = "00002bb1-0000-1000-8000-00805f9b34fb";
-const String xorNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
+const String plaudServiceUuid = "00001910-0000-1000-8000-00805f9b34fb";
+const String plaudWriteCharUuid = "00002bb1-0000-1000-8000-00805f9b34fb";
+const String plaudNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
 
 const String beeServiceUuid = "03d5d5c4-a86c-11ee-9d89-8f2089a49e7e";
 

@@ -2,11 +2,13 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/gen/flutter_communicator.g.dart';
@@ -122,6 +124,9 @@ class _FoundDevicesState extends State<FoundDevices> {
 
       await provider.deviceProvider?.scanAndConnectToDevice();
 
+      // Show firmware warning if needed
+      await _showFirmwareWarningIfNeeded(device);
+
       if (widget.isFromOnboarding) {
         widget.goNext();
       } else {
@@ -130,6 +135,47 @@ class _FoundDevicesState extends State<FoundDevices> {
     } catch (e) {
       debugPrint('Error completing Apple Watch onboarding: $e');
     }
+  }
+
+  Future<void> _showFirmwareWarningIfNeeded(BtDevice device) async {
+    final warningMessage = device.getFirmwareWarningMessage();
+    if (warningMessage.isEmpty) {
+      return; // No warning needed for this device type
+    }
+
+    // Check if user has already acknowledged this device type
+    final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+    final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey) ?? false;
+
+    if (alreadyAcknowledged) {
+      return; // User already acknowledged this warning
+    }
+
+    bool dontShowAgain = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // Must click button
+      builder: (context) => ConfirmationDialog(
+        title: device.getFirmwareWarningTitle(),
+        description: warningMessage,
+        checkboxText: "Don't show it again",
+        checkboxValue: false,
+        onCheckboxChanged: (value) {
+          dontShowAgain = value;
+        },
+        confirmText: "I Understand",
+        onConfirm: () {
+          if (dontShowAgain) {
+            SharedPreferencesUtil().saveBool(prefKey, true);
+          }
+          Navigator.of(context).pop();
+        },
+        onCancel: () {
+          // Not used, but required by ConfirmationDialog
+        },
+      ),
+    );
   }
 
   @override
@@ -232,6 +278,11 @@ class _FoundDevicesState extends State<FoundDevices> {
                       isFromOnboarding: widget.isFromOnboarding,
                       goNext: widget.goNext,
                     );
+
+                    // Show firmware warning after successful connection
+                    if (provider.isConnected) {
+                      await _showFirmwareWarningIfNeeded(device);
+                    }
                   }
                 }
               : null,

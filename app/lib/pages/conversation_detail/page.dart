@@ -132,19 +132,26 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
     _controller!.addListener(() {
       setState(() {
+        String? tabName;
         switch (_controller!.index) {
           case 0:
             selectedTab = ConversationTab.transcript;
+            tabName = 'Transcript';
             break;
           case 1:
             selectedTab = ConversationTab.summary;
+            tabName = 'Summary';
             break;
           case 2:
             selectedTab = ConversationTab.actionItems;
+            tabName = 'Action Items';
             break;
           default:
             debugPrint('Invalid tab index: ${_controller!.index}');
             selectedTab = ConversationTab.summary;
+        }
+        if (tabName != null) {
+          MixpanelManager().conversationDetailTabChanged(tabName);
         }
         if (_searchQuery.isNotEmpty) {
           _updateSearchResults();
@@ -210,6 +217,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   }
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
+    // Track the menu action selection
+    MixpanelManager().conversationThreeDotsMenuActionSelected(
+      conversationId: provider.conversation.id,
+      action: value,
+    );
+
     switch (value) {
       case 'copy_transcript':
         _copyContent(context, provider.conversation.getTranscript(generate: true));
@@ -421,6 +434,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       return;
                                     }
                                     String content = 'https://h.omi.me/memories/${provider.conversation.id}';
+                                    // Track share event
+                                    MixpanelManager().conversationShared(
+                                      conversation: provider.conversation,
+                                      shareMethod: 'url_share',
+                                    );
                                     // Start sharing and get the position for iOS
                                     final RenderBox? box =
                                         _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
@@ -480,6 +498,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   _searchFocusNode.unfocus();
                                 } else {
                                   _searchFocusNode.requestFocus();
+                                  MixpanelManager().conversationDetailSearchClicked(
+                                    conversationId: provider.conversation.id,
+                                  );
                                 }
                               });
                               HapticFeedback.mediumImpact();
@@ -529,6 +550,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           buttonBuilder: (context, showMenu) => GestureDetector(
                             onTap: () {
                               HapticFeedback.mediumImpact();
+                              MixpanelManager().conversationThreeDotsMenuOpened(
+                                conversationId: provider.conversation.id,
+                              );
                               showMenu();
                             },
                             child: Container(
@@ -877,6 +901,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 setState(() {
                                   _searchQuery = value;
                                   _updateSearchResults();
+                                  if (value.isNotEmpty) {
+                                    // Track search query with results
+                                    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+                                    MixpanelManager().conversationDetailSearchQueryEntered(
+                                      conversationId: provider.conversation.id,
+                                      query: value,
+                                      resultsCount: _totalSearchResults,
+                                      activeTab: _getTabTitle(selectedTab),
+                                    );
+                                  }
                                 });
                               },
                             ),

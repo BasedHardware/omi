@@ -110,16 +110,42 @@ class FriendManager {
         })
     }
     
+    /// Provides audio chunks from the Omi device every 8 seconds.
+    ///
+    /// Important: The recording file is copied to a temp location before `resetRecording()` is called,
+    /// because `resetRecording()` deletes the original file. The WAV header in the copied file may
+    /// show 0 bytes of audio data (since the file is still being written to), but the actual PCM
+    /// data exists after the 44-byte header.
     func getRawAudio(device: Friend, completion: @escaping (URL?) -> Void) {
-//        transcriptCompletion = completion
         audioFileTimer?.invalidate()
         audioFileTimer = Timer.scheduledTimer(withTimeInterval: 8.0, repeats: true, block: { timer in
-            if let recording = device.recording {
-                let recordingFileURL = recording.fileURL
-                device.resetRecording()
-                completion(recordingFileURL)
+            guard let recording = device.recording else {
+                completion(nil)
+                return
             }
-            else {
+
+            let recordingFileURL = recording.fileURL
+            let fileManager = FileManager.default
+
+            // Check if file exists and has audio data (more than just the 44-byte WAV header)
+            let attributes = try? fileManager.attributesOfItem(atPath: recordingFileURL.path)
+            let fileSize = attributes?[.size] as? UInt64 ?? 0
+
+            guard fileSize > 44 else {
+                completion(nil)
+                return
+            }
+
+            // Copy file to temp location BEFORE resetRecording() deletes the original
+            let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent(UUID().uuidString + ".wav")
+
+            do {
+                try fileManager.copyItem(at: recordingFileURL, to: tempURL)
+                device.resetRecording()
+                completion(tempURL)
+            } catch {
+                device.resetRecording()
                 completion(nil)
             }
         })

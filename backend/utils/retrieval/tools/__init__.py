@@ -24,6 +24,9 @@ from .omi_tools import (
 from .perplexity_tools import (
     perplexity_search_tool,
 )
+from .file_tools import (
+    search_files_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -35,4 +38,5 @@ __all__ = [
     'update_action_item_tool',
     'get_omi_product_info_tool',
     'perplexity_search_tool',
+    'search_files_tool',
 ]

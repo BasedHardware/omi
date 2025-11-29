@@ -18,12 +18,29 @@ class CreateConversationResponse {
   factory CreateConversationResponse.fromJson(Map<String, dynamic> json) {
     return CreateConversationResponse(
       messages: ((json['messages'] ?? []) as List<dynamic>).map((message) => ServerMessage.fromJson(message)).toList(),
-      conversation: json['memory'] != null ? ServerConversation.fromJson(json['memory']) : null,
+      conversation: json['conversation'] != null
+          ? ServerConversation.fromJson(json['conversation'])
+          : (json['memory'] != null ? ServerConversation.fromJson(json['memory']) : null),
     );
   }
 }
 
-enum ConversationSource { friend, omi, workflow, openglass, screenpipe, sdcard }
+enum ConversationSource {
+  friend,
+  omi,
+  workflow,
+  openglass,
+  screenpipe,
+  sdcard,
+  fieldy,
+  bee,
+  xor,
+  frame,
+  friend_com,
+  apple_watch,
+  phone,
+  desktop,
+}
 
 class ConversationExternalData {
   final String text;

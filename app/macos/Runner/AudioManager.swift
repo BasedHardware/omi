@@ -680,8 +680,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
                 return // Nothing to process.
             }
             
-            print("DEBUG: Processing audio. Mic buffers: \(micBuffers.count), System buffers: \(systemBuffers.count)")
-            
             // Concatenate all buffers from each source.
             let micBuffer = self.concatenateBuffers(buffers: micBuffers)
             var systemBuffer = self.concatenateBuffers(buffers: systemBuffers)
@@ -706,8 +704,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
         
         if totalFrames == 0 { return nil }
         
-        print("DEBUG: Mixing audio into mono. Total frames: \(totalFrames). Mic frames: \(micFrames), System frames: \(systemFrames).")
-
         // outputFormat is now mono (1 channel)
         guard let outputFormat = self.outputAudioFormat,
               let mixedBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: totalFrames) else {
@@ -764,7 +760,6 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
             
             if bytesInThisChunk > 0 {
                 let dataChunk = Data(bytes: int16DataPtr.advanced(by: framesProcessed), count: bytesInThisChunk)
-                print("DEBUG: Sending \(dataChunk.count) bytes of mixed audio to Flutter.")
                 if self.audioFormatSentToFlutter && self.isFlutterEngineActive {
                     self.screenCaptureChannel?.invokeMethod("audioFrame", arguments: dataChunk)
                 }
@@ -845,11 +840,20 @@ class AudioManager: NSObject, SCStreamDelegate, SCStreamOutput {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         print("SCStream stopped with error: \(error.localizedDescription)")
         
+        // Mark as not recording since stream stopped
+        _isRecording = false
+        
         // Clean up sleep prevention since recording stopped
         stopSleepPrevention()
         
         if isFlutterEngineActive {
             self.screenCaptureChannel?.invokeMethod("captureError", arguments: "SCStream stopped: \(error.localizedDescription)")
+            
+            // Notify Flutter that recording ended so state stays in sync
+            if audioFormatSentToFlutter {
+                self.screenCaptureChannel?.invokeMethod("audioStreamEnded", arguments: nil)
+                audioFormatSentToFlutter = false
+            }
         }
         self.stream = nil
         self.streamOutputReference = nil

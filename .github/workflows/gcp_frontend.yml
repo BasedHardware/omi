@@ -44,6 +44,8 @@ jobs:
             --build-arg NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }} \
             --build-arg NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID }} \
+            --build-arg OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }} \
+            --build-arg API_URL=${{ secrets.API_URL }} \
             -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f web/frontend/Dockerfile .
             
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}

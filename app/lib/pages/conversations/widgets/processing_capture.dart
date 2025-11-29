@@ -43,6 +43,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       return GestureDetector(
         onTap: () async {
           if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+          MixpanelManager().liveTranscriptCardClicked(
+            hasSegments: provider.segments.isNotEmpty,
+            hasPhotos: provider.photos.isNotEmpty,
+            segmentCount: provider.segments.length,
+            photoCount: provider.photos.length,
+          );
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
@@ -342,6 +348,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
+                        // Track mute/pause action
+                        if (!isPaused) {
+                          // User is pausing/muting
+                          MixpanelManager().recordingMuteToggled(
+                            isMuted: true,
+                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                          );
+                        } else {
+                          // User is resuming
+                          MixpanelManager().recordingMuteToggled(
+                            isMuted: false,
+                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                          );
+                        }
                         _toggleRecording(context, provider);
                       },
                       child: Container(

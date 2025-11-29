@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import envConfig from '@/src/constants/envConfig';
 
 interface App {
   id: string;
@@ -40,12 +41,8 @@ export default function MyAppsPage() {
         throw new Error('Authentication token not available.');
       }
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/v1/apps`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
+        `${envConfig.API_URL || 'http://localhost:8000'}/v1/apps`,
+        { headers: { Authorization: `Bearer ${token}` } },
       );
 
       console.log('📡 [fetchUserApps] Backend response status:', response.status);

@@ -66,8 +66,6 @@ class MemoryItem extends StatelessWidget {
                       Text(
                         memory.content.decodeString,
                         style: AppStyles.body,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

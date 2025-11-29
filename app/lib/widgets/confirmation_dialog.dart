@@ -53,6 +53,9 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Hide cancel button if cancelText is null and onCancel doesn't do anything meaningful
+    final showCancelButton = widget.cancelText != null;
+
     if (Platform.isAndroid) {
       return AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
@@ -120,14 +123,15 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: widget.onCancel,
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade300,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          if (showCancelButton)
+            TextButton(
+              onPressed: widget.onCancel,
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey.shade300,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              child: Text(widget.cancelText ?? "Cancel"),
             ),
-            child: Text(widget.cancelText ?? "Cancel"),
-          ),
           TextButton(
             onPressed: widget.onConfirm,
             style: TextButton.styleFrom(
@@ -190,17 +194,18 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
           ],
         ),
         actions: [
-          CupertinoDialogAction(
-            onPressed: widget.onCancel,
-            isDestructiveAction: false,
-            child: Text(
-              widget.cancelText ?? "Cancel",
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey.shade300,
+          if (showCancelButton)
+            CupertinoDialogAction(
+              onPressed: widget.onCancel,
+              isDestructiveAction: false,
+              child: Text(
+                widget.cancelText ?? "Cancel",
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade300,
+                ),
               ),
             ),
-          ),
           CupertinoDialogAction(
             onPressed: widget.onConfirm,
             isDefaultAction: true,

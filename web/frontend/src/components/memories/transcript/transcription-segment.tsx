@@ -1,14 +1,16 @@
 'use client';
 
 import { predefinedColors } from '@/src/constants/colors';
-import { TranscriptSegment } from '@/src/types/memory.types';
+import { TranscriptSegment, Person } from '@/src/types/memory.types';
 import { UserCircle, UserStar } from 'iconoir-react';
 import { useState } from 'react';
 
 export default function TranscriptionSegment({
   segment,
+  people,
 }: {
   segment: TranscriptSegment;
+  people?: Person[];
 }) {
   const color = predefinedColors[segment.speaker_id % predefinedColors.length];
   const [showMore, setShowMore] = useState(false);
@@ -18,6 +20,15 @@ export default function TranscriptionSegment({
     segment.text.replace(`Speaker ${segment.speaker_id}:`, '').slice(1);
 
   const isUser = segment.is_user;
+
+  // Get person name if available
+  const personName = segment.person_id && people
+    ? people.find(p => p.id === segment.person_id)?.name
+    : null;
+
+  const displayName = isUser 
+    ? 'Owner' 
+    : personName || `Speaker ${segment.speaker_id}`;
 
   return (
     <li className="my-5 flex gap-2">
@@ -32,7 +43,7 @@ export default function TranscriptionSegment({
       )}
       <div>
         <p className="text-base font-semibold md:text-lg">
-          {isUser ? `Owner` : `Speaker ${segment.speaker_id}`}
+          {displayName}
         </p>
         <p className="text-base font-extralight leading-7 md:text-lg md:leading-9">
           {showMore

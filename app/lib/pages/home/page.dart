@@ -455,8 +455,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   alignment: Alignment.bottomCenter,
                                   child: Container(
                                     width: double.infinity,
-                                    height: 90,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                                    height: 80,
+                                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
                                     decoration: const BoxDecoration(
                                       color: Color.fromARGB(255, 15, 15, 15),
                                     ),
@@ -486,6 +486,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       FontAwesomeIcons.house,
                                                       color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
                                                       size: 24,
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'Home',
+                                                      style: TextStyle(
+                                                        color: home.selectedIndex == 0
+                                                            ? Colors.white
+                                                            : Colors.grey.withValues(alpha: 0.8),
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -517,6 +528,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       FontAwesomeIcons.listCheck,
                                                       color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
                                                       size: 24,
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'Tasks',
+                                                      style: TextStyle(
+                                                        color: home.selectedIndex == 1
+                                                            ? Colors.white
+                                                            : Colors.grey.withValues(alpha: 0.8),
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -551,6 +573,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                                       size: 24,
                                                     ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'Memories',
+                                                      style: TextStyle(
+                                                        color: home.selectedIndex == 2
+                                                            ? Colors.white
+                                                            : Colors.grey.withValues(alpha: 0.8),
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),
@@ -581,6 +614,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       FontAwesomeIcons.puzzlePiece,
                                                       color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
                                                       size: 24,
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Text(
+                                                      'Apps',
+                                                      style: TextStyle(
+                                                        color: home.selectedIndex == 3
+                                                            ? Colors.white
+                                                            : Colors.grey.withValues(alpha: 0.8),
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
                                                     ),
                                                   ],
                                                 ),

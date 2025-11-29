@@ -116,73 +116,42 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
-                transform: Matrix4.identity()..scale(_isHovered ? 1.03 : 1.0),
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        ResponsiveHelper.purplePrimary,
-                        ResponsiveHelper.purplePrimary.withValues(alpha: 0.8),
-                        const Color(0xFF6366F1),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(60),
-                    boxShadow: [
-                      BoxShadow(
-                        color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.25),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                        spreadRadius: 2,
-                      ),
-                      BoxShadow(
-                        color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
-                        blurRadius: 40,
-                        offset: const Offset(0, 16),
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    children: [
-                      // Pulsing ring effect
-                      if (!isInitializing)
-                        Positioned.fill(
-                          child: AnimatedContainer(
-                            duration: const Duration(seconds: 2),
-                            curve: Curves.easeInOut,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(60),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                width: 2,
-                              ),
-                            ),
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: ResponsiveHelper.purplePrimary,
+                  borderRadius: BorderRadius.circular(60),
+                  boxShadow: _isHovered
+                      ? [
+                          BoxShadow(
+                            color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                            blurRadius: 25,
+                            offset: const Offset(0, 10),
                           ),
+                        ]
+                      : [
+                          BoxShadow(
+                            color: ResponsiveHelper.purplePrimary.withOpacity(0.2),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                ),
+                child: Center(
+                  child: isInitializing
+                      ? const SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.mic_rounded,
+                          size: 48,
+                          color: Colors.white,
                         ),
-
-                      // Center content
-                      Center(
-                        child: isInitializing
-                            ? const SizedBox(
-                                width: 32,
-                                height: 32,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 3,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Icon(
-                                Icons.mic_rounded,
-                                size: 48,
-                                color: Colors.white,
-                              ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -206,7 +175,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               SelectableText(
                 isInitializing
                     ? 'Preparing system audio capture'
-                    : 'Click the button above to begin capturing audio and create live transcripts',
+                    : 'Click the button to capture audio for live transcripts, AI insights, and automatic saving.',
                 style: const TextStyle(
                   fontSize: 15,
                   color: ResponsiveHelper.textTertiary,
@@ -218,19 +187,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
           ),
 
           const SizedBox(height: 16),
-
-          // Feature highlights
-          if (!isInitializing)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildFeatureChip(Icons.transcribe_rounded, 'Live Transcript'),
-                const SizedBox(width: 12),
-                _buildFeatureChip(Icons.psychology_rounded, 'AI Insights'),
-                const SizedBox(width: 12),
-                _buildFeatureChip(Icons.cloud_sync_rounded, 'Auto Save'),
-              ],
-            ),
         ],
       ),
     );
@@ -333,7 +289,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                       style: TextStyle(
                         fontSize: 14,
                         color: isRecordingOrPaused ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
-                        fontStyle: latestTranscript.isNotEmpty ? FontStyle.normal : FontStyle.italic,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -394,39 +349,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureChip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 14,
-            color: ResponsiveHelper.purplePrimary,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: ResponsiveHelper.textSecondary,
-            ),
-          ),
         ],
       ),
     );
@@ -557,7 +479,6 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
                             style: TextStyle(
                               fontSize: isFullScreen ? 16 : 12,
                               color: ResponsiveHelper.textTertiary,
-                              fontStyle: FontStyle.italic,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -605,7 +526,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
   }
 
   Widget _buildLiveTranscriptContent(List<TranscriptSegment> segments) {
-    final displaySegments = segments.length > 15 ? segments.sublist(segments.length - 15) : segments;
+    final displaySegments = segments;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -886,157 +807,157 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
     );
   }
 
-Widget _buildAudioSourceStatus(CaptureProvider captureProvider) {
-  final micName = captureProvider.microphoneName;
-  final micLevel = captureProvider.microphoneLevel;
-  final systemLevel = captureProvider.systemAudioLevel;
+  Widget _buildAudioSourceStatus(CaptureProvider captureProvider) {
+    final micName = captureProvider.microphoneName;
+    final micLevel = captureProvider.microphoneLevel;
+    final systemLevel = captureProvider.systemAudioLevel;
 
-  if (micName == null) {
-    return const SizedBox.shrink();
+    if (micName == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _buildMicrophoneSection(micName, micLevel),
+        const SizedBox(width: 24),
+        Row(
+          children: [
+            const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+            const SizedBox(width: 8),
+            const Text(
+              'System',
+              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+            ),
+            const SizedBox(width: 8),
+            _buildAudioLevelBar(systemLevel, Colors.orange.shade600),
+          ],
+        ),
+      ],
+    );
   }
 
-  return Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      _buildMicrophoneSection(micName, micLevel),
-      const SizedBox(width: 24),
-      Row(
-        children: [
-          const Icon(Icons.volume_up_rounded, size: 16, color: ResponsiveHelper.textSecondary),
-          const SizedBox(width: 8),
-          const Text(
-            'System',
-            style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
-          ),
-          const SizedBox(width: 8),
-          _buildAudioLevelBar(systemLevel, Colors.orange.shade600),
-        ],
+  Widget _buildMicrophoneSection(String micName, double micLevel) {
+    return GestureDetector(
+      key: _micKey,
+      onTap: _toggleAudioDeviceDropdown,
+      child: Tooltip(
+        message: micName,
+        child: Row(
+          children: [
+            const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
+            const SizedBox(width: 8),
+            const Text(
+              'Mic',
+              style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              _audioDeviceOverlayEntry != null ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+              size: 14,
+              color: ResponsiveHelper.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
+          ],
+        ),
       ),
-    ],
-  );
-}
+    );
+  }
 
-Widget _buildMicrophoneSection(String micName, double micLevel) {
-  return GestureDetector(
-    key: _micKey,
-    onTap: _toggleAudioDeviceDropdown,
-    child: Tooltip(
-      message: micName,
-      child: Row(
-        children: [
-          const Icon(Icons.mic_rounded, size: 16, color: ResponsiveHelper.textSecondary),
-          const SizedBox(width: 8),
-          const Text(
-            'Mic',
-            style: TextStyle(fontSize: 13, color: ResponsiveHelper.textSecondary),
-          ),
-          const SizedBox(width: 4),
-          Icon(
-            _audioDeviceOverlayEntry != null ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-            size: 14,
-            color: ResponsiveHelper.textSecondary,
-          ),
-          const SizedBox(width: 8),
-          _buildAudioLevelBar(micLevel, ResponsiveHelper.purplePrimary),
-        ],
-      ),
-    ),
-  );
-}
-
-void _toggleAudioDeviceDropdown() {
-  if (_audioDeviceOverlayEntry != null) {
-    _removeAudioDeviceOverlay();
-  } else {
-    if (_availableAudioDevices.isEmpty) {
-      _loadAvailableAudioDevices();
+  void _toggleAudioDeviceDropdown() {
+    if (_audioDeviceOverlayEntry != null) {
+      _removeAudioDeviceOverlay();
+    } else {
+      if (_availableAudioDevices.isEmpty) {
+        _loadAvailableAudioDevices();
+      }
+      _audioDeviceOverlayEntry = _createAudioDeviceOverlayEntry();
+      Overlay.of(context).insert(_audioDeviceOverlayEntry!);
+      setState(() {});
     }
-    _audioDeviceOverlayEntry = _createAudioDeviceOverlayEntry();
-    Overlay.of(context).insert(_audioDeviceOverlayEntry!);
+  }
+
+  void _removeAudioDeviceOverlay() {
+    _audioDeviceOverlayEntry?.remove();
+    _audioDeviceOverlayEntry = null;
     setState(() {});
   }
-}
 
-void _removeAudioDeviceOverlay() {
-  _audioDeviceOverlayEntry?.remove();
-  _audioDeviceOverlayEntry = null;
-  setState(() {});
-}
+  OverlayEntry _createAudioDeviceOverlayEntry() {
+    final renderBox = _micKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) {
+      return OverlayEntry(builder: (context) => const SizedBox.shrink());
+    }
 
-OverlayEntry _createAudioDeviceOverlayEntry() {
-  final renderBox = _micKey.currentContext?.findRenderObject() as RenderBox?;
-  if (renderBox == null) {
-    return OverlayEntry(builder: (context) => const SizedBox.shrink());
-  }
-  
-  final size = renderBox.size;
-  final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    final offset = renderBox.localToGlobal(Offset.zero);
 
-  return OverlayEntry(
-    builder: (context) => GestureDetector(
-      onTap: _removeAudioDeviceOverlay,
-      behavior: HitTestBehavior.translucent,
-      child: Stack(
-        children: [
-          _overlayBackground(),
-          Positioned(
-            top: offset.dy + size.height + 5,
-            left: offset.dx - 100 + (size.width / 2),
-            child: _overlayDropdown(),
-          ),
-        ],
+    return OverlayEntry(
+      builder: (context) => GestureDetector(
+        onTap: _removeAudioDeviceOverlay,
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          children: [
+            _overlayBackground(),
+            Positioned(
+              top: offset.dy + size.height + 5,
+              left: offset.dx - 100 + (size.width / 2),
+              child: _overlayDropdown(),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-Widget _overlayBackground() => Positioned.fill(
-  child: Container(color: Colors.transparent),
-);
-
-Widget _overlayDropdown() => GestureDetector(
-  onTap: () {},
-  child: _buildFloatingAudioDeviceDropdown(),
-);
-
-Future<void> _selectAudioDevice(Map<String, String> device) async {
-  setState(() {
-    _selectedDeviceId = device['id'];
-  });
-
-  _removeAudioDeviceOverlay();
-
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  await prefs.setString('selected_audio_device_id', device['id'] ?? '');
-  
-  try {
-    final result = await const MethodChannel('screenCapturePlatform')
-        .invokeMethod('selectAudioDevice', {'deviceId': device['id']});
-    
-    if (mounted && result == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Audio input set to ${device['name']}'),
-          duration: const Duration(seconds: 2),
-        ),
+  Widget _overlayBackground() => Positioned.fill(
+        child: Container(color: Colors.transparent),
       );
-    }
-  } catch (e) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error switching audio device: $e'),
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.red,
-        ),
+
+  Widget _overlayDropdown() => GestureDetector(
+        onTap: () {},
+        child: _buildFloatingAudioDeviceDropdown(),
       );
+
+  Future<void> _selectAudioDevice(Map<String, String> device) async {
+    setState(() {
+      _selectedDeviceId = device['id'];
+    });
+
+    _removeAudioDeviceOverlay();
+
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('selected_audio_device_id', device['id'] ?? '');
+
+    try {
+      final result = await const MethodChannel('screenCapturePlatform')
+          .invokeMethod('selectAudioDevice', {'deviceId': device['id']});
+
+      if (mounted && result == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Audio input set to ${device['name']}'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error switching audio device: $e'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
-}
 
-Widget _buildFloatingAudioDeviceDropdown() {
-  return Material(
+  Widget _buildFloatingAudioDeviceDropdown() {
+    return Material(
       elevation: 8,
       borderRadius: BorderRadius.circular(12),
       color: const Color(0xFF2C2C2E),
@@ -1053,10 +974,7 @@ Widget _buildFloatingAudioDeviceDropdown() {
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text('Select Audio Input',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w600)),
             ),
             Divider(height: 1, color: Colors.white.withOpacity(0.1)),
             const SizedBox(height: 4),
@@ -1067,17 +985,15 @@ Widget _buildFloatingAudioDeviceDropdown() {
                   padding: EdgeInsets.all(16),
                   child: Center(
                       child: Text('Loading devices...',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: ResponsiveHelper.textSecondary)))),
+                          style: TextStyle(fontSize: 12, color: ResponsiveHelper.textSecondary)))),
             const SizedBox(height: 4),
           ],
         ),
       ),
     );
-}
+  }
 
-Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
+  Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
     final isSelected = device['id'] == _selectedDeviceId;
 
     return Material(
@@ -1142,15 +1058,16 @@ Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
   }
 
   Future<void> _loadAvailableAudioDevices() async {
-    final result = await const MethodChannel('screenCapturePlatform')
-        .invokeMethod('getAvailableAudioDevices');
-    
+    final result = await const MethodChannel('screenCapturePlatform').invokeMethod('getAvailableAudioDevices');
+
     if (result is List && mounted) {
-      final devices = result.map((device) => {
-        'id': device['id']?.toString() ?? '',
-        'name': device['name']?.toString() ?? 'Unknown Device',
-      }).toList();
-      
+      final devices = result
+          .map((device) => {
+                'id': device['id']?.toString() ?? '',
+                'name': device['name']?.toString() ?? 'Unknown Device',
+              })
+          .toList();
+
       setState(() {
         _availableAudioDevices = devices;
         _selectedDeviceId = _validateSelectedDevice(devices, _selectedDeviceId);
@@ -1160,7 +1077,7 @@ Widget _buildFloatingAudioDeviceItem(Map<String, String> device) {
 
   String? _findCurrentDeviceId(List<Map<String, String>> devices) {
     if (devices.isEmpty) return null;
-    
+
     final currentMicName = context.read<CaptureProvider>().microphoneName;
     if (currentMicName != null) {
       final matchingDevice = devices.firstWhere(

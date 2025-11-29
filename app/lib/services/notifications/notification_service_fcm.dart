@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// Firebase Cloud Messaging enabled notification service
@@ -130,17 +131,33 @@ class _FCMNotificationService implements NotificationInterface {
     if (token == null) return;
     String timeZone = await getTimeZone();
     if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
-      await Intercom.instance.sendTokenToIntercom(token);
       await saveFcmTokenServer(token: token, timeZone: timeZone);
+
+      try {
+        await IntercomManager.instance.sendTokenToIntercom(token);
+      } catch (e) {
+        print(e);
+      }
     }
   }
 
   @override
   void saveNotificationToken() async {
-    if (Platform.isIOS) {
-      await _firebaseMessaging.getAPNSToken();
+    if (Platform.isIOS || Platform.isMacOS) {
+      String? apnsToken;
+      for (int i = 0; i < 10; i++) {
+        apnsToken = await _firebaseMessaging.getAPNSToken();
+        if (apnsToken != null) break;
+        await Future.delayed(const Duration(seconds: 1));
+      }
+
+      if (apnsToken == null) {
+        debugPrint('APNS token not available yet, will retry on refresh');
+        _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
+        return;
+      }
     }
-    if (Platform.isMacOS) return;
+
     String? token = await _firebaseMessaging.getToken();
     await saveFcmToken(token);
     _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
