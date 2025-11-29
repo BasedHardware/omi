@@ -28,7 +28,7 @@ os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../../' + os.getenv('GOOGLE_APPL
 firebase_admin.initialize_app()
 
 from models.transcript_segment import TranscriptSegment
-from utils.stt.streaming import process_audio_dg, process_audio_soniox, process_audio_speechmatics
+from utils.stt.streaming import process_audio_dg, process_audio_soniox, process_audio_speechmatics, process_audio_elevenlabs
 from groq import Groq
 
 from utils.other.storage import upload_postprocessing_audio
@@ -86,7 +86,7 @@ async def _execute_single(file_path: str):
         return
 
     print('Started processing', memory_id, 'duration', aseg.duration_seconds)
-    result = {'deepgram': [], 'soniox': [], 'speechmatics': []}
+    result = {'elevenlabs': [], 'deepgram': [], 'soniox': [], 'speechmatics': []}
 
     def stream_transcript_deepgram(new_segments, _):
         print('stream_transcript_deepgram', new_segments)
@@ -99,11 +99,16 @@ async def _execute_single(file_path: str):
     def stream_transcript_speechmatics(new_segments, _):
         print('stream_transcript_speechmatics', new_segments)
         add_model_result_segments('speechmatics', new_segments, result)
+    
+    def stream_transcript_elevenlabs(new_segments, _):
+        print('stream_transcript_elevenlabs', new_segments)
+        add_model_result_segments('elevenlabs', new_segments, result)
 
     # streaming models
     socket = await process_audio_dg(stream_transcript_deepgram, '1', 'en', 16000, 'pcm16', 1, 0)
     socket_soniox = await process_audio_soniox(stream_transcript_soniox, '1', 16000, 'en', None)
     socket_speechmatics = await process_audio_speechmatics(stream_transcript_speechmatics, '1', 16000, 'en', 0)
+    socket_elevenlabs = await process_audio_elevenlabs(stream_transcript_elevenlabs, 16000, 'eng', 0)
     print('duration', duration)
     with open(file_path, "rb") as file:
         while True:
@@ -113,6 +118,7 @@ async def _execute_single(file_path: str):
             socket.send(bytes(chunk))
             await socket_soniox.send(bytes(chunk))
             await socket_speechmatics.send(bytes(chunk))
+            await socket_elevenlabs.send(bytes(chunk))
             await asyncio.sleep(0.005)
 
     print('Finished sending audio')
@@ -139,6 +145,7 @@ async def _execute_single(file_path: str):
     socket.finish()
     await socket_soniox.close()
     await socket_speechmatics.close()
+    await socket_elevenlabs.close()
 
 
 def batched(iterable, n):
