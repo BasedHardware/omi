@@ -24,9 +24,14 @@ abstract class IPureSocketListener {
 }
 
 abstract class IPureSocket {
+  PureSocketStatus get status;
+
   Future<bool> connect();
   Future disconnect();
+  Future stop();
   void send(dynamic message);
+
+  void setListener(IPureSocketListener listener);
 
   void onConnectionStateChanged(bool isConnected);
 

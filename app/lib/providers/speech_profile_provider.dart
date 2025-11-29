@@ -13,12 +13,12 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
-    implements IDeviceServiceSubsciption, ITransctipSegmentSocketServiceListener {
+    implements IDeviceServiceSubsciption, ITransctiptSegmentSocketServiceListener {
   DeviceProvider? deviceProvider;
   bool? permissionEnabled;
   bool loading = false;
