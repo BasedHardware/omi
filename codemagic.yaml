@@ -768,17 +768,21 @@ workflows:
           # TESTING: Hardcoded version
           BUILD_NAME="1.0.78"
           BUILD_NUMBER="474"
+          TAG_NAME="v${BUILD_NAME}+${BUILD_NUMBER}-desktop-cm"
 
           # Extract version from tag (supports both -desktop-cm and -macos-cm)
           # BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
           # BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          # TAG_NAME="$CM_TAG"
 
           # Export to environment for all subsequent steps
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
           echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
           echo VERSION="${BUILD_NAME}+${BUILD_NUMBER}" >> $CM_ENV
+          echo TAG_NAME="$TAG_NAME" >> $CM_ENV
 
           echo "Version set to: ${BUILD_NAME}+${BUILD_NUMBER}"
+          echo "Tag name: $TAG_NAME"
 
       - name: Get Flutter packages
         script: |
@@ -1252,7 +1256,22 @@ workflows:
         script: |
           echo "Creating Sparkle ZIP for version: $VERSION"
 
-          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release -name "Omi.app" -type d | head -1)
+          # Find the app in the Release-prod flavor directory
+          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-prod -name "Omi.app" -type d | head -1)
+
+          if [ -z "$APP_PATH" ]; then
+            echo "App not found in Release-prod, trying Release..."
+            APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release -name "Omi.app" -type d | head -1)
+          fi
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Could not find Omi.app in build outputs"
+            find $(pwd)/build/macos/Build/Products -type d -name "*.app" || true
+            exit 1
+          fi
+
+          echo "Found app at: $APP_PATH"
+
           ZIP_NAME="${VERSION}-macos.zip"
           DIST_DIR="dist/${VERSION}-macos"
           WORKING_DIR=$(pwd)
@@ -1317,12 +1336,13 @@ workflows:
       - name: Create GitHub Release
         script: |
           echo "Creating GitHub release for version: $VERSION"
+          echo "Tag name: $TAG_NAME"
 
           # Get the recent commits for changelog
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 $CM_TAG^ 2>/dev/null || echo "")
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
 
           if [ -n "$PREVIOUS_TAG" ]; then
-            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$CM_TAG | grep -v "Merge" | head -20)
+            CHANGELOG=$(git log --pretty=format:"* %s" $PREVIOUS_TAG..$TAG_NAME | grep -v "Merge" | head -20)
           else
             CHANGELOG=$(git log --pretty=format:"* %s" -10 | grep -v "Merge")
           fi
@@ -1336,7 +1356,7 @@ workflows:
 
           $CHANGELOG
 
-          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${CM_TAG}
+          **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
 
           <!-- KEY_VALUE_START
           changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
@@ -1350,17 +1370,17 @@ workflows:
           DMG_FILE=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
 
           # Create GitHub release with DMG attachment
-          echo "Creating GitHub release for $CM_TAG..."
+          echo "Creating GitHub release for $TAG_NAME..."
           if [ -f "$DMG_FILE" ]; then
             echo "Uploading DMG file: $DMG_FILE"
-            gh release create "$CM_TAG" \
+            gh release create "$TAG_NAME" \
               --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
               --notes-file /tmp/release_notes.md \
               --repo BasedHardware/omi \
               "$DMG_FILE"
           else
             echo "Warning: DMG file not found, creating release without DMG"
-            gh release create "$CM_TAG" \
+            gh release create "$TAG_NAME" \
               --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
               --notes-file /tmp/release_notes.md \
               --repo BasedHardware/omi
