@@ -133,27 +133,37 @@ export default function ConversationCategoriesChart({
       {/* Chart */}
       {data ? (
         <Card className="p-6">
-          <h3 className="mb-4 text-lg font-semibold">Categories Breakdown</h3>
-          <div className="space-y-3">
+          <h3 className="mb-6 text-lg font-semibold">Categories Breakdown</h3>
+          <div className="flex flex-wrap justify-center gap-4">
             {data.categories.map((item) => {
               const percentage = ((item.count / data.total) * 100).toFixed(1);
-              const barWidth = (item.count / maxCount) * 100;
+              // Scale bubble size: min 60px, max 160px based on percentage
+              const minSize = 60;
+              const maxSize = 160;
+              const sizeRatio = item.count / maxCount;
+              const bubbleSize = Math.max(minSize, Math.min(maxSize, minSize + sizeRatio * (maxSize - minSize)));
               const colorClass = CATEGORY_COLORS[item.category] || 'bg-neutral-500';
 
               return (
-                <div key={item.category} className="group">
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="font-medium">{formatCategoryName(item.category)}</span>
-                    <span className="text-neutral-500">
-                      {item.count.toLocaleString()} ({percentage}%)
-                    </span>
+                <div
+                  key={item.category}
+                  className="group relative flex flex-col items-center"
+                >
+                  <div
+                    className={`flex items-center justify-center rounded-full ${colorClass} text-white font-bold shadow-lg hover:scale-110 transition-transform duration-300 cursor-pointer`}
+                    style={{
+                      width: `${bubbleSize}px`,
+                      height: `${bubbleSize}px`,
+                      fontSize: `${Math.max(12, bubbleSize / 5)}px`,
+                    }}
+                    title={`${formatCategoryName(item.category)}: ${item.count.toLocaleString()} (${percentage}%)`}
+                  >
+                    {item.count}
                   </div>
-                  <div className="h-6 w-full overflow-hidden rounded-full bg-neutral-100">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${colorClass}`}
-                      style={{ width: `${barWidth}%` }}
-                    />
-                  </div>
+                  <span className="mt-2 text-xs font-medium text-neutral-600 text-center max-w-[100px] truncate">
+                    {formatCategoryName(item.category)}
+                  </span>
+                  <span className="text-xs text-neutral-400">{percentage}%</span>
                 </div>
               );
             })}
@@ -161,14 +171,14 @@ export default function ConversationCategoriesChart({
         </Card>
       ) : (
         <Card className="p-6">
-          <div className="space-y-4">
+          <div className="flex flex-wrap justify-center gap-4">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i}>
-                <div className="mb-1 flex items-center justify-between">
-                  <div className="h-4 w-24 animate-pulse rounded bg-neutral-200"></div>
-                  <div className="h-4 w-16 animate-pulse rounded bg-neutral-200"></div>
-                </div>
-                <div className="h-6 w-full animate-pulse rounded-full bg-neutral-200"></div>
+              <div key={i} className="flex flex-col items-center">
+                <div
+                  className="animate-pulse rounded-full bg-neutral-200"
+                  style={{ width: `${80 + i * 10}px`, height: `${80 + i * 10}px` }}
+                />
+                <div className="mt-2 h-3 w-16 animate-pulse rounded bg-neutral-200"></div>
               </div>
             ))}
           </div>
