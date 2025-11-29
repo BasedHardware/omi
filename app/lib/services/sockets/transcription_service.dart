@@ -366,6 +366,35 @@ class TranscriptSocketServiceFactory {
     );
   }
 
+  static TranscriptSegmentSocketService createWhisperCpp(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    String host = '127.0.0.1',
+    int port = 8080,
+    double temperature = 0.0,
+    double temperatureInc = 0.2,
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    return _createPollingService(
+      sampleRate,
+      codec,
+      language,
+      _createWhisperCppSocket(sampleRate, codec,
+          host: host,
+          port: port,
+          temperature: temperature,
+          temperatureInc: temperatureInc,
+          bufferDuration: bufferDuration,
+          transcoder: transcoder),
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
   static TranscriptSegmentSocketService createSchemaBased(
     int sampleRate,
     BleAudioCodec codec,
@@ -445,6 +474,39 @@ class TranscriptSocketServiceFactory {
       codec,
       language,
       apiKey: deepgramApiKey,
+      bufferDuration: bufferDuration,
+      transcoder: transcoder,
+    );
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: primarySocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+    );
+  }
+
+  static TranscriptSegmentSocketService createCompositeWithWhisperCpp(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    String host = '127.0.0.1',
+    int port = 8080,
+    double temperature = 0.0,
+    double temperatureInc = 0.2,
+    bool includeSpeechProfile = false,
+    String? source,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) {
+    final primarySocket = _createWhisperCppSocket(
+      sampleRate,
+      codec,
+      host: host,
+      port: port,
+      temperature: temperature,
+      temperatureInc: temperatureInc,
       bufferDuration: bufferDuration,
       transcoder: transcoder,
     );
@@ -633,6 +695,30 @@ class TranscriptSocketServiceFactory {
         codec,
         SchemaBasedSttProvider.gemini(apiKey: apiKey, model: model, language: language),
         serviceId: 'gemini',
+        bufferDuration: bufferDuration,
+        transcoder: transcoder,
+      );
+
+  static PurePollingSocket _createWhisperCppSocket(
+    int sampleRate,
+    BleAudioCodec codec, {
+    String host = '127.0.0.1',
+    int port = 8080,
+    double temperature = 0.0,
+    double temperatureInc = 0.2,
+    Duration bufferDuration = const Duration(seconds: 5),
+    IAudioTranscoder? transcoder,
+  }) =>
+      _createPollingSocket(
+        sampleRate,
+        codec,
+        SchemaBasedSttProvider.whisperCpp(
+          host: host,
+          port: port,
+          temperature: temperature,
+          temperatureInc: temperatureInc,
+        ),
+        serviceId: 'whisper-cpp',
         bufferDuration: bufferDuration,
         transcoder: transcoder,
       );

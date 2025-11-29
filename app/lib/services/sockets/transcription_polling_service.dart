@@ -193,6 +193,28 @@ class SchemaBasedSttProvider implements ISttProvider {
     );
   }
 
+  // ref: https://github.com/ggml-org/whisper.cpp
+  factory SchemaBasedSttProvider.whisperCpp({
+    String host = '127.0.0.1',
+    int port = 8080,
+    String responseFormat = 'verbose_json',
+    double temperature = 0.0,
+    double temperatureInc = 0.2,
+  }) {
+    return SchemaBasedSttProvider(
+      apiUrl: 'http://$host:$port/inference',
+      schema: SttResponseSchema.openAI, // whisper.cpp uses same format as OpenAI
+      defaultHeaders: {},
+      defaultFields: {
+        'temperature': temperature.toString(),
+        'temperature_inc': temperatureInc.toString(),
+        'response_format': responseFormat,
+      },
+      audioFieldName: 'file',
+      requestBodyType: SttRequestBodyType.multipartForm,
+    );
+  }
+
   Future<String?> _uploadAudio(Uint8List audioData) async {
     if (fileUploadConfig == null) return null;
 
