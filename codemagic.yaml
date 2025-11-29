@@ -809,7 +809,7 @@ workflows:
             if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
               /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed App Sandbox" || true
             fi
-            
+
             # Remove get-task-allow (debug-only, blocks notarization)
             if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null; then
               /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed get-task-allow" || true
@@ -999,14 +999,34 @@ workflows:
           echo "=== Notarization entitlements file (with Team ID hardcoded) ==="
           cat /tmp/notarization.entitlements
 
-          # Sign ONLY the top-level app bundle with hardened runtime
-          # DO NOT re-sign frameworks - they're already properly signed
+          # Sign ALL embedded frameworks FIRST (REQUIRED when re-signing app with --force)
+          echo ""
+          echo "=== Signing embedded frameworks ==="
+          find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d -print0 | while IFS= read -r -d '' framework; do
+            echo "Signing framework: $(basename "$framework")"
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$framework"
+          done
+
+          # Sign any dylibs
+          find "$APP_PATH" -name "*.dylib" -type f -print0 | while IFS= read -r -d '' dylib; do
+            echo "Signing dylib: $(basename "$dylib")"
+            codesign --force --timestamp --options runtime \
+              --sign "$DEVELOPER_ID_CERT" \
+              "$dylib"
+          done
+
+          # Now sign the app bundle with --force to update entitlements
           echo ""
           echo "=== Signing app bundle for notarization ==="
-          codesign --timestamp --options runtime \
+          echo "Using --force to replace existing signature and update entitlements..."
+          codesign --force --timestamp --options runtime \
             --sign "$DEVELOPER_ID_CERT" \
             --entitlements /tmp/notarization.entitlements \
-            "$APP_PATH" 2>&1
+            "$APP_PATH"
+          
+          echo "codesign exit code: $?"
 
           # Verify signature
           echo ""
