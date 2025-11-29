@@ -803,11 +803,26 @@ workflows:
           # The private key should be stored in Codemagic environment variables as SPARKLE_PRIVATE_KEY
           # Import it into the Keychain using Sparkle's tool
           if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-            echo "$SPARKLE_PRIVATE_KEY" | /Users/builder/clone/app/macos/Pods/Sparkle/bin/generate_keys --import-private-key
-            echo "✓ Sparkle private key imported successfully"
+            # Write private key to temporary file
+            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key.txt
+
+            # Import using -f flag (not --import-private-key)
+            /Users/builder/clone/app/macos/Pods/Sparkle/bin/generate_keys -f /tmp/sparkle_private_key.txt
+
+            # Clean up temp file
+            rm /tmp/sparkle_private_key.txt
+
+            # Verify import
+            if security find-generic-password -s "Sparkle EdDSA Private Key" 2>/dev/null; then
+              echo "✓ Sparkle private key imported successfully"
+            else
+              echo "ERROR: Failed to import Sparkle private key"
+              exit 1
+            fi
           else
             echo "⚠ WARNING: SPARKLE_PRIVATE_KEY environment variable not set"
             echo "Signing will fail without this key!"
+            exit 1
           fi
 
       - name: Clean up entitlements (remove Mac App Store-only capabilities)
