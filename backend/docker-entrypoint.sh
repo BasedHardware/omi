@@ -7,15 +7,30 @@ echo "Starting Omi Backend..."
 # Support base64 encoded JSON (recommended for avoiding escape issues)
 if [ -n "$SERVICE_ACCOUNT_JSON_BASE64" ]; then
     echo "Creating google-credentials.json from SERVICE_ACCOUNT_JSON_BASE64 environment variable..."
-    echo "$SERVICE_ACCOUNT_JSON_BASE64" | base64 -d > /app/google-credentials.json
 
+    # Use Python for reliable base64 decoding (works across all platforms)
+    python3 -c "
+import base64
+import json
+import os
+import sys
+
+b64_value = os.environ.get('SERVICE_ACCOUNT_JSON_BASE64', '')
+try:
+    decoded = base64.b64decode(b64_value).decode('utf-8')
     # Validate it's proper JSON
-    if ! python3 -c "import json; json.load(open('/app/google-credentials.json'))" 2>/dev/null; then
-        echo "ERROR: Decoded SERVICE_ACCOUNT_JSON_BASE64 is not valid JSON"
+    data = json.loads(decoded)
+    with open('/app/google-credentials.json', 'w') as f:
+        json.dump(data, f)
+    print('✓ Successfully created /app/google-credentials.json from base64')
+except Exception as e:
+    print(f'ERROR: Failed to decode SERVICE_ACCOUNT_JSON_BASE64: {e}')
+    sys.exit(1)
+"
+    if [ $? -ne 0 ]; then
         exit 1
     fi
 
-    echo "✓ Successfully created /app/google-credentials.json from base64"
     export GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
 elif [ -n "$SERVICE_ACCOUNT_JSON" ]; then
     echo "Creating google-credentials.json from SERVICE_ACCOUNT_JSON environment variable..."
