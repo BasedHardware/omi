@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import 'package:omi/widgets/generative_ui/generative_ui.dart';
+
 class ConversationMarkdownWidget extends StatefulWidget {
   final String content;
   final String searchQuery;
@@ -192,16 +194,55 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     );
   }
 
+  // Preprocess markdown to ensure proper spacing around headings and horizontal rules
+  // This fixes issues where text directly before/after --- becomes a setext heading
+  String _preprocessMarkdown(String content) {
+    var processed = content;
+
+    // Add blank line BEFORE horizontal rules if not present (prevents setext headings)
+    // This is critical: text followed directly by --- becomes an H2 heading!
+    processed = processed.replaceAllMapped(
+      RegExp(r'([^\n])\n(---+)(\n|$)'),
+      (match) => '${match.group(1)}\n\n${match.group(2)}${match.group(3)}',
+    );
+
+    // Add blank line after headings if not present (# through ######)
+    processed = processed.replaceAllMapped(
+      RegExp(r'(^|\n)(#{1,6}\s+[^\n]+)\n(?!\n)'),
+      (match) => '${match.group(1)}${match.group(2)}\n\n',
+    );
+
+    // Add blank line after horizontal rules if not present
+    processed = processed.replaceAllMapped(
+      RegExp(r'(^|\n)(---+)\n(?!\n)'),
+      (match) => '${match.group(1)}${match.group(2)}\n\n',
+    );
+
+    return processed;
+  }
+
   // Custom markdown widget with search functionality
   Widget _getMarkdownWidgetWithSearch(BuildContext context, String content,
       {String searchQuery = '', int currentResultIndex = -1}) {
-    var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
+    // Check for generative UI tags
+    final hasGenerativeTags = XmlTagParser.containsGenerativeTags(content);
 
-    String processedContent = content;
+    // If content has generative tags and no search, use GenerativeMarkdownWidget
+    if (hasGenerativeTags && searchQuery.isEmpty) {
+      return GenerativeMarkdownWidget(content: content);
+    }
+
+    // If content has generative tags WITH search, we need to handle it specially
+    if (hasGenerativeTags && searchQuery.isNotEmpty) {
+      return _buildGenerativeContentWithSearch(context, content, searchQuery, currentResultIndex);
+    }
+
+    // Preprocess markdown to fix spacing issues
+    String processedContent = _preprocessMarkdown(content);
 
     // If there's a search query, inject highlight tags
     if (searchQuery.isNotEmpty) {
-      processedContent = _highlightSearchInMarkdown(content, searchQuery, currentResultIndex);
+      processedContent = _highlightSearchInMarkdown(processedContent, searchQuery, currentResultIndex);
     }
 
     return MarkdownBody(
@@ -217,32 +258,80 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
               _SearchHighlightSyntax(),
             ]
           : [],
-      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-        a: style,
-        p: style.copyWith(
-          height: 1.5,
-        ),
-        pPadding: const EdgeInsets.only(bottom: 12),
-        blockquote: style.copyWith(
-          backgroundColor: Colors.transparent,
-          color: Colors.white,
-        ),
-        blockquoteDecoration: BoxDecoration(
-          color: Color(0xFF35343B),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        code: style.copyWith(
-          backgroundColor: Colors.transparent,
-          decoration: TextDecoration.none,
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
-        ),
-        strong: style.copyWith(
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+      styleSheet: MarkdownStyleHelper.getStyleSheet(context),
       data: processedContent,
     );
+  }
+
+  // Build generative UI content with search highlighting for markdown segments only
+  Widget _buildGenerativeContentWithSearch(
+    BuildContext context,
+    String content,
+    String searchQuery,
+    int currentResultIndex,
+  ) {
+    final parser = XmlTagParser();
+    final segments = parser.parse(content);
+
+    int currentMatchOffset = 0;
+
+    // Wrap in DefaultTextStyle to ensure consistent styling
+    return DefaultTextStyle(
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 16,
+        height: 1.5,
+        fontStyle: FontStyle.normal,
+        fontWeight: FontWeight.normal,
+        decoration: TextDecoration.none,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: segments.map((segment) {
+          if (segment is MarkdownSegment) {
+            // Preprocess markdown to fix spacing issues
+            final preprocessed = _preprocessMarkdown(segment.content);
+
+            // Count matches in this segment to track offset
+            final matchCount = _countMatches(preprocessed, searchQuery);
+            final localIndex = currentResultIndex >= currentMatchOffset &&
+                    currentResultIndex < currentMatchOffset + matchCount
+                ? currentResultIndex - currentMatchOffset
+                : -1;
+
+            currentMatchOffset += matchCount;
+
+            // Apply search highlighting to markdown content
+            final processedContent =
+                _highlightSearchInMarkdown(preprocessed, searchQuery, localIndex);
+
+            return MarkdownBody(
+              selectable: false,
+              shrinkWrap: true,
+              builders: {'highlight': _SearchHighlightBuilder()},
+              inlineSyntaxes: [_SearchHighlightSyntax()],
+              styleSheet: MarkdownStyleHelper.getStyleSheet(context),
+              data: processedContent,
+            );
+          } else if (segment is RichListSegment) {
+            return RichListWidget(
+              items: segment.items,
+              onUrlTap: (url) => InAppBrowser.open(context, url),
+            );
+          } else if (segment is PieChartSegment) {
+            return GenerativeBarChartWidget(data: segment.data);
+          }
+          return const SizedBox.shrink();
+        }).toList(),
+      ),
+    );
+  }
+
+  int _countMatches(String content, String searchQuery) {
+    if (searchQuery.isEmpty) return 0;
+    final pattern = RegExp(RegExp.escape(searchQuery), caseSensitive: false);
+    return pattern.allMatches(content).length;
   }
 
   static void _resetGlobalCounter() {
