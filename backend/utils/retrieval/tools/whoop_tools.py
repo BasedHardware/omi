@@ -45,30 +45,19 @@ def refresh_whoop_token(uid: str, integration: Optional[dict] = None) -> Optiona
         integration = users_db.get_integration(uid, 'whoop')
 
     if not integration:
-        print(f"🔄 Whoop token refresh failed: No integration found")
         return None
-
-    # Debug: Log what keys are in the integration dict
-    integration_keys = list(integration.keys())
-    print(f"🔄 Whoop integration keys: {integration_keys}")
 
     refresh_token = integration.get('refresh_token')
     if not refresh_token:
-        print(f"🔄 Whoop token refresh failed: No refresh token found in integration")
-        print(
-            f"🔄 Integration data (excluding sensitive fields): { {k: v for k, v in integration.items() if k not in ['access_token']} }"
-        )
         return None
 
     client_id = os.getenv('WHOOP_CLIENT_ID')
     client_secret = os.getenv('WHOOP_CLIENT_SECRET')
 
     if not all([client_id, client_secret]):
-        print(f"🔄 Whoop token refresh failed: Missing client credentials")
         return None
 
     try:
-        print(f"🔄 Attempting to refresh Whoop token for user {uid}")
         response = requests.post(
             'https://api.prod.whoop.com/oauth/oauth2/token',
             data={
@@ -81,8 +70,6 @@ def refresh_whoop_token(uid: str, integration: Optional[dict] = None) -> Optiona
             timeout=10.0,
         )
 
-        print(f"🔄 Whoop token refresh response status: {response.status_code}")
-
         if response.status_code == 200:
             token_data = response.json()
             new_access_token = token_data.get('access_token')
@@ -93,20 +80,14 @@ def refresh_whoop_token(uid: str, integration: Optional[dict] = None) -> Optiona
                 if 'refresh_token' in token_data:
                     integration['refresh_token'] = token_data.get('refresh_token')
                 users_db.set_integration(uid, 'whoop', integration)
-                print(f"✅ Whoop token refreshed successfully")
                 return new_access_token
-            else:
-                print(f"🔄 Whoop token refresh failed: No access token in response")
         else:
             error_body = response.text[:500] if response.text else "No error body"
-            print(f"🔄 Whoop token refresh failed with HTTP {response.status_code}: {error_body}")
+            print(f"❌ Whoop token refresh failed with HTTP {response.status_code}: {error_body}")
     except requests.exceptions.RequestException as e:
-        print(f"🔄 Network error refreshing Whoop token: {e}")
+        print(f"❌ Network error refreshing Whoop token: {e}")
     except Exception as e:
-        print(f"🔄 Error refreshing Whoop token: {e}")
-        import traceback
-
-        traceback.print_exc()
+        print(f"❌ Error refreshing Whoop token: {e}")
 
     return None
 
@@ -144,8 +125,6 @@ def get_whoop_sleep_data(
         'limit': min(limit, 25),  # Whoop API max is 25
     }
 
-    print(f"🛌 Calling Whoop Sleep API with start={start_str}, end={end_str}, limit={params['limit']}")
-
     try:
         all_records = []
         next_token = None
@@ -160,8 +139,6 @@ def get_whoop_sleep_data(
                 params=page_params,
                 timeout=10.0,
             )
-
-            print(f"🛌 Whoop Sleep API response status: {response.status_code}")
 
             if response.status_code == 200:
                 data = response.json()
@@ -221,8 +198,6 @@ def get_whoop_recovery_data(
         'limit': min(limit, 25),  # Whoop API max is 25
     }
 
-    print(f"💚 Calling Whoop Recovery API with start={start_str}, end={end_str}, limit={params['limit']}")
-
     try:
         all_records = []
         next_token = None
@@ -237,8 +212,6 @@ def get_whoop_recovery_data(
                 params=page_params,
                 timeout=10.0,
             )
-
-            print(f"💚 Whoop Recovery API response status: {response.status_code}")
 
             if response.status_code == 200:
                 data = response.json()
@@ -298,8 +271,6 @@ def get_whoop_workout_data(
         'limit': min(limit, 25),  # Whoop API max is 25
     }
 
-    print(f"🏃 Calling Whoop Workout API with start={start_str}, end={end_str}, limit={params['limit']}")
-
     try:
         all_records = []
         next_token = None
@@ -314,8 +285,6 @@ def get_whoop_workout_data(
                 params=page_params,
                 timeout=10.0,
             )
-
-            print(f"🏃 Whoop Workout API response status: {response.status_code}")
 
             if response.status_code == 200:
                 data = response.json()
@@ -339,83 +308,6 @@ def get_whoop_workout_data(
         raise
     except Exception as e:
         print(f"❌ Error fetching Whoop workout data: {e}")
-        raise
-
-
-def get_whoop_cycle_data(
-    access_token: str,
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
-    limit: int = 10,
-) -> dict:
-    """
-    Fetch cycle data from Whoop API.
-
-    Args:
-        access_token: Whoop access token
-        start: Start datetime (defaults to 7 days ago)
-        end: End datetime (defaults to now)
-        limit: Maximum number of records to return (max 25)
-
-    Returns:
-        Dict with cycle records
-    """
-    if start is None:
-        start = datetime.now(timezone.utc) - timedelta(days=7)
-    if end is None:
-        end = datetime.now(timezone.utc)
-
-    # Format times in ISO 8601 format
-    start_str = start.strftime('%Y-%m-%dT%H:%M:%SZ')
-    end_str = end.strftime('%Y-%m-%dT%H:%M:%SZ')
-
-    params = {
-        'start': start_str,
-        'end': end_str,
-        'limit': min(limit, 25),  # Whoop API max is 25
-    }
-
-    print(f"🔄 Calling Whoop Cycle API with start={start_str}, end={end_str}, limit={params['limit']}")
-
-    try:
-        all_records = []
-        next_token = None
-        while True:
-            page_params = dict(params)
-            if next_token:
-                page_params['next_token'] = next_token
-
-            response = requests.get(
-                'https://api.prod.whoop.com/developer/v2/cycle',
-                headers={'Authorization': f'Bearer {access_token}'},
-                params=page_params,
-                timeout=10.0,
-            )
-
-            print(f"🔄 Whoop Cycle API response status: {response.status_code}")
-
-            if response.status_code == 200:
-                data = response.json()
-                all_records.extend(data.get('records', []))
-                if len(all_records) >= limit:
-                    break
-                next_token = data.get('next_token')
-                if not next_token:
-                    break
-            elif response.status_code == 401:
-                print(f"❌ Whoop Cycle API 401 - token expired")
-                raise Exception("Authentication failed - token may be expired")
-            else:
-                error_body = response.text[:200] if response.text else "No error body"
-                print(f"❌ Whoop Cycle API error {response.status_code}: {error_body}")
-                raise Exception(f"Whoop Cycle API error: {response.status_code} - {error_body}")
-
-        return {'records': all_records[:limit]}
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error fetching Whoop cycle data: {e}")
-        raise
-    except Exception as e:
-        print(f"❌ Error fetching Whoop cycle data: {e}")
         raise
 
 
@@ -461,8 +353,6 @@ def get_whoop_sleep_tool(
     Returns:
         Formatted list of sleep data with details like duration, sleep stages, performance, etc.
     """
-    print(f"🔧 get_whoop_sleep_tool called - start_date: {start_date}, " f"end_date: {end_date}, limit: {limit}")
-
     uid, integration, access_token, access_err = prepare_access(
         config,
         'whoop',
@@ -472,17 +362,10 @@ def get_whoop_sleep_tool(
         'Error checking Whoop connection',
     )
     if access_err:
-        print(f"❌ get_whoop_sleep_tool - {access_err}")
         return access_err
-
-    print(f"✅ get_whoop_sleep_tool - uid: {uid}, limit: {limit}")
 
     try:
         limit = ensure_capped(limit, 25, "⚠️ get_whoop_sleep_tool - limit capped from {} to {}")
-
-        print(f"🛌 Checking Whoop connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
 
         # Parse dates if provided
         time_start = None
@@ -523,13 +406,10 @@ def get_whoop_sleep_tool(
             ),
         )
         if err:
-            print(f"❌ {err}")
             return err
-        print(f"✅ Successfully fetched sleep data")
 
         records = sleep_data.get('records', [])
         records_count = len(records) if records else 0
-        print(f"📊 get_whoop_sleep_tool - found {records_count} sleep records")
 
         if not records:
             date_info = ""
@@ -677,8 +557,6 @@ def get_whoop_recovery_tool(
     Returns:
         Formatted list of recovery data with details like recovery score, HRV, resting heart rate, etc.
     """
-    print(f"🔧 get_whoop_recovery_tool called - start_date: {start_date}, " f"end_date: {end_date}, limit: {limit}")
-
     uid, integration, access_token, access_err = prepare_access(
         config,
         'whoop',
@@ -688,15 +566,10 @@ def get_whoop_recovery_tool(
         'Error checking Whoop connection',
     )
     if access_err:
-        print(f"❌ get_whoop_recovery_tool - {access_err}")
         return access_err
-
-    print(f"✅ get_whoop_recovery_tool - uid: {uid}, limit: {limit}")
 
     try:
         limit = ensure_capped(limit, 25, "⚠️ get_whoop_recovery_tool - limit capped from {} to {}")
-
-        print(f"💚 Checking Whoop connection for user {uid}...")
 
         # Parse dates if provided
         time_start = None
@@ -822,8 +695,6 @@ def get_whoop_workout_tool(
     Returns:
         Formatted list of workout data with details like sport, strain, heart rate, duration, etc.
     """
-    print(f"🔧 get_whoop_workout_tool called - start_date: {start_date}, " f"end_date: {end_date}, limit: {limit}")
-
     uid, integration, access_token, access_err = prepare_access(
         config,
         'whoop',
@@ -833,15 +704,10 @@ def get_whoop_workout_tool(
         'Error checking Whoop connection',
     )
     if access_err:
-        print(f"❌ get_whoop_workout_tool - {access_err}")
         return access_err
-
-    print(f"✅ get_whoop_workout_tool - uid: {uid}, limit: {limit}")
 
     try:
         limit = ensure_capped(limit, 25, "⚠️ get_whoop_workout_tool - limit capped from {} to {}")
-
-        print(f"🏃 Checking Whoop connection for user {uid}...")
 
         # Parse dates if provided
         time_start = None

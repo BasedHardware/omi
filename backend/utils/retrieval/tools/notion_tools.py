@@ -63,10 +63,6 @@ def search_notion_pages(
     if filter_type:
         body['filter'] = {'property': 'object', 'value': filter_type}
 
-    print(
-        f"📝 Calling Notion Search API with query='{query}', filter_type={filter_type}, page_size={body['page_size']}"
-    )
-
     try:
         response = requests.post(
             url,
@@ -75,12 +71,8 @@ def search_notion_pages(
             timeout=10.0,
         )
 
-        print(f"📝 Notion Search API response status: {response.status_code}")
-
         if response.status_code == 200:
             data = response.json()
-            results = data.get('results', [])
-            print(f"📝 Notion Search API returned {len(results)} results")
             return data
         elif response.status_code == 401:
             print(f"❌ Notion Search API 401 - token expired or invalid")
@@ -118,16 +110,12 @@ def get_notion_page_content(
         'Notion-Version': '2022-06-28',
     }
 
-    print(f"📝 Calling Notion Page API for page_id={page_id}")
-
     try:
         response = requests.get(
             url,
             headers=headers,
             timeout=10.0,
         )
-
-        print(f"📝 Notion Page API response status: {response.status_code}")
 
         if response.status_code == 200:
             data = response.json()
@@ -168,8 +156,6 @@ def get_notion_page_blocks(
         'Notion-Version': '2022-06-28',
     }
 
-    print(f"📝 Calling Notion Blocks API for page_id={page_id}")
-
     all_blocks = []
     start_cursor = None
 
@@ -186,13 +172,10 @@ def get_notion_page_blocks(
                 timeout=10.0,
             )
 
-            print(f"📝 Notion Blocks API response status: {response.status_code}")
-
             if response.status_code == 200:
                 data = response.json()
                 blocks = data.get('results', [])
                 all_blocks.extend(blocks)
-                print(f"📝 Notion Blocks API returned {len(blocks)} blocks (total: {len(all_blocks)})")
 
                 # Check if there are more pages
                 has_more = data.get('has_more', False)
@@ -210,7 +193,6 @@ def get_notion_page_blocks(
                 print(f"❌ Notion Blocks API error {response.status_code}: {error_body}")
                 raise Exception(f"Notion Blocks API error: {response.status_code} - {error_body}")
 
-        print(f"📝 Total blocks retrieved: {len(all_blocks)}")
         return all_blocks
     except requests.exceptions.RequestException as e:
         print(f"❌ Network error fetching Notion blocks: {e}")
@@ -331,21 +313,12 @@ def search_notion_pages_tool(
     Returns:
         Formatted list of Notion pages with their titles and full content (when query is provided) or content previews.
     """
-    print(f"🔧 search_notion_pages_tool called - query: {query}, " f"page_size: {page_size}")
-
     uid, uid_err = resolve_config_uid(config)
     if uid_err:
-        print(f"❌ search_notion_pages_tool - {uid_err}")
         return uid_err
 
-    print(f"✅ search_notion_pages_tool - uid: {uid}, page_size: {page_size}")
-
     try:
-        if page_size > 100:
-            print(f"⚠️ search_notion_pages_tool - page_size capped from {page_size} to 100")
         page_size = cap_limit(page_size, 100)
-
-        print(f"📝 Checking Notion connection for user {uid}...")
         integration, int_err = get_integration_checked(
             uid,
             'notion',
@@ -354,7 +327,6 @@ def search_notion_pages_tool(
             'Error checking Notion connection',
         )
         if int_err:
-            print(f"❌ {int_err}")
             return int_err
 
         access_token, token_err = get_access_token_checked(
@@ -362,10 +334,7 @@ def search_notion_pages_tool(
             'Notion access token not found. Please reconnect your Notion account from settings.',
         )
         if token_err:
-            print(f"❌ {token_err}")
             return token_err
-
-        print(f"✅ Access token found")
 
         # Search Notion pages
         # If query contains common page references, try to find the specific page first
@@ -388,19 +357,13 @@ def search_notion_pages_tool(
                 query=search_query,
                 page_size=page_size,
             )
-
-            print(f"✅ Successfully fetched Notion search results")
         except Exception as e:
             error_msg = str(e)
             print(f"❌ Error fetching Notion pages: {error_msg}")
-            import traceback
-
-            traceback.print_exc()
             return f"Error fetching Notion pages: {error_msg}"
 
         results = search_results.get('results', [])
         results_count = len(results) if results else 0
-        print(f"📊 search_notion_pages_tool - found {results_count} pages")
 
         if not results:
             query_info = f" matching '{query}'" if query else ""

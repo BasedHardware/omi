@@ -43,8 +43,6 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
     Returns:
         Email address if found, None otherwise
     """
-    print(f"🔍 Searching Google Contacts for: {query}")
-
     # First, search in "My Contacts"
     try:
         response = requests.get(
@@ -58,8 +56,6 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
             timeout=10.0,
         )
 
-        print(f"📇 Google Contacts API (My Contacts) response status: {response.status_code}")
-
         if response.status_code == 200:
             data = response.json()
             results = data.get('results', [])
@@ -71,16 +67,13 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
 
                 if email_addresses:
                     email = email_addresses[0].get('value')
-                    name = person.get('names', [{}])[0].get('displayName', query)
-                    print(f"✅ Found contact in My Contacts: {name} -> {email}")
                     return email
-                else:
-                    print(f"⚠️ Found contact '{query}' in My Contacts but no email address")
         elif response.status_code == 401:
             print(f"❌ Google Contacts API 401 - token expired")
             return None
         elif response.status_code == 403:
-            print(f"⚠️ Google Contacts API 403 - insufficient permissions for My Contacts, will try Other Contacts")
+            # Will try Other Contacts
+            pass
         else:
             error_body = response.text[:200] if response.text else "No error body"
             print(f"⚠️ Google Contacts API error {response.status_code}: {error_body}")
@@ -90,7 +83,6 @@ def search_google_contacts(access_token: str, query: str) -> Optional[str]:
         print(f"⚠️ Error searching My Contacts: {e}")
 
     # If not found in My Contacts, search in "Other Contacts"
-    print(f"🔍 Searching Other Contacts for: {query}")
     try:
         # First, warm up the cache with an empty query (recommended by Google)
         try:
@@ -479,11 +471,6 @@ def get_calendar_events_tool(
     Returns:
         Formatted list of calendar events with their details.
     """
-    print(
-        f"🔧 get_calendar_events_tool called - start_date: {start_date}, "
-        f"end_date: {end_date}, max_results: {max_results}, search_query: {search_query}"
-    )
-
     uid, integration, access_token, access_err = prepare_access(
         config,
         'google_calendar',
@@ -493,16 +480,10 @@ def get_calendar_events_tool(
         'Error checking Google Calendar connection',
     )
     if access_err:
-        print(f"❌ get_calendar_events_tool - {access_err}")
         return access_err
-    print(f"✅ get_calendar_events_tool - uid: {uid}, max_results: {max_results}")
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
-
-        print(f"📅 Checking Google Calendar connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
 
         # Parse dates if provided
         time_min = None
@@ -803,15 +784,9 @@ def create_calendar_event_tool(
         'Error checking Google Calendar connection',
     )
     if access_err:
-        print(f"❌ create_calendar_event_tool - {access_err}")
         return access_err
 
-    print(f"✅ create_calendar_event_tool - uid: {uid}")
-
     try:
-        print(f"📅 Checking Google Calendar connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
 
         # Parse start and end times
         try:
@@ -1004,15 +979,9 @@ def delete_calendar_event_tool(
         'Error checking Google Calendar connection',
     )
     if access_err:
-        print(f"❌ delete_calendar_event_tool - {access_err}")
         return access_err
 
-    print(f"✅ delete_calendar_event_tool - uid: {uid}")
-
     try:
-        print(f"📅 Checking Google Calendar connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
 
         # If event_id is provided, delete directly
         if event_id:
@@ -1290,15 +1259,9 @@ def update_calendar_event_tool(
         'Error checking Google Calendar connection',
     )
     if access_err:
-        print(f"❌ update_calendar_event_tool - {access_err}")
         return access_err
 
-    print(f"✅ update_calendar_event_tool - uid: {uid}")
-
     try:
-        print(f"📅 Checking Google Calendar connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
 
         # Find the event if event_id not provided
         target_event_id = event_id
