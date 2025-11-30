@@ -96,10 +96,8 @@ def get_conversations(
 
     for conv in conversations:
         if conv.get('is_locked', False):
-            # Keep overview for blurred UI, but clear other sensitive data
             conv['structured']['action_items'] = []
             conv['structured']['events'] = []
-            conv['transcript_segments'] = conv.get('transcript_segments', [])[-3:]
             conv['apps_results'] = []
             conv['plugins_results'] = []
             conv['suggested_summarization_apps'] = []

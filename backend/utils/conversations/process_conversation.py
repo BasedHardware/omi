@@ -315,7 +315,7 @@ def _extract_memories(uid: str, conversation: Conversation):
         record_usage(uid, memories_created=len(parsed_memories))
 
 
-def send_new_memories_notification(token: str, memories: [MemoryDB]):
+def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
     memories_str = ", ".join([memory.content for memory in memories])
     message = f"New memories {memories_str}"
     ai_message = NotificationMessage(
@@ -326,7 +326,7 @@ def send_new_memories_notification(token: str, memories: [MemoryDB]):
         navigate_to="/facts",
     )
 
-    send_notification(token, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
 def _extract_trends(uid: str, conversation: Conversation):
@@ -669,12 +669,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     message = response
 
     # Send the notification
-    token = notification_db.get_token_only(uid)
-    if token is None:
-        print(f"User token is none. Uid: {uid}")
-        return
-
-    send_notification(token, title, message, None)
+    send_notification(uid, title, message, None)
 
     return
 

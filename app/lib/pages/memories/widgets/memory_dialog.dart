@@ -23,6 +23,8 @@ class MemoryDialog extends StatefulWidget {
 
 class _MemoryDialogState extends State<MemoryDialog> {
   late TextEditingController contentController;
+  bool _isSaving = false;
+  bool _saveFailed = false;
 
   @override
   void initState() {
@@ -122,43 +124,97 @@ class _MemoryDialogState extends State<MemoryDialog> {
               ),
             ),
             const SizedBox(height: 24),
+            if (_saveFailed) ...[
+              const Text(
+                'Failed to save. Please check your connection.',
+                style: TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+            ],
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  if (contentController.text.trim().isNotEmpty) {
-                    if (isEditing) {
-                      widget.provider.editMemory(widget.memory!, contentController.text);
-                      MixpanelManager().memoriesPageEditedMemory();
-                    } else {
-                      widget.provider
-                          .createMemory(contentController.text, MemoryVisibility.private, MemoryCategory.manual);
-                      MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
-                    }
-                    Navigator.pop(context);
-                  }
-                },
+                onPressed: _isSaving ? null : _handleSave,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurpleAccent,
+                  backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
+                  disabledForegroundColor: Colors.white.withOpacity(0.7),
                 ),
-                child: const Text(
-                  'Save Memory',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        _saveFailed ? 'Retry' : 'Save Memory',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _handleSave() async {
+    if (contentController.text.trim().isEmpty) return;
+
+    setState(() {
+      _isSaving = true;
+      _saveFailed = false;
+    });
+
+    final isEditing = widget.memory != null;
+    bool success;
+
+    try {
+      if (isEditing) {
+        success = await widget.provider.editMemory(widget.memory!, contentController.text);
+        if (success) {
+          MixpanelManager().memoriesPageEditedMemory();
+        }
+      } else {
+        success = await widget.provider.createMemory(
+          contentController.text,
+          MemoryVisibility.private,
+          MemoryCategory.manual,
+        );
+        if (success) {
+          MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
+        }
+      }
+    } catch (e) {
+      success = false;
+      debugPrint('Error saving memory: $e');
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSaving = false;
+      _saveFailed = !success;
+    });
+
+    if (success) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _showDeleteConfirmation(BuildContext context) async {

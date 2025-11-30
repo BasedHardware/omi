@@ -21,6 +21,7 @@ import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -130,8 +131,32 @@ class _AppShellState extends State<AppShell> {
       } else {
         debugPrint('ClickUp callback received but no success flag');
       }
+    } else if (uri.host == 'notion' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      await _handleOAuthCallback(uri, 'Notion', 'Notion', _handleNotionCallback);
+    } else if (uri.host == 'google_calendar' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      await _handleOAuthCallback(uri, 'Google', 'Google Calendar', _handleGoogleCalendarCallback);
+    } else if (uri.host == 'whoop' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      await _handleOAuthCallback(uri, 'Whoop', 'Whoop', _handleWhoopCallback);
     } else {
       debugPrint('Unknown link: $uri');
+    }
+  }
+
+  Future<void> _handleOAuthCallback(
+      Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
+    final error = uri.queryParameters['error'];
+    if (error != null) {
+      debugPrint('$oauthLogName OAuth error: $error');
+      AppSnackbar.showSnackbarError('Failed to connect to $errorDisplayName: $error');
+      return;
+    }
+
+    final success = uri.queryParameters['success'];
+    if (success == 'true') {
+      debugPrint('$oauthLogName OAuth successful (tokens in Firebase)');
+      await onSuccess();
+    } else {
+      debugPrint('$oauthLogName callback received but no success flag');
     }
   }
 
@@ -170,11 +195,7 @@ class _AppShellState extends State<AppShell> {
 
       // Auto-open settings page for configuration
       if (requiresSetup && mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const AsanaSettingsPage(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
       }
     } else {
       debugPrint('Failed to complete Asana authentication');
@@ -217,15 +238,77 @@ class _AppShellState extends State<AppShell> {
 
       // Auto-open settings page for configuration
       if (requiresSetup && mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const ClickUpSettingsPage(),
-          ),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
       }
     } else {
       debugPrint('Failed to complete ClickUp authentication');
       AppSnackbar.showSnackbarError('Failed to connect to ClickUp. Please try again.');
+    }
+  }
+
+  Future<void> _handleNotionCallback() async {
+    if (!mounted) return;
+
+    try {
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
+
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
+      debugPrint('✓ Notion authentication completed successfully');
+      AppSnackbar.showSnackbar('Successfully connected to Notion!');
+    } catch (e) {
+      debugPrint('Error handling Notion callback: $e');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh Notion connection status.');
+      }
+    }
+  }
+
+  Future<void> _handleGoogleCalendarCallback() async {
+    if (!mounted) return;
+
+    try {
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
+
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
+      debugPrint('✓ Google authentication completed successfully');
+      AppSnackbar.showSnackbar('Successfully connected to Google!');
+    } catch (e) {
+      debugPrint('Error handling Google Calendar callback: $e');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh Google connection status.');
+      }
+    }
+  }
+
+  Future<void> _handleWhoopCallback() async {
+    if (!mounted) return;
+
+    try {
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
+
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
+      debugPrint('✓ Whoop authentication completed successfully');
+      AppSnackbar.showSnackbar('Successfully connected to Whoop!');
+    } catch (e) {
+      debugPrint('Error handling Whoop callback: $e');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh Whoop connection status.');
+      }
     }
   }
 

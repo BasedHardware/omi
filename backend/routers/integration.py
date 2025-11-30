@@ -547,6 +547,5 @@ async def send_notification_via_integration(
             content={'detail': f'Rate limit exceeded. Maximum {MAX_NOTIFICATIONS_PER_HOUR} notifications per hour.'},
         )
 
-    token = notification_db.get_token_only(uid)
-    send_app_notification(token, app.name, app.id, message)
+    send_app_notification(uid, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})

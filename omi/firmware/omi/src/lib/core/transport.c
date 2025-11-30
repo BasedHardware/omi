@@ -23,7 +23,9 @@
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
+#ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
+#endif
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
@@ -35,7 +37,6 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
-extern uint32_t file_num_array[MAX_AUDIO_FILES];
 extern bool storage_is_on;
 #endif
 
@@ -597,8 +598,10 @@ static struct ring_buf ring_buf;
 
 static bool write_to_tx_queue(uint8_t *data, size_t size)
 {
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     // Increment the counter
     monitor_inc_tx_queue_write();
+#endif
 
     if (size > CODEC_OUTPUT_MAX_BYTES) {
         return false;
@@ -680,7 +683,9 @@ static bool push_to_gatt(struct bt_conn *conn)
             // Try send notification
             int err =
                 bt_gatt_notify(conn, &audio_service.attrs[1], pusher_temp_data, packet_size + NET_BUFFER_HEADER_SIZE);
+#ifdef CONFIG_OMI_ENABLE_MONITOR
             monitor_inc_gatt_notify();
+#endif
 
             // Log failure
             if (err) {
@@ -775,7 +780,9 @@ bool write_to_storage(void)
         buffer_offset = buffer_offset + packet_size;
     }
 
+#ifdef CONFIG_OMI_ENABLE_MONITOR
     monitor_inc_storage_write();
+#endif
     return true;
 }
 #endif
@@ -785,13 +792,6 @@ static bool use_storage = true;
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-void update_file_size()
-{
-    file_num_array[0] = get_file_size(1);
-    file_num_array[1] = get_offset();
-}
-#endif
 
 void test_pusher(void)
 {
@@ -833,24 +833,14 @@ void pusher(void)
         // Load current connection
         //
         struct bt_conn *conn = current_connection;
-        // updating the most recent file size is expensive!
-        static bool file_size_updated = true;
         static bool connection_was_true = false;
         if (conn && !connection_was_true) {
             k_msleep(100);
-            file_size_updated = false;
             connection_was_true = true;
         } else if (!conn) {
             connection_was_true = false;
         }
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-        if (!file_size_updated) {
-            LOG_PRINTK("updating file size\n");
-            update_file_size();
 
-            file_size_updated = true;
-        }
-#endif
         if (conn) {
             conn = bt_conn_ref(conn);
         }
@@ -866,7 +856,7 @@ void pusher(void)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
         if (!valid && !storage_is_on) {
             bool result = false;
-            if (file_num_array[1] < MAX_STORAGE_BYTES) {
+            if (get_file_size() < MAX_STORAGE_BYTES) {
                 if (is_sd_on()) {
                     result = write_to_storage();
                 }
@@ -874,7 +864,6 @@ void pusher(void)
             if (result) {
                 heartbeat_count++;
                 if (heartbeat_count == 255) {
-                    update_file_size();
                     heartbeat_count = 0;
                     LOG_PRINTK("drawing\n");
                 }

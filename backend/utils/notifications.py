@@ -15,33 +15,51 @@ from .llm.notifications import (
     generate_silent_user_notification,
 )
 
+# Error codes that indicate a token is permanently invalid
+PERMANENT_FAILURE_CODES = frozenset(
+    [
+        'UNREGISTERED',  # App uninstalled
+        'INVALID_REGISTRATION_TOKEN',  # Token format invalid
+    ]
+)
 
-def send_notification(token: str, title: str, body: str, data: dict = None):
-    print('send_notification')
+
+def _handle_send_error(e: Exception, token: str) -> None:
+    """Handle FCM send errors and remove permanently invalid tokens."""
+    error_code = getattr(e, 'code', None)
+
+    if error_code in PERMANENT_FAILURE_CODES:
+        notification_db.remove_invalid_token(token)
+        print(f'Removed invalid token - Error: {error_code}')
+    else:
+        print(f'FCM send failed: {e}({error_code})')
+
+
+def send_notification(user_id: str, title: str, body: str, data: dict = None):
+    """Send notification to all user's devices"""
+    print(f'send_notification to user {user_id}')
+    tokens = notification_db.get_all_tokens(user_id)
+
+    if not tokens:
+        print(f"No tokens found for user {user_id}")
+        return
+
     notification = messaging.Notification(title=title, body=body)
-    message = messaging.Message(notification=notification, token=token)
 
-    if data:
-        message.data = data
+    for token in tokens:
+        message = messaging.Message(notification=notification, token=token)
+        if data:
+            message.data = data
 
-    try:
-        response = messaging.send(message)
-        print('send_notification success:', response)
-    except Exception as e:
-        error_message = str(e)
-        if "Requested entity was not found" in error_message:
-            notification_db.remove_token(token)
-        print('send_notification failed:', e)
+        try:
+            response = messaging.send(message)
+            print(f'send_notification success to device: {response}')
+        except Exception as e:
+            _handle_send_error(e, token)
 
 
 async def send_subscription_paid_personalized_notification(user_id: str, data: dict = None):
     """Send a personalized notification to all user's devices when unlimited subscription is purchased"""
-    # Get user's notification token
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
-        return
-
     # Get user name from Firebase Auth
     try:
         user = auth.get_user(user_id)
@@ -57,7 +75,7 @@ async def send_subscription_paid_personalized_notification(user_id: str, data: d
     # Generate welcome message for unlimited plan with user context
     title, body = await generate_notification_message(user_id, name, "unlimited")
 
-    send_notification(token, "omi", body, data)
+    send_notification(user_id, "omi", body, data)
 
 
 async def send_credit_limit_notification(user_id: str):
@@ -65,12 +83,6 @@ async def send_credit_limit_notification(user_id: str):
     # Check if notification was sent recently (within 6 hours)
     if has_credit_limit_notification_been_sent(user_id):
         print(f"Credit limit notification already sent recently for user {user_id}")
-        return
-
-    # Get user's notification token
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
         return
 
     # Get user name from Firebase Auth
@@ -89,7 +101,7 @@ async def send_credit_limit_notification(user_id: str):
     title, body = await generate_credit_limit_notification(user_id, name)
 
     # Send notification
-    send_notification(token, title, body)
+    send_notification(user_id, title, body)
 
     # Cache that notification was sent (6 hours TTL)
     set_credit_limit_notification_sent(user_id)
@@ -101,12 +113,6 @@ async def send_silent_user_notification(user_id: str):
     # Check if notification was sent recently (within 24 hours)
     if has_silent_user_notification_been_sent(user_id):
         print(f"Silent user notification already sent recently for user {user_id}")
-        return
-
-    # Get user's notification token
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
         return
 
     # Get user name from Firebase Auth
@@ -125,7 +131,7 @@ async def send_silent_user_notification(user_id: str):
     title, body = generate_silent_user_notification(name)
 
     # Send notification
-    send_notification(token, title, body)
+    send_notification(user_id, title, body)
 
     # Cache that notification was sent (24 hours TTL)
     set_silent_user_notification_sent(user_id)
@@ -134,11 +140,6 @@ async def send_silent_user_notification(user_id: str):
 
 def send_training_data_submitted_notification(user_id: str):
     """Send a notification when user submits their training data opt-in request."""
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
-        return
-
     # Get user name from Firebase Auth
     try:
         user = auth.get_user(user_id)
@@ -154,7 +155,7 @@ def send_training_data_submitted_notification(user_id: str):
     title = "omi"
     body = f"Hey {name}! Thanks for your interest in our training data program. We've received your request and our team will review it shortly. We'll notify you as soon as it's approved!"
 
-    send_notification(token, title, body)
+    send_notification(user_id, title, body)
     print(f"Training data submitted notification sent to user {user_id}")
 
 
@@ -168,7 +169,19 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
                 messaging.Message(notification=messaging.Notification(title=title, body=body), token=token)
                 for token in batch_users
             ]
-            return messaging.send_each(messages)
+            response = messaging.send_each(messages)
+
+            # Only remove tokens that are definitively invalid (not temporary network issues)
+            invalid_tokens = []
+            for idx, result in enumerate(response.responses):
+                if not result.success and result.exception:
+                    error_code = getattr(result.exception, 'code', None)
+
+                    if error_code in PERMANENT_FAILURE_CODES:
+                        invalid_tokens.append(batch_users[idx])
+                        print(f"Invalid token found - Error: {error_code}")
+
+            return response, invalid_tokens
 
         tasks = []
         for i in range(num_batches):
@@ -178,7 +191,16 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
             task = asyncio.to_thread(send_batch, batch_users)
             tasks.append(task)
 
-        await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
+
+        # Remove invalid tokens
+        invalid_tokens = []
+        for response, batch_invalid_tokens in results:
+            invalid_tokens.extend(batch_invalid_tokens)
+
+        if invalid_tokens:
+            print(f"Removing {len(invalid_tokens)} invalid tokens")
+            notification_db.remove_bulk_tokens(invalid_tokens)
 
     except Exception as e:
         print("Error sending message:", e)
@@ -188,32 +210,24 @@ def send_app_review_reply_notification(
     reviewer_uid: str, app_owner_uid: str, reply_body: str, app_id: str, app_name: str
 ):
     """Sends a notification to a user when their app review receives a reply."""
-    token = notification_db.get_token_only(reviewer_uid)
-    if not token:
-        return
-
     app_owner = get_user_from_uid(app_owner_uid)
     owner_name = app_owner.get('display_name', 'The developer') if app_owner else 'The developer'
     title = f'{owner_name} ({app_name})'
     body = reply_body
     data = {'app_id': app_id, 'type': 'app_review_reply', 'navigate_to': f'/apps/{app_id}'}
-    send_notification(token, title, body, data)
+    send_notification(reviewer_uid, title, body, data)
 
 
 def send_new_app_review_notification(
     app_owner_uid: str, reviewer_uid: str, app_id: str, app_name: str, review_body: str
 ):
     """Sends a notification to the app owner when a new review is submitted."""
-    token = notification_db.get_token_only(app_owner_uid)
-    if not token:
-        return
-
     reviewer = get_user_from_uid(reviewer_uid)
     reviewer_name = reviewer.get('display_name', 'A user') if reviewer else 'A user'
     title = f'{reviewer_name} reviewed {app_name}'
     body = review_body
     data = {'app_id': app_id, 'type': 'new_app_review', 'navigate_to': f'/apps/{app_id}'}
-    send_notification(token, title, body, data)
+    send_notification(app_owner_uid, title, body, data)
 
 
 def send_action_item_data_message(user_id: str, action_item_id: str, description: str, due_at: str):
@@ -227,9 +241,9 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
         description: The action item description
         due_at: ISO format datetime string for when the action item is due
     """
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
+    tokens = notification_db.get_all_tokens(user_id)
+    if not tokens:
+        print(f"No notification tokens found for user {user_id}")
         return
 
     # Data-only message
@@ -241,29 +255,28 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
         'due_at': due_at,
     }
 
-    message = messaging.Message(
-        data=data,
-        token=token,
-        # Set high priority to ensure delivery even when app is in background
-        android=messaging.AndroidConfig(priority='high'),
-        # iOS requires specific headers for background data-only messages
-        apns=messaging.APNSConfig(
-            headers={
-                'apns-push-type': 'background',
-                'apns-priority': '5',
-                'apns-topic': 'com.friend-app-with-wearable.ios12',
-            },
-            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-        ),
-    )
+    for token in tokens:
+        message = messaging.Message(
+            data=data,
+            token=token,
+            # Set high priority to ensure delivery even when app is in background
+            android=messaging.AndroidConfig(priority='high'),
+            # iOS requires specific headers for background data-only messages
+            apns=messaging.APNSConfig(
+                headers={
+                    'apns-push-type': 'background',
+                    'apns-priority': '5',
+                    'apns-topic': 'com.friend-app-with-wearable.ios12',
+                },
+                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+            ),
+        )
 
-    try:
-        response = messaging.send(message)
-    except Exception as e:
-        error_message = str(e)
-        if "Requested entity was not found" in error_message:
-            notification_db.remove_token(token)
-        print(f'Failed to send action item data message: {e}')
+        try:
+            response = messaging.send(message)
+            print(f'Action item data message sent to device: {response}')
+        except Exception as e:
+            _handle_send_error(e, token)
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
@@ -271,9 +284,9 @@ def send_action_item_update_message(user_id: str, action_item_id: str, descripti
     Sends a data-only FCM message when an action item is updated.
     The app receives this and reschedules the local notification.
     """
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
+    tokens = notification_db.get_all_tokens(user_id)
+    if not tokens:
+        print(f"No notification tokens found for user {user_id}")
         return
 
     data = {
@@ -283,28 +296,27 @@ def send_action_item_update_message(user_id: str, action_item_id: str, descripti
         'due_at': due_at,
     }
 
-    message = messaging.Message(
-        data=data,
-        token=token,
-        android=messaging.AndroidConfig(priority='high'),
-        # iOS requires specific headers for background data-only messages
-        apns=messaging.APNSConfig(
-            headers={
-                'apns-push-type': 'background',
-                'apns-priority': '5',
-                'apns-topic': 'com.friend-app-with-wearable.ios12',
-            },
-            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-        ),
-    )
+    for token in tokens:
+        message = messaging.Message(
+            data=data,
+            token=token,
+            android=messaging.AndroidConfig(priority='high'),
+            # iOS requires specific headers for background data-only messages
+            apns=messaging.APNSConfig(
+                headers={
+                    'apns-push-type': 'background',
+                    'apns-priority': '5',
+                    'apns-topic': 'com.friend-app-with-wearable.ios12',
+                },
+                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+            ),
+        )
 
-    try:
-        response = messaging.send(message)
-    except Exception as e:
-        error_message = str(e)
-        if "Requested entity was not found" in error_message:
-            notification_db.remove_token(token)
-        print(f'Failed to send action item update message: {e}')
+        try:
+            response = messaging.send(message)
+            print(f'Action item update message sent to device: {response}')
+        except Exception as e:
+            _handle_send_error(e, token)
 
 
 def send_action_item_deletion_message(user_id: str, action_item_id: str):
@@ -312,9 +324,9 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
     Sends a data-only FCM message when an action item is deleted.
     The app receives this and cancels the scheduled local notification.
     """
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
+    tokens = notification_db.get_all_tokens(user_id)
+    if not tokens:
+        print(f"No notification tokens found for user {user_id}")
         return
 
     data = {
@@ -322,28 +334,27 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
         'action_item_id': action_item_id,
     }
 
-    message = messaging.Message(
-        data=data,
-        token=token,
-        android=messaging.AndroidConfig(priority='high'),
-        # iOS requires specific headers for background data-only messages
-        apns=messaging.APNSConfig(
-            headers={
-                'apns-push-type': 'background',
-                'apns-priority': '5',
-                'apns-topic': 'com.friend-app-with-wearable.ios12',
-            },
-            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-        ),
-    )
+    for token in tokens:
+        message = messaging.Message(
+            data=data,
+            token=token,
+            android=messaging.AndroidConfig(priority='high'),
+            # iOS requires specific headers for background data-only messages
+            apns=messaging.APNSConfig(
+                headers={
+                    'apns-push-type': 'background',
+                    'apns-priority': '5',
+                    'apns-topic': 'com.friend-app-with-wearable.ios12',
+                },
+                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+            ),
+        )
 
-    try:
-        response = messaging.send(message)
-    except Exception as e:
-        error_message = str(e)
-        if "Requested entity was not found" in error_message:
-            notification_db.remove_token(token)
-        print(f'Failed to send action item deletion message: {e}')
+        try:
+            response = messaging.send(message)
+            print(f'Action item deletion message sent to device: {response}')
+        except Exception as e:
+            _handle_send_error(e, token)
 
 
 def send_action_item_created_notification(user_id: str, action_item_description: str):
@@ -351,11 +362,6 @@ def send_action_item_created_notification(user_id: str, action_item_description:
     Sends a notification when a new action item is created via the agentic chat.
     This provides confirmation that the task was successfully added.
     """
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
-        return
-
     # Truncate description if too long
     max_length = 60
     display_description = (
@@ -367,7 +373,7 @@ def send_action_item_created_notification(user_id: str, action_item_description:
     title = "Task Added"
     body = display_description
 
-    send_notification(token, title, body)
+    send_notification(user_id, title, body)
     print(f"Action item created notification sent to user {user_id}")
 
 
@@ -376,11 +382,6 @@ def send_action_item_completed_notification(user_id: str, action_item_descriptio
     Sends a notification when a user completes an action item via the agentic chat.
     This provides positive feedback and confirmation of task completion.
     """
-    token = notification_db.get_token_only(user_id)
-    if not token:
-        print(f"No notification token found for user {user_id}")
-        return
-
     # Truncate description if too long
     max_length = 60
     display_description = (
@@ -392,5 +393,5 @@ def send_action_item_completed_notification(user_id: str, action_item_descriptio
     title = "Task Complete! 🎉"
     body = display_description
 
-    send_notification(token, title, body)
+    send_notification(user_id, title, body)
     print(f"Action item completed notification sent to user {user_id}")
