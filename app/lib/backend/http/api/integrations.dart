@@ -100,3 +100,74 @@ Future<String?> getIntegrationOAuthUrl(String appKey) async {
     return null;
   }
 }
+
+/// GitHub repository model
+class GitHubRepository {
+  final String fullName;
+  final String name;
+  final String owner;
+  final bool isPrivate;
+  final String? description;
+  final String updatedAt;
+
+  GitHubRepository({
+    required this.fullName,
+    required this.name,
+    required this.owner,
+    required this.isPrivate,
+    this.description,
+    required this.updatedAt,
+  });
+
+  factory GitHubRepository.fromJson(Map<String, dynamic> json) {
+    return GitHubRepository(
+      fullName: json['full_name'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      owner: json['owner'] as String? ?? '',
+      isPrivate: json['private'] as bool? ?? false,
+      description: json['description'] as String?,
+      updatedAt: json['updated_at'] as String? ?? '',
+    );
+  }
+}
+
+/// Get GitHub repositories
+Future<List<GitHubRepository>> getGitHubRepositories() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/integrations/github/repositories',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return [];
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    var data = jsonDecode(body);
+    var repos = data['repositories'] as List? ?? [];
+    return repos.map((repo) => GitHubRepository.fromJson(repo)).toList();
+  } else {
+    debugPrint('getGitHubRepositories error ${response.statusCode}');
+    return [];
+  }
+}
+
+/// Set GitHub default repository
+Future<bool> setGitHubDefaultRepo(String defaultRepo) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/integrations/github/default-repo?default_repo=${Uri.encodeComponent(defaultRepo)}',
+    headers: {},
+    method: 'PUT',
+    body: '',
+  );
+
+  if (response == null) return false;
+
+  if (response.statusCode == 200) {
+    return true;
+  } else {
+    debugPrint('setGitHubDefaultRepo error ${response.statusCode}');
+    return false;
+  }
+}
