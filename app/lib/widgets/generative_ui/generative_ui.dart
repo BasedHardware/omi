@@ -5,7 +5,8 @@ library generative_ui;
 export 'models/rich_list_item_data.dart';
 export 'models/pie_chart_data.dart';
 
-// Parser
+// Parsers (modular tag parsers for easy extension)
+export 'parsers/parsers.dart';
 export 'xml_parser.dart';
 
 // Styles
