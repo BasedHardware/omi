@@ -119,6 +119,56 @@ def _get_gcs_bucket_url() -> str:
     return f'https://storage.googleapis.com/{bucket}'
 
 
+async def _get_live_desktop_releases(platform: str) -> List[Dict]:
+    """
+    Fetch and filter live desktop releases for a given platform.
+    Returns list of releases sorted by published date (newest first).
+
+    Args:
+        platform: Target platform (macos, windows, or linux)
+
+    Returns:
+        List of dicts containing release and version_info
+    """
+    # Fetch releases from GitHub
+    cache_key = "github_releases_desktop"
+    releases = await get_omi_github_releases(cache_key)
+
+    if not releases:
+        return []
+
+    # Filter for desktop releases
+    desktop_releases = []
+    for release in releases:
+        # Skip drafts and unpublished releases
+        if release.get("draft") or not release.get("published_at"):
+            continue
+
+        tag_name = release.get("tag_name", "")
+
+        # Check if it's a desktop release
+        if not tag_name.endswith("-desktop-cm") and not tag_name.endswith(f"-{platform}-cm"):
+            continue
+
+        # Parse version info
+        version_info = _parse_desktop_version(tag_name)
+        if not version_info:
+            continue
+
+        # Check if release is live (only include live releases)
+        kv = extract_key_value_pairs(release.get("body", ""))
+        is_live = kv.get("isLive", "false").lower() == "true"
+        if not is_live:
+            continue
+
+        desktop_releases.append({"release": release, "version_info": version_info, "metadata": kv})
+
+    # Sort by published date (newest first)
+    desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
+
+    return desktop_releases
+
+
 def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
     """Format changelog as HTML for Sparkle appcast"""
     if not changes:
@@ -159,10 +209,10 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
         )
         SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}shortVersionString').text = version
 
-        # Release notes as HTML
+        # Release notes as HTML (CDATA will be added during serialization)
         description = _format_changelog_html(release_item.get('changes', []))
         desc_elem = SubElement(item, 'description')
-        desc_elem.text = f'<![CDATA[{description}]]>'
+        desc_elem.text = description
 
         SubElement(item, 'pubDate').text = release_item['date']
 
@@ -211,38 +261,11 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
         XML appcast feed
     """
     try:
-        # Reuse existing release fetching logic
-        cache_key = "github_releases_desktop"
-        releases = await get_omi_github_releases(cache_key)
-
-        if not releases:
-            raise HTTPException(status_code=404, detail="No releases found")
-
-        # Filter for desktop releases
-        desktop_releases = []
-        for release in releases:
-            # Skip drafts and unpublished releases
-            if release.get("draft") or not release.get("published_at"):
-                continue
-
-            tag_name = release.get("tag_name", "")
-
-            # Check if it's a desktop release
-            if not tag_name.endswith("-desktop-cm") and not tag_name.endswith(f"-{platform}-cm"):
-                continue
-
-            # Parse version info
-            version_info = _parse_desktop_version(tag_name)
-            if not version_info:
-                continue
-
-            desktop_releases.append({"release": release, "version_info": version_info})
+        # Get live desktop releases using shared helper
+        desktop_releases = await _get_live_desktop_releases(platform)
 
         if not desktop_releases:
             raise HTTPException(status_code=404, detail=f"No desktop releases found for platform: {platform}")
-
-        # Sort by published date (newest first)
-        desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
 
         # Transform to items format
         gcs_bucket_url = _get_gcs_bucket_url()
@@ -251,14 +274,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
         for entry in desktop_releases:
             release = entry["release"]
             version_info = entry["version_info"]
-
-            # Extract metadata from release body
-            kv = extract_key_value_pairs(release.get("body", ""))
-
-            # Check if release is live (only serve live releases to users)
-            is_live = kv.get("isLive", "false").lower() == "true"
-            if not is_live:
-                continue  # Skip releases that are not marked as live
+            kv = entry["metadata"]
 
             changelog = kv.get("changelog", [])
             mandatory = kv.get("mandatory", "false").lower() == "true"
@@ -299,6 +315,62 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating appcast: {str(e)}")
+
+
+@router.get("/v2/desktop/download/latest")
+async def download_latest_desktop_release(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
+    """
+    Get the download URL for the latest desktop release installer.
+    Redirects to the GitHub release asset download URL.
+
+    Args:
+        platform: Target platform (macos, windows, or linux)
+
+    Returns:
+        Redirect to the installer download URL (DMG for macOS, EXE for Windows, AppImage for Linux)
+    """
+    try:
+        # Get live desktop releases using shared helper
+        desktop_releases = await _get_live_desktop_releases(platform)
+
+        if not desktop_releases:
+            raise HTTPException(status_code=404, detail=f"No live desktop releases found for platform: {platform}")
+
+        # Get the latest release (first in the sorted list)
+        latest_entry = desktop_releases[0]
+        latest_release = latest_entry["release"]
+
+        # Find the installer asset in the release
+        assets = latest_release.get("assets", [])
+
+        # Look for platform-specific installer files
+        extension_map = {"macos": ".dmg", "windows": ".exe", "linux": ".AppImage"}
+        target_extension = extension_map.get(platform, ".dmg")
+
+        installer_asset = None
+        for asset in assets:
+            asset_name = asset.get("name", "").lower()
+            if asset_name.endswith(target_extension):
+                installer_asset = asset
+                break
+
+        if not installer_asset:
+            raise HTTPException(status_code=404, detail=f"No {target_extension} installer found in the latest release")
+
+        # Get the download URL from the asset
+        download_url = installer_asset.get("browser_download_url")
+        if not download_url:
+            raise HTTPException(status_code=404, detail="Download URL not found")
+
+        # Redirect to the GitHub asset download URL
+        from fastapi.responses import RedirectResponse
+
+        return RedirectResponse(url=download_url, status_code=302)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching latest release: {str(e)}")
 
 
 @router.post("/v2/desktop/clear-cache")
