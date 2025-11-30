@@ -207,7 +207,7 @@ def get_gmail_messages_tool(
     """
     uid, integration, access_token, access_err = prepare_access(
         config,
-        'google_calendar',  # Changed from 'google_gmail' to 'google_calendar'
+        'google_calendar',
         'Gmail',
         'Gmail is not connected. Please connect your Google account from settings to view your emails.',
         'Gmail access token not found. Please reconnect your Google account from settings.',
