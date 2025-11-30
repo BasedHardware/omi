@@ -9,6 +9,7 @@ from fastapi.responses import Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from utils.other.storage import get_desktop_update_signed_url
+from database.redis_db import delete_generic_cache
 
 
 router = APIRouter()
@@ -37,18 +38,6 @@ def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
         'version': f"{major}.{minor}.{patch}+{build}",
         'tag_name': tag_name,
     }
-
-
-def _calculate_short_version(major: str, minor: str, patch: str, build: str) -> int:
-    """
-    Calculate numeric short version for desktop_updater comparison.
-    Format: major * 10000000 + minor * 100000 + patch * 1000 + build
-    Example: 1.0.77+464 -> 10077464
-    """
-    try:
-        return int(major) * 10000000 + int(minor) * 100000 + int(patch) * 1000 + int(build)
-    except (ValueError, TypeError):
-        return 0
 
 
 def _parse_changelog_to_changes(changelog: List[str], release_body: str) -> List[Dict[str, str]]:
@@ -193,10 +182,8 @@ async def get_desktop_updates(platform: str = Query(default="macos", regex="^(ma
         # Parse changes
         changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
 
-        # Calculate short version
-        short_version = _calculate_short_version(
-            version_info["major"], version_info["minor"], version_info["patch"], version_info["build"]
-        )
+        # Use build number directly (matches CFBundleVersion from Flutter)
+        short_version = version_info["build"]
 
         # Construct GCS URL for the release folder
         folder_name = f"{version_info['version']}-{platform}"
@@ -251,6 +238,12 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
         version = release_item['version']
         SubElement(item, 'title').text = f"Omi {version}"
 
+        # For macOS, version fields go at item level (not in enclosure)
+        SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}version').text = str(
+            release_item['shortVersion']
+        )
+        SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}shortVersionString').text = version
+
         # Release notes as HTML
         description = _format_changelog_html(release_item.get('changes', []))
         desc_elem = SubElement(item, 'description')
@@ -266,23 +259,23 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
 
         download_url = get_desktop_update_signed_url(blob_path, expiration_hours=1)
 
+        # Enclosure with signature and OS
         enclosure_attrs = {
             'url': download_url,
-            'sparkle:version': str(release_item['shortVersion']),
-            'sparkle:shortVersionString': version,
             'type': 'application/octet-stream',
+            '{http://www.andymatuschak.org/xml-namespaces/sparkle}os': platform,
         }
 
         # Add EdDSA signature if available
         ed_signature = release_item.get('edSignature', '').strip()
         if ed_signature:
-            enclosure_attrs['sparkle:edSignature'] = ed_signature
+            enclosure_attrs['{http://www.andymatuschak.org/xml-namespaces/sparkle}edSignature'] = ed_signature
 
         enclosure = SubElement(item, 'enclosure', enclosure_attrs)
 
         # Critical update (optional)
         if release_item.get('mandatory'):
-            SubElement(item, 'sparkle:criticalUpdate')
+            SubElement(item, '{http://www.andymatuschak.org/xml-namespaces/sparkle}criticalUpdate')
 
     # Pretty print
     xml_str = tostring(rss, encoding='unicode')
@@ -359,10 +352,9 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
             # Parse changes
             changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
 
-            # Calculate short version
-            short_version = _calculate_short_version(
-                version_info["major"], version_info["minor"], version_info["patch"], version_info["build"]
-            )
+            # Use build number directly for sparkle:version (matches CFBundleVersion from Flutter)
+            # Flutter sets CFBundleVersion = --build-number (e.g., "474")
+            short_version = version_info["build"]
 
             # Construct GCS URL for the release folder
             folder_name = f"{version_info['version']}-{platform}"
@@ -393,3 +385,16 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating appcast: {str(e)}")
+
+
+@router.post("/v2/desktop/clear-cache")
+async def clear_desktop_cache():
+    """
+    Clear the GitHub releases cache for desktop updates.
+    This forces the next appcast.xml request to fetch fresh data from GitHub.
+    """
+    try:
+        delete_generic_cache("github_releases_desktop")
+        return {"success": True, "message": "Desktop releases cache cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing cache: {str(e)}")
