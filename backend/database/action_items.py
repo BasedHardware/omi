@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
