@@ -765,24 +765,16 @@ workflows:
 
       - name: Extract version from tag
         script: |
-          # TESTING: Hardcoded version
-          BUILD_NAME="1.0.78"
-          BUILD_NUMBER="475"
-          TAG_NAME="v${BUILD_NAME}+${BUILD_NUMBER}-desktop-cm"
-
           # Extract version from tag (supports both -desktop-cm and -macos-cm)
-          # BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          # BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          # TAG_NAME="$CM_TAG"
+          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          TAG_NAME="$CM_TAG"
 
           # Export to environment for all subsequent steps
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
           echo BUILD_NUMBER="$BUILD_NUMBER" >> $CM_ENV
           echo VERSION="${BUILD_NAME}+${BUILD_NUMBER}" >> $CM_ENV
           echo TAG_NAME="$TAG_NAME" >> $CM_ENV
-
-          echo "Version set to: ${BUILD_NAME}+${BUILD_NUMBER}"
-          echo "Tag name: $TAG_NAME"
 
       - name: Get Flutter packages
         script: |
@@ -803,7 +795,7 @@ workflows:
             exit 1
           fi
 
-      - name: Clean up entitlements (remove Mac App Store-only capabilities)
+      - name: Clean up entitlements (this step can be removed once we move away from AppStore)
         script: |
           # Process all Release entitlements files (including -prod variants)
           find macos -name "*Release*.entitlements" -type f | while read entitlements_file; do
@@ -833,11 +825,9 @@ workflows:
           keychain initialize
 
           # Import Developer ID Application certificate
-          echo "Importing Developer ID Application certificate..."
           echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > /tmp/developer_id.p12
 
           KEYCHAIN_PATH=$(keychain get-default)
-          echo "Keychain path: $KEYCHAIN_PATH"
 
           security import /tmp/developer_id.p12 \
             -k "$KEYCHAIN_PATH" \
@@ -849,15 +839,8 @@ workflows:
 
           rm /tmp/developer_id.p12
 
-          # List all code signing identities
-          echo ""
-          echo "=== All available code signing identities ==="
-          security find-identity -v -p codesigning
-
           # Find and export the Developer ID cert name
           DEVELOPER_ID_CERT=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
-          echo ""
-          echo "Selected Developer ID cert: $DEVELOPER_ID_CERT"
 
           if [ -z "$DEVELOPER_ID_CERT" ]; then
             echo "ERROR: No Developer ID Application certificate found!"
@@ -868,7 +851,6 @@ workflows:
 
       - name: Install Developer ID provisioning profile
         script: |
-          echo "Installing Developer ID provisioning profile..."
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
 
           # Decode and save the provisioning profile
@@ -879,7 +861,6 @@ workflows:
 
           # Get the profile UUID
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" /tmp/profile.plist)
-          echo "Profile UUID: $PROFILE_UUID"
 
           # Now install it with the UUID as the filename (this is what Xcode expects)
           cp /tmp/developer_id.provisionprofile "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
@@ -887,48 +868,20 @@ workflows:
           # Export UUID for later use
           echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
 
-          # Display profile details
-          echo ""
-          echo "Profile details:"
-          echo "Name: $(/usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist)"
-          echo "TeamName: $(/usr/libexec/PlistBuddy -c "Print :TeamName" /tmp/profile.plist)"
-          echo "TeamIdentifier: $(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" /tmp/profile.plist)"
-          echo "AppIDName: $(/usr/libexec/PlistBuddy -c "Print :AppIDName" /tmp/profile.plist)"
-          echo "Expiration: $(/usr/libexec/PlistBuddy -c "Print :ExpirationDate" /tmp/profile.plist)"
-
-          # List installed profiles
-          echo ""
-          echo "Installed provisioning profiles:"
-          ls -la "$HOME/Library/MobileDevice/Provisioning Profiles/"
-
       - name: Configure Xcode project for Developer ID signing
         script: |
           cd macos
 
-          echo "Configuring Xcode project to use Developer ID certificate and provisioning profile..."
-
           # Use Codemagic's xcode-project tool to configure manual signing
-          # It automatically finds provisioning profiles in ~/Library/MobileDevice/Provisioning Profiles/
           xcode-project use-profiles \
             --project Runner.xcodeproj \
             --code-signing-setup-verbose-logging
-
-          # Verify the configuration
-          echo ""
-          echo "Verifying build settings after configuration:"
-          xcrun xcodebuild -project Runner.xcodeproj \
-            -target Runner \
-            -configuration Release-prod \
-            -showBuildSettings | grep -E "CODE_SIGN|PROVISIONING_PROFILE|DEVELOPMENT_TEAM"
 
           cd ..
 
       - name: Flutter build macOS
         script: |
-          echo "Building version: $BUILD_NAME+$BUILD_NUMBER with Developer ID signing"
-
           # Build with release configuration using Developer ID certificate and provisioning profile
-          # Pass code signing settings via environment variables that xcodebuild will use
           export CODE_SIGN_STYLE=Manual
           export CODE_SIGN_IDENTITY="$DEVELOPER_ID_CERT"
           export DEVELOPMENT_TEAM=9536L8KLMP
@@ -944,23 +897,6 @@ workflows:
         script: |
           # Find the built app
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
-          echo "Found app at: $APP_PATH"
-
-          # Log current signing status before re-signing
-          echo ""
-          echo "=== Current app signature before re-signing ==="
-          codesign -dv --verbose=4 "$APP_PATH" 2>&1 || echo "App not signed yet"
-
-          echo ""
-          echo "=== Current entitlements before re-signing ==="
-          codesign -d --entitlements :- "$APP_PATH" 2>&1 || echo "No entitlements"
-
-          echo ""
-          echo "=== Checking Firebase frameworks signatures ==="
-          find "$APP_PATH/Contents/Frameworks" -name "Firebase*.framework" -type d | head -3 | while read fw; do
-            echo "Framework: $(basename $fw)"
-            codesign -dv "$fw" 2>&1 | head -3
-          done
 
           # Create hardened runtime entitlements for notarization
           cat > /tmp/notarization.entitlements << 'ENTITLEMENTS_EOF'
@@ -996,10 +932,6 @@ workflows:
           </dict>
           </plist>
           ENTITLEMENTS_EOF
-
-          echo ""
-          echo "=== Notarization entitlements file (with Team ID hardcoded) ==="
-          cat /tmp/notarization.entitlements
 
           # Sign ALL embedded frameworks FIRST (REQUIRED when re-signing app with --force)
           # Sign embedded frameworks
@@ -1202,7 +1134,6 @@ workflows:
         script: |
           # Install gcloud if not already installed
           if ! command -v gcloud &> /dev/null; then
-            echo "Installing Google Cloud SDK..."
             curl https://sdk.cloud.google.com | bash
             exec -l $SHELL
             source $HOME/google-cloud-sdk/path.bash.inc
@@ -1211,8 +1142,6 @@ workflows:
           # Authenticate with service account (reuse Play Store credentials)
           echo "$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS" > /tmp/gcp-key.json
           gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
-
-          echo "GCloud authenticated successfully"
 
       - name: Upload to Google Cloud Storage
         script: |
@@ -1224,9 +1153,6 @@ workflows:
 
       - name: Create GitHub Release
         script: |
-          echo "Creating GitHub release for version: $VERSION"
-          echo "Tag name: $TAG_NAME"
-
           # Get the recent commits for changelog
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${TAG_NAME}^ 2>/dev/null || echo "")
 
@@ -1265,23 +1191,16 @@ workflows:
           DMG_FILE=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
 
           # Create GitHub release with DMG attachment
-          echo "Creating GitHub release for $TAG_NAME..."
           if [ -f "$DMG_FILE" ]; then
-            echo "Uploading DMG file: $DMG_FILE"
             gh release create "$TAG_NAME" \
               --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
               --notes-file /tmp/release_notes.md \
               --repo BasedHardware/omi \
               "$DMG_FILE"
           else
-            echo "Warning: DMG file not found, creating release without DMG"
-            gh release create "$TAG_NAME" \
-              --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
-              --notes-file /tmp/release_notes.md \
-              --repo BasedHardware/omi
+            echo "ERROR: DMG file not found"
+            exit 1
           fi
-
-          echo "GitHub release created successfully!"
 
     artifacts:
       - dist/**/*

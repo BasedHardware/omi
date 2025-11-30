@@ -4,7 +4,7 @@ from typing import Optional, List, Dict
 from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
@@ -115,93 +115,8 @@ def _get_gcs_bucket_url() -> str:
     Get the GCS bucket URL for desktop updates.
     Can be configured via environment variable or use default.
     """
-    return os.getenv('DESKTOP_UPDATES_GCS_BUCKET', 'https://storage.googleapis.com/omi_macos_updates')
-
-
-@router.get("/v2/desktop/app-archive.json")
-async def get_desktop_updates(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
-    """
-    Desktop updater endpoint for macOS/Windows/Linux updates.
-    Returns app-archive.json format expected by desktop_updater package.
-
-    Fetches releases from GitHub with tag pattern: *-desktop-cm
-    Returns versions hosted on Google Cloud Storage.
-
-    Args:
-        platform: Target platform (macos, windows, or linux)
-
-    Returns:
-        JSON object with appName, description, and items array
-    """
-    # Fetch GitHub releases with caching
-    cache_key = "github_releases_desktop"
-    releases = await get_omi_github_releases(cache_key)
-
-    if not releases:
-        raise HTTPException(status_code=404, detail="No releases found")
-
-    # Filter for desktop releases
-    desktop_releases = []
-    for release in releases:
-        # Skip drafts and unpublished releases
-        if release.get("draft") or not release.get("published_at"):
-            continue
-
-        tag_name = release.get("tag_name", "")
-
-        # Check if it's a desktop release
-        if not tag_name.endswith("-desktop-cm") and not tag_name.endswith(f"-{platform}-cm"):
-            continue
-
-        # Parse version info
-        version_info = _parse_desktop_version(tag_name)
-        if not version_info:
-            continue
-
-        desktop_releases.append({"release": release, "version_info": version_info})
-
-    if not desktop_releases:
-        raise HTTPException(status_code=404, detail=f"No desktop releases found for platform: {platform}")
-
-    # Sort by published date (newest first)
-    desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
-
-    # Transform to desktop_updater format
-    gcs_bucket_url = _get_gcs_bucket_url()
-    items = []
-
-    for entry in desktop_releases:
-        release = entry["release"]
-        version_info = entry["version_info"]
-
-        # Extract metadata from release body
-        kv = extract_key_value_pairs(release.get("body", ""))
-        changelog = kv.get("changelog", [])
-        mandatory = kv.get("mandatory", "false").lower() == "true"
-
-        # Parse changes
-        changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
-
-        # Use build number directly (matches CFBundleVersion from Flutter)
-        short_version = version_info["build"]
-
-        # Construct GCS URL for the release folder
-        folder_name = f"{version_info['version']}-{platform}"
-        url = f"{gcs_bucket_url}/{folder_name}/"
-
-        items.append(
-            {
-                "version": version_info["version"],
-                "shortVersion": short_version,
-                "changes": changes,
-                "date": release.get("published_at"),
-                "mandatory": mandatory,
-                "url": url,
-                "platform": platform,
-            }
-        )
-
-    return {"appName": "Omi", "description": "Omi AI Desktop Application", "items": items}
+    bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
+    return f'https://storage.googleapis.com/{bucket}'
 
 
 def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
@@ -329,7 +244,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
         # Sort by published date (newest first)
         desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
 
-        # Transform to items format (reuse logic from get_desktop_updates)
+        # Transform to items format
         gcs_bucket_url = _get_gcs_bucket_url()
         items = []
 
@@ -352,8 +267,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
             # Parse changes
             changes = _parse_changelog_to_changes(changelog, release.get("body", ""))
 
-            # Use build number directly for sparkle:version (matches CFBundleVersion from Flutter)
-            # Flutter sets CFBundleVersion = --build-number (e.g., "474")
+            # Use build number directly for sparkle:version
             short_version = version_info["build"]
 
             # Construct GCS URL for the release folder
@@ -369,7 +283,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
                     "mandatory": mandatory,
                     "url": url,
                     "platform": platform,
-                    "edSignature": ed_signature,  # Include signature
+                    "edSignature": ed_signature,
                 }
             )
 
@@ -388,13 +302,12 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 
 
 @router.post("/v2/desktop/clear-cache")
-async def clear_desktop_cache():
+async def clear_desktop_cache(secret_key: str = Header(...)):
     """
     Clear the GitHub releases cache for desktop updates.
     This forces the next appcast.xml request to fetch fresh data from GitHub.
     """
-    try:
-        delete_generic_cache("github_releases_desktop")
-        return {"success": True, "message": "Desktop releases cache cleared successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error clearing cache: {str(e)}")
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    delete_generic_cache("github_releases_desktop")
+    return {"success": True, "message": "Desktop releases cache cleared successfully"}

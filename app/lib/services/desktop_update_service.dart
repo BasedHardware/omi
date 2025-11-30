@@ -5,7 +5,6 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// Service to manage desktop application updates using auto_updater
-/// Uses native Sparkle (macOS) and WinSparkle (Windows)
 class DesktopUpdateService {
   static final DesktopUpdateService _instance = DesktopUpdateService._internal();
   factory DesktopUpdateService() => _instance;
@@ -38,11 +37,12 @@ class DesktopUpdateService {
 
       // Configure auto_updater
       await autoUpdater.setFeedURL(feedURL);
-      await autoUpdater.checkForUpdates();
-      await autoUpdater.setScheduledCheckInterval(21600); // 6 hours
+      await autoUpdater.setScheduledCheckInterval(10800); // Check every 3 hours
+
+      // Check for updates in background on startup
+      await autoUpdater.checkForUpdates(inBackground: true);
 
       _initialized = true;
-      Logger.info('Auto updater initialized: $feedURL');
     } catch (e, stackTrace) {
       Logger.handle(e, stackTrace, message: 'Failed to initialize auto updater');
     }
