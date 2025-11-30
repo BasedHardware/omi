@@ -28,17 +28,8 @@ class _GenerativeBarChartWidgetState extends State<GenerativeBarChartWidget> {
       return _buildEmptyState();
     }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.08),
-          width: 1,
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,24 +200,13 @@ class _GenerativeBarChartWidgetState extends State<GenerativeBarChartWidget> {
   }
 
   Widget _buildEmptyState() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.08),
-          width: 1,
-        ),
-      ),
-      child: Center(
-        child: Text(
-          'No chart data available',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
-            fontSize: 14,
-          ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        'No chart data available',
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.5),
+          fontSize: 14,
         ),
       ),
     );

@@ -28,17 +28,8 @@ class _GenerativePieChartWidgetState extends State<GenerativePieChartWidget> {
       return _buildEmptyState();
     }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.08),
-          width: 1,
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -53,12 +44,12 @@ class _GenerativePieChartWidgetState extends State<GenerativePieChartWidget> {
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
           ],
 
           // Chart
           SizedBox(
-            height: widget.height - (widget.showLegend ? 60 : 0),
+            height: widget.height,
             child: PieChart(
               PieChartData(
                 pieTouchData: PieTouchData(
@@ -86,8 +77,9 @@ class _GenerativePieChartWidgetState extends State<GenerativePieChartWidget> {
 
           // Legend
           if (widget.showLegend) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             _buildLegend(),
+            const SizedBox(height: 16),
           ],
         ],
       ),
@@ -172,24 +164,13 @@ class _GenerativePieChartWidgetState extends State<GenerativePieChartWidget> {
   }
 
   Widget _buildEmptyState() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.08),
-          width: 1,
-        ),
-      ),
-      child: Center(
-        child: Text(
-          'No chart data available',
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
-            fontSize: 14,
-          ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Text(
+        'No chart data available',
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.5),
+          fontSize: 14,
         ),
       ),
     );

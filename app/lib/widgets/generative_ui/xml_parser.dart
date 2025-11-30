@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/rich_list_item_data.dart';
 import 'models/pie_chart_data.dart';
+import 'models/accordion_data.dart';
 import 'parsers/parsers.dart';
 
 /// Base class for parsed content segments
@@ -29,6 +30,13 @@ class PieChartSegment extends ContentSegment {
   const PieChartSegment(this.data);
 }
 
+/// A segment containing an accordion with expandable sections
+class AccordionSegment extends ContentSegment {
+  final AccordionDisplayData data;
+
+  const AccordionSegment(this.data);
+}
+
 /// Main parser for extracting custom XML tags from markdown content.
 ///
 /// Uses modular [BaseTagParser] implementations for each tag type.
@@ -43,12 +51,14 @@ class XmlTagParser {
   final List<BaseTagParser> _parsers = [
     RichListParser(),
     ChartParser(),
+    AccordionParser(),
   ];
 
   /// Check if content contains any generative UI tags
   static bool containsGenerativeTags(String content) {
     return RichListParser().containsTag(content) ||
-        ChartParser().containsTag(content);
+        ChartParser().containsTag(content) ||
+        AccordionParser().containsTag(content);
   }
 
   /// Parse content into a list of segments (markdown and widgets)

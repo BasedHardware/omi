@@ -20,6 +20,7 @@ class InAppBrowser extends StatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       useSafeArea: true,
+      enableDrag: false, // Disable drag-to-dismiss so WebView can scroll
       builder: (context) => InAppBrowser(url: url, title: title),
     );
   }

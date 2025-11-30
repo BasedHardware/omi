@@ -4,6 +4,7 @@ library generative_ui;
 // Models
 export 'models/rich_list_item_data.dart';
 export 'models/pie_chart_data.dart';
+export 'models/accordion_data.dart';
 
 // Parsers (modular tag parsers for easy extension)
 export 'parsers/parsers.dart';
@@ -16,6 +17,7 @@ export 'markdown_style.dart';
 export 'widgets/rich_list_widget.dart';
 export 'widgets/pie_chart_widget.dart';
 export 'widgets/bar_chart_widget.dart';
+export 'widgets/accordion_widget.dart';
 export 'widgets/in_app_browser.dart';
 
 // Main renderer

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import 'xml_parser.dart';
+import 'models/pie_chart_data.dart';
 import 'markdown_style.dart';
 import 'widgets/rich_list_widget.dart';
 import 'widgets/bar_chart_widget.dart';
+import 'widgets/pie_chart_widget.dart';
+import 'widgets/accordion_widget.dart';
 import 'widgets/in_app_browser.dart';
 
 /// Main widget that renders markdown content with embedded generative UI components
@@ -52,9 +55,19 @@ class GenerativeMarkdownWidget extends StatelessWidget {
         onUrlTap: onUrlTap ?? (url) => InAppBrowser.open(context, url),
       );
     } else if (segment is PieChartSegment) {
-      return GenerativeBarChartWidget(data: segment.data);
+      return _buildChartWidget(segment.data);
+    } else if (segment is AccordionSegment) {
+      return GenerativeAccordionWidget(data: segment.data);
     }
     return const SizedBox.shrink();
+  }
+
+  /// Build the appropriate chart widget based on chart type
+  Widget _buildChartWidget(PieChartDisplayData data) {
+    if (data.isPieStyle) {
+      return GenerativePieChartWidget(data: data);
+    }
+    return GenerativeBarChartWidget(data: data);
   }
 
   Widget _buildMarkdownSegment(BuildContext context, String markdownContent) {
