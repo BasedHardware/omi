@@ -190,6 +190,8 @@ def get_action_items(
     # Apply filters
     if conversation_id is not None:
         query = query.where(filter=FieldFilter('conversation_id', '==', conversation_id))
+    elif conversation_id is None and completed is None:
+        pass
 
     if completed is not None:
         query = query.where(filter=FieldFilter('completed', '==', completed))
