@@ -4,12 +4,20 @@ Tools for accessing user memories and facts.
 
 from datetime import datetime
 from typing import Optional
+import contextvars
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
 from models.memories import MemoryDB
+
+# Import agent_config_context for fallback config access
+try:
+    from utils.retrieval.agentic import agent_config_context
+except ImportError:
+    # Fallback if import fails
+    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
 @tool
@@ -68,7 +76,27 @@ def get_memories_tool(
     print(
         f"🔧 get_memories_tool called - limit: {limit}, offset: {offset}, start_date: {start_date}, end_date: {end_date}"
     )
-    uid = config['configurable'].get('user_id')
+
+    # Get config from parameter or context variable (like other tools do)
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 get_memories_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ get_memories_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ get_memories_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ get_memories_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
     if not uid:
         print(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
