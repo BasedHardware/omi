@@ -31,6 +31,7 @@ OAUTH_CONFIGS = {
     'whoop': {'name': 'Whoop'},
     'notion': {'name': 'Notion'},
     'twitter': {'name': 'Twitter'},
+    'github': {'name': 'GitHub'},
 }
 
 # Provider-specific OAuth URL configuration
@@ -82,6 +83,17 @@ AUTH_PROVIDERS = {
         'log_name': 'Twitter',
         'error_detail': 'Twitter not configured - TWITTER_CLIENT_ID missing',
         'requires_pkce': True,
+    },
+    'github': {
+        'client_env': 'GITHUB_CLIENT_ID',
+        'auth_base': 'https://github.com/login/oauth/authorize',
+        'redirect_path': '/v2/integrations/github/callback',
+        'query': {
+            'response_type': 'code',
+            'scope': 'repo issues pull_requests read:user',
+        },
+        'log_name': 'GitHub',
+        'error_detail': 'GitHub not configured - GITHUB_CLIENT_ID missing',
     },
 }
 
@@ -233,6 +245,72 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=404, detail="Integration not found")
 
     return None
+
+
+@router.get("/v1/integrations/github/repositories", tags=['integrations'])
+def get_github_repositories(uid: str = Depends(auth.get_current_user_uid)):
+    """Get list of GitHub repositories accessible to the authenticated user."""
+    integration = users_db.get_integration(uid, 'github')
+
+    if not integration or not integration.get('connected'):
+        raise HTTPException(status_code=401, detail="GitHub is not connected")
+
+    access_token = integration.get('access_token')
+    if not access_token:
+        raise HTTPException(status_code=401, detail="GitHub access token not found")
+
+    try:
+        from utils.retrieval.tools.github_tools import github_api_request
+
+        url = 'https://api.github.com/user/repos'
+        params = {
+            'per_page': 100,
+            'sort': 'updated',
+            'direction': 'desc',
+            'affiliation': 'owner,collaborator,organization_member',
+        }
+
+        repos = github_api_request('GET', url, access_token, params=params)
+
+        # Format repositories for frontend
+        formatted_repos = []
+        if isinstance(repos, list):
+            for repo in repos:
+                owner = repo.get('owner', {})
+                owner_login = owner.get('login', '') if isinstance(owner, dict) else ''
+                formatted_repos.append(
+                    {
+                        'full_name': repo.get('full_name', ''),
+                        'name': repo.get('name', ''),
+                        'owner': owner_login,
+                        'private': repo.get('private', False),
+                        'description': repo.get('description', ''),
+                        'updated_at': repo.get('updated_at', ''),
+                    }
+                )
+
+        return {'repositories': formatted_repos}
+    except Exception as e:
+        print(f"Error fetching GitHub repositories: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch repositories: {str(e)}")
+
+
+@router.put("/v1/integrations/github/default-repo", tags=['integrations'])
+def set_github_default_repo(
+    default_repo: str = Query(..., description="Repository in format 'owner/repo'"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Set the default GitHub repository for creating issues."""
+    integration = users_db.get_integration(uid, 'github')
+
+    if not integration or not integration.get('connected'):
+        raise HTTPException(status_code=401, detail="GitHub is not connected")
+
+    # Update integration with default repo
+    integration['default_repo'] = default_repo
+    users_db.set_integration(uid, 'github', integration)
+
+    return {"status": "ok", "default_repo": default_repo}
 
 
 # *****************************
@@ -443,6 +521,7 @@ async def oauth_callback(
         'whoop': 'whoop',
         'notion': 'notion',
         'twitter': 'twitter',
+        'github': 'github',
     }
     normalized_key = key_map.get(app_key, app_key)
 
@@ -451,6 +530,7 @@ async def oauth_callback(
         'whoop': ('WHOOP_CLIENT_ID', 'WHOOP_CLIENT_SECRET'),
         'notion': ('NOTION_CLIENT_ID', 'NOTION_CLIENT_SECRET'),
         'twitter': ('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'),
+        'github': ('GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET'),
     }
 
     if normalized_key not in client_envs:
@@ -471,6 +551,7 @@ async def oauth_callback(
         'whoop': '/v2/integrations/whoop/callback',
         'notion': '/v2/integrations/notion/callback',
         'twitter': '/v2/integrations/twitter/callback',
+        'github': '/v2/integrations/github/callback',
     }
     redirect_uri = f"{base_url_clean}{redirect_path_map[normalized_key]}"
 
@@ -543,6 +624,22 @@ async def oauth_callback(
             },
             additional_headers={
                 'Authorization': f'Basic {encoded_credentials}',
+            },
+        )
+        return await handle_oauth_callback(request, normalized_key, code, state, config)
+
+    if normalized_key == 'github':
+        config = OAuthProviderConfig(
+            token_endpoint='https://github.com/login/oauth/access_token',
+            token_request_type='form',
+            token_request_data={
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
+            },
+            additional_headers={
+                'Accept': 'application/json',
             },
         )
         return await handle_oauth_callback(request, normalized_key, code, state, config)

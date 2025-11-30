@@ -5,6 +5,8 @@ import 'package:omi/services/google_calendar_service.dart';
 import 'package:omi/services/notion_service.dart';
 import 'package:omi/services/twitter_service.dart';
 import 'package:omi/services/whoop_service.dart';
+import 'package:omi/services/github_service.dart';
+import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:provider/provider.dart';
 
 enum IntegrationApp {
@@ -12,6 +14,7 @@ enum IntegrationApp {
   whoop,
   notion,
   twitter,
+  github,
 }
 
 extension IntegrationAppExtension on IntegrationApp {
@@ -25,6 +28,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'Notion';
       case IntegrationApp.twitter:
         return 'Twitter';
+      case IntegrationApp.github:
+        return 'GitHub';
     }
   }
 
@@ -38,6 +43,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return 'notion';
       case IntegrationApp.twitter:
         return 'twitter';
+      case IntegrationApp.github:
+        return 'github';
     }
   }
 
@@ -56,9 +63,11 @@ extension IntegrationAppExtension on IntegrationApp {
         // Direct path works even if not in generated assets file
         return 'assets/integration_app_logos/notion-logo.png';
       case IntegrationApp.twitter:
-        // Use logo from assets - file is twitter-logo.png (if available)
-        // Direct path works even if not in generated assets file
-        return 'assets/integration_app_logos/twitter-logo.png';
+        // Use logo from assets - file is x-logo.avif
+        return 'assets/integration_app_logos/x-logo.avif';
+      case IntegrationApp.github:
+        // Use logo from assets - file is github-logo.png
+        return 'assets/integration_app_logos/github-logo.png';
     }
   }
 
@@ -72,6 +81,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return Icons.note; // Note icon for Notion
       case IntegrationApp.twitter:
         return FontAwesomeIcons.twitter; // Twitter icon
+      case IntegrationApp.github:
+        return FontAwesomeIcons.github; // GitHub icon
     }
   }
 
@@ -85,6 +96,8 @@ extension IntegrationAppExtension on IntegrationApp {
         return const Color(0xFF000000); // Notion brand color (black)
       case IntegrationApp.twitter:
         return const Color(0xFF1DA1F2); // Twitter brand color (blue)
+      case IntegrationApp.github:
+        return const Color(0xFF24292E); // GitHub brand color (dark gray)
     }
   }
 
@@ -158,6 +171,15 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       final service = TwitterService();
       final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
       if (handled) return;
+    }
+
+    if (app == IntegrationApp.github) {
+      final service = GitHubService();
+      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      if (handled) {
+        // After successful auth, settings will be opened in didChangeAppLifecycleState
+        return;
+      }
     }
   }
 
@@ -242,8 +264,22 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         await _handleDisconnect(app, NotionService().disconnect);
       } else if (app == IntegrationApp.twitter) {
         await _handleDisconnect(app, TwitterService().disconnect);
+      } else if (app == IntegrationApp.github) {
+        await _handleDisconnect(app, GitHubService().disconnect);
       }
     }
+  }
+
+  bool _shouldShowSettingsIcon() {
+    return context.read<IntegrationProvider>().isAppConnected(IntegrationApp.github);
+  }
+
+  void _openGitHubSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const GitHubSettingsPage(),
+      ),
+    );
   }
 
   Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
@@ -479,6 +515,15 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           ),
         ),
         centerTitle: true,
+        actions: [
+          // Settings icon for GitHub when connected
+          if (_shouldShowSettingsIcon())
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              onPressed: _openGitHubSettings,
+              tooltip: 'GitHub Settings',
+            ),
+        ],
       ),
       body: SafeArea(
         child: Padding(

@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
+import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -137,6 +138,8 @@ class _AppShellState extends State<AppShell> {
       await _handleOAuthCallback(uri, 'Google', 'Google Calendar', _handleGoogleCalendarCallback);
     } else if (uri.host == 'whoop' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       await _handleOAuthCallback(uri, 'Whoop', 'Whoop', _handleWhoopCallback);
+    } else if (uri.host == 'github' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
+      await _handleOAuthCallback(uri, 'GitHub', 'GitHub', _handleGitHubCallback);
     } else {
       debugPrint('Unknown link: $uri');
     }
@@ -308,6 +311,40 @@ class _AppShellState extends State<AppShell> {
       debugPrint('Error handling Whoop callback: $e');
       if (mounted) {
         AppSnackbar.showSnackbarError('Failed to refresh Whoop connection status.');
+      }
+    }
+  }
+
+  Future<void> _handleGitHubCallback() async {
+    if (!mounted) return;
+
+    try {
+      // Capture provider before async operation to avoid use_build_context_synchronously
+      final integrationProvider = context.read<IntegrationProvider>();
+
+      // IntegrationProvider.loadFromBackend() fetches all connection statuses
+      // and syncs SharedPreferences for backward compatibility
+      await integrationProvider.loadFromBackend();
+
+      if (!mounted) return;
+      debugPrint('✓ GitHub authentication completed successfully');
+      AppSnackbar.showSnackbar('Successfully connected to GitHub!');
+
+      // Open GitHub settings page to select default repository
+      if (mounted) {
+        await Future.delayed(const Duration(milliseconds: 500)); // Small delay for UI
+        if (mounted) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const GitHubSettingsPage(),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error handling GitHub callback: $e');
+      if (mounted) {
+        AppSnackbar.showSnackbarError('Failed to refresh GitHub connection status.');
       }
     }
   }
