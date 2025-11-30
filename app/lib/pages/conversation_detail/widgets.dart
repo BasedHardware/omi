@@ -451,9 +451,42 @@ class AppResultDetailWidget extends StatelessWidget {
     this.currentResultIndex = -1,
   });
 
+  // Mock data for testing generative UI components
+  static const String _mockGenerativeUIContent = '''
+
+---
+
+**Here are some recommended resources:**
+
+<rich-list>
+<item title="Getting Started Guide" description="Learn the basics of our platform" thumb="https://picsum.photos/100" url="https://example.com/guide"/>
+<item title="Best Practices" description="Tips and tricks from power users" thumb="https://picsum.photos/100" url="https://example.com/tips"/>
+<item title="Video Tutorial" description="Watch step-by-step instructions" thumb="https://picsum.photos/100" url="https://example.com/video"/>
+</rich-list>
+
+**Conversation Topics Breakdown:**
+
+<pie-chart title="Topic Distribution" type="donut">
+<segment label="Work" value="45" color="#8B5CF6"/>
+<segment label="Planning" value="25" color="#10B981"/>
+<segment label="Ideas" value="20" color="#F59E0B"/>
+<segment label="Follow-ups" value="10" color="#3B82F6"/>
+</pie-chart>
+
+**More resources after the chart:**
+
+<rich-list>
+<item title="Documentation" description="Complete reference guide" thumb="https://picsum.photos/100" url="https://docs.example.com"/>
+<item title="Community Forum" description="Get help from other users" thumb="https://picsum.photos/100" url="https://forum.example.com"/>
+</rich-list>
+
+That concludes the summary with embedded components.
+''';
+
   @override
   Widget build(BuildContext context) {
-    final String content = appResponse.content.trim().decodeString;
+    // Append mock generative UI content for testing
+    final String content = appResponse.content.trim().decodeString + _mockGenerativeUIContent;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
