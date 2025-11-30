@@ -176,8 +176,16 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                 ),
               ),
               const SizedBox(height: 32),
-              ...widget.children,
-              const Spacer(),
+              // Wrap children in Expanded with SingleChildScrollView to handle overflow
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: widget.children,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               GestureDetector(
                 onTap: _disconnect,
                 child: Container(
