@@ -44,6 +44,12 @@ from .notion_tools import (
 from .twitter_tools import (
     get_twitter_tweets_tool,
 )
+from .github_tools import (
+    get_github_pull_requests_tool,
+    get_github_issues_tool,
+    create_github_issue_tool,
+    close_github_issue_tool,
+)
 from .file_tools import (
     search_files_tool,
 )
@@ -68,5 +74,9 @@ __all__ = [
     'get_whoop_workout_tool',
     'search_notion_pages_tool',
     'get_twitter_tweets_tool',
+    'get_github_pull_requests_tool',
+    'get_github_issues_tool',
+    'create_github_issue_tool',
+    'close_github_issue_tool',
     'search_files_tool',
 ]

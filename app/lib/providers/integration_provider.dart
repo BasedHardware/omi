@@ -15,12 +15,14 @@ class IntegrationProvider extends ChangeNotifier {
         getIntegration('whoop'),
         getIntegration('notion'),
         getIntegration('twitter'),
+        getIntegration('github'),
       ]);
 
       _integrations['google_calendar'] = responses[0]?.connected ?? false;
       _integrations['whoop'] = responses[1]?.connected ?? false;
       _integrations['notion'] = responses[2]?.connected ?? false;
       _integrations['twitter'] = responses[3]?.connected ?? false;
+      _integrations['github'] = responses[4]?.connected ?? false;
 
       // Sync SharedPreferences for backward compatibility with services
       // This ensures services that read from SharedPreferences stay in sync
@@ -28,6 +30,7 @@ class IntegrationProvider extends ChangeNotifier {
       await SharedPreferencesUtil().saveBool('whoop_connected', _integrations['whoop'] ?? false);
       await SharedPreferencesUtil().saveBool('notion_connected', _integrations['notion'] ?? false);
       await SharedPreferencesUtil().saveBool('twitter_connected', _integrations['twitter'] ?? false);
+      await SharedPreferencesUtil().saveBool('github_connected', _integrations['github'] ?? false);
 
       notifyListeners();
     } catch (e) {
@@ -73,6 +76,8 @@ class IntegrationProvider extends ChangeNotifier {
         return _integrations['notion'] ?? false;
       case IntegrationApp.twitter:
         return _integrations['twitter'] ?? false;
+      case IntegrationApp.github:
+        return _integrations['github'] ?? false;
     }
   }
 }
