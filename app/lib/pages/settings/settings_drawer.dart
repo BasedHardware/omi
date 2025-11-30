@@ -323,7 +323,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
                 title: showSubscription ? 'Plan & Usage' : 'Usage Insights',
-                icon: const FaIcon(FontAwesomeIcons.chartBar, color: Color(0xFF8E8E93), size: 20),
+                icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(
@@ -375,8 +375,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Integrations',
-                icon: const FaIcon(FontAwesomeIcons.plug, color: Color(0xFF8E8E93), size: 20),
+                title: 'Chat Tools',
+                icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
                 showBetaTag: true,
                 onTap: () {
                   Navigator.pop(context);

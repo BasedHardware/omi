@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/services/github_service.dart';
+import 'package:shimmer/shimmer.dart';
 
 class GitHubSettingsPage extends StatefulWidget {
   const GitHubSettingsPage({super.key});
@@ -103,13 +104,106 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
     }
   }
 
+  Widget _buildShimmerLoading() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF000000),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF000000),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'GitHub Settings',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Connected status shimmer
+              Shimmer.fromColors(
+                baseColor: Colors.grey[800]!,
+                highlightColor: Colors.grey[600]!,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  height: 40,
+                ),
+              ),
+              // Title shimmer
+              Shimmer.fromColors(
+                baseColor: Colors.grey[800]!,
+                highlightColor: Colors.grey[600]!,
+                child: Container(
+                  width: 200,
+                  height: 24,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              // Description shimmer
+              Shimmer.fromColors(
+                baseColor: Colors.grey[800]!,
+                highlightColor: Colors.grey[600]!,
+                child: Container(
+                  width: double.infinity,
+                  height: 16,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              // Repository list shimmer
+              Expanded(
+                child: ListView.builder(
+                  itemCount: 5,
+                  itemBuilder: (context, index) {
+                    return Shimmer.fromColors(
+                      baseColor: Colors.grey[800]!,
+                      highlightColor: Colors.grey[600]!,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        height: 80,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoadingRepos) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF000000),
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return _buildShimmerLoading();
     }
 
     return IntegrationSettingsPage(

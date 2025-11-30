@@ -8,6 +8,7 @@ import 'package:omi/services/whoop_service.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum IntegrationApp {
   googleCalendar,
@@ -270,17 +271,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     }
   }
 
-  bool _shouldShowSettingsIcon() {
-    return context.read<IntegrationProvider>().isAppConnected(IntegrationApp.github);
-  }
-
-  void _openGitHubSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const GitHubSettingsPage(),
-      ),
-    );
-  }
 
   Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
     // Capture instances before async operation to avoid use_build_context_synchronously
@@ -364,7 +354,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       onTap: isAvailable
           ? () {
               if (isConnected) {
-                _disconnectApp(app);
+                // If GitHub is connected, open settings page
+                if (app == IntegrationApp.github) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const GitHubSettingsPage(),
+                    ),
+                  );
+                } else {
+                  // For other apps, show disconnect dialog
+                  _disconnectApp(app);
+                }
               } else {
                 _connectApp(app);
               }
@@ -515,15 +515,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           ),
         ),
         centerTitle: true,
-        actions: [
-          // Settings icon for GitHub when connected
-          if (_shouldShowSettingsIcon())
-            IconButton(
-              icon: const Icon(Icons.settings, color: Colors.white),
-              onPressed: _openGitHubSettings,
-              tooltip: 'GitHub Settings',
-            ),
-        ],
       ),
       body: SafeArea(
         child: Padding(
