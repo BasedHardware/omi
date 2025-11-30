@@ -85,9 +85,6 @@ class GenerativeMarkdownWidget extends StatelessWidget {
       (match) => '${match.group(1)}${match.group(2)}\n\n',
     );
 
-    debugPrint('=== Rendering MarkdownSegment ===');
-    debugPrint('Original length: ${markdownContent.length}, Processed length: ${processedContent.length}');
-
     return MarkdownBody(
       selectable: selectable,
       shrinkWrap: true,
