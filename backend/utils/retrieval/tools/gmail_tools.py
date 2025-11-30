@@ -56,8 +56,6 @@ def get_gmail_messages(
     if label_ids:
         params['labelIds'] = label_ids
 
-    print(f"Calling Gmail API with query: {query}, max_results: {max_results}")
-
     message_ids = []
     page_token = None
 
@@ -83,8 +81,6 @@ def get_gmail_messages(
         page_token = data.get('nextPageToken')
         if not page_token:
             break
-
-    print(f"Gmail API returned {len(message_ids)} message IDs")
 
     messages = []
     for msg_id in message_ids:
@@ -209,8 +205,6 @@ def get_gmail_messages_tool(
     Returns:
         Formatted list of emails with their details.
     """
-    print(f"🔧 get_gmail_messages_tool called - query: {query}, " f"max_results: {max_results}, label: {label}")
-
     uid, integration, access_token, access_err = prepare_access(
         config,
         'google_gmail',
@@ -220,16 +214,10 @@ def get_gmail_messages_tool(
         'Error checking Gmail connection',
     )
     if access_err:
-        print(f"❌ get_gmail_messages_tool - {access_err}")
         return access_err
-    print(f"✅ get_gmail_messages_tool - uid: {uid}, max_results: {max_results}")
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")
-
-        print(f"📧 Checking Google connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
 
         # Build label_ids if label is provided
         # Note: "UNREAD" is a search operator, not a label, so handle it in query
@@ -266,12 +254,9 @@ def get_gmail_messages_tool(
             ),
         )
         if err:
-            print(f"❌ {err}")
             return err
-        print(f"✅ Successfully fetched {len(messages)} messages")
 
         messages_count = len(messages) if messages else 0
-        print(f"📊 get_gmail_messages_tool - found {messages_count} messages")
 
         if not messages:
             query_info = f" matching '{query}'" if query else ""

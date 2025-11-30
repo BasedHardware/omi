@@ -392,12 +392,6 @@ async def handle_oauth_callback(
                 print(f'{app_key}: No access token received in response')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
-            # Debug: Log token response keys for Whoop
-            if app_key == 'whoop':
-                token_keys = list(token_data.keys())
-                print(f'{app_key}: Token response keys: {token_keys}')
-                print(f'{app_key}: Has refresh_token: {bool(refresh_token)}')
-
             integration_data = {
                 'connected': True,
                 'access_token': access_token,
@@ -405,11 +399,6 @@ async def handle_oauth_callback(
 
             if refresh_token:
                 integration_data['refresh_token'] = refresh_token
-                if app_key == 'whoop':
-                    print(f'{app_key}: Storing refresh_token (length: {len(refresh_token)})')
-            else:
-                if app_key == 'whoop':
-                    print(f'{app_key}: WARNING - No refresh_token in token response!')
 
             try:
                 additional_data = await provider_config.fetch_additional_data(client, access_token)
@@ -420,7 +409,6 @@ async def handle_oauth_callback(
             # Store in Firebase
             try:
                 users_db.set_integration(uid, app_key, integration_data)
-                print(f'{app_key}: Successfully stored tokens for user {uid}')
             except Exception as e:
                 print(f'{app_key}: Error storing tokens in Firebase: {e}')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')

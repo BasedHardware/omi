@@ -44,24 +44,19 @@ def refresh_twitter_token(uid: str, integration: Optional[dict] = None) -> Optio
         integration = users_db.get_integration(uid, 'twitter')
 
     if not integration:
-        print(f"🔄 Twitter token refresh failed: No integration found")
         return None
 
     refresh_token = integration.get('refresh_token')
     if not refresh_token:
-        print(f"🔄 Twitter token refresh failed: No refresh token found in integration")
         return None
 
     client_id = os.getenv('TWITTER_CLIENT_ID')
     client_secret = os.getenv('TWITTER_CLIENT_SECRET')
 
     if not all([client_id, client_secret]):
-        print(f"🔄 Twitter token refresh failed: Missing client credentials")
         return None
 
     try:
-        print(f"🔄 Attempting to refresh Twitter token for user {uid}")
-
         # Twitter OAuth 2.0 uses Basic Auth with base64-encoded credentials
         credentials = f'{client_id}:{client_secret}'
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
@@ -79,8 +74,6 @@ def refresh_twitter_token(uid: str, integration: Optional[dict] = None) -> Optio
             timeout=10.0,
         )
 
-        print(f"🔄 Twitter token refresh response status: {response.status_code}")
-
         if response.status_code == 200:
             token_data = response.json()
             new_access_token = token_data.get('access_token')
@@ -92,20 +85,14 @@ def refresh_twitter_token(uid: str, integration: Optional[dict] = None) -> Optio
                 if 'refresh_token' in token_data:
                     integration['refresh_token'] = token_data.get('refresh_token')
                 users_db.set_integration(uid, 'twitter', integration)
-                print(f"✅ Twitter token refreshed successfully")
                 return new_access_token
-            else:
-                print(f"🔄 Twitter token refresh failed: No access token in response")
         else:
             error_body = response.text[:500] if response.text else "No error body"
-            print(f"🔄 Twitter token refresh failed with HTTP {response.status_code}: {error_body}")
+            print(f"❌ Twitter token refresh failed with HTTP {response.status_code}: {error_body}")
     except requests.exceptions.RequestException as e:
-        print(f"🔄 Network error refreshing Twitter token: {e}")
+        print(f"❌ Network error refreshing Twitter token: {e}")
     except Exception as e:
-        print(f"🔄 Error refreshing Twitter token: {e}")
-        import traceback
-
-        traceback.print_exc()
+        print(f"❌ Error refreshing Twitter token: {e}")
 
     return None
 
@@ -208,8 +195,6 @@ def get_twitter_tweets(
     if end_time:
         params['end_time'] = end_time
 
-    print(f"Calling Twitter Tweets API for user_id={user_id}, max_results={params['max_results']}")
-
     try:
         all_tweets = []
         all_users = {}
@@ -222,8 +207,6 @@ def get_twitter_tweets(
                 page_params['pagination_token'] = pagination_token
 
             response = requests.get(url, headers=headers, params=page_params, timeout=10.0)
-
-            print(f"Twitter Tweets API response status: {response.status_code}")
 
             if response.status_code == 200:
                 data = response.json()
@@ -296,8 +279,6 @@ def get_twitter_tweets_tool(
     Returns:
         Formatted list of tweets with author, text, timestamp, and engagement metrics.
     """
-    print(f"🔧 get_twitter_tweets_tool called - username: {username}, max_results: {max_results}")
-
     uid, integration, access_token, access_err = prepare_access(
         config,
         'twitter',
@@ -307,17 +288,12 @@ def get_twitter_tweets_tool(
         'Error checking Twitter connection',
     )
     if access_err:
-        print(f"❌ get_twitter_tweets_tool - {access_err}")
         return access_err
 
-    print(f"✅ get_twitter_tweets_tool - uid: {uid}, max_results: {max_results}")
-
     try:
-        max_results = max(5, ensure_capped(max_results, 100, "get_twitter_tweets_tool - max_results capped from {} to {}"))
-
-        print(f"Checking Twitter connection for user {uid}...")
-
-        print(f"✅ Access token found, length: {len(access_token)}")
+        max_results = max(
+            5, ensure_capped(max_results, 100, "get_twitter_tweets_tool - max_results capped from {} to {}")
+        )
 
         # Fetch tweets
         tweets_data, err = retry_on_auth(
@@ -341,9 +317,7 @@ def get_twitter_tweets_tool(
             ),
         )
         if err:
-            print(f"❌ {err}")
             return err
-        print(f"✅ Successfully fetched Twitter tweets")
 
         tweets = tweets_data.get('data', [])
         users = tweets_data.get('includes', {}).get('users', [])
@@ -352,7 +326,6 @@ def get_twitter_tweets_tool(
         user_map = {user['id']: user for user in users}
 
         tweets_count = len(tweets) if tweets else 0
-        print(f"📊 get_twitter_tweets_tool - found {tweets_count} tweets")
 
         if not tweets:
             username_info = f" for @{username}" if username else ""

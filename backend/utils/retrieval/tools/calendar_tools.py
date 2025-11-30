@@ -624,8 +624,6 @@ def get_calendar_events_tool(
                     max_results=max_results,
                     search_query=search_query,
                 )
-
-            print(f"✅ Successfully fetched {len(events)} events")
         except Exception as e:
             error_msg = str(e)
             print(f"❌ Error fetching calendar events: {error_msg}")
@@ -638,7 +636,6 @@ def get_calendar_events_tool(
                 print(f"🔄 Attempting to refresh Google Calendar token...")
                 new_token = refresh_google_token(uid, integration)
                 if new_token:
-                    print(f"✅ Token refreshed, retrying...")
                     try:
                         events = get_google_calendar_events(
                             access_token=new_token,
@@ -647,7 +644,6 @@ def get_calendar_events_tool(
                             max_results=max_results,
                             search_query=search_query,
                         )
-                        print(f"✅ Successfully fetched {len(events)} events after token refresh")
                     except Exception as retry_error:
                         print(f"❌ Error after token refresh: {str(retry_error)}")
                         import traceback
@@ -664,7 +660,6 @@ def get_calendar_events_tool(
                 return f"Error fetching calendar events: {error_msg}"
 
         events_count = len(events) if events else 0
-        print(f"📊 get_calendar_events_tool - found {events_count} events")
 
         if not events:
             date_info = ""
@@ -831,7 +826,6 @@ def create_calendar_event_tool(
 
             if resolved_emails:
                 attendee_list = resolved_emails
-                print(f"✅ Resolved {len(resolved_emails)} attendee(s) to email addresses")
 
         # Create the event
         try:
@@ -875,7 +869,6 @@ def create_calendar_event_tool(
                 print(f"🔄 Attempting to refresh Google Calendar token...")
                 new_token = refresh_google_token(uid, integration)
                 if new_token:
-                    print(f"✅ Token refreshed, retrying...")
                     try:
                         event = create_google_calendar_event(
                             access_token=new_token,
@@ -997,7 +990,6 @@ def delete_calendar_event_tool(
                     print(f"🔄 Attempting to refresh Google Calendar token...")
                     new_token = refresh_google_token(uid, integration)
                     if new_token:
-                        print(f"✅ Token refreshed, retrying...")
                         try:
                             delete_google_calendar_event(new_token, event_id)
                             return f"✅ Successfully deleted calendar event (ID: {event_id})"
@@ -1092,7 +1084,6 @@ def delete_calendar_event_tool(
                 try:
                     delete_google_calendar_event(access_token, event_id)
                     deleted_count += 1
-                    print(f"✅ Deleted: {event_title_found} (ID: {event_id})")
                 except Exception as e:
                     error_msg = str(e)
                     print(f"❌ Failed to delete {event_title_found}: {error_msg}")
@@ -1138,7 +1129,6 @@ def delete_calendar_event_tool(
                 print(f"🔄 Attempting to refresh Google Calendar token...")
                 new_token = refresh_google_token(uid, integration)
                 if new_token:
-                    print(f"✅ Token refreshed, retrying...")
                     try:
                         events = get_google_calendar_events(
                             access_token=new_token,
@@ -1328,7 +1318,6 @@ def update_calendar_event_tool(
                 print(f"🔄 Attempting to refresh Google Calendar token...")
                 new_token = refresh_google_token(uid, integration)
                 if new_token:
-                    print(f"✅ Token refreshed, retrying...")
                     try:
                         current_event = get_google_calendar_event(new_token, target_event_id)
                         access_token = new_token
@@ -1439,7 +1428,6 @@ def update_calendar_event_tool(
                 print(f"🔄 Attempting to refresh Google Calendar token...")
                 new_token = refresh_google_token(uid, integration)
                 if new_token:
-                    print(f"✅ Token refreshed, retrying...")
                     try:
                         updated_event = update_google_calendar_event(
                             access_token=new_token,
