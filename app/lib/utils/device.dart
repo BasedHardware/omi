@@ -72,15 +72,25 @@ class DeviceUtils {
           return Assets.images.friendPendant.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
-          if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
+           if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
             final upperModel = modelNumber.toUpperCase();
-            if (upperModel.contains('DEVKIT') || upperModel.contains('FRIEND')) {
+
+            if (upperModel.contains('GLASS')) {
+              return Assets.images.omiGlass.path;
+            }
+
+            if (upperModel.contains('DEVKIT') || (upperModel.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
           }
           if (deviceName != null && deviceName.isNotEmpty) {
             final upperName = deviceName.toUpperCase();
-            if (upperName.contains('DEVKIT') || upperName.contains('DEV') || upperName.contains('FRIEND')) {
+
+            if (upperName.contains('GLASS')) {
+              return Assets.images.omiGlass.path;
+            }
+
+            if (upperName.contains('DEVKIT') || (upperName.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
           }
