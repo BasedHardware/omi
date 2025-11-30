@@ -11,6 +11,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -213,6 +214,28 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
+  Widget _buildSttChip() {
+    final useCustom = SharedPreferencesUtil().useCustomStt;
+    final config = SharedPreferencesUtil().customSttConfig;
+    final label = useCustom ? config.provider.displayName : 'Omi';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: useCustom ? const Color(0xFF7C3AED).withOpacity(0.2) : Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: useCustom ? const Color(0xFF7C3AED) : Colors.grey,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
   Widget _buildVersionInfoSection() {
     if (!Platform.isIOS && !Platform.isAndroid) {
       return const SizedBox.shrink();
@@ -354,6 +377,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const DeviceSettings(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
+                title: 'Transcription',
+                icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
+                trailingChip: _buildSttChip(),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const TranscriptionSettingsPage(),
                     ),
                   );
                 },

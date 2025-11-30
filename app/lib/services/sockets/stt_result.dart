@@ -1,5 +1,6 @@
 import 'package:omi/services/sockets/stt_response_schema.dart';
 
+/// A single segment of transcribed text with timing information
 class SttSegment {
   final String text;
   final double start;

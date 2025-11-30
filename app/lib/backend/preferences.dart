@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -83,6 +84,21 @@ class SharedPreferencesUtil {
   bool get doubleTapPausesMuting => getBool('doubleTapPausesMuting');
 
   set doubleTapPausesMuting(bool value) => saveBool('doubleTapPausesMuting', value);
+
+  // Custom STT configuration
+  CustomSttConfig get customSttConfig {
+    final configJson = getString('customSttConfig');
+    if (configJson.isEmpty) return CustomSttConfig.defaultConfig;
+    try {
+      return CustomSttConfig.fromJson(jsonDecode(configJson));
+    } catch (e) {
+      return CustomSttConfig.defaultConfig;
+    }
+  }
+
+  set customSttConfig(CustomSttConfig value) => saveString('customSttConfig', jsonEncode(value.toJson()));
+
+  bool get useCustomStt => customSttConfig.isEnabled;
 
   //----------------------------- Permissions ---------------------------------//
 

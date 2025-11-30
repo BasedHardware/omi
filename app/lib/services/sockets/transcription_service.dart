@@ -69,6 +69,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool includeSpeechProfile;
   String? source;
   bool customSttMode;
+  String? configKey;
 
   TranscriptSegmentSocketService.create(
     this.sampleRate,
@@ -77,6 +78,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.includeSpeechProfile = false,
     this.source,
     this.customSttMode = false,
+    this.configKey,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -105,6 +107,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.includeSpeechProfile = false,
     this.source,
     this.customSttMode = false,
+    this.configKey,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -257,12 +260,15 @@ class TranscriptSocketServiceFactory {
     String language, {
     bool includeSpeechProfile = true,
     String? source,
+    String? configKey,
   }) {
-    return ConversationTranscriptSegmentSocketService.create(
+    return TranscriptSegmentSocketService.create(
       sampleRate,
       codec,
       language,
+      includeSpeechProfile: includeSpeechProfile,
       source: source,
+      configKey: configKey ?? 'omi:default',
     );
   }
 
@@ -439,6 +445,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
+    String? configKey,
   }) {
     final primarySocket = _createOpenAISocket(
       sampleRate,
@@ -456,6 +463,7 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       includeSpeechProfile: includeSpeechProfile,
       source: source,
+      configKey: configKey,
     );
   }
 
@@ -468,6 +476,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
+    String? configKey,
   }) {
     final primarySocket = _createDeepgramSocket(
       sampleRate,
@@ -484,6 +493,7 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       includeSpeechProfile: includeSpeechProfile,
       source: source,
+      configKey: configKey,
     );
   }
 
@@ -499,6 +509,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
+    String? configKey,
   }) {
     final primarySocket = _createWhisperCppSocket(
       sampleRate,
@@ -517,6 +528,7 @@ class TranscriptSocketServiceFactory {
       primarySocket: primarySocket,
       includeSpeechProfile: includeSpeechProfile,
       source: source,
+      configKey: configKey,
     );
   }
 
@@ -552,6 +564,7 @@ class TranscriptSocketServiceFactory {
     IPureSocket socket, {
     bool includeSpeechProfile = false,
     String? source,
+    String? configKey,
   }) {
     return TranscriptSegmentSocketService.withSocket(
       sampleRate,
@@ -560,6 +573,116 @@ class TranscriptSocketServiceFactory {
       socket,
       includeSpeechProfile: includeSpeechProfile,
       source: source,
+      configKey: configKey,
+    );
+  }
+
+  /// Create socket service from CustomSttConfig (from user settings)
+  /// This centralizes all custom STT socket creation logic
+  static TranscriptSegmentSocketService createFromCustomConfig(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language,
+    dynamic config, {
+    String? source,
+  }) {
+    final provider = config.provider.toString().split('.').last;
+    final apiKey = config.apiKey as String?;
+    final host = config.host as String? ?? '127.0.0.1';
+    final port = config.port as int? ?? 8080;
+    final configKey = config.configKey as String?;
+
+    debugPrint("Creating custom STT socket for provider: $provider, configKey: $configKey");
+
+    switch (provider) {
+      case 'openai':
+        return createCompositeWithOpenAI(
+          sampleRate,
+          codec,
+          language,
+          openAiApiKey: apiKey ?? '',
+          source: source,
+          configKey: configKey,
+        );
+      case 'deepgram':
+        return createCompositeWithDeepgram(
+          sampleRate,
+          codec,
+          language,
+          deepgramApiKey: apiKey ?? '',
+          source: source,
+          configKey: configKey,
+        );
+      case 'whisperCpp':
+        return createCompositeWithWhisperCpp(
+          sampleRate,
+          codec,
+          language,
+          host: host,
+          port: port,
+          source: source,
+          configKey: configKey,
+        );
+      case 'falai':
+        if (apiKey != null && apiKey.isNotEmpty) {
+          return _createCompositeService(
+            sampleRate,
+            codec,
+            language,
+            primarySocket: _createFalAISocket(sampleRate, codec, language, apiKey: apiKey),
+            source: source,
+            configKey: configKey,
+          );
+        }
+        return _createSchemaBasedFromConfig(sampleRate, codec, language, config, source: source);
+      case 'gemini':
+        if (apiKey != null && apiKey.isNotEmpty) {
+          return _createCompositeService(
+            sampleRate,
+            codec,
+            language,
+            primarySocket: _createGeminiSocket(sampleRate, codec, language, apiKey: apiKey),
+            source: source,
+            configKey: configKey,
+          );
+        }
+        return _createSchemaBasedFromConfig(sampleRate, codec, language, config, source: source);
+      case 'custom':
+        return _createSchemaBasedFromConfig(sampleRate, codec, language, config, source: source);
+      default:
+        return createDefault(sampleRate, codec, language, source: source, configKey: configKey);
+    }
+  }
+
+  static TranscriptSegmentSocketService _createSchemaBasedFromConfig(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language,
+    dynamic config, {
+    String? source,
+  }) {
+    final apiUrl = config.apiUrl as String? ?? '';
+    final headers = config.headers as Map<String, String>? ?? {};
+    final fields = config.fields as Map<String, String>? ?? {};
+    final audioFieldName = config.audioFieldName as String? ?? 'audio';
+    final schema = config.schema as SttResponseSchema;
+    final configKey = config.configKey as String?;
+
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: _createSchemaBasedSocket(
+        sampleRate,
+        codec,
+        apiUrl: apiUrl,
+        schema: schema,
+        headers: headers,
+        fields: fields,
+        audioFieldName: audioFieldName,
+      ),
+      source: source,
+      configKey: configKey,
     );
   }
 
@@ -570,6 +693,7 @@ class TranscriptSocketServiceFactory {
     required IPureSocket primarySocket,
     bool includeSpeechProfile = false,
     String? source,
+    String? configKey,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -589,6 +713,7 @@ class TranscriptSocketServiceFactory {
       includeSpeechProfile: includeSpeechProfile,
       source: source,
       customSttMode: true,
+      configKey: configKey,
     );
   }
 

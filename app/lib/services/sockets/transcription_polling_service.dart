@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/sockets/pure_polling.dart';
+import 'package:omi/services/sockets/stt_response_schema.dart';
+import 'package:omi/services/sockets/stt_result.dart';
 
 enum SttRequestBodyType {
   multipartForm,
@@ -215,7 +217,7 @@ class SchemaBasedSttProvider implements ISttProvider {
     );
   }
 
-  Future<String?> _uploadAudio(Uint8List audioData) async {
+  Future<String?> _uploadAudio(Uint8List audioBytes) async {
     if (fileUploadConfig == null) return null;
 
     try {
@@ -244,9 +246,9 @@ class SchemaBasedSttProvider implements ISttProvider {
 
       final uploadRequest = fileUploadConfig!.uploadMethod.toUpperCase() == 'PUT'
           ? _client.put(Uri.parse(uploadUrl),
-              headers: {'Content-Type': fileUploadConfig!.uploadContentType}, body: audioData)
+              headers: {'Content-Type': fileUploadConfig!.uploadContentType}, body: audioBytes)
           : _client.post(Uri.parse(uploadUrl),
-              headers: {'Content-Type': fileUploadConfig!.uploadContentType}, body: audioData);
+              headers: {'Content-Type': fileUploadConfig!.uploadContentType}, body: audioBytes);
 
       final uploadResponse = await uploadRequest.timeout(const Duration(seconds: 60));
 
@@ -264,30 +266,31 @@ class SchemaBasedSttProvider implements ISttProvider {
 
   @override
   Future<SttTranscriptionResult?> transcribe(
-    Uint8List audioData, {
+    dynamic audioData, {
     double audioOffsetSeconds = 0,
   }) async {
+    final Uint8List audioBytes = audioData is Uint8List ? audioData : Uint8List.fromList(audioData);
     try {
       final uri = Uri.parse(apiUrl);
       http.Response response;
 
       String? audioUrlFromUpload;
       if (fileUploadConfig != null) {
-        audioUrlFromUpload = await _uploadAudio(audioData);
+        audioUrlFromUpload = await _uploadAudio(audioBytes);
         if (audioUrlFromUpload == null) return null;
       }
 
       switch (requestBodyType) {
         case SttRequestBodyType.rawBinary:
           response =
-              await _client.post(uri, headers: defaultHeaders, body: audioData).timeout(const Duration(seconds: 60));
+              await _client.post(uri, headers: defaultHeaders, body: audioBytes).timeout(const Duration(seconds: 60));
           break;
 
         case SttRequestBodyType.jsonBase64:
           if (jsonBodyBuilder == null) {
             throw Exception('jsonBodyBuilder required for jsonBase64 request type');
           }
-          final audioInput = audioUrlFromUpload ?? base64Encode(audioData);
+          final audioInput = audioUrlFromUpload ?? base64Encode(audioBytes);
           response = await _client
               .post(uri, headers: defaultHeaders, body: jsonEncode(jsonBodyBuilder!(audioInput)))
               .timeout(const Duration(seconds: 60));
@@ -297,7 +300,7 @@ class SchemaBasedSttProvider implements ISttProvider {
           final request = http.MultipartRequest('POST', uri)
             ..headers.addAll(defaultHeaders)
             ..fields.addAll(defaultFields)
-            ..files.add(http.MultipartFile.fromBytes(audioFieldName, audioData, filename: 'audio.wav'));
+            ..files.add(http.MultipartFile.fromBytes(audioFieldName, audioBytes, filename: 'audio.wav'));
 
           final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
           response = await http.Response.fromStream(streamedResponse);
