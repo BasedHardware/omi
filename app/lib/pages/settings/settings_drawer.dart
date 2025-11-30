@@ -11,6 +11,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
@@ -217,18 +218,18 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   Widget _buildSttChip() {
     final useCustom = SharedPreferencesUtil().useCustomStt;
     final config = SharedPreferencesUtil().customSttConfig;
-    final label = useCustom ? config.provider.displayName : 'Omi';
+    final label = useCustom ? SttProviderConfig.get(config.provider).displayName : 'Omi';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: useCustom ? const Color(0xFF7C3AED).withOpacity(0.2) : Colors.grey.shade800,
+        color: Colors.grey.shade800,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          color: useCustom ? const Color(0xFF7C3AED) : Colors.grey,
+        style: const TextStyle(
+          color: Colors.grey,
           fontSize: 11,
           fontWeight: FontWeight.w500,
         ),
