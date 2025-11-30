@@ -70,8 +70,8 @@ class MarkdownStyleHelper {
 
       // Lists
       listBullet: style,
-      listBulletPadding: const EdgeInsets.only(right: 8),
-      listIndent: 24.0,
+      listBulletPadding: const EdgeInsets.only(right: 4),
+      listIndent: 8.0,
 
       // Text scaling
       textScaler: TextScaler.noScaling,
@@ -83,10 +83,10 @@ class MarkdownStyleHelper {
       tableColumnWidth: const FlexColumnWidth(),
       tableCellsPadding: const EdgeInsets.all(8),
 
-      // Horizontal rule
-      horizontalRuleDecoration: const BoxDecoration(
+      // Horizontal rule - subtle, barely visible
+      horizontalRuleDecoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: Colors.white24, width: 1),
+          top: BorderSide(color: Colors.white.withOpacity(0.08), width: 0.5),
         ),
       ),
 

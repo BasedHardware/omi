@@ -57,7 +57,20 @@ class ChartParser extends BaseTagParser {
     return PieChartSegment(PieChartDisplayData(
       title: attributes['title'],
       segments: segments,
-      isDonut: attributes['type']?.toLowerCase() == 'donut',
+      chartType: _parseChartType(attributes['type']),
     ));
+  }
+
+  /// Parse chart type from string attribute
+  ChartType _parseChartType(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'pie':
+        return ChartType.pie;
+      case 'donut':
+        return ChartType.donut;
+      case 'bar':
+      default:
+        return ChartType.bar;
+    }
   }
 }

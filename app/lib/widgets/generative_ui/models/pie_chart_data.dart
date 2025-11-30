@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 
-/// Data model for a single pie chart segment
+/// Available chart types for data visualization
+enum ChartType {
+  bar,    // Vertical bar chart (default)
+  pie,    // Solid pie chart
+  donut,  // Pie chart with center hole
+}
+
+/// Data model for a single chart segment
 class PieChartSegmentData {
   final String label;
   final double value;
@@ -41,17 +48,23 @@ class PieChartSegmentData {
   double get percentage => value;
 }
 
-/// Data model for a complete pie chart
+/// Data model for chart display
 class PieChartDisplayData {
   final String? title;
   final List<PieChartSegmentData> segments;
-  final bool isDonut;
+  final ChartType chartType;
 
   const PieChartDisplayData({
     this.title,
     required this.segments,
-    this.isDonut = false,
+    this.chartType = ChartType.bar,
   });
+
+  /// Helper to check if this is a pie-style chart (pie or donut)
+  bool get isPieStyle => chartType == ChartType.pie || chartType == ChartType.donut;
+
+  /// Helper to check if donut style
+  bool get isDonut => chartType == ChartType.donut;
 
   /// Default color palette for chart segments
   static const List<Color> defaultPalette = [
