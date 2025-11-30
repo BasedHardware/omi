@@ -220,17 +220,14 @@ def get_action_items(
         query = query.limit(limit)
 
     # Execute query
+    docs = query.stream()
+
     action_items = []
-    try:
-        docs = query.stream()
-        for doc in docs:
-            data = doc.to_dict()
-            data['id'] = doc.id
-            action_item = _prepare_action_item_for_read(data)
-            action_items.append(action_item)
-    except Exception as e:
-        # Re-raise to let caller handle it
-        raise
+    for doc in docs:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        action_item = _prepare_action_item_for_read(data)
+        action_items.append(action_item)
 
     # Sort results by due_at first (items without due_at come last), then by created_at
     action_items.sort(
