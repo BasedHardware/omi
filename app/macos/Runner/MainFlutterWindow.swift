@@ -220,6 +220,16 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     result(granted)
                 }
 
+            case "checkAccessibilityPermission":
+                let status = self.permissionManager.checkAccessibilityPermission()
+                result(status)
+
+            case "requestAccessibilityPermission":
+                Task {
+                    let granted = await self.permissionManager.requestAccessibilityPermission()
+                    result(granted)
+                }
+
             case "bringAppToFront":
                 DispatchQueue.main.async {
                     NSApp.activate(ignoringOtherApps: true)
