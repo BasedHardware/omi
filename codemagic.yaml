@@ -798,64 +798,33 @@ workflows:
 
       - name: Verify Sparkle signing key
         script: |
-          echo "Verifying SPARKLE_PRIVATE_KEY environment variable..."
-
           if [ -z "$SPARKLE_PRIVATE_KEY" ]; then
-            echo "⚠ ERROR: SPARKLE_PRIVATE_KEY environment variable not set"
-            echo "Signing will fail without this key!"
+            echo "ERROR: SPARKLE_PRIVATE_KEY environment variable not set"
             exit 1
           fi
 
-          echo "✓ SPARKLE_PRIVATE_KEY is set (will be used during ZIP signing)"
-
       - name: Clean up entitlements (remove Mac App Store-only capabilities)
         script: |
-          echo "Cleaning up entitlements files before build..."
-
-          # List all entitlements files found
-          echo "Searching for Release entitlements files..."
-          find macos -name "*Release*.entitlements" -type f
-          echo ""
-
-          # Explicitly check for prod entitlements file (used by prod flavor)
-          PROD_ENTITLEMENTS="macos/Runner/RunnerRelease-prod.entitlements"
-          if [ -f "$PROD_ENTITLEMENTS" ]; then
-            echo "✓ Found prod entitlements file: $PROD_ENTITLEMENTS"
-          else
-            echo "⚠ WARNING: Prod entitlements file not found: $PROD_ENTITLEMENTS"
-          fi
-          echo ""
-
           # Process all Release entitlements files (including -prod variants)
           find macos -name "*Release*.entitlements" -type f | while read entitlements_file; do
-            echo "Processing: $entitlements_file"
-
             # Remove Sign in with Apple (if present)
-            if grep -q "applesignin" "$entitlements_file" 2>/dev/null; then
-              /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed Sign in with Apple" || true
-            fi
+            grep -q "applesignin" "$entitlements_file" 2>/dev/null && \
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.applesignin" "$entitlements_file" 2>/dev/null || true
 
             # Remove App Sandbox (if present)
-            if grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null; then
-              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed App Sandbox" || true
-            fi
+            grep -q "com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null && \
+              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.app-sandbox" "$entitlements_file" 2>/dev/null || true
 
             # Remove get-task-allow (debug-only, blocks notarization)
-            if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null; then
-              /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null && echo "  ✓ Removed get-task-allow" || true
-            fi
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$entitlements_file" 2>/dev/null || true
 
-            # Add hardened runtime entitlements (Set instead of Add to handle existing keys)
+            # Add hardened runtime entitlements
             /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || \
               /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" "$entitlements_file" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || \
               /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-unsigned-executable-memory bool true" "$entitlements_file" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Set :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || \
               /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.disable-library-validation bool true" "$entitlements_file" 2>/dev/null || true
-
-            echo "  Final entitlements:"
-            cat "$entitlements_file"
-            echo ""
           done
 
       - name: Set up keychain and import Developer ID certificate
@@ -1033,10 +1002,8 @@ workflows:
           cat /tmp/notarization.entitlements
 
           # Sign ALL embedded frameworks FIRST (REQUIRED when re-signing app with --force)
-          echo ""
-          echo "=== Signing embedded frameworks ==="
+          # Sign embedded frameworks
           find "$APP_PATH/Contents/Frameworks" -name "*.framework" -type d -print0 | while IFS= read -r -d '' framework; do
-            echo "Signing framework: $(basename "$framework")"
             codesign --force --timestamp --options runtime \
               --sign "$DEVELOPER_ID_CERT" \
               "$framework"
@@ -1044,102 +1011,59 @@ workflows:
 
           # Sign any dylibs
           find "$APP_PATH" -name "*.dylib" -type f -print0 | while IFS= read -r -d '' dylib; do
-            echo "Signing dylib: $(basename "$dylib")"
             codesign --force --timestamp --options runtime \
               --sign "$DEVELOPER_ID_CERT" \
               "$dylib"
           done
 
           # Sign Sparkle framework and its components first
-          echo ""
-          echo "=== Signing Sparkle framework components ==="
           SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 
           if [ -d "$SPARKLE_FW" ]; then
-            echo "Found Sparkle framework, signing all components..."
-
             # Sign XPC services
             find "$SPARKLE_FW" -name "*.xpc" -type d | while read xpc; do
-              echo "Signing XPC: $(basename $xpc)"
               codesign --force --timestamp --options runtime \
                 --sign "$DEVELOPER_ID_CERT" \
                 "$xpc"
             done
 
             # Sign Updater.app
-            if [ -d "$SPARKLE_FW/Versions/B/Updater.app" ]; then
-              echo "Signing Updater.app..."
+            [ -d "$SPARKLE_FW/Versions/B/Updater.app" ] && \
               codesign --force --timestamp --options runtime \
                 --sign "$DEVELOPER_ID_CERT" \
                 "$SPARKLE_FW/Versions/B/Updater.app"
-            fi
 
             # Sign Autoupdate binary
-            if [ -f "$SPARKLE_FW/Versions/B/Autoupdate" ]; then
-              echo "Signing Autoupdate binary..."
+            [ -f "$SPARKLE_FW/Versions/B/Autoupdate" ] && \
               codesign --force --timestamp --options runtime \
                 --sign "$DEVELOPER_ID_CERT" \
                 "$SPARKLE_FW/Versions/B/Autoupdate"
-            fi
 
             # Sign the framework itself
-            echo "Signing Sparkle.framework..."
             codesign --force --timestamp --options runtime \
               --sign "$DEVELOPER_ID_CERT" \
               "$SPARKLE_FW"
-
-            echo "✓ Sparkle framework signed successfully"
-          else
-            echo "⚠ Sparkle framework not found at $SPARKLE_FW"
           fi
 
-          # Now sign the app bundle with --force to update entitlements
-          echo ""
-          echo "=== Signing app bundle for notarization ==="
-          echo "Using --force to replace existing signature and update entitlements..."
+          # Sign the app bundle with --force to update entitlements
           codesign --force --timestamp --options runtime \
             --sign "$DEVELOPER_ID_CERT" \
             --entitlements /tmp/notarization.entitlements \
             "$APP_PATH"
-          
-          echo "codesign exit code: $?"
 
-          # Verify signature
-          echo ""
-          echo "=== Verifying signature after signing ==="
-          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | head -20
-
-          echo ""
-          echo "=== Final entitlements ==="
-          codesign -d --entitlements :- "$APP_PATH" 2>&1
-
-          echo ""
-          echo "=== Checking for get-task-allow (should NOT be present) ==="
+          # Verify no get-task-allow entitlement (blocks notarization)
           if codesign -d --entitlements :- "$APP_PATH" 2>&1 | grep -q "get-task-allow"; then
-            echo "ERROR: get-task-allow found!"
+            echo "ERROR: get-task-allow entitlement found"
             exit 1
-          else
-            echo "✓ No get-task-allow entitlement"
           fi
-
-          echo ""
-          echo "=== Verifying Firebase frameworks are still signed ==="
-          find "$APP_PATH/Contents/Frameworks" -name "Firebase*.framework" -type d | head -3 | while read fw; do
-            echo "Verifying: $(basename $fw)"
-            codesign --verify --verbose "$fw" 2>&1 && echo "✓ Valid signature" || echo "✗ INVALID SIGNATURE"
-          done
 
       - name: Notarize app
         script: |
           set -e
 
-          echo "Creating zip for notarization..."
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
           APP_ZIP="build/macos/Omi.zip"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
-
-          echo ""
-          echo "Submitting to Apple Notary Service..."
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1157,13 +1081,11 @@ workflows:
             --wait \
             --output-format json)
 
-          echo "$RESULT"
-
           SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
           STATUS=$(echo "$RESULT" | jq -r '.status')
 
           if [ "$STATUS" != "Accepted" ]; then
-            echo "Notarization failed! Fetching log..."
+            echo "Notarization failed"
             xcrun notarytool log "$SUBMISSION_ID" \
               --key "$PRIVATE_KEY_PATH" \
               --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
@@ -1171,15 +1093,10 @@ workflows:
             exit 1
           fi
 
-          echo "Stapling notarization ticket..."
           xcrun stapler staple "$APP_PATH"
-
-          echo "✓ App notarized successfully!"
 
       - name: Create DMG installer
         script: |
-          echo "Creating DMG for version: $VERSION"
-
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
@@ -1199,21 +1116,14 @@ workflows:
           rm -rf "$TMP_DMG_DIR"
 
           # Sign DMG
-          echo "Signing DMG..."
           codesign --force --sign "$DEVELOPER_ID_CERT" "$DMG_PATH"
-
-          # Verify DMG signature
           codesign --verify --verbose "$DMG_PATH"
-
-          echo "✓ DMG created and signed: $DMG_PATH"
-          ls -lh "$DMG_PATH"
 
       - name: Notarize DMG
         script: |
           set -e
 
           DMG_PATH=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
-          echo "Notarizing DMG: $DMG_PATH"
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1231,13 +1141,11 @@ workflows:
             --wait \
             --output-format json)
 
-          echo "$RESULT"
-
           SUBMISSION_ID=$(echo "$RESULT" | jq -r '.id')
           STATUS=$(echo "$RESULT" | jq -r '.status')
 
           if [ "$STATUS" != "Accepted" ]; then
-            echo "DMG notarization failed! Fetching log..."
+            echo "DMG notarization failed"
             xcrun notarytool log "$SUBMISSION_ID" \
               --key "$PRIVATE_KEY_PATH" \
               --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
@@ -1245,30 +1153,11 @@ workflows:
             exit 1
           fi
 
-          echo "Stapling notarization ticket to DMG..."
           xcrun stapler staple "$DMG_PATH"
-
-          echo "✓ DMG notarized successfully!"
 
       - name: Create and sign Sparkle-compatible ZIP
         script: |
-          echo "Creating Sparkle ZIP for version: $VERSION"
-
-          # Find the app in the Release-prod flavor directory
-          APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release-prod -name "Omi.app" -type d | head -1)
-
-          if [ -z "$APP_PATH" ]; then
-            echo "App not found in Release-prod, trying Release..."
-            APP_PATH=$(find $(pwd)/build/macos/Build/Products/Release -name "Omi.app" -type d | head -1)
-          fi
-
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: Could not find Omi.app in build outputs"
-            find $(pwd)/build/macos/Build/Products -type d -name "*.app" || true
-            exit 1
-          fi
-
-          echo "Found app at: $APP_PATH"
+          APP_PATH="$(pwd)/build/macos/Build/Products/Release-prod/Omi.app"
 
           ZIP_NAME="${VERSION}-macos.zip"
           DIST_DIR="dist/${VERSION}-macos"
@@ -1276,49 +1165,29 @@ workflows:
 
           mkdir -p "$DIST_DIR"
 
-          # Create ZIP that Sparkle can use (must contain just the app)
+          # Create ZIP that Sparkle can use
           cd "$(dirname "$APP_PATH")"
           ditto -c -k --sequesterRsrc --keepParent "Omi.app" "$(pwd)/$ZIP_NAME"
-
-          # Move to dist folder (using absolute path)
           mv "$ZIP_NAME" "$APP_DIR/$DIST_DIR/"
 
-          echo "Created Sparkle ZIP: $APP_DIR/$DIST_DIR/$ZIP_NAME"
-
           # Sign the ZIP file for Sparkle
-          # IMPORTANT: Must run from app directory where macos/Pods/Sparkle exists
           cd "$APP_DIR"
-          echo "Signing ZIP with Sparkle..."
 
-          # Verify Sparkle binary exists
-          if [ ! -f "macos/Pods/Sparkle/bin/sign_update" ]; then
-            echo "ERROR: Sparkle sign_update binary not found at macos/Pods/Sparkle/bin/sign_update"
-            echo "Current directory: $(pwd)"
-            ls -la macos/Pods/Sparkle/bin/ || true
-            exit 1
-          fi
+          [ ! -f "macos/Pods/Sparkle/bin/sign_update" ] && echo "ERROR: Sparkle sign_update binary not found" && exit 1
 
           # Sign using Sparkle's sign_update with private key from environment variable
-          # Pass key via stdin using --ed-key-file - flag (no Keychain needed!)
-          echo "Signing with private key from environment variable..."
           SIGN_OUTPUT=$(echo "$SPARKLE_PRIVATE_KEY" | macos/Pods/Sparkle/bin/sign_update --ed-key-file - "$DIST_DIR/$ZIP_NAME" 2>&1)
-          echo "Sign output: $SIGN_OUTPUT"
 
-          # Extract the signature value from sparkle:edSignature="VALUE" format
-          # Expected format: sparkle:edSignature="ABC123..." length="12345"
+          # Extract the signature value
           SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -oE 'sparkle:edSignature="[^"]+"' | sed 's/sparkle:edSignature="//;s/"$//')
 
           if [ -z "$SIGNATURE" ]; then
-            echo "ERROR: Failed to extract signature from sign_update output"
-            echo "Full output was: $SIGN_OUTPUT"
+            echo "ERROR: Failed to extract signature"
+            echo "Output: $SIGN_OUTPUT"
             exit 1
           fi
 
-          # Save signature to a file
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
-          echo "EdDSA Signature: $SIGNATURE"
-
-          ls -lh "$DIST_DIR"
 
       - name: Set up Google Cloud SDK
         script: |
@@ -1340,20 +1209,9 @@ workflows:
         script: |
           FOLDER_NAME="${VERSION}-${PLATFORM}"
 
-          echo "Uploading $FOLDER_NAME to GCS bucket: $GCS_BUCKET"
-
-          # Upload the entire folder
           gsutil -m cp -r "dist/${FOLDER_NAME}" "${GCS_BUCKET}/"
-
-          # Verify upload
-          echo "Verifying upload..."
           gsutil ls "${GCS_BUCKET}/${FOLDER_NAME}/"
 
-          # Make files publicly accessible
-          echo "Setting public read permissions..."
-          gsutil -m acl ch -r -u AllUsers:R "${GCS_BUCKET}/${FOLDER_NAME}"
-
-          echo "Upload complete! Files available at: https://storage.googleapis.com/omi_macos_updates/${FOLDER_NAME}/"
 
       - name: Create GitHub Release
         script: |
@@ -1380,10 +1238,16 @@ workflows:
 
           **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
 
+          ---
+
+          _This release was automatically created by the Codemagic CI/CD workflow._
+          _To make this release live to users, edit this release and set \`isLive: true\` in the metadata below._
+
           <!-- KEY_VALUE_START
           changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
           mandatory: false
           minimum_app_version: 1.0.70
+          isLive: false
           edSignature: $SIGNATURE
           KEY_VALUE_END -->
           EOF

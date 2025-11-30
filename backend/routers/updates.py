@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
+from utils.other.storage import get_desktop_update_signed_url
 
 
 router = APIRouter()
@@ -257,9 +258,13 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
 
         SubElement(item, 'pubDate').text = release_item['date']
 
-        # Download URL - point to GCS ZIP file
-        gcs_base = release_item['url']  # e.g., https://storage.googleapis.com/omi_macos_updates/1.0.78+471-macos/
-        download_url = f"{gcs_base}{version}-{platform}.zip"
+        # Generate signed URL for download (1 hour expiration)
+        # Blob path format: "1.0.78+474-macos/1.0.78+474-macos.zip"
+        folder_name = f"{version}-{platform}"
+        zip_filename = f"{version}-{platform}.zip"
+        blob_path = f"{folder_name}/{zip_filename}"
+
+        download_url = get_desktop_update_signed_url(blob_path, expiration_hours=1)
 
         enclosure_attrs = {
             'url': download_url,
@@ -341,6 +346,12 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 
             # Extract metadata from release body
             kv = extract_key_value_pairs(release.get("body", ""))
+
+            # Check if release is live (only serve live releases to users)
+            is_live = kv.get("isLive", "false").lower() == "true"
+            if not is_live:
+                continue  # Skip releases that are not marked as live
+
             changelog = kv.get("changelog", [])
             mandatory = kv.get("mandatory", "false").lower() == "true"
             ed_signature = kv.get("edSignature", "")  # EdDSA signature for Sparkle
