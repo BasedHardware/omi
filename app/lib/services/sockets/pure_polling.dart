@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:omi/services/sockets/audio_transcoder.dart';
+import 'package:omi/utils/audio/audio_transcoder.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
-import 'package:omi/services/sockets/stt_result.dart';
+import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/connectivity_service.dart';
 
 enum PurePollingStatus { notConnected, connecting, connected, disconnected }

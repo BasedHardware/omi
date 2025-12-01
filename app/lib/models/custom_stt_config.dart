@@ -1,5 +1,5 @@
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/services/sockets/stt_response_schema.dart';
+import 'package:omi/models/stt_response_schema.dart';
 
 class CustomSttConfig {
   final SttProvider provider;
@@ -70,7 +70,8 @@ class CustomSttConfig {
       audioFieldName: json['audio_field_name'],
       requestType: json['request_type'],
       schemaJson: json['schema'] != null ? Map<String, dynamic>.from(json['schema']) : null,
-      fileUploadConfig: json['file_upload_config'] != null ? Map<String, dynamic>.from(json['file_upload_config']) : null,
+      fileUploadConfig:
+          json['file_upload_config'] != null ? Map<String, dynamic>.from(json['file_upload_config']) : null,
     );
   }
 

@@ -14,11 +14,11 @@ import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
-export 'package:omi/services/sockets/audio_transcoder.dart';
+export 'package:omi/utils/audio/audio_transcoder.dart';
 export 'package:omi/services/sockets/composite_transcription_socket.dart';
 export 'package:omi/services/sockets/pure_polling.dart';
-export 'package:omi/services/sockets/stt_response_schema.dart';
-export 'package:omi/services/sockets/stt_result.dart';
+export 'package:omi/models/stt_response_schema.dart';
+export 'package:omi/models/stt_result.dart';
 export 'package:omi/services/sockets/transcription_polling_service.dart';
 
 abstract interface class ITransctiptSegmentSocketServiceListener {
