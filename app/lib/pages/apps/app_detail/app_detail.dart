@@ -721,7 +721,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
       bool hasSetupInstructions =
           isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
       bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
-      int stepsCount = app.externalIntegration?.authSteps.length ?? 0;
       return Scaffold(
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -1380,47 +1379,95 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ],
                       )
                     : const SizedBox.shrink(),
-                const SizedBox(height: 16),
-                (hasAuthSteps && stepsCount > 0)
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Setup Steps',
-                              style: TextStyle(color: Colors.white, fontSize: 18),
-                            ),
-                            setupCompleted
-                                ? const Padding(
-                                    padding: EdgeInsets.only(right: 12.0),
-                                    child: Text(
-                                      '✅',
-                                      style: TextStyle(color: Colors.grey, fontSize: 18),
-                                    ),
-                                  )
-                                : const SizedBox(),
-                          ],
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                const SizedBox(height: 24),
                 ...(hasAuthSteps
                     ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
-                        String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
-                        // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
-                        return ListTile(
-                            title: Text(
-                              title,
-                              style: const TextStyle(fontSize: 17),
+                        return Container(
+                          margin: EdgeInsets.only(
+                            left: MediaQuery.of(context).size.width * 0.05,
+                            right: MediaQuery.of(context).size.width * 0.05,
+                            bottom: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F25),
+                            borderRadius: BorderRadius.circular(16.0),
+                            border: Border.all(
+                              color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
+                              width: 1,
                             ),
-                            onTap: () async {
-                              await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
-                              checkSetupCompleted();
-                            },
-                            trailing: const Padding(
-                              padding: EdgeInsets.only(right: 12.0),
-                              child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
-                            ));
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16.0),
+                              onTap: () async {
+                                await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                                checkSetupCompleted();
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: setupCompleted
+                                            ? Colors.green.withOpacity(0.2)
+                                            : Colors.grey.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Center(
+                                        child: setupCompleted
+                                            ? const FaIcon(
+                                                FontAwesomeIcons.check,
+                                                size: 14,
+                                                color: Colors.green,
+                                              )
+                                            : Text(
+                                                '${i + 1}',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade400,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            step.name,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            setupCompleted ? 'Completed' : 'Tap to complete',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: setupCompleted ? Colors.green : Colors.grey.shade500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    FaIcon(
+                                      FontAwesomeIcons.arrowUpRightFromSquare,
+                                      size: 16,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
                       }).toList()
                     : <Widget>[const SizedBox.shrink()]),
                 !hasAuthSteps && hasSetupInstructions
