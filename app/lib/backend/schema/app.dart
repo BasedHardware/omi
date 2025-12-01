@@ -272,6 +272,8 @@ class App {
   String? username;
   bool? isPopular;
   List<ChatTool>? chatTools;
+  DateTime? createdAt;
+  DateTime? updatedAt;
 
   App({
     required this.id,
@@ -311,6 +313,8 @@ class App {
     this.twitter,
     this.isPopular = false,
     this.chatTools,
+    this.createdAt,
+    this.updatedAt,
   });
 
   String getName() {
@@ -391,6 +395,8 @@ class App {
       twitter: json['twitter'],
       isPopular: json['is_popular'] ?? false,
       chatTools: ChatTool.fromJsonList(json['chat_tools']),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
     );
   }
 
@@ -435,6 +441,11 @@ class App {
 
   String getCategoryName() {
     return category.decodeString.split('-').map((e) => e.capitalize()).join(' ');
+  }
+
+  /// Returns the most recent date (updated_at preferred, falls back to created_at)
+  DateTime? getLastUpdatedDate() {
+    return updatedAt ?? createdAt;
   }
 
   List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {

@@ -31,6 +31,7 @@ import 'dart:async';
 import '../../../backend/schema/app.dart';
 import '../../../backend/http/api/payment.dart';
 import '../widgets/show_app_options_sheet.dart';
+import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
@@ -67,6 +68,56 @@ class _AppDetailPageState extends State<AppDetailPage> {
       return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)} / mo';
     }
     return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)}';
+  }
+
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'conversation-analysis':
+        return FontAwesomeIcons.solidComments;
+      case 'personality-emulation':
+        return FontAwesomeIcons.solidUser;
+      case 'health-and-wellness':
+        return FontAwesomeIcons.solidHeart;
+      case 'education-and-learning':
+        return FontAwesomeIcons.graduationCap;
+      case 'communication-improvement':
+        return FontAwesomeIcons.solidMessage;
+      case 'emotional-and-mental-support':
+        return FontAwesomeIcons.brain;
+      case 'productivity-and-organization':
+        return FontAwesomeIcons.listCheck;
+      case 'entertainment-and-fun':
+        return FontAwesomeIcons.gamepad;
+      case 'financial':
+        return FontAwesomeIcons.solidCreditCard;
+      case 'travel-and-exploration':
+        return FontAwesomeIcons.plane;
+      case 'safety-and-security':
+        return FontAwesomeIcons.shieldHalved;
+      case 'shopping-and-commerce':
+        return FontAwesomeIcons.cartShopping;
+      case 'social-and-relationships':
+        return FontAwesomeIcons.userGroup;
+      case 'news-and-information':
+        return FontAwesomeIcons.solidNewspaper;
+      case 'utilities-and-tools':
+        return FontAwesomeIcons.toolbox;
+      case 'popular':
+        return FontAwesomeIcons.fire;
+      default:
+        return FontAwesomeIcons.solidCircleQuestion;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final day = date.day;
+    final month = months[date.month - 1];
+    if (date.year == now.year) {
+      return '$day $month';
+    }
+    return '$day $month ${date.year}';
   }
 
   checkSetupCompleted() {
@@ -214,7 +265,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
         }
       }
-      if (!app.enabled) {
+      // Always check setup completed status when there are auth steps
+      if (app.externalIntegration?.authSteps.isNotEmpty == true) {
+        checkSetupCompleted();
+      } else if (!app.enabled) {
         checkSetupCompleted();
       }
     }
@@ -375,7 +429,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
+        color: const Color(0xFF1F1F25).withOpacity(0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -413,7 +467,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2F),
+          color: const Color(0xFF2A2A2F).withOpacity(0.7),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF35343B)),
         ),
@@ -505,7 +559,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
+        color: const Color(0xFF1F1F25).withOpacity(0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -543,7 +597,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2F),
+          color: const Color(0xFF2A2A2F).withOpacity(0.7),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF35343B)),
         ),
@@ -670,7 +724,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
       bool hasSetupInstructions =
           isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
       bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
-      int stepsCount = app.externalIntegration?.authSteps.length ?? 0;
       return Scaffold(
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -873,16 +926,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
               children: [
                 const SizedBox(height: 20),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(width: 20),
                     CachedNetworkImage(
                       imageUrl: app.getImageUrl(),
                       imageBuilder: (context, imageProvider) => Container(
-                        width: 48,
-                        height: 48,
+                        width: 108,
+                        height: 108,
                         decoration: BoxDecoration(
                           shape: BoxShape.rectangle,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(24),
                           image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                         ),
                       ),
@@ -890,205 +944,301 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
                     ),
                     const SizedBox(width: 20),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: MediaQuery.of(context).size.width * 0.6,
-                          child: Text(
-                            app.name.decodeString,
-                            style: const TextStyle(color: Colors.white, fontSize: 20),
-                          ),
+                    Expanded(
+                      child: SizedBox(
+                        height: 108,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  app.name.decodeString,
+                                  style:
+                                      const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  app.author.decodeString,
+                                  style: const TextStyle(color: Colors.grey, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                            isLoading
+                                ? AnimatedLoadingButton(
+                                    text: '',
+                                    width: 32,
+                                    height: 32,
+                                    onPressed: () async {},
+                                    color: const Color(0xFF35343B),
+                                  )
+                                : app.enabled
+                                    ? AnimatedLoadingButton(
+                                        text: 'Uninstall',
+                                        width: 90,
+                                        height: 32,
+                                        onPressed: () => _toggleApp(app.id, false),
+                                        color: Colors.red,
+                                      )
+                                    : (app.isPaid && !app.isUserPaid
+                                        ? AnimatedLoadingButton(
+                                            width: 100,
+                                            height: 32,
+                                            text: "Subscribe",
+                                            onPressed: () async {
+                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                _checkPaymentStatus(app.id);
+                                                await launchUrl(Uri.parse(app.paymentLink!));
+                                              } else {
+                                                await _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: Colors.green,
+                                          )
+                                        : AnimatedLoadingButton(
+                                            width: 75,
+                                            height: 32,
+                                            text: 'Install',
+                                            onPressed: () async {
+                                              if (app.worksExternally()) {
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (ctx) {
+                                                    return StatefulBuilder(builder: (ctx, setState) {
+                                                      return ConfirmationDialog(
+                                                        title: 'Data Access Notice',
+                                                        description:
+                                                            'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                                        onConfirm: () {
+                                                          _toggleApp(app.id, true);
+                                                          Navigator.pop(context);
+                                                        },
+                                                        onCancel: () {
+                                                          Navigator.pop(context);
+                                                        },
+                                                      );
+                                                    });
+                                                  },
+                                                );
+                                              } else {
+                                                _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: Colors.green,
+                                          )),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          app.author.decodeString,
-                          style: const TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 20),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    app.ratingCount == 0
-                        ? const Column(
+                const SizedBox(height: 32),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Ratings section - App Store style
+                          Column(
                             children: [
                               Text(
-                                '0.0',
+                                app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
-                              SizedBox(height: 4),
-                              Text("no reviews"),
+                              const SizedBox(height: 6),
+                              Text(
+                                app.getRatingAvg() ?? '0.0',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              RatingBar.builder(
+                                initialRating: app.ratingAvg ?? 0,
+                                minRating: 1,
+                                ignoreGestures: true,
+                                direction: Axis.horizontal,
+                                allowHalfRating: true,
+                                itemCount: 5,
+                                itemSize: 12,
+                                tapOnlyMode: false,
+                                itemPadding: const EdgeInsets.symmetric(horizontal: 1),
+                                itemBuilder: (context, _) => Icon(
+                                  FontAwesomeIcons.solidStar,
+                                  color: Colors.grey.shade500,
+                                ),
+                                maxRating: 5.0,
+                                onRatingUpdate: (rating) {},
+                              ),
                             ],
-                          )
-                        : Column(
+                          ),
+                          const SizedBox(width: 20),
+                          VerticalDivider(
+                            color: Colors.grey.shade800,
+                            width: 4,
+                          ),
+                          const SizedBox(width: 20),
+                          // Installs
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    app.getRatingAvg() ?? '0.0',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  RatingBar.builder(
-                                    initialRating: app.ratingAvg ?? 0,
-                                    minRating: 1,
-                                    ignoreGestures: true,
-                                    direction: Axis.horizontal,
-                                    allowHalfRating: true,
-                                    itemCount: 1,
-                                    itemSize: 16,
-                                    tapOnlyMode: false,
-                                    itemPadding: const EdgeInsets.symmetric(horizontal: 1),
-                                    itemBuilder: (context, _) =>
-                                        const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
-                                    maxRating: 5.0,
-                                    onRatingUpdate: (rating) {},
-                                  ),
-                                ],
+                              Text(
+                                '${(app.installs / 10).round() * 10}+',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade400,
+                                ),
                               ),
-                              const SizedBox(height: 4),
-                              Text('${app.ratingCount}+ reviews'),
+                              const SizedBox(height: 8),
+                              Text(
+                                'INSTALLS',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                             ],
                           ),
-                    const Spacer(),
-                    const SizedBox(
-                      height: 36,
-                      child: VerticalDivider(
-                        color: Colors.white,
-                        endIndent: 2,
-                        indent: 2,
-                        width: 4,
-                      ),
-                    ),
-                    const Spacer(),
-                    Column(
-                      children: [
-                        Text(
-                          '${(app.installs / 10).round() * 10}+',
-                          style: const TextStyle(
-                            fontSize: 16,
+                          const SizedBox(width: 20),
+                          VerticalDivider(
+                            color: Colors.grey.shade800,
+                            width: 4,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text("installs"),
-                      ],
-                    ),
-                    const Spacer(),
-                    const SizedBox(
-                      height: 36,
-                      child: VerticalDivider(
-                        color: Colors.white,
-                        endIndent: 2,
-                        indent: 2,
-                        width: 4,
-                      ),
-                    ),
-                    const Spacer(),
-                    Column(
-                      children: [
-                        Text(
-                          _getPricingText(app),
-                          style: const TextStyle(
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text("pricing"),
-                      ],
-                    ),
-                    const Spacer(),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                isLoading
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: AnimatedLoadingButton(
-                            text: '',
-                            width: MediaQuery.of(context).size.width * 0.9,
-                            onPressed: () async {},
-                            color: const Color(0xFF35343B),
-                          ),
-                        ),
-                      )
-                    : app.enabled
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: AnimatedLoadingButton(
-                                text: 'Uninstall App',
-                                width: MediaQuery.of(context).size.width * 0.9,
-                                onPressed: () => _toggleApp(app.id, false),
-                                color: Colors.red,
+                          const SizedBox(width: 20),
+                          // Pricing
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _getPricingText(app),
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade400,
+                                ),
                               ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'PRICE',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 20),
+                          VerticalDivider(
+                            color: Colors.grey.shade800,
+                            width: 4,
+                          ),
+                          const SizedBox(width: 20),
+                          // Category
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              FaIcon(
+                                _getCategoryIcon(app.category),
+                                size: 20,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                app.getCategoryName().split(' ').first.toUpperCase(),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (app.getLastUpdatedDate() != null) ...[
+                            const SizedBox(width: 20),
+                            VerticalDivider(
+                              color: Colors.grey.shade800,
+                              width: 4,
                             ),
-                          )
-                        : (app.isPaid && !app.isUserPaid
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: AnimatedLoadingButton(
-                                    width: MediaQuery.of(context).size.width * 0.9,
-                                    text: "Subscribe",
-                                    onPressed: () async {
-                                      if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                        _checkPaymentStatus(app.id);
-                                        await launchUrl(Uri.parse(app.paymentLink!));
-                                      } else {
-                                        await _toggleApp(app.id, true);
-                                      }
-                                    },
-                                    color: Colors.green,
+                            const SizedBox(width: 20),
+                            // Updated/Created
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _formatDate(app.getLastUpdatedDate()!),
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade400,
                                   ),
                                 ),
-                              )
-                            : Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: AnimatedLoadingButton(
-                                    width: MediaQuery.of(context).size.width * 0.9,
-                                    text: 'Install App',
-                                    onPressed: () async {
-                                      if (app.worksExternally()) {
-                                        showDialog(
-                                          context: context,
-                                          builder: (ctx) {
-                                            return StatefulBuilder(builder: (ctx, setState) {
-                                              return ConfirmationDialog(
-                                                title: 'Data Access Notice',
-                                                description:
-                                                    'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
-                                                onConfirm: () {
-                                                  _toggleApp(app.id, true);
-                                                  Navigator.pop(context);
-                                                },
-                                                onCancel: () {
-                                                  Navigator.pop(context);
-                                                },
-                                              );
-                                            });
-                                          },
-                                        );
-                                      } else {
-                                        _toggleApp(app.id, true);
-                                      }
-                                    },
-                                    color: Colors.green,
+                                const SizedBox(height: 8),
+                                Text(
+                                  app.updatedAt != null ? 'UPDATED' : 'CREATED',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
                                   ),
                                 ),
-                              )),
-
+                              ],
+                            ),
+                          ],
+                          if (app.isPopular == true) ...[
+                            const SizedBox(width: 20),
+                            VerticalDivider(
+                              color: Colors.grey.shade800,
+                              width: 4,
+                            ),
+                            const SizedBox(width: 20),
+                            // Featured
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FaIcon(
+                                  FontAwesomeIcons.trophy,
+                                  size: 20,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'FEATURED',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 // Cancel Subscription
                 !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
                     ? Padding(
@@ -1232,47 +1382,95 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         ],
                       )
                     : const SizedBox.shrink(),
-                const SizedBox(height: 16),
-                (hasAuthSteps && stepsCount > 0)
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Setup Steps',
-                              style: TextStyle(color: Colors.white, fontSize: 18),
-                            ),
-                            setupCompleted
-                                ? const Padding(
-                                    padding: EdgeInsets.only(right: 12.0),
-                                    child: Text(
-                                      '✅',
-                                      style: TextStyle(color: Colors.grey, fontSize: 18),
-                                    ),
-                                  )
-                                : const SizedBox(),
-                          ],
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                const SizedBox(height: 24),
                 ...(hasAuthSteps
                     ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
-                        String title = stepsCount == 0 ? step.name : '${i + 1}. ${step.name}';
-                        // String title = stepsCount == 1 ? step.name : '${i + 1}. ${step.name}';
-                        return ListTile(
-                            title: Text(
-                              title,
-                              style: const TextStyle(fontSize: 17),
+                        return Container(
+                          margin: EdgeInsets.only(
+                            left: MediaQuery.of(context).size.width * 0.05,
+                            right: MediaQuery.of(context).size.width * 0.05,
+                            bottom: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F25).withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(16.0),
+                            border: Border.all(
+                              color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
+                              width: 1,
                             ),
-                            onTap: () async {
-                              await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
-                              checkSetupCompleted();
-                            },
-                            trailing: const Padding(
-                              padding: EdgeInsets.only(right: 12.0),
-                              child: Icon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
-                            ));
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16.0),
+                              onTap: () async {
+                                await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                                checkSetupCompleted();
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: setupCompleted
+                                            ? Colors.green.withOpacity(0.2)
+                                            : Colors.grey.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Center(
+                                        child: setupCompleted
+                                            ? const FaIcon(
+                                                FontAwesomeIcons.check,
+                                                size: 14,
+                                                color: Colors.green,
+                                              )
+                                            : Text(
+                                                '${i + 1}',
+                                                style: TextStyle(
+                                                  color: Colors.grey.shade400,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            step.name,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            setupCompleted ? 'Completed' : 'Tap to complete',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: setupCompleted ? Colors.green : Colors.grey.shade500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    FaIcon(
+                                      FontAwesomeIcons.arrowUpRightFromSquare,
+                                      size: 16,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
                       }).toList()
                     : <Widget>[const SizedBox.shrink()]),
                 !hasAuthSteps && hasSetupInstructions
@@ -1397,12 +1595,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   },
                   title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                   description: app.description,
-                  showChips: true,
-                  capabilityChips: app
-                      .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
-                      .map((e) => e.title)
-                      .toList(),
-                  connectionChips: app.getConnectedAccountNames(),
+                  showChips: false,
+                ),
+                CapabilitiesCard(
+                  capabilities: app.getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities),
                 ),
                 _buildPermissionsCard(app),
                 app.conversationPrompt != null
@@ -1452,7 +1648,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             bottom: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25),
+                            color: const Color(0xFF1F1F25).withOpacity(0.8),
                             borderRadius: BorderRadius.circular(16.0),
                           ),
                           child: Column(
