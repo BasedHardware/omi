@@ -9,6 +9,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   final IPureSocket secondarySocket;
 
   final String? suggestedTranscriptType;
+  final String? sttProvider;
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
   IPureSocketListener? _listener;
@@ -20,6 +21,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     required this.primarySocket,
     required this.secondarySocket,
     this.suggestedTranscriptType = 'suggested_transcript',
+    this.sttProvider,
   }) {
     _primaryListener = _PrimarySocketListener(this);
     _secondaryListener = _SecondarySocketListener(this);
@@ -123,15 +125,19 @@ class CompositeTranscriptionSocket implements IPureSocket {
         segments = message;
       }
 
-      final suggestedMessage = suggestedTranscriptType != null
-          ? jsonEncode({
-              'type': suggestedTranscriptType,
-              'segments': segments,
-            })
-          : message;
+      final Map<String, dynamic> payload = {
+        'type': suggestedTranscriptType,
+        'segments': segments,
+      };
+
+      if (sttProvider != null) {
+        payload['stt_provider'] = sttProvider;
+      }
+
+      final suggestedMessage = suggestedTranscriptType != null ? jsonEncode(payload) : message;
 
       secondarySocket.send(suggestedMessage);
-      debugPrint("[Composite] Forwarded suggested transcript to secondary");
+      debugPrint("[Composite] Forwarded suggested transcript to secondary (provider: $sttProvider)");
     } catch (e) {
       debugPrint("[Composite] Error forwarding suggested transcript: $e");
     }

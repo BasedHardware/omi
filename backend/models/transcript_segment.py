@@ -23,6 +23,7 @@ class TranscriptSegment(BaseModel):
     end: float
     translations: Optional[List[Translation]] = []
     speech_profile_processed: bool = True
+    stt_provider: Optional[str] = None  # Tracks which custom STT provider was used, None means default/backend STT
 
     def __init__(self, **data):
         super().__init__(**data)

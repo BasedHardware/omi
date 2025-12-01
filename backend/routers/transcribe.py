@@ -1213,7 +1213,12 @@ async def _listen(
                         elif json_data.get('type') == 'suggested_transcript':
                             if use_custom_stt:
                                 suggested_segments = json_data.get('segments', [])
+                                stt_provider = json_data.get('stt_provider')
                                 if suggested_segments:
+                                    # Attach stt_provider to each segment
+                                    if stt_provider:
+                                        for seg in suggested_segments:
+                                            seg['stt_provider'] = stt_provider
                                     stream_transcript(suggested_segments)
                         elif json_data.get('type') == 'speaker_assigned':
                             segment_ids = json_data.get('segment_ids', [])
