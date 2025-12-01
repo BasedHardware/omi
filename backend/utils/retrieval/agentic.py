@@ -142,13 +142,19 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         """Add a data chunk to the queue."""
         await self.queue.put(f"data: {text}")
 
-    async def put_thought(self, text):
+    async def put_thought(self, text, app_id: Optional[str] = None):
         """Add a thought/status message to the queue."""
-        await self.queue.put(f"think: {text}")
+        if app_id:
+            await self.queue.put(f"think: {text}|app_id:{app_id}")
+        else:
+            await self.queue.put(f"think: {text}")
 
-    def put_thought_nowait(self, text):
+    def put_thought_nowait(self, text, app_id: Optional[str] = None):
         """Add a thought/status message to the queue without waiting."""
-        self.queue.put_nowait(f"think: {text}")
+        if app_id:
+            self.queue.put_nowait(f"think: {text}|app_id:{app_id}")
+        else:
+            self.queue.put_nowait(f"think: {text}")
 
     def put_data_nowait(self, text):
         """Add a data chunk to the queue without waiting."""
@@ -473,17 +479,55 @@ async def _run_agent_stream(
                 tool_input = event.get("data", {}).get("input", {})
                 print(f"🔧 Tool started: {tool_name}")
 
+                # Extract app_id from tool name if it's from an app tool
+                # App tools have format: app_id_tool_name
+                app_id = None
+                tools_list = config.get('configurable', {}).get('tools', [])
+
+                # Standard tool names that don't come from apps
+                standard_tool_names = {
+                    'get_conversations_tool',
+                    'vector_search_conversations_tool',
+                    'get_memories_tool',
+                    'get_action_items_tool',
+                    'create_action_item_tool',
+                    'update_action_item_tool',
+                    'get_omi_product_info_tool',
+                    'perplexity_search_tool',
+                    'get_calendar_events_tool',
+                    'create_calendar_event_tool',
+                    'update_calendar_event_tool',
+                    'delete_calendar_event_tool',
+                    'get_gmail_messages_tool',
+                    'get_whoop_sleep_tool',
+                    'get_whoop_recovery_tool',
+                    'get_whoop_workout_tool',
+                    'search_notion_pages_tool',
+                    'get_twitter_tweets_tool',
+                    'get_github_pull_requests_tool',
+                    'get_github_issues_tool',
+                    'create_github_issue_tool',
+                    'close_github_issue_tool',
+                    'search_files_tool',
+                }
+
+                # If tool name is not a standard tool and contains underscore, it's likely an app tool
+                if tool_name not in standard_tool_names and '_' in tool_name:
+                    parts = tool_name.split('_', 1)
+                    if len(parts) == 2:
+                        # First part is likely the app_id
+                        app_id = parts[0]
+
                 # Send user-friendly tool call message to frontend
                 # Get tool object to check for custom status_message
                 tool_obj = None
-                tools_list = config.get('configurable', {}).get('tools', [])
                 for tool in tools_list:
                     if hasattr(tool, 'name') and tool.name == tool_name:
                         tool_obj = tool
                         break
 
                 tool_display_name = get_tool_display_name(tool_name, tool_obj)
-                await callback.put_thought(tool_display_name)
+                await callback.put_thought(tool_display_name, app_id=app_id)
 
                 # Validate tool call with safety guard
                 if safety_guard:
