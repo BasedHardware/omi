@@ -874,16 +874,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
               children: [
                 const SizedBox(height: 20),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(width: 20),
                     CachedNetworkImage(
                       imageUrl: app.getImageUrl(),
                       imageBuilder: (context, imageProvider) => Container(
-                        width: 48,
-                        height: 48,
+                        width: 108,
+                        height: 108,
                         decoration: BoxDecoration(
                           shape: BoxShape.rectangle,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(24),
                           image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                         ),
                       ),
@@ -891,24 +892,95 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       errorWidget: (context, url, error) => const Icon(FontAwesomeIcons.circleExclamation),
                     ),
                     const SizedBox(width: 20),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: MediaQuery.of(context).size.width * 0.6,
-                          child: Text(
-                            app.name.decodeString,
-                            style: const TextStyle(color: Colors.white, fontSize: 20),
-                          ),
+                    Expanded(
+                      child: SizedBox(
+                        height: 108,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  app.name.decodeString,
+                                  style:
+                                      const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  app.author.decodeString,
+                                  style: const TextStyle(color: Colors.grey, fontSize: 14),
+                                ),
+                              ],
+                            ),
+                            isLoading
+                                ? AnimatedLoadingButton(
+                                    text: '',
+                                    width: 32,
+                                    height: 32,
+                                    onPressed: () async {},
+                                    color: const Color(0xFF35343B),
+                                  )
+                                : app.enabled
+                                    ? AnimatedLoadingButton(
+                                        text: 'Uninstall',
+                                        width: 90,
+                                        height: 32,
+                                        onPressed: () => _toggleApp(app.id, false),
+                                        color: Colors.red,
+                                      )
+                                    : (app.isPaid && !app.isUserPaid
+                                        ? AnimatedLoadingButton(
+                                            width: 100,
+                                            height: 32,
+                                            text: "Subscribe",
+                                            onPressed: () async {
+                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                _checkPaymentStatus(app.id);
+                                                await launchUrl(Uri.parse(app.paymentLink!));
+                                              } else {
+                                                await _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: Colors.green,
+                                          )
+                                        : AnimatedLoadingButton(
+                                            width: 75,
+                                            height: 32,
+                                            text: 'Install',
+                                            onPressed: () async {
+                                              if (app.worksExternally()) {
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (ctx) {
+                                                    return StatefulBuilder(builder: (ctx, setState) {
+                                                      return ConfirmationDialog(
+                                                        title: 'Data Access Notice',
+                                                        description:
+                                                            'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
+                                                        onConfirm: () {
+                                                          _toggleApp(app.id, true);
+                                                          Navigator.pop(context);
+                                                        },
+                                                        onCancel: () {
+                                                          Navigator.pop(context);
+                                                        },
+                                                      );
+                                                    });
+                                                  },
+                                                );
+                                              } else {
+                                                _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: Colors.green,
+                                          )),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          app.author.decodeString,
-                          style: const TextStyle(color: Colors.grey, fontSize: 14),
-                        ),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 20),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -1010,86 +1082,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     const Spacer(),
                   ],
                 ),
-                const SizedBox(height: 24),
-                isLoading
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: AnimatedLoadingButton(
-                            text: '',
-                            width: MediaQuery.of(context).size.width * 0.9,
-                            onPressed: () async {},
-                            color: const Color(0xFF35343B),
-                          ),
-                        ),
-                      )
-                    : app.enabled
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: AnimatedLoadingButton(
-                                text: 'Uninstall App',
-                                width: MediaQuery.of(context).size.width * 0.9,
-                                onPressed: () => _toggleApp(app.id, false),
-                                color: Colors.red,
-                              ),
-                            ),
-                          )
-                        : (app.isPaid && !app.isUserPaid
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: AnimatedLoadingButton(
-                                    width: MediaQuery.of(context).size.width * 0.9,
-                                    text: "Subscribe",
-                                    onPressed: () async {
-                                      if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                        _checkPaymentStatus(app.id);
-                                        await launchUrl(Uri.parse(app.paymentLink!));
-                                      } else {
-                                        await _toggleApp(app.id, true);
-                                      }
-                                    },
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              )
-                            : Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: AnimatedLoadingButton(
-                                    width: MediaQuery.of(context).size.width * 0.9,
-                                    text: 'Install App',
-                                    onPressed: () async {
-                                      if (app.worksExternally()) {
-                                        showDialog(
-                                          context: context,
-                                          builder: (ctx) {
-                                            return StatefulBuilder(builder: (ctx, setState) {
-                                              return ConfirmationDialog(
-                                                title: 'Data Access Notice',
-                                                description:
-                                                    'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app',
-                                                onConfirm: () {
-                                                  _toggleApp(app.id, true);
-                                                  Navigator.pop(context);
-                                                },
-                                                onCancel: () {
-                                                  Navigator.pop(context);
-                                                },
-                                              );
-                                            });
-                                          },
-                                        );
-                                      } else {
-                                        _toggleApp(app.id, true);
-                                      }
-                                    },
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              )),
-
                 // Cancel Subscription
                 !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
                     ? Padding(
