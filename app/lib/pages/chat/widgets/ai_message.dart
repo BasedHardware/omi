@@ -3,41 +3,132 @@ import 'dart:convert';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'markdown_message_widget.dart';
+import 'package:omi/providers/app_provider.dart';
 
-IconData? _getThinkingIcon(String thinkingText) {
+/// Parse app_id from thinking text (format: "text|app_id:app_id")
+String? _parseAppIdFromThinking(String thinkingText) {
+  if (thinkingText.contains('|app_id:')) {
+    var parts = thinkingText.split('|app_id:');
+    if (parts.length == 2) {
+      return parts[1];
+    }
+  }
+  return null;
+}
+
+/// Get the display text from thinking (removes app_id suffix if present)
+String _getThinkingDisplayText(String thinkingText) {
+  if (thinkingText.contains('|app_id:')) {
+    var parts = thinkingText.split('|app_id:');
+    if (parts.length == 2) {
+      return parts[0];
+    }
+  }
+  return thinkingText;
+}
+
+/// Build app icon widget from app_id
+Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, double opacity = 1.0}) {
+  final appProvider = Provider.of<AppProvider>(context, listen: false);
+  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId);
+
+  if (app != null) {
+    return Opacity(
+      opacity: opacity,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: CachedNetworkImage(
+          imageUrl: app.getImageUrl(),
+          httpHeaders: const {
+            "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+          },
+          imageBuilder: (context, imageProvider) => Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              image: DecorationImage(
+                image: imageProvider,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+          placeholder: (context, url) => SizedBox(
+            width: size,
+            height: size,
+            child: Icon(
+              Icons.apps,
+              size: size * 0.7,
+              color: Colors.white.withOpacity(opacity),
+            ),
+          ),
+          errorWidget: (context, url, error) => Icon(
+            Icons.apps,
+            size: size * 0.7,
+            color: Colors.white.withOpacity(opacity),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Fallback to generic icon if app not found
+  return Opacity(
+    opacity: opacity,
+    child: Icon(
+      Icons.apps,
+      size: size,
+      color: Colors.white.withOpacity(opacity),
+    ),
+  );
+}
+
+/// Get the integration logo path for a thinking text, if applicable
+String? _getIntegrationLogoPath(String thinkingText) {
+  final text = thinkingText.toLowerCase();
+  if (text.contains('notion')) {
+    return 'assets/integration_app_logos/notion-logo.png';
+  } else if (text.contains('whoop')) {
+    return 'assets/integration_app_logos/whoop.png';
+  } else if (text.contains('calendar')) {
+    return 'assets/integration_app_logos/google-calendar.png';
+  } else if (text.contains('gmail')) {
+    return 'assets/integration_app_logos/gmail-logo.jpeg';
+  } else if (text.contains('github')) {
+    return 'assets/integration_app_logos/github-logo.png';
+  } else if (text.contains('twitter') || text.contains('tweet')) {
+    return 'assets/integration_app_logos/x-logo.avif';
+  }
+  return null;
+}
+
+/// Get the fallback icon for thinking text (used when no integration logo)
+IconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
-    return Icons.psychology; // Brain icon
-  } else if (text.contains('notion')) {
-    return Icons.note;
-  } else if (text.contains('whoop')) {
-    return Icons.favorite; // Heart icon for Whoop
-  } else if (text.contains('calendar')) {
-    return Icons.calendar_today;
+    return Icons.psychology;
   } else if (text.contains('searching the web') || text.contains('searching web')) {
     return Icons.search;
   } else if (text.contains('conversations')) {
@@ -52,6 +143,32 @@ IconData? _getThinkingIcon(String thinkingText) {
     return Icons.search;
   }
   return Icons.psychology; // Default brain icon
+}
+
+/// Build the thinking icon widget - either an integration logo or a fallback icon
+Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color color = Colors.white}) {
+  final logoPath = _getIntegrationLogoPath(thinkingText);
+  if (logoPath != null) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: Image.asset(
+        logoPath,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => Icon(
+          _getThinkingIcon(thinkingText),
+          size: size,
+          color: color,
+        ),
+      ),
+    );
+  }
+  return Icon(
+    _getThinkingIcon(thinkingText),
+    size: size,
+    color: color,
+  );
 }
 
 class AIMessage extends StatefulWidget {
@@ -325,19 +442,25 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingText = widget.message.thinkings.length > 1
+    var previousThinkingTextRaw = widget.message.thinkings.length > 1
         ? widget.message.thinkings
             .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
             .first
             .decodeString
         : null;
-    var thinkingText = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+    var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+
+    // Parse app_id and display text from thinking messages
+    String? previousAppId = previousThinkingTextRaw != null ? _parseAppIdFromThinking(previousThinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
+    String? previousThinkingText =
+        previousThinkingTextRaw != null ? _getThinkingDisplayText(previousThinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
         thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText.isEmpty);
     String displayThinkingText = thinkingText ?? 'Thinking';
-    IconData? thinkingIcon = _getThinkingIcon(displayThinkingText);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,11 +494,13 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                                     ? Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            _getThinkingIcon(previousThinkingText) ?? Icons.psychology,
-                                            size: 15,
-                                            color: Colors.white60,
-                                          ),
+                                          previousAppId != null
+                                              ? _buildAppIcon(context, previousAppId, size: 15, opacity: 0.6)
+                                              : Opacity(
+                                                  opacity: 0.6,
+                                                  child: _buildThinkingIconWidget(previousThinkingText,
+                                                      size: 15, color: Colors.white),
+                                                ),
                                           const SizedBox(width: 6),
                                           Flexible(
                                             child: Text(
@@ -389,21 +514,22 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                                         ],
                                       )
                                     : const SizedBox.shrink(),
-                                Shimmer.fromColors(
-                                  baseColor: Colors.white,
-                                  highlightColor: Colors.grey,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (thinkingIcon != null) ...[
-                                        Icon(
-                                          thinkingIcon,
-                                          size: 15,
-                                          color: Colors.white,
-                                        ),
-                                        const SizedBox(width: 6),
-                                      ],
-                                      Flexible(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Icon stays outside shimmer to preserve colors (app icon or integration logo)
+                                    if (currentAppId != null) ...[
+                                      _buildAppIcon(context, currentAppId, size: 15),
+                                      const SizedBox(width: 6),
+                                    ] else ...[
+                                      _buildThinkingIconWidget(displayThinkingText, size: 15),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    // Shimmer only applies to text
+                                    Flexible(
+                                      child: Shimmer.fromColors(
+                                        baseColor: Colors.white,
+                                        highlightColor: Colors.grey,
                                         child: Text(
                                           overflow: TextOverflow.fade,
                                           maxLines: 1,
@@ -412,8 +538,8 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                                           style: const TextStyle(color: Colors.white, fontSize: 15),
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 )
                               ],
                             ),
@@ -506,19 +632,25 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    var previousThinkingText = widget.message.thinkings.length > 1
+    var previousThinkingTextRaw = widget.message.thinkings.length > 1
         ? widget.message.thinkings
             .sublist(widget.message.thinkings.length - 2 >= 0 ? widget.message.thinkings.length - 2 : 0)
             .first
             .decodeString
         : null;
-    var thinkingText = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+    var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
+
+    // Parse app_id and display text from thinking messages
+    String? previousAppId = previousThinkingTextRaw != null ? _parseAppIdFromThinking(previousThinkingTextRaw) : null;
+    String? currentAppId = thinkingTextRaw != null ? _parseAppIdFromThinking(thinkingTextRaw) : null;
+    String? previousThinkingText =
+        previousThinkingTextRaw != null ? _getThinkingDisplayText(previousThinkingTextRaw) : null;
+    var thinkingText = thinkingTextRaw != null ? _getThinkingDisplayText(thinkingTextRaw) : null;
 
     // Show "thinking" text if we have thinking text, or if dots timer expired and no thinking text yet
     bool shouldShowThinking =
         thinkingText != null || (!_showDots && widget.showTypingIndicator && widget.messageText == '...');
     String displayThinkingText = thinkingText ?? 'Thinking';
-    IconData? thinkingIcon = _getThinkingIcon(displayThinkingText);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -559,11 +691,13 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                                     ? Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(
-                                            _getThinkingIcon(previousThinkingText) ?? Icons.psychology,
-                                            size: 15,
-                                            color: Colors.white60,
-                                          ),
+                                          previousAppId != null
+                                              ? _buildAppIcon(context, previousAppId, size: 15, opacity: 0.6)
+                                              : Opacity(
+                                                  opacity: 0.6,
+                                                  child: _buildThinkingIconWidget(previousThinkingText,
+                                                      size: 15, color: Colors.white),
+                                                ),
                                           const SizedBox(width: 6),
                                           Flexible(
                                             child: Text(
@@ -577,21 +711,22 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                                         ],
                                       )
                                     : const SizedBox.shrink(),
-                                Shimmer.fromColors(
-                                  baseColor: Colors.white,
-                                  highlightColor: Colors.grey,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (thinkingIcon != null) ...[
-                                        Icon(
-                                          thinkingIcon,
-                                          size: 15,
-                                          color: Colors.white,
-                                        ),
-                                        const SizedBox(width: 6),
-                                      ],
-                                      Flexible(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Icon stays outside shimmer to preserve colors (app icon or integration logo)
+                                    if (currentAppId != null) ...[
+                                      _buildAppIcon(context, currentAppId, size: 15),
+                                      const SizedBox(width: 6),
+                                    ] else ...[
+                                      _buildThinkingIconWidget(displayThinkingText, size: 15),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    // Shimmer only applies to text
+                                    Flexible(
+                                      child: Shimmer.fromColors(
+                                        baseColor: Colors.white,
+                                        highlightColor: Colors.grey,
                                         child: Text(
                                           overflow: TextOverflow.fade,
                                           maxLines: 1,
@@ -600,8 +735,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                                           style: const TextStyle(color: Colors.white, fontSize: 15),
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 )
                               ],
                             ),
