@@ -98,6 +98,51 @@ class Action {
   }
 }
 
+class ChatTool {
+  String name;
+  String description;
+  String endpoint;
+  String method;
+  bool authRequired;
+  String? statusMessage;
+
+  ChatTool({
+    required this.name,
+    required this.description,
+    required this.endpoint,
+    this.method = 'POST',
+    this.authRequired = true,
+    this.statusMessage,
+  });
+
+  factory ChatTool.fromJson(Map<String, dynamic> json) {
+    return ChatTool(
+      name: json['name'],
+      description: json['description'],
+      endpoint: json['endpoint'],
+      method: json['method'] ?? 'POST',
+      authRequired: json['auth_required'] ?? true,
+      statusMessage: json['status_message'],
+    );
+  }
+
+  toJson() {
+    return {
+      'name': name,
+      'description': description,
+      'endpoint': endpoint,
+      'method': method,
+      'auth_required': authRequired,
+      if (statusMessage != null) 'status_message': statusMessage,
+    };
+  }
+
+  static List<ChatTool> fromJsonList(List<dynamic>? jsonList) {
+    if (jsonList == null) return [];
+    return jsonList.map((e) => ChatTool.fromJson(e)).toList();
+  }
+}
+
 class ExternalIntegration {
   String? triggersOn;
   String? webhookUrl;
@@ -226,6 +271,9 @@ class App {
   List<String> thumbnailUrls;
   String? username;
   bool? isPopular;
+  List<ChatTool>? chatTools;
+  DateTime? createdAt;
+  DateTime? updatedAt;
 
   App({
     required this.id,
@@ -264,6 +312,9 @@ class App {
     this.connectedAccounts = const [],
     this.twitter,
     this.isPopular = false,
+    this.chatTools,
+    this.createdAt,
+    this.updatedAt,
   });
 
   String getName() {
@@ -343,6 +394,9 @@ class App {
       connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
       twitter: json['twitter'],
       isPopular: json['is_popular'] ?? false,
+      chatTools: ChatTool.fromJsonList(json['chat_tools']),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
     );
   }
 
@@ -387,6 +441,11 @@ class App {
 
   String getCategoryName() {
     return category.decodeString.split('-').map((e) => e.capitalize()).join(' ');
+  }
+
+  /// Returns the most recent date (updated_at preferred, falls back to created_at)
+  DateTime? getLastUpdatedDate() {
+    return updatedAt ?? createdAt;
   }
 
   List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {

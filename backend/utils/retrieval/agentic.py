@@ -9,8 +9,9 @@ approach, this lets the LLM make decisions about what information it needs.
 import re
 import uuid
 import asyncio
+import contextvars
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator, Tuple
+from typing import List, Optional, AsyncGenerator, Tuple, Any
 
 import database.notifications as notification_db
 
@@ -19,6 +20,9 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
+
+# Context variable to store config for tools
+agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
 from models.chat import Message, ChatSession
@@ -32,11 +36,100 @@ from utils.retrieval.tools import (
     update_action_item_tool,
     get_omi_product_info_tool,
     perplexity_search_tool,
+    get_calendar_events_tool,
+    create_calendar_event_tool,
+    update_calendar_event_tool,
+    delete_calendar_event_tool,
+    get_gmail_messages_tool,
+    get_whoop_sleep_tool,
+    get_whoop_recovery_tool,
+    get_whoop_workout_tool,
+    search_notion_pages_tool,
+    get_twitter_tweets_tool,
+    get_github_pull_requests_tool,
+    get_github_issues_tool,
+    create_github_issue_tool,
+    close_github_issue_tool,
+    search_files_tool,
 )
+from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
+
+
+def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str:
+    """
+    Convert tool name to user-friendly display name.
+
+    Args:
+        tool_name: Internal tool name (e.g., 'search_notion_pages_tool')
+        tool_obj: Optional tool object that may have status_message attribute
+
+    Returns:
+        User-friendly display name (e.g., 'Searching Notion')
+    """
+    # Check if tool has a custom status_message (for app tools)
+    # First check the global mapping
+    status_msg = get_tool_status_message(tool_name)
+    if status_msg:
+        return status_msg
+
+    # Fallback: check if tool object has status_message attribute
+    if tool_obj and hasattr(tool_obj, 'status_message') and tool_obj.status_message:
+        return tool_obj.status_message
+    tool_display_map = {
+        'search_notion_pages_tool': 'Searching Notion',
+        'get_whoop_sleep_tool': 'Checking Whoop sleep data',
+        'get_whoop_recovery_tool': 'Checking Whoop recovery data',
+        'get_whoop_workout_tool': 'Checking Whoop workout data',
+        'get_twitter_tweets_tool': 'Checking Twitter',
+        'get_github_pull_requests_tool': 'Checking GitHub pull requests',
+        'get_github_issues_tool': 'Checking GitHub issues',
+        'create_github_issue_tool': 'Creating GitHub issue',
+        'close_github_issue_tool': 'Closing GitHub issue',
+        'get_calendar_events_tool': 'Checking calendar',
+        'create_calendar_event_tool': 'Creating calendar event',
+        'update_calendar_event_tool': 'Updating calendar event',
+        'delete_calendar_event_tool': 'Deleting calendar event',
+        'get_gmail_messages_tool': 'Checking Gmail',
+        'perplexity_search_tool': 'Searching the web',
+        'get_conversations_tool': 'Searching conversations',
+        'vector_search_conversations_tool': 'Searching conversations',
+        'get_memories_tool': 'Searching memories',
+        'get_action_items_tool': 'Checking action items',
+        'create_action_item_tool': 'Creating action item',
+        'update_action_item_tool': 'Updating action item',
+        'get_omi_product_info_tool': 'Looking up product info',
+    }
+
+    # Try exact match first
+    if tool_name in tool_display_map:
+        return tool_display_map[tool_name]
+
+    # Try partial matches for common patterns
+    if 'notion' in tool_name.lower():
+        return 'Searching Notion'
+    elif 'whoop' in tool_name.lower():
+        return 'Checking Whoop data'
+    elif 'twitter' in tool_name.lower():
+        return 'Checking Twitter'
+    elif 'github' in tool_name.lower():
+        return 'Checking GitHub'
+    elif 'calendar' in tool_name.lower():
+        return 'Checking calendar'
+    elif 'perplexity' in tool_name.lower() or 'search' in tool_name.lower():
+        return 'Searching the web'
+    elif 'memory' in tool_name.lower():
+        return 'Searching memories'
+    elif 'conversation' in tool_name.lower():
+        return 'Searching conversations'
+    elif 'action' in tool_name.lower():
+        return 'Checking action items'
+
+    # Default: convert snake_case to Title Case
+    return tool_name.replace('_', ' ').title()
 
 
 class AsyncStreamingCallback(BaseCallbackHandler):
@@ -49,13 +142,19 @@ class AsyncStreamingCallback(BaseCallbackHandler):
         """Add a data chunk to the queue."""
         await self.queue.put(f"data: {text}")
 
-    async def put_thought(self, text):
+    async def put_thought(self, text, app_id: Optional[str] = None):
         """Add a thought/status message to the queue."""
-        await self.queue.put(f"think: {text}")
+        if app_id:
+            await self.queue.put(f"think: {text}|app_id:{app_id}")
+        else:
+            await self.queue.put(f"think: {text}")
 
-    def put_thought_nowait(self, text):
+    def put_thought_nowait(self, text, app_id: Optional[str] = None):
         """Add a thought/status message to the queue without waiting."""
-        self.queue.put_nowait(f"think: {text}")
+        if app_id:
+            self.queue.put_nowait(f"think: {text}|app_id:{app_id}")
+        else:
+            self.queue.put_nowait(f"think: {text}")
 
     def put_data_nowait(self, text):
         """Add a data chunk to the queue without waiting."""
@@ -126,7 +225,31 @@ def execute_agentic_chat(
         update_action_item_tool,
         get_omi_product_info_tool,
         perplexity_search_tool,
+        get_calendar_events_tool,
+        create_calendar_event_tool,
+        update_calendar_event_tool,
+        delete_calendar_event_tool,
+        get_gmail_messages_tool,
+        get_whoop_sleep_tool,
+        get_whoop_recovery_tool,
+        get_whoop_workout_tool,
+        search_notion_pages_tool,
+        get_twitter_tweets_tool,
+        get_github_pull_requests_tool,
+        get_github_issues_tool,
+        create_github_issue_tool,
+        close_github_issue_tool,
+        search_files_tool,
     ]
+
+    # Load tools from enabled apps
+    try:
+        app_tools = load_app_tools(uid)
+        tools.extend(app_tools)
+        if app_tools:
+            print(f"🔧 Added {len(app_tools)} app tools to chat")
+    except Exception as e:
+        print(f"⚠️ Error loading app tools: {e}")
 
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
@@ -145,6 +268,9 @@ def execute_agentic_chat(
             "thread_id": str(uuid.uuid4()),
         }
     }
+
+    # Store config in context for tools to access
+    agent_config_context.set(config)
 
     result = agent.invoke(
         {"messages": lc_messages},
@@ -185,8 +311,8 @@ async def execute_agentic_chat_stream(
     Yields:
         Formatted chunks with "data: " or "think: " prefixes
     """
-    # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app)
+    # Build system prompt with file context
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages)
 
     # Get all tools
     tools = [
@@ -198,7 +324,31 @@ async def execute_agentic_chat_stream(
         update_action_item_tool,
         get_omi_product_info_tool,
         perplexity_search_tool,
+        get_calendar_events_tool,
+        create_calendar_event_tool,
+        update_calendar_event_tool,
+        delete_calendar_event_tool,
+        get_gmail_messages_tool,
+        get_whoop_sleep_tool,
+        get_whoop_recovery_tool,
+        get_whoop_workout_tool,
+        search_notion_pages_tool,
+        get_twitter_tweets_tool,
+        get_github_pull_requests_tool,
+        get_github_issues_tool,
+        create_github_issue_tool,
+        close_github_issue_tool,
+        search_files_tool,
     ]
+
+    # Load tools from enabled apps
+    try:
+        app_tools = load_app_tools(uid)
+        tools.extend(app_tools)
+        if app_tools:
+            print(f"🔧 Added {len(app_tools)} app tools to chat")
+    except Exception as e:
+        print(f"⚠️ Error loading app tools: {e}")
 
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
@@ -225,8 +375,13 @@ async def execute_agentic_chat_stream(
             "thread_id": str(uuid.uuid4()),
             "conversations_collected": conversations_collected,
             "safety_guard": safety_guard,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "tools": tools,  # Store tools for status message lookup
         }
     }
+
+    # Store config in context for tools to access
+    agent_config_context.set(config)
 
     full_response = []
     tool_usage_count = 0
@@ -324,6 +479,56 @@ async def _run_agent_stream(
                 tool_input = event.get("data", {}).get("input", {})
                 print(f"🔧 Tool started: {tool_name}")
 
+                # Extract app_id from tool name if it's from an app tool
+                # App tools have format: app_id_tool_name
+                app_id = None
+                tools_list = config.get('configurable', {}).get('tools', [])
+
+                # Standard tool names that don't come from apps
+                standard_tool_names = {
+                    'get_conversations_tool',
+                    'vector_search_conversations_tool',
+                    'get_memories_tool',
+                    'get_action_items_tool',
+                    'create_action_item_tool',
+                    'update_action_item_tool',
+                    'get_omi_product_info_tool',
+                    'perplexity_search_tool',
+                    'get_calendar_events_tool',
+                    'create_calendar_event_tool',
+                    'update_calendar_event_tool',
+                    'delete_calendar_event_tool',
+                    'get_gmail_messages_tool',
+                    'get_whoop_sleep_tool',
+                    'get_whoop_recovery_tool',
+                    'get_whoop_workout_tool',
+                    'search_notion_pages_tool',
+                    'get_twitter_tweets_tool',
+                    'get_github_pull_requests_tool',
+                    'get_github_issues_tool',
+                    'create_github_issue_tool',
+                    'close_github_issue_tool',
+                    'search_files_tool',
+                }
+
+                # If tool name is not a standard tool and contains underscore, it's likely an app tool
+                if tool_name not in standard_tool_names and '_' in tool_name:
+                    parts = tool_name.split('_', 1)
+                    if len(parts) == 2:
+                        # First part is likely the app_id
+                        app_id = parts[0]
+
+                # Send user-friendly tool call message to frontend
+                # Get tool object to check for custom status_message
+                tool_obj = None
+                for tool in tools_list:
+                    if hasattr(tool, 'name') and tool.name == tool_name:
+                        tool_obj = tool
+                        break
+
+                tool_display_name = get_tool_display_name(tool_name, tool_obj)
+                await callback.put_thought(tool_display_name, app_id=app_id)
+
                 # Validate tool call with safety guard
                 if safety_guard:
                     try:
@@ -344,13 +549,58 @@ async def _run_agent_stream(
 
             elif kind == "on_tool_end":
                 tool_name = event.get("name", "unknown")
-                output = event.get("data", {}).get("output", "")
+                output_raw = event.get("data", {}).get("output", "")
+
+                # Extract string content from output (could be ToolMessage object or string)
+                if hasattr(output_raw, 'content'):
+                    output = str(output_raw.content)
+                elif isinstance(output_raw, str):
+                    output = output_raw
+                else:
+                    output = str(output_raw)
+
                 print(f"✅ Tool ended: {tool_name}")
+
+                # Send completion message for calendar tools to update status
+                if 'calendar' in tool_name.lower():
+                    if 'create' in tool_name.lower():
+                        # Clear the "Creating calendar event" status
+                        # The tool output will contain the success message which the LLM will include
+                        if output and ('Successfully created' in output or '✅' in output):
+                            # Send a brief completion status that will be replaced by the actual response
+                            await callback.put_thought('Event created successfully')
+                        elif output and ('Error' in output or 'error' in output.lower()):
+                            await callback.put_thought('Failed to create event')
+                        else:
+                            await callback.put_thought('Creating event...')
+                    elif 'update' in tool_name.lower():
+                        # Clear the "Updating calendar event" status
+                        if output and ('Successfully updated' in output or '✅' in output):
+                            await callback.put_thought('Event updated successfully')
+                        elif output and ('Error' in output or 'error' in output.lower()):
+                            await callback.put_thought('Failed to update event')
+                        else:
+                            await callback.put_thought('Updating event...')
+                    elif 'delete' in tool_name.lower():
+                        # Clear the "Deleting calendar event" status
+                        if output and ('Successfully deleted' in output or '✅' in output):
+                            await callback.put_thought('Event deleted successfully')
+                        elif output and ('Error' in output or 'error' in output.lower()):
+                            await callback.put_thought('Failed to delete event')
+                        else:
+                            await callback.put_thought('Deleting event...')
+                    elif 'get' in tool_name.lower() or 'search' in tool_name.lower():
+                        # For read operations, clear the "Checking calendar" status
+                        # The actual results will be in the response
+                        if output and len(output) > 0:
+                            await callback.put_thought('Found calendar events')
+                        else:
+                            await callback.put_thought('No events found')
 
                 # Check context size with safety guard
                 if safety_guard and output:
                     try:
-                        safety_guard.check_context_size(str(output))
+                        safety_guard.check_context_size(output)
                     except SafetyGuardError as e:
                         # Send friendly error message to user (no technical jargon)
                         error_msg = f"\n\n{str(e)}"

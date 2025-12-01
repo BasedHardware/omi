@@ -1,0 +1,538 @@
+---
+title: Chat Tools
+description: "Learn how to add custom chat tools to your Omi app that extend Omi's capabilities in user conversations."
+---
+
+## Overview
+
+**Chat Tools** allow your app to provide custom functions that become available in Omi chat when users install your app. These tools enable the AI assistant to interact with your service directly through natural language conversations.
+
+For example, a Slack integration app might provide tools to:
+
+- Send messages to Slack channels
+- List available channels
+- Search messages in Slack
+
+When a user installs your app, these tools automatically become available in their Omi chat, allowing them to say things like "Send a message to #general saying hello" or "What Slack channels do I have?"
+
+<Info>
+  Chat Tools require your app to have the `external_integration` capability
+  enabled. They are not a separate capability, but rather a feature that works
+  with external integration apps.
+</Info>
+
+## How Chat Tools Work
+
+When a user chats with Omi and the AI decides to use your tool:
+
+1. Omi calls your tool's endpoint with a POST request
+2. The payload includes: `uid`, `app_id`, `tool_name`, plus any parameters the AI extracted from the conversation
+3. Your endpoint processes the request and returns a result
+4. Omi displays the result to the user
+
+## Part 1: Implementing Chat Tools in Your Code
+
+### Step 1: Create Tool Endpoints
+
+Your backend server needs to expose endpoints that Omi will call when tools are invoked. Each tool requires its own endpoint.
+
+#### Endpoint Requirements
+
+Your endpoints should:
+
+- Accept POST requests with JSON payload (or GET with query parameters)
+- Receive these standard fields:
+  - `uid`: User ID
+  - `app_id`: Your app ID
+  - `tool_name`: Name of the tool being called
+  - Plus any tool-specific parameters
+- Return JSON with either:
+  - `result`: Success message (string)
+  - `error`: Error message (string)
+
+#### Example: Send Message Tool
+
+```python
+from flask import Flask, request, jsonify
+import requests
+
+app = Flask(__name__)
+
+@app.route('/api/send_message', methods=['POST'])
+def send_message():
+    """
+    Tool endpoint: Send a message to a Slack channel
+
+    Expected payload:
+    {
+        "uid": "user_id",
+        "app_id": "slack_app_id",
+        "tool_name": "send_slack_message",
+        "channel": "#general",
+        "message": "Hello from Omi!"
+    }
+    """
+    data = request.json
+
+    # Validate required parameters
+    if not data:
+        return jsonify({'error': 'Missing request body'}), 400
+
+    uid = data.get('uid')
+    channel = data.get('channel')
+    message = data.get('message')
+
+    if not uid:
+        return jsonify({'error': 'Missing uid parameter'}), 400
+    if not channel:
+        return jsonify({'error': 'Missing required parameter: channel'}), 400
+    if not message:
+        return jsonify({'error': 'Missing required parameter: message'}), 400
+
+    # Get user's authentication token (from your database)
+    slack_token = get_user_token(uid)
+    if not slack_token:
+        return jsonify({
+            'error': 'Slack not connected. Please connect your Slack account.'
+        }), 401
+
+    # Call external API (e.g., Slack API)
+    slack_response = requests.post(
+        'https://slack.com/api/chat.postMessage',
+        headers={'Authorization': f'Bearer {slack_token}'},
+        json={'channel': channel, 'text': message}
+    )
+
+    if slack_response.json().get('ok'):
+        return jsonify({
+            'result': f'Successfully sent message to {channel}'
+        })
+    else:
+        return jsonify({
+            'error': f"Failed to send message: {slack_response.json().get('error')}"
+        }), 400
+```
+
+#### Example: Search Tool
+
+```python
+@app.route('/api/search_messages', methods=['POST'])
+def search_messages():
+    """
+    Tool endpoint: Search for messages
+
+    Expected payload:
+    {
+        "uid": "user_id",
+        "app_id": "slack_app_id",
+        "tool_name": "search_slack_messages",
+        "query": "meeting notes",
+        "channel": "#general"  # optional
+    }
+    """
+    data = request.json
+
+    uid = data.get('uid')
+    query = data.get('query')
+    channel = data.get('channel')
+
+    if not uid:
+        return jsonify({'error': 'Missing uid parameter'}), 400
+    if not query:
+        return jsonify({'error': 'Missing required parameter: query'}), 400
+
+    # Get user's authentication token
+    slack_token = get_user_token(uid)
+    if not slack_token:
+        return jsonify({
+            'error': 'Slack not connected. Please connect your Slack account.'
+        }), 401
+
+    # Build search query
+    search_query = query
+    if channel:
+        search_query = f'in:{channel} {query}'
+
+    # Call external API
+    slack_response = requests.get(
+        'https://slack.com/api/search.messages',
+        headers={'Authorization': f'Bearer {slack_token}'},
+        params={'query': search_query}
+    )
+
+    if slack_response.json().get('ok'):
+        messages = slack_response.json().get('messages', {}).get('matches', [])
+        if not messages:
+            return jsonify({
+                'result': f'No messages found for "{query}"'
+            })
+
+        results = []
+        for msg in messages[:5]:
+            results.append(f"- {msg.get('text', '')[:100]} (in #{msg.get('channel', {}).get('name', 'unknown')})")
+
+        return jsonify({
+            'result': f'Found {len(messages)} messages:\n' + '\n'.join(results)
+        })
+    else:
+        return jsonify({
+            'error': f"Failed to search messages: {slack_response.json().get('error')}"
+        }), 400
+```
+
+### Step 2: Handle Authentication
+
+If your tools require user authentication:
+
+1. **Store user tokens securely** - When users connect their accounts via OAuth, store their tokens in a secure database associated with their `uid`
+2. **Validate authentication** - Check if the user has connected their account before processing tool requests
+3. **Return helpful errors** - If authentication is missing, return a clear error message
+
+```python
+def get_user_token(uid: str) -> Optional[str]:
+    """Get user's authentication token from database"""
+    # In production, fetch from secure database
+    return user_tokens.get(uid)
+
+@app.route('/api/send_message', methods=['POST'])
+def send_message():
+    data = request.json
+    uid = data.get('uid')
+
+    # Check authentication
+    token = get_user_token(uid)
+    if not token:
+        return jsonify({
+            'error': 'Account not connected. Please connect your account in app settings.'
+        }), 401
+
+    # Proceed with tool execution
+    # ...
+```
+
+### Step 3: Error Handling Best Practices
+
+Always return helpful error messages:
+
+```python
+# Good error messages
+return jsonify({'error': 'Slack not connected. Please connect your Slack account.'}), 401
+return jsonify({'error': 'Missing required parameter: channel'}), 400
+return jsonify({'error': 'Channel not found. Please check the channel name.'}), 404
+
+# Avoid exposing sensitive information
+# ❌ Bad: return jsonify({'error': f'Database connection failed: {db_password}'}), 500
+# ✅ Good: return jsonify({'error': 'Service temporarily unavailable. Please try again later.'}), 500
+```
+
+## Part 2: Adding Chat Tools in Omi App Store
+
+When creating or updating your app in the Omi App Store, you can add chat tools through the mobile app UI.
+
+### Using the Mobile App UI
+
+1. **Open the Omi mobile app**
+2. **Navigate to Apps → Create App** (or edit an existing app)
+3. **Fill in basic app details**:
+   - App name
+   - Description
+   - Category
+   - Thumbnails
+4. **Select External Integration capability**:
+   - Chat Tools require the `external_integration` capability
+   - Fill in external integration fields if needed (webhook URL, OAuth steps, etc.)
+5. **Scroll down to the Chat Tools section**
+6. **Click "Add Tool"** for each tool you want to create
+7. **Fill in tool details** for each tool:
+
+   - **Tool Name**: A descriptive name (e.g., `send_slack_message`)
+   - **Description**: Detailed description explaining when and how to use the tool
+   - **Endpoint URL**: Your backend endpoint URL (e.g., `https://your-server.com/api/send_message`)
+   - **HTTP Method**: POST, GET, PUT, PATCH, or DELETE
+   - **Auth Required**: Check if the tool requires user authentication
+   - **Status Message** (Optional): Custom message shown to users when the tool is called (e.g., "Sending message to Slack")
+
+8. **Submit your app**
+
+### Tool Definition Fields Explained
+
+#### Tool Name
+
+Use descriptive, action-oriented names:
+
+- ✅ `send_slack_message`
+- ✅ `list_slack_channels`
+- ✅ `search_slack_messages`
+- ❌ `slack1`
+- ❌ `do_stuff`
+
+#### Description
+
+Write detailed descriptions that help the AI understand:
+
+- **When to use the tool**: "Use this when the user wants to..."
+- **What parameters are required**: List required vs optional parameters
+- **What the tool does**: Clear explanation of the action
+
+**Example:**
+
+```
+Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack. Required parameters: channel (e.g., '#general' or channel name) and message (the text to send).
+```
+
+#### Endpoint URL
+
+Your publicly accessible HTTPS endpoint that handles tool invocations:
+
+- Must be accessible via HTTPS
+- Should handle the HTTP method you specify
+- Example: `https://your-server.com/api/send_message`
+
+#### HTTP Method
+
+Choose the appropriate HTTP method:
+
+- **POST**: For creating resources or sending data (most common)
+- **GET**: For retrieving data (parameters sent as query params)
+- **PUT/PATCH**: For updating resources
+- **DELETE**: For deleting resources
+
+#### Auth Required
+
+Check this box if your tool requires user authentication. When checked, Omi will ensure the user has connected their account before calling the tool.
+
+#### Status Message (Optional)
+
+A custom message shown to users when your tool is being called. This provides better UX by showing what's happening:
+
+- Example: "Searching Slack", "Sending message", "Creating calendar event"
+- If not provided, Omi will generate a default message based on the tool name
+
+### Example: Complete Tool Configuration
+
+Here's an example of how to configure three tools for a Slack integration:
+
+**Tool 1: Send Message**
+
+- **Name**: `send_slack_message`
+- **Description**: `Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack. Required parameters: channel (e.g., '#general' or channel name) and message (the text to send).`
+- **Endpoint**: `https://your-server.com/api/send_message`
+- **Method**: POST
+- **Auth Required**: ✅ Yes
+- **Status Message**: `Sending message to Slack`
+
+**Tool 2: List Channels**
+
+- **Name**: `list_slack_channels`
+- **Description**: `List all available Slack channels in the workspace. Use this when the user asks about available channels, wants to see what channels exist, or needs to choose a channel to send a message to.`
+- **Endpoint**: `https://your-server.com/api/list_channels`
+- **Method**: POST
+- **Auth Required**: ✅ Yes
+- **Status Message**: `Checking Slack channels`
+
+**Tool 3: Search Messages**
+
+- **Name**: `search_slack_messages`
+- **Description**: `Search for messages in Slack. Use this when the user wants to find specific messages, look up past conversations, or search for information in Slack. Required parameter: query (search terms). Optional parameter: channel (to limit search to a specific channel).`
+- **Endpoint**: `https://your-server.com/api/search_messages`
+- **Method**: POST
+- **Auth Required**: ✅ Yes
+- **Status Message**: `Searching Slack`
+
+## Request and Response Format
+
+### Request Format
+
+Your endpoints will receive requests with this structure:
+
+**POST Request:**
+
+```json
+{
+  "uid": "user_firebase_id",
+  "app_id": "your_app_id",
+  "tool_name": "send_slack_message",
+  "channel": "#general",
+  "message": "Hello from Omi!"
+}
+```
+
+**GET Request:**
+
+```
+GET /api/search?uid=user_id&app_id=app_id&tool_name=search_slack_messages&query=meeting
+```
+
+### Response Format
+
+**Success Response:**
+
+```json
+{
+  "result": "Successfully sent message to #general"
+}
+```
+
+**Error Response:**
+
+```json
+{
+  "error": "Slack not connected. Please connect your Slack account."
+}
+```
+
+**HTTP Status Codes:**
+
+- `200`: Success (with `result` field)
+- `400`: Bad request (with `error` field)
+- `401`: Unauthorized (with `error` field)
+- `500`: Server error (with `error` field)
+
+## Best Practices
+
+### 1. Tool Descriptions
+
+Write clear, detailed descriptions that help the AI understand when to use your tool:
+
+- ✅ **Good**: "Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack. Required parameters: channel (e.g., '#general' or channel name) and message (the text to send)."
+- ❌ **Bad**: "Sends messages"
+
+### 2. Parameter Naming
+
+Use consistent, clear parameter names that match common patterns:
+
+- For search: `query`
+- For messages: `message`
+- For channels: `channel`
+- For IDs: `id` or `item_id`
+
+### 3. Error Messages
+
+Provide helpful, user-friendly error messages:
+
+- ✅ **Good**: "Slack not connected. Please connect your Slack account."
+- ❌ **Bad**: "Error 401"
+
+### 4. Response Format
+
+Keep responses concise but informative:
+
+- ✅ **Good**: "Successfully sent message to #general"
+- ❌ **Bad**: "OK"
+- ✅ **Good**: "Found 5 messages:\n- Message 1\n- Message 2"
+- ❌ **Bad**: `{"data": [{"id": 1, "text": "..."}]}` (too technical)
+
+### 5. Authentication
+
+- Always validate user authentication for tools that require it
+- Store tokens securely (encrypted, in a secure database)
+- Implement token refresh for long-lived sessions
+- Return clear errors when authentication is missing
+
+### 6. Rate Limiting
+
+Implement rate limiting on your endpoints to prevent abuse:
+
+```python
+from functools import wraps
+from flask import request, jsonify
+
+# Simple rate limiting example
+request_counts = {}
+
+def rate_limit(max_requests=100, window=60):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            uid = request.json.get('uid')
+            key = f"{uid}_{f.__name__}"
+            now = time.time()
+
+            if key in request_counts:
+                requests, first_request = request_counts[key]
+                if now - first_request < window:
+                    if requests >= max_requests:
+                        return jsonify({'error': 'Rate limit exceeded'}), 429
+                    request_counts[key] = (requests + 1, first_request)
+                else:
+                    request_counts[key] = (1, now)
+            else:
+                request_counts[key] = (1, now)
+
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+@app.route('/api/send_message', methods=['POST'])
+@rate_limit(max_requests=100, window=60)
+def send_message():
+    # ...
+```
+
+## Testing Your Tools
+
+### 1. Test Endpoints Directly
+
+Test your endpoints with curl or Postman before adding them to your app:
+
+```bash
+# Test send_message endpoint
+curl -X POST https://your-server.com/api/send_message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "uid": "test_user_id",
+    "app_id": "slack-integration",
+    "tool_name": "send_slack_message",
+    "channel": "#general",
+    "message": "Test message"
+  }'
+```
+
+### 2. Test in Omi
+
+1. **Create the app** with your tool definitions in the Omi App Store
+2. **Install the app** in your test account
+3. **Connect your account** (if auth is required) - Click the connect button in app settings
+4. **Try using the tools** in Omi chat:
+   - "Send a message to #general saying hello"
+   - "What Slack channels do I have?"
+   - "Search Slack for messages about the project"
+
+## Troubleshooting
+
+### Tool Not Appearing in Chat
+
+- Verify the app is installed and enabled (`enabled: true`)
+- Check that `chat_tools` array is properly formatted
+- Ensure endpoints are accessible and return proper responses
+- Verify the app has `external_integration` capability
+
+### Tool Calls Failing
+
+- Check endpoint logs for errors
+- Verify authentication is working
+- Ensure response format matches specification
+- Test endpoints directly with curl/Postman
+- Check that required parameters are being sent
+
+### AI Not Using Your Tool
+
+- Improve tool description to be more specific about when to use it
+- Add examples in the description
+- Ensure tool name is descriptive
+- Make sure the description clearly states when the tool should be used
+
+## Complete Example
+
+For a complete working example, see the [Slack Integration Example](/doc/developer/apps/examples/Slack) which demonstrates:
+
+- Setting up OAuth authentication
+- Creating multiple chat tools
+- Handling tool invocations
+- Error handling and user feedback
+
+## Next Steps
+
+- Read the [Integration Apps Guide](/doc/developer/apps/Integrations) for more details on external integrations
+- Check out [OAuth Guide](/doc/developer/apps/Oauth) for authentication setup
+- See [Submitting Apps](/doc/developer/apps/Submitting) for publishing your app

@@ -31,7 +31,7 @@ class InfoCardWidget extends StatelessWidget {
           bottom: 6,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
+          color: const Color(0xFF1F1F25).withOpacity(0.8),
           borderRadius: BorderRadius.circular(16.0),
         ),
         child: Column(
@@ -39,7 +39,7 @@ class InfoCardWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 description.decodeString.characters.length > 200
                     ? const Icon(

@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
@@ -286,11 +287,11 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
 
           // Share button
           OmiButton(
-            label: _isSharing ? 'Sharing...' : 'Share',
-            icon: _isSharing ? null : FontAwesomeIcons.share,
+            label: _isSharing ? 'Copied!' : 'Copy Link',
+            icon: _isSharing ? null : FontAwesomeIcons.link,
             type: OmiButtonType.neutral,
             enabled: !_isSharing,
-            onPressed: _isSharing ? null : _handleShareConversation,
+            onPressed: _isSharing ? null : _handleCopyConversationLink,
           ),
 
           const SizedBox(width: 12),
@@ -495,6 +496,27 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       title: 'No Transcript Available',
       message: 'This conversation doesn\'t have a transcript.',
     );
+  }
+
+  Future<void> _handleCopyConversationLink() async {
+    if (_isSharing) return;
+    setState(() => _isSharing = true);
+
+    try {
+      bool shared = await setConversationVisibility(widget.conversation.id);
+      if (!shared) {
+        _showSnackBar('Conversation URL could not be generated.');
+        setState(() => _isSharing = false);
+        return;
+      }
+
+      String content = 'https://h.omi.me/conversations/${widget.conversation.id}';
+      await Clipboard.setData(ClipboardData(text: content));
+    } catch (e) {
+      _showSnackBar('Failed to generate conversation link');
+    } finally {
+      setState(() => _isSharing = false);
+    }
   }
 
   Future<void> _handleShareConversation() async {

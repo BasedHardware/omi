@@ -18,7 +18,7 @@ import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
-import 'widgets/create_options_sheet.dart';
+import 'add_app.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -548,14 +548,9 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                     child: state.isLoading
                         ? _buildShimmerCreateButton()
                         : GestureDetector(
-                            onTap: () async {
-                              showModalBottomSheet(
-                                context: context,
-                                builder: (context) => const CreateOptionsSheet(),
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                ),
-                              );
+                            onTap: () {
+                              MixpanelManager().pageOpened('Submit App');
+                              routeToPage(context, const AddAppPage());
                             },
                             child: Container(
                               padding: const EdgeInsets.all(20),
