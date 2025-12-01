@@ -250,7 +250,6 @@ def load_app_tools(uid: str) -> List[Callable]:
     from models.app import App
 
     enabled_app_ids = get_enabled_apps(uid)
-    print(f"🔍 Debug: User {uid} has {len(enabled_app_ids)} enabled apps: {enabled_app_ids}")
     tools = []
 
     for app_id in enabled_app_ids:
@@ -263,10 +262,6 @@ def load_app_tools(uid: str) -> List[Callable]:
         except Exception as e:
             print(f"Error parsing app {app_id}: {e}")
             continue
-
-        print(
-            f"🔍 Debug: App {app_id} ({app.name}) has chat_tools: {bool(app.chat_tools)}, count: {len(app.chat_tools) if app.chat_tools else 0}"
-        )
 
         # Only load tools if app has chat_tools defined
         if app.chat_tools and len(app.chat_tools) > 0:
