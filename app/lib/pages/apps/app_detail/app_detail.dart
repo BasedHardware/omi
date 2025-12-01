@@ -56,6 +56,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
   late App app;
+  Set<String> _expandedChatTools = {};
 
   String _getPricingText(App app) {
     if (!app.isPaid || app.price == null || app.price == 0) {
@@ -352,6 +353,158 @@ class _AppDetailPageState extends State<AppDetailPage> {
       title: 'Permissions & Triggers',
       description: descriptions.join('\n'),
       showChips: false,
+    );
+  }
+
+  Widget _buildChatToolsCard(App app) {
+    if (app.chatTools == null || app.chatTools!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16.0),
+      margin: EdgeInsets.only(
+        left: MediaQuery.of(context).size.width * 0.05,
+        right: MediaQuery.of(context).size.width * 0.05,
+        top: 12,
+        bottom: 6,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Chat Tools',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          ...app.chatTools!.asMap().entries.map((entry) {
+            final tool = entry.value;
+            final isLast = entry.key == app.chatTools!.length - 1;
+            return _buildChatToolItem(tool, isLast);
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatToolItem(ChatTool tool, bool isLast) {
+    final isExpanded = _expandedChatTools.contains(tool.name);
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isExpanded) {
+            _expandedChatTools.remove(tool.name);
+          } else {
+            _expandedChatTools.add(tool.name);
+          }
+        });
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2F),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF35343B)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                  ),
+                  child: Text(
+                    tool.method,
+                    style: const TextStyle(
+                      color: Colors.blue,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    tool.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.grey,
+                  size: 20,
+                ),
+              ],
+            ),
+            if (isExpanded) ...[
+              const SizedBox(height: 12),
+              Text(
+                tool.description,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+              if (tool.statusMessage != null && tool.statusMessage!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 14,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Status: ${tool.statusMessage}',
+                        style: TextStyle(
+                          color: Colors.grey.shade400,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                tool.endpoint,
+                style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1147,6 +1300,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         showChips: false,
                       )
                     : const SizedBox.shrink(),
+                app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
                 GestureDetector(
                   onTap: () {
                     if (app.reviews.isNotEmpty) {
