@@ -1301,81 +1301,83 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       )
                     : const SizedBox.shrink(),
                 app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
-                GestureDetector(
-                  onTap: () {
-                    if (app.reviews.isNotEmpty) {
-                      routeToPage(context, ReviewsListPage(app: app));
-                    }
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16.0),
-                    margin: EdgeInsets.only(
-                      left: MediaQuery.of(context).size.width * 0.05,
-                      right: MediaQuery.of(context).size.width * 0.05,
-                      top: 12,
-                      bottom: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(16.0),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
-                            const Spacer(),
-                            app.reviews.isNotEmpty
-                                ? const Icon(
-                                    FontAwesomeIcons.arrowRight,
-                                    size: 20,
-                                  )
-                                : const SizedBox.shrink(),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Text(app.getRatingAvg() ?? '0.0',
-                                style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
-                            const Spacer(),
-                            Column(
-                              children: [
-                                Skeleton.ignore(
-                                  child: RatingBar.builder(
-                                    initialRating: app.ratingAvg ?? 0,
-                                    minRating: 1,
-                                    ignoreGestures: true,
-                                    direction: Axis.horizontal,
-                                    allowHalfRating: true,
-                                    itemCount: 5,
-                                    itemSize: 16,
-                                    tapOnlyMode: false,
-                                    itemPadding: const EdgeInsets.symmetric(horizontal: 2),
-                                    itemBuilder: (context, _) =>
-                                        const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
-                                    maxRating: 5.0,
-                                    onRatingUpdate: (rating) {},
+                (app.ratingCount > 0 || app.reviews.isNotEmpty)
+                    ? GestureDetector(
+                        onTap: () {
+                          if (app.reviews.isNotEmpty) {
+                            routeToPage(context, ReviewsListPage(app: app));
+                          }
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16.0),
+                          margin: EdgeInsets.only(
+                            left: MediaQuery.of(context).size.width * 0.05,
+                            right: MediaQuery.of(context).size.width * 0.05,
+                            top: 12,
+                            bottom: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F25),
+                            borderRadius: BorderRadius.circular(16.0),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text('Ratings & Reviews', style: TextStyle(color: Colors.white, fontSize: 18)),
+                                  const Spacer(),
+                                  app.reviews.isNotEmpty
+                                      ? const Icon(
+                                          FontAwesomeIcons.arrowRight,
+                                          size: 20,
+                                        )
+                                      : const SizedBox.shrink(),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  Text(app.getRatingAvg() ?? '0.0',
+                                      style: const TextStyle(fontSize: 38, fontWeight: FontWeight.bold)),
+                                  const Spacer(),
+                                  Column(
+                                    children: [
+                                      Skeleton.ignore(
+                                        child: RatingBar.builder(
+                                          initialRating: app.ratingAvg ?? 0,
+                                          minRating: 1,
+                                          ignoreGestures: true,
+                                          direction: Axis.horizontal,
+                                          allowHalfRating: true,
+                                          itemCount: 5,
+                                          itemSize: 16,
+                                          tapOnlyMode: false,
+                                          itemPadding: const EdgeInsets.symmetric(horizontal: 2),
+                                          itemBuilder: (context, _) =>
+                                              const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
+                                          maxRating: 5.0,
+                                          onRatingUpdate: (rating) {},
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(app.ratingCount <= 0 ? "no ratings" : "${app.ratingCount}+ ratings"),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(app.ratingCount <= 0 ? "no ratings" : "${app.ratingCount}+ ratings"),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              RecentReviewsSection(
+                                reviews: app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                                appAuthor: app.author,
+                              )
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 16),
-                        RecentReviewsSection(
-                          reviews: app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
-                          appAuthor: app.author,
-                        )
-                      ],
-                    ),
-                  ),
-                ),
+                      )
+                    : const SizedBox.shrink(),
                 !app.isOwner(SharedPreferencesUtil().uid) && (app.enabled || app.userReview != null)
                     ? AddReviewWidget(app: app)
                     : const SizedBox.shrink(),
