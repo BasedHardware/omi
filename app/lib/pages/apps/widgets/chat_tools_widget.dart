@@ -249,7 +249,12 @@ onChanged: (_) {
             ),
             style: const TextStyle(color: Colors.white),
             keyboardType: TextInputType.url,
-            onChanged: (_) => _updateTool(),
+onChanged: (_) {
+              // Defer to avoid setState during build
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                _updateTool();
+              });
+            },
           ),
           const SizedBox(height: 12),
           TextField(
