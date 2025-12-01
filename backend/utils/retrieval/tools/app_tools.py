@@ -7,7 +7,7 @@ in the Omi chat when the app is installed by a user.
 
 import contextvars
 from typing import List, Optional, Callable, Any, Dict
-import requests
+import httpx
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
@@ -109,28 +109,28 @@ def create_app_tool(app_tool: ChatTool, app_id: str, app_name: str) -> Callable:
     # For send_slack_message, we want: message: str, channel: Optional[str] = None, config: RunnableConfig = None
     if 'send' in app_tool.name.lower() and 'message' in app_tool.name.lower():
         # Special handling for send_slack_message
-        def tool_function(message: str, channel: Optional[str] = None, config: RunnableConfig = None) -> str:
+        async def tool_function(message: str, channel: Optional[str] = None, config: RunnableConfig = None) -> str:
             """Tool dynamically created from app definition."""
             kwargs = {'message': message}
             if channel:
                 kwargs['channel'] = channel
-            return _call_tool_endpoint(kwargs, config, app_tool, app_id)
+            return await _call_tool_endpoint(kwargs, config, app_tool, app_id)
 
     elif 'search' in app_tool.name.lower():
         # Special handling for search tools
-        def tool_function(query: str, channel: Optional[str] = None, config: RunnableConfig = None) -> str:
+        async def tool_function(query: str, channel: Optional[str] = None, config: RunnableConfig = None) -> str:
             """Tool dynamically created from app definition."""
             kwargs = {'query': query}
             if channel:
                 kwargs['channel'] = channel
-            return _call_tool_endpoint(kwargs, config, app_tool, app_id)
+            return await _call_tool_endpoint(kwargs, config, app_tool, app_id)
 
     else:
         # Generic fallback - use **kwargs but with better description
-        def tool_function(**kwargs) -> str:
+        async def tool_function(**kwargs) -> str:
             """Tool dynamically created from app definition."""
             config_param = kwargs.pop('config', None)
-            return _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
+            return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
 
     # Create the tool
     dynamic_tool = tool(tool_function)
@@ -157,8 +157,8 @@ def get_tool_status_message(tool_name: str) -> Optional[str]:
     return _tool_status_messages.get(tool_name)
 
 
-def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str) -> str:
-    """Helper function to call the tool endpoint."""
+async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str) -> str:
+    """Helper function to call the tool endpoint asynchronously."""
     # Get user ID from config
     if config is None:
         try:
@@ -191,45 +191,49 @@ def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], app_tool
         pass
 
     try:
-        # Call the app's endpoint
-        response = requests.request(
-            method=app_tool.method.upper(),
-            url=app_tool.endpoint,
-            json=payload if app_tool.method.upper() in ['POST', 'PUT', 'PATCH'] else None,
-            params=payload if app_tool.method.upper() == 'GET' else None,
-            headers=headers,
-            timeout=30,
-        )
+        # Call the app's endpoint asynchronously
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            method = app_tool.method.upper()
+            request_kwargs = {
+                'headers': headers,
+            }
 
-        if response.status_code == 200:
-            # Try to parse JSON response, fallback to text
-            try:
-                result = response.json()
-                if isinstance(result, dict) and 'result' in result:
-                    return str(result['result'])
-                elif isinstance(result, dict) and 'message' in result:
-                    return str(result['message'])
-                elif isinstance(result, str):
-                    return result
-                else:
-                    return str(result)
-            except ValueError:
-                return response.text
-        else:
-            error_msg = f"Error calling {app_tool.name}: HTTP {response.status_code}"
-            try:
-                error_detail = response.json()
-                if isinstance(error_detail, dict) and 'error' in error_detail:
-                    error_msg += f" - {error_detail['error']}"
-                else:
-                    error_msg += f" - {str(error_detail)}"
-            except ValueError:
-                error_msg += f" - {response.text[:200]}"
-            return error_msg
+            if method in ['POST', 'PUT', 'PATCH']:
+                request_kwargs['json'] = payload
+            elif method == 'GET':
+                request_kwargs['params'] = payload
 
-    except requests.exceptions.Timeout:
+            response = await client.request(method=method, url=app_tool.endpoint, **request_kwargs)
+
+            if response.status_code == 200:
+                # Try to parse JSON response, fallback to text
+                try:
+                    result = response.json()
+                    if isinstance(result, dict) and 'result' in result:
+                        return str(result['result'])
+                    elif isinstance(result, dict) and 'message' in result:
+                        return str(result['message'])
+                    elif isinstance(result, str):
+                        return result
+                    else:
+                        return str(result)
+                except ValueError:
+                    return response.text
+            else:
+                error_msg = f"Error calling {app_tool.name}: HTTP {response.status_code}"
+                try:
+                    error_detail = response.json()
+                    if isinstance(error_detail, dict) and 'error' in error_detail:
+                        error_msg += f" - {error_detail['error']}"
+                    else:
+                        error_msg += f" - {str(error_detail)}"
+                except ValueError:
+                    error_msg += f" - {response.text[:200]}"
+                return error_msg
+
+    except httpx.TimeoutException:
         return f"Error: Timeout calling {app_tool.name}. The app endpoint did not respond within 30 seconds."
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         return f"Error: Could not connect to {app_tool.name}. The app endpoint may be unreachable."
     except Exception as e:
         return f"Error calling {app_tool.name}: {str(e)}"
