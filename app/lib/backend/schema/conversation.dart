@@ -148,6 +148,13 @@ class ServerConversation {
   final bool deleted;
   final bool isLocked;
 
+  // Conversation merge tracking
+  final String? mergedIntoId; // ID of merged conversation this was combined into
+  final DateTime? mergeTime; // When this conversation was merged
+  final bool isMerged; // True if this conversation was created by merging
+  final List<String> sourceConversationIds; // IDs of source conversations
+  final String? mergeId; // Reference to MergeHistory for rollback
+
   // local label
   bool isNew = false;
 
@@ -169,6 +176,11 @@ class ServerConversation {
     this.externalIntegration,
     this.status = ConversationStatus.completed,
     this.isLocked = false,
+    this.mergedIntoId,
+    this.mergeTime,
+    this.isMerged = false,
+    this.sourceConversationIds = const [],
+    this.mergeId,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -199,6 +211,13 @@ class ServerConversation {
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
       isLocked: json['is_locked'] ?? false,
+      mergedIntoId: json['merged_into_id'],
+      mergeTime: json['merge_time'] != null ? DateTime.parse(json['merge_time']).toLocal() : null,
+      isMerged: json['is_merged'] ?? false,
+      sourceConversationIds: json['source_conversation_ids'] != null
+          ? (json['source_conversation_ids'] as List<dynamic>).map((id) => id.toString()).toList()
+          : [],
+      mergeId: json['merge_id'],
     );
   }
 
@@ -221,6 +240,11 @@ class ServerConversation {
       'external_data': externalIntegration?.toJson(),
       'status': status.toString().split('.').last,
       'is_locked': isLocked,
+      'merged_into_id': mergedIntoId,
+      'merge_time': mergeTime?.toUtc().toIso8601String(),
+      'is_merged': isMerged,
+      'source_conversation_ids': sourceConversationIds,
+      'merge_id': mergeId,
     };
   }
 

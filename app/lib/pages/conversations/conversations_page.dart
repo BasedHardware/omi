@@ -132,12 +132,90 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     );
   }
 
+  Widget _buildMergeToolbar(ConversationProvider provider) {
+    int selectedCount = provider.selectedConversationIds.length;
+    bool canMerge = provider.canMergeSelected();
+
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // Cancel button
+            TextButton.icon(
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                provider.exitMergeMode();
+              },
+              icon: const Icon(Icons.close, color: Colors.white70),
+              label: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+            ),
+            const SizedBox(width: 16),
+            // Selection count
+            Expanded(
+              child: Text(
+                '$selectedCount selected',
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+            // Merge button
+            ElevatedButton.icon(
+              onPressed: canMerge && !provider.isMergingConversations
+                  ? () async {
+                      HapticFeedback.mediumImpact();
+                      await provider.executeMerge();
+                    }
+                  : null,
+              icon: provider.isMergingConversations
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.merge_type, size: 20),
+              label: Text(provider.isMergingConversations ? 'Merging...' : 'Merge'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurpleAccent,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade800,
+                disabledForegroundColor: Colors.grey.shade600,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     debugPrint('building conversations page');
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
-      return RefreshIndicator(
+      return Stack(
+        children: [
+          RefreshIndicator(
         onRefresh: () async {
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
@@ -222,6 +300,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
           ],
         ),
+      ),
+          // Merge mode toolbar
+          if (convoProvider.isMergeMode)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _buildMergeToolbar(convoProvider),
+            ),
+        ],
       );
     });
   }

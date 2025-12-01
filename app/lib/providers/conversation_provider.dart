@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/merge.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -664,5 +665,73 @@ class ConversationProvider extends ChangeNotifier {
   void updateSyncedConversation(ServerConversation conversation) {
     updateConversationInSortedList(conversation);
     notifyListeners();
+  }
+
+  // ==================== Conversation Merge State ====================
+
+  bool isMergeMode = false;
+  Set<String> selectedConversationIds = {};
+  bool isMergingConversations = false;
+
+  void enterMergeMode() {
+    isMergeMode = true;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void exitMergeMode() {
+    isMergeMode = false;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  void toggleConversationSelection(String conversationId) {
+    if (selectedConversationIds.contains(conversationId)) {
+      selectedConversationIds.remove(conversationId);
+    } else {
+      selectedConversationIds.add(conversationId);
+    }
+    notifyListeners();
+  }
+
+  bool isConversationSelected(String conversationId) {
+    return selectedConversationIds.contains(conversationId);
+  }
+
+  bool canMergeSelected() {
+    // Need at least 2 conversations
+    if (selectedConversationIds.length < 2) return false;
+
+    // Check if selected conversations are chronologically adjacent
+    // (Simplified - full adjacency check done by backend)
+    var selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+    selectedConvos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    return selectedConvos.length >= 2;
+  }
+
+  Future<void> executeMerge({String? customTitle}) async {
+    if (!canMergeSelected()) return;
+
+    isMergingConversations = true;
+    notifyListeners();
+
+    try {
+      var selectedIds = selectedConversationIds.toList();
+      var result = await mergeConversations(selectedIds, customTitle: customTitle);
+
+      if (result != null) {
+        // Refresh conversations list to show merged conversation
+        await getInitialConversations();
+
+        exitMergeMode();
+
+        // Analytics
+        MixpanelManager().conversationsMerged(selectedIds.length);
+      }
+    } finally {
+      isMergingConversations = false;
+      notifyListeners();
+    }
   }
 }

@@ -32,6 +32,7 @@ from routers import (
     other,
     developer,
     calendar_meetings,
+    merge_endpoints,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -47,6 +48,7 @@ app = FastAPI()
 
 app.include_router(transcribe.router)
 app.include_router(conversations.router)
+app.include_router(merge_endpoints.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)

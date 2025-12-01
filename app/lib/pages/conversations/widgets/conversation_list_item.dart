@@ -67,7 +67,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
     Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
+        onLongPress: () {
+          // Long-press activates merge mode and selects this conversation
+          if (!widget.conversation.isLocked && !widget.conversation.discarded) {
+            HapticFeedback.mediumImpact();
+            provider.enterMergeMode();
+            provider.toggleConversationSelection(widget.conversation.id);
+          }
+        },
         onTap: () async {
+          // Merge mode: toggle selection instead of opening detail
+          if (provider.isMergeMode) {
+            HapticFeedback.lightImpact();
+            provider.toggleConversationSelection(widget.conversation.id);
+            return;
+          }
+
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -268,22 +283,41 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
+    return Consumer<ConversationProvider>(builder: (context, provider, child) {
+      bool isSelected = provider.isConversationSelected(widget.conversation.id);
+
+      return Padding(
+        padding: const EdgeInsets.only(left: 4.0, right: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Merge mode checkbox
+            if (provider.isMergeMode) ...[
+              Checkbox(
+                value: isSelected,
+                onChanged: (bool? value) {
+                  HapticFeedback.lightImpact();
+                  provider.toggleConversationSelection(widget.conversation.id);
+                },
+                activeColor: Colors.deepPurpleAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+
+            // 🧠 Emoji + Tag
+            Flexible(
+              fit: FlexFit.tight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!widget.conversation.discarded)
+                    Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                    ),
                 if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
                   const SizedBox(width: 8),
                 if (widget.conversation.structured.category.isNotEmpty)
@@ -349,6 +383,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ],
       ),
     );
+    });
   }
 
   String _getConversationDuration() {
