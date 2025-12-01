@@ -7,40 +7,36 @@ import 'package:omi/models/stt_response_schema.dart';
 class CustomSttConfig {
   final SttProvider provider;
   final String? apiKey;
-  final String? apiUrl;
-  final String? wsUrl;
+  final String? language;
+  final String? model;
+  final String? url;
   final String? host;
   final int? port;
-  final Map<String, String>? headers;
-  final Map<String, String>? fields;
-  final String? audioFieldName;
   final String? requestType;
+  final Map<String, String>? headers;
+  final Map<String, String>? params;
+  final String? audioFieldName;
   final Map<String, dynamic>? schemaJson;
-  final Map<String, dynamic>? fileUploadConfig;
-  final Map<String, String>? streamingParams;
 
   const CustomSttConfig({
     required this.provider,
     this.apiKey,
-    this.apiUrl,
-    this.wsUrl,
+    this.language,
+    this.model,
+    this.url,
     this.host,
     this.port,
-    this.headers,
-    this.fields,
-    this.audioFieldName,
     this.requestType,
+    this.headers,
+    this.params,
+    this.audioFieldName,
     this.schemaJson,
-    this.fileUploadConfig,
-    this.streamingParams,
   });
 
-  bool get isLive =>
-      provider == SttProvider.deepgramLive ||
-      provider == SttProvider.geminiLive ||
-      provider == SttProvider.customLive ||
-      requestType == 'streaming' ||
-      wsUrl != null;
+  /// Determine if live/streaming based on request_type
+  String get effectiveRequestType => requestType ?? providerConfig.requestType;
+  bool get isLive => SttRequestType.isLive(effectiveRequestType);
+  bool get isPolling => SttRequestType.isPolling(effectiveRequestType);
 
   bool get isEnabled => provider != SttProvider.omi;
 
@@ -53,22 +49,58 @@ class CustomSttConfig {
     return providerConfig.responseSchema;
   }
 
+  /// Get the effective language (user-selected or provider default)
+  String get effectiveLanguage => language ?? providerConfig.defaultLanguage;
+
+  /// Get the effective model (user-selected or provider default)
+  String get effectiveModel => model ?? providerConfig.defaultModel;
+
+  /// Get effective URL (custom or provider default)
+  String get effectiveUrl {
+    if (url != null && url!.isNotEmpty) return url!;
+    final config = providerConfig.buildRequestConfig(
+      apiKey: apiKey,
+      language: language,
+      model: model,
+      host: host,
+      port: port,
+    );
+    return config['url'] ?? '';
+  }
+
+  /// Build request config with all settings applied
+  Map<String, dynamic> get requestConfig {
+    if (provider == SttProvider.custom || provider == SttProvider.customLive) {
+      return {
+        'url': url,
+        'request_type': effectiveRequestType,
+        'headers': headers,
+        'params': params,
+        'audio_field_name': audioFieldName,
+      };
+    }
+    return providerConfig.buildRequestConfig(
+      apiKey: apiKey,
+      language: language,
+      model: model,
+      host: host,
+      port: port,
+    );
+  }
+
   String get sttConfigId {
     if (!isEnabled) return 'omi:default';
 
     final configData = {
       'api_key': apiKey,
-      'api_url': apiUrl,
-      'ws_url': wsUrl,
+      'language': language,
+      'model': model,
+      'url': url,
       'host': host,
       'port': port,
-      'headers': headers,
-      'fields': fields,
-      'audio_field_name': audioFieldName,
       'request_type': requestType,
-      'schema': schemaJson,
-      'file_upload_config': fileUploadConfig,
-      'streaming_params': streamingParams,
+      'headers': headers,
+      'params': params,
     };
 
     final jsonStr = jsonEncode(configData);
@@ -81,40 +113,76 @@ class CustomSttConfig {
   Map<String, dynamic> toJson() => {
         'provider': provider.name,
         'api_key': apiKey,
-        'api_url': apiUrl,
-        'ws_url': wsUrl,
+        'language': language,
+        'model': model,
+        'url': url,
         'host': host,
         'port': port,
-        'headers': headers,
-        'fields': fields,
-        'audio_field_name': audioFieldName,
         'request_type': requestType,
+        'headers': headers,
+        'params': params,
+        'audio_field_name': audioFieldName,
         'schema': schemaJson,
-        'file_upload_config': fileUploadConfig,
-        'streaming_params': streamingParams,
       };
 
   factory CustomSttConfig.fromJson(Map<String, dynamic> json) {
+    // Safely cast maps to Map<String, String> by converting all values to strings
+    Map<String, String>? safeStringMap(dynamic value) {
+      if (value == null) return null;
+      if (value is Map) {
+        return value.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+      }
+      return null;
+    }
+
     return CustomSttConfig(
       provider: SttProvider.fromString(json['provider'] ?? 'omi'),
       apiKey: json['api_key'],
-      apiUrl: json['api_url'],
-      wsUrl: json['ws_url'],
+      language: json['language'],
+      model: json['model'],
+      url: json['url'],
       host: json['host'],
       port: json['port'],
-      headers: json['headers'] != null ? Map<String, String>.from(json['headers']) : null,
-      fields: json['fields'] != null ? Map<String, String>.from(json['fields']) : null,
-      audioFieldName: json['audio_field_name'],
       requestType: json['request_type'],
+      headers: safeStringMap(json['headers']),
+      params: safeStringMap(json['params']),
+      audioFieldName: json['audio_field_name'],
       schemaJson: json['schema'] != null ? Map<String, dynamic>.from(json['schema']) : null,
-      fileUploadConfig:
-          json['file_upload_config'] != null ? Map<String, dynamic>.from(json['file_upload_config']) : null,
-      streamingParams:
-          json['streaming_params'] != null ? Map<String, String>.from(json['streaming_params']) : null,
     );
   }
 
   static const defaultConfig = CustomSttConfig(provider: SttProvider.omi);
+
+  /// Copy with new values
+  CustomSttConfig copyWith({
+    SttProvider? provider,
+    String? apiKey,
+    String? language,
+    String? model,
+    String? url,
+    String? host,
+    int? port,
+    String? requestType,
+    Map<String, String>? headers,
+    Map<String, String>? params,
+    String? audioFieldName,
+    Map<String, dynamic>? schemaJson,
+  }) {
+    return CustomSttConfig(
+      provider: provider ?? this.provider,
+      apiKey: apiKey ?? this.apiKey,
+      language: language ?? this.language,
+      model: model ?? this.model,
+      url: url ?? this.url,
+      host: host ?? this.host,
+      port: port ?? this.port,
+      requestType: requestType ?? this.requestType,
+      headers: headers ?? this.headers,
+      params: params ?? this.params,
+      audioFieldName: audioFieldName ?? this.audioFieldName,
+      schemaJson: schemaJson ?? this.schemaJson,
+    );
+  }
 
   static Map<String, dynamic> getFullTemplateJson(SttProvider provider) {
     return SttProviderConfig.get(provider).getFullTemplateJson();

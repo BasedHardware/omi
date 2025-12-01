@@ -1,140 +1,127 @@
+/// Minimal schema for parsing STT responses into TranscriptSegments
+/// Only contains fields required by backend: text, start, end, speaker
 class SttResponseSchema {
   final String? segmentsPath;
-  final String textField;
-  final String? startField;
-  final String? endField;
-  final String? speakerField;
-  final String? speakerIdField;
-  final String? confidenceField;
-  final String? rawTextPath;
-  final String? durationPath;
-  final String? languagePath;
+  final String segmentsTextField;
+  final String? segmentsStartField;
+  final String? segmentsEndField;
+  final String? segmentsSpeakerField;
+  final String? textPath;
   final double defaultSegmentDuration;
 
   const SttResponseSchema({
     this.segmentsPath = 'segments',
-    this.textField = 'text',
-    this.startField = 'start',
-    this.endField = 'end',
-    this.speakerField,
-    this.speakerIdField,
-    this.confidenceField,
-    this.rawTextPath = 'text',
-    this.durationPath = 'duration',
-    this.languagePath = 'language',
+    this.segmentsTextField = 'text',
+    this.segmentsStartField = 'start',
+    this.segmentsEndField = 'end',
+    this.segmentsSpeakerField,
+    this.textPath = 'text',
     this.defaultSegmentDuration = 5.0,
   });
 
   static const openAI = SttResponseSchema(
     segmentsPath: 'segments',
-    textField: 'text',
-    startField: 'start',
-    endField: 'end',
-    confidenceField: 'avg_logprob',
-    rawTextPath: 'text',
-    durationPath: 'duration',
-    languagePath: 'language',
+    segmentsTextField: 'text',
+    segmentsStartField: 'start',
+    segmentsEndField: 'end',
+    textPath: 'text',
   );
 
   static const deepgram = SttResponseSchema(
     segmentsPath: 'results.channels[0].alternatives[0].words',
-    textField: 'word',
-    startField: 'start',
-    endField: 'end',
-    confidenceField: 'confidence',
-    speakerField: 'speaker',
-    rawTextPath: 'results.channels[0].alternatives[0].transcript',
-    durationPath: 'metadata.duration',
-    languagePath: 'metadata.language_code',
+    segmentsTextField: 'word',
+    segmentsStartField: 'start',
+    segmentsEndField: 'end',
+    segmentsSpeakerField: 'speaker',
+    textPath: 'results.channels[0].alternatives[0].transcript',
   );
 
   static const googleCloud = SttResponseSchema(
     segmentsPath: 'results[0].alternatives[0].words',
-    textField: 'word',
-    startField: 'startTime',
-    endField: 'endTime',
-    speakerField: 'speakerTag',
-    confidenceField: 'confidence',
-    rawTextPath: 'results[0].alternatives[0].transcript',
+    segmentsTextField: 'word',
+    segmentsStartField: 'startTime',
+    segmentsEndField: 'endTime',
+    segmentsSpeakerField: 'speakerTag',
+    textPath: 'results[0].alternatives[0].transcript',
   );
 
   static const azure = SttResponseSchema(
     segmentsPath: 'recognizedPhrases',
-    textField: 'nBest[0].display',
-    startField: 'offsetInTicks',
-    endField: 'durationInTicks',
-    confidenceField: 'nBest[0].confidence',
-    rawTextPath: 'combinedRecognizedPhrases[0].display',
-    durationPath: 'duration',
+    segmentsTextField: 'nBest[0].display',
+    segmentsStartField: 'offsetInTicks',
+    segmentsEndField: 'durationInTicks',
+    textPath: 'combinedRecognizedPhrases[0].display',
   );
 
   static const simpleText = SttResponseSchema(
     segmentsPath: null,
-    textField: 'text',
-    rawTextPath: 'text',
+    segmentsTextField: 'text',
+    textPath: 'text',
   );
 
   static const falAI = SttResponseSchema(
     segmentsPath: 'chunks',
-    textField: 'text',
-    startField: 'timestamp[0]',
-    endField: 'timestamp[1]',
-    rawTextPath: 'text',
+    segmentsTextField: 'text',
+    segmentsStartField: 'timestamp[0]',
+    segmentsEndField: 'timestamp[1]',
+    textPath: 'text',
   );
 
   static const gemini = SttResponseSchema(
     segmentsPath: null,
-    textField: 'text',
-    rawTextPath: 'candidates[0].content.parts[0].text',
+    segmentsTextField: 'text',
+    textPath: 'candidates[0].content.parts[0].text',
   );
 
   /// Deepgram live WebSocket response format
   static const deepgramLive = SttResponseSchema(
     segmentsPath: 'channel.alternatives[0].words',
-    textField: 'punctuated_word',
-    startField: 'start',
-    endField: 'end',
-    confidenceField: 'confidence',
-    speakerField: 'speaker',
-    rawTextPath: 'channel.alternatives[0].transcript',
-    durationPath: 'duration',
+    segmentsTextField: 'punctuated_word',
+    segmentsStartField: 'start',
+    segmentsEndField: 'end',
+    segmentsSpeakerField: 'speaker',
+    textPath: 'channel.alternatives[0].transcript',
   );
 
   /// Gemini Live WebSocket response format
   static const geminiLive = SttResponseSchema(
     segmentsPath: null,
-    textField: 'text',
-    rawTextPath: 'serverContent.modelTurn.parts[0].text',
+    segmentsTextField: 'text',
+    textPath: 'serverContent.modelTurn.parts[0].text',
     defaultSegmentDuration: 3.0,
   );
+
+  /// Template names that are live/streaming
+  static const Set<String> liveTemplates = {'Deepgram', 'Google Gemini'};
+
+  /// Available templates for custom STT configuration
+  static const Map<String, SttResponseSchema> templates = {
+    'OpenAI': openAI,
+    'Deepgram': deepgramLive,
+    'Fal.AI': falAI,
+    'Google Gemini': geminiLive,
+    'Whisper': openAI,
+  };
 
   factory SttResponseSchema.fromJson(Map<String, dynamic> json) {
     return SttResponseSchema(
       segmentsPath: json['segments_path'] as String?,
-      textField: json['text_field'] as String? ?? 'text',
-      startField: json['start_field'] as String?,
-      endField: json['end_field'] as String?,
-      speakerField: json['speaker_field'] as String?,
-      speakerIdField: json['speaker_id_field'] as String?,
-      confidenceField: json['confidence_field'] as String?,
-      rawTextPath: json['raw_text_path'] as String?,
-      durationPath: json['duration_path'] as String?,
-      languagePath: json['language_path'] as String?,
+      segmentsTextField: json['segments_text_field'] as String? ?? 'text',
+      segmentsStartField: json['segments_start_field'] as String?,
+      segmentsEndField: json['segments_end_field'] as String?,
+      segmentsSpeakerField: json['segments_speaker_field'] as String?,
+      textPath: json['text_path'] as String?,
       defaultSegmentDuration: (json['default_segment_duration'] as num?)?.toDouble() ?? 5.0,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'segments_path': segmentsPath,
-        'text_field': textField,
-        'start_field': startField,
-        'end_field': endField,
-        'speaker_field': speakerField,
-        'speaker_id_field': speakerIdField,
-        'confidence_field': confidenceField,
-        'raw_text_path': rawTextPath,
-        'duration_path': durationPath,
-        'language_path': languagePath,
+        'segments_text_field': segmentsTextField,
+        'segments_start_field': segmentsStartField,
+        'segments_end_field': segmentsEndField,
+        'segments_speaker_field': segmentsSpeakerField,
+        'text_path': textPath,
         'default_segment_duration': defaultSegmentDuration,
       };
 }

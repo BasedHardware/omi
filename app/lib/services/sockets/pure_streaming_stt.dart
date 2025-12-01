@@ -16,7 +16,7 @@ import 'package:omi/utils/audio/audio_transcoder.dart';
 
 /// Configuration for streaming STT WebSocket connections
 class StreamingSttConfig {
-  final String wsUrl;
+  final String url;
   final Map<String, String> headers;
   final SttResponseSchema responseSchema;
   final IAudioTranscoder? transcoder;
@@ -26,7 +26,7 @@ class StreamingSttConfig {
   final Duration keepAliveInterval;
 
   const StreamingSttConfig({
-    required this.wsUrl,
+    required this.url,
     this.headers = const {},
     required this.responseSchema,
     this.transcoder,
@@ -36,72 +36,8 @@ class StreamingSttConfig {
     this.keepAliveInterval = const Duration(seconds: 10),
   });
 
-  /// Factory for Deepgram streaming WebSocket
-  /// Matches backend params from backend/utils/stt/streaming.py
-  factory StreamingSttConfig.deepgramLive({
-    required String apiKey,
-    String model = 'nova-3',
-    String language = 'multi',
-    bool smartFormat = true,
-    bool interimResults = false, // Must be false to avoid duplicates
-    bool punctuate = true,
-    bool diarize = true,
-    bool noDelay = true,
-    int endpointing = 300,
-    bool profanityFilter = false,
-    bool fillerWords = false,
-    int sampleRate = 16000,
-    String encoding = 'linear16',
-    int channels = 1,
-    IAudioTranscoder? transcoder,
-  }) {
-    final params = {
-      'model': model,
-      'language': language,
-      'smart_format': smartFormat.toString(),
-      'interim_results': interimResults.toString(),
-      'punctuate': punctuate.toString(),
-      'diarize': diarize.toString(),
-      'no_delay': noDelay.toString(),
-      'endpointing': endpointing.toString(),
-      'profanity_filter': profanityFilter.toString(),
-      'filler_words': fillerWords.toString(),
-      'encoding': encoding,
-      'sample_rate': sampleRate.toString(),
-      'channels': channels.toString(),
-    };
-    final queryString = params.entries.map((e) => '${e.key}=${e.value}').join('&');
-
-    return StreamingSttConfig(
-      wsUrl: 'wss://api.deepgram.com/v1/listen?$queryString',
-      headers: {'Authorization': 'Token $apiKey'},
-      responseSchema: SttResponseSchema.deepgramLive,
-      transcoder: transcoder,
-      serviceId: 'deepgram-streaming',
-      sendKeepAlive: true,
-      keepAliveInterval: const Duration(seconds: 8),
-    );
-  }
-
-  /// Factory for Gemini Live streaming WebSocket
-  factory StreamingSttConfig.geminiLive({
-    required String apiKey,
-    String model = 'gemini-2.0-flash-exp',
-    String language = 'en',
-    int sampleRate = 16000,
-    IAudioTranscoder? transcoder,
-  }) {
-    return StreamingSttConfig(
-      wsUrl:
-          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey',
-      headers: {},
-      responseSchema: SttResponseSchema.geminiLive,
-      transcoder: transcoder,
-      serviceId: 'gemini-streaming',
-      sendKeepAlive: false,
-      minBytesBeforeSend: sampleRate * 2,
-    );
-  }
+  /// Alias for backward compatibility
+  String get wsUrl => url;
 
   /// Factory for generic schema-based streaming WebSocket
   factory StreamingSttConfig.schemaBased({
@@ -115,7 +51,7 @@ class StreamingSttConfig {
     Duration keepAliveInterval = const Duration(seconds: 10),
   }) {
     return StreamingSttConfig(
-      wsUrl: wsUrl,
+      url: wsUrl,
       headers: headers,
       responseSchema: schema,
       transcoder: transcoder,
@@ -559,7 +495,7 @@ class PureStreamingSttSocket implements IPureSocket {
 
     try {
       _channel = IOWebSocketChannel.connect(
-        config.wsUrl,
+        config.url,
         headers: config.headers,
         pingInterval: const Duration(seconds: 20),
         connectTimeout: const Duration(seconds: 15),
@@ -640,26 +576,23 @@ class PureStreamingSttSocket implements IPureSocket {
       final result = SttTranscriptionResult.fromJsonWithSchema(
         json,
         config.responseSchema,
-        audioOffsetSeconds: 0, // Streaming providers usually provide absolute timestamps
+        audioOffsetSeconds: 0,
       );
 
       if (result.isNotEmpty) {
-        // Update offset based on latest segment
         if (result.segments.isNotEmpty) {
           _audioOffsetSeconds = result.segments.last.end;
         }
 
-        // Aggregate words by speaker (matching backend behavior)
+        // Aggregate words by speaker (matching backend TranscriptSegment format)
         final segments = <Map<String, dynamic>>[];
         for (final segment in result.segments) {
           if (segment.text.trim().isEmpty) continue;
 
-          // Format speaker as SPEAKER_{id} to match backend format
-          final speakerId = segment.speakerId ?? 0;
+          final speakerId = segment.speakerId;
           final speaker = 'SPEAKER_$speakerId';
 
           if (segments.isEmpty || segments.last['speaker'] != speaker) {
-            // New segment for different speaker
             segments.add({
               'text': segment.text.trim(),
               'speaker': speaker,
@@ -670,7 +603,6 @@ class PureStreamingSttSocket implements IPureSocket {
               'person_id': null,
             });
           } else {
-            // Same speaker - append to last segment
             final last = segments.last;
             last['text'] = '${last['text']} ${segment.text.trim()}';
             last['end'] = segment.end;

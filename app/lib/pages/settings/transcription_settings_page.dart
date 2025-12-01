@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -21,21 +23,28 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _isSaving = false;
   String? _validationError;
 
-  // Store API keys per provider
+  // Store settings per provider
   final Map<SttProvider, String> _apiKeysPerProvider = {};
+  final Map<SttProvider, String> _languagePerProvider = {};
+  final Map<SttProvider, String> _modelPerProvider = {};
 
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _hostController = TextEditingController(text: '127.0.0.1');
   final TextEditingController _portController = TextEditingController(text: '8080');
-  final TextEditingController _wsUrlController = TextEditingController(text: 'wss://');
+  final TextEditingController _urlController = TextEditingController(text: '');
 
   // Store JSON configs per provider
   final Map<SttProvider, String> _requestJsonPerProvider = {};
   final Map<SttProvider, String> _schemaJsonPerProvider = {};
+  final Map<SttProvider, bool> _requestJsonCustomized = {};
 
   bool _showApiKey = false;
 
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
+  String get _currentLanguage => _languagePerProvider[_selectedProvider] ?? _currentConfig.defaultLanguage;
+  String get _currentModel => _modelPerProvider[_selectedProvider] ?? _currentConfig.defaultModel;
+  String get _currentRequestJson => _requestJsonPerProvider[_selectedProvider] ?? '{}';
+  String get _currentSchemaJson => _schemaJsonPerProvider[_selectedProvider] ?? '{}';
 
   @override
   void initState() {
@@ -49,52 +58,119 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _useCustomStt = config.isEnabled;
       _selectedProvider = config.provider == SttProvider.omi ? SttProvider.openai : config.provider;
 
-      // Load stored API keys per provider from preferences
-      _loadStoredApiKeys();
+      // Load stored settings per provider from preferences
+      _loadStoredSettings();
 
-      // Set current provider's API key
+      // Set current provider's settings
       _apiKeyController.text = _apiKeysPerProvider[_selectedProvider] ?? '';
       _hostController.text = config.host ?? '127.0.0.1';
       _portController.text = (config.port ?? 8080).toString();
-      _wsUrlController.text = config.wsUrl ?? 'wss://';
+      _urlController.text = config.url ?? '';
 
-      // Initialize JSON configs for all providers with templates
+      // Initialize JSON configs for custom providers
       _initializeJsonConfigs();
+
+      // Restore saved custom configuration if it exists
+      _restoreSavedConfig(config);
     });
   }
 
-  void _loadStoredApiKeys() {
+  void _restoreSavedConfig(CustomSttConfig config) {
+    if (!config.isEnabled) return;
+
+    // Check if there are customized request values (these are only saved when advanced was customized)
+    final hasCustomRequest =
+        config.requestType != null || config.headers != null || config.params != null || config.audioFieldName != null;
+
+    if (hasCustomRequest) {
+      // Rebuild request JSON from saved config values
+      final providerConfig = SttProviderConfig.get(config.provider);
+      final defaults = providerConfig.buildRequestConfig(
+        apiKey: config.apiKey,
+        language: config.language ?? providerConfig.defaultLanguage,
+        model: config.model ?? providerConfig.defaultModel,
+      );
+
+      final requestConfig = <String, dynamic>{};
+      requestConfig['url'] = config.url ?? defaults['url'];
+      requestConfig['request_type'] = config.requestType ?? defaults['request_type'];
+      requestConfig['headers'] = config.headers ?? defaults['headers'];
+      requestConfig['params'] = config.params ?? defaults['params'];
+      if (config.audioFieldName != null || defaults['audio_field_name'] != null) {
+        requestConfig['audio_field_name'] = config.audioFieldName ?? defaults['audio_field_name'];
+      }
+
+      _requestJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
+      _requestJsonCustomized[config.provider] = true;
+    }
+
+    // Restore custom schema if it exists
+    if (config.schemaJson != null) {
+      _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
+    }
+  }
+
+  void _loadStoredSettings() {
     for (final provider in SttProvider.values) {
-      if (provider != SttProvider.omi && provider != SttProvider.localWhisper && provider != SttProvider.custom) {
+      if (provider != SttProvider.omi) {
         final storedKey = SharedPreferencesUtil().getString('stt_api_key_${provider.name}');
         if (storedKey.isNotEmpty) {
           _apiKeysPerProvider[provider] = storedKey;
+        }
+        final storedLang = SharedPreferencesUtil().getString('stt_language_${provider.name}');
+        if (storedLang.isNotEmpty) {
+          _languagePerProvider[provider] = storedLang;
+        }
+        final storedModel = SharedPreferencesUtil().getString('stt_model_${provider.name}');
+        if (storedModel.isNotEmpty) {
+          _modelPerProvider[provider] = storedModel;
         }
       }
     }
   }
 
   void _initializeJsonConfigs() {
+    // Initialize JSON configs for all providers
     for (final config in SttProviderConfig.allProviders) {
+      _regenerateRequestJson(config.provider);
       final template = CustomSttConfig.getFullTemplateJson(config.provider);
-      _requestJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['request']);
       _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+      _requestJsonCustomized[config.provider] = false;
     }
   }
 
-  void _loadTemplateForProvider(SttProvider provider) {
-    final template = CustomSttConfig.getFullTemplateJson(provider);
-    _requestJsonPerProvider[provider] = const JsonEncoder.withIndent('  ').convert(template['request']);
-    _schemaJsonPerProvider[provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+  void _regenerateRequestJson(SttProvider provider) {
+    final config = SttProviderConfig.get(provider);
+    final apiKey = _apiKeysPerProvider[provider] ?? '';
+    final language = _languagePerProvider[provider] ?? config.defaultLanguage;
+    final model = _modelPerProvider[provider] ?? config.defaultModel;
+
+    final requestConfig = config.buildRequestConfig(
+      apiKey: apiKey,
+      language: language,
+      model: model,
+    );
+    _requestJsonPerProvider[provider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
   }
 
-  String get _currentRequestJson => _requestJsonPerProvider[_selectedProvider] ?? '{}';
-  String get _currentSchemaJson => _schemaJsonPerProvider[_selectedProvider] ?? '{}';
+  void _onLanguageOrModelChanged() {
+    // Only regenerate if user hasn't customized the JSON
+    if (_requestJsonCustomized[_selectedProvider] != true) {
+      _regenerateRequestJson(_selectedProvider);
+    }
+  }
 
-  void _saveApiKeyForCurrentProvider() {
+  void _saveSettingsForCurrentProvider() {
     if (_apiKeyController.text.isNotEmpty) {
       _apiKeysPerProvider[_selectedProvider] = _apiKeyController.text;
       SharedPreferencesUtil().saveString('stt_api_key_${_selectedProvider.name}', _apiKeyController.text);
+    }
+    if (_languagePerProvider[_selectedProvider] != null) {
+      SharedPreferencesUtil()
+          .saveString('stt_language_${_selectedProvider.name}', _languagePerProvider[_selectedProvider]!);
+    }
+    if (_modelPerProvider[_selectedProvider] != null) {
+      SharedPreferencesUtil().saveString('stt_model_${_selectedProvider.name}', _modelPerProvider[_selectedProvider]!);
     }
   }
 
@@ -115,8 +191,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           return;
         }
       } else if (_selectedProvider == SttProvider.customLive) {
-        if (_wsUrlController.text.isEmpty || !_wsUrlController.text.startsWith('wss://')) {
+        if (_urlController.text.isEmpty || !_urlController.text.startsWith('wss://')) {
           _validationError = 'Valid WebSocket URL is required (wss://)';
+          return;
+        }
+      } else if (_selectedProvider == SttProvider.custom) {
+        if (_urlController.text.isEmpty) {
+          _validationError = 'API URL is required';
           return;
         }
       } else if (_selectedProvider != SttProvider.custom) {
@@ -144,6 +225,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     });
   }
 
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Future<void> _saveConfig() async {
     _validateAndSetError();
     if (_validationError != null) {
@@ -156,11 +244,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     setState(() => _isSaving = true);
 
     try {
-      // Save current API key for this provider
-      _saveApiKeyForCurrentProvider();
+      // Save current settings for this provider
+      _saveSettingsForCurrentProvider();
 
-      Map<String, dynamic> requestJson = {};
-      Map<String, dynamic> schemaJson = {};
+      Map<String, dynamic>? requestJson;
+      Map<String, dynamic>? schemaJson;
 
       if (_showAdvanced && _currentRequestJson.isNotEmpty) {
         requestJson = jsonDecode(_currentRequestJson);
@@ -169,43 +257,46 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         schemaJson = jsonDecode(_currentSchemaJson);
       }
 
-      if (!_showAdvanced && _apiKeyController.text.isNotEmpty && _currentConfig.requiresApiKey) {
-        requestJson = _currentConfig.getRequestConfigWithApiKey(_apiKeyController.text);
+      // Extract values from request JSON if customized
+      String? url;
+      String? requestType;
+      Map<String, String>? headers;
+      Map<String, String>? params;
+      String? audioFieldName;
+
+      if (requestJson != null && _requestJsonCustomized[_selectedProvider] == true) {
+        url = requestJson['url'];
+        requestType = requestJson['request_type'];
+        headers = requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null;
+        params = requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null;
+        audioFieldName = requestJson['audio_field_name'];
       }
 
-      if (_selectedProvider == SttProvider.localWhisper) {
-        requestJson['api_url'] = 'http://${_hostController.text}:${_portController.text}/inference';
-      }
-
-      // Handle WebSocket URL for live providers
-      String? wsUrl;
-      if (_selectedProvider == SttProvider.customLive) {
-        wsUrl = _wsUrlController.text;
-      } else if (_selectedProvider == SttProvider.deepgramLive || _selectedProvider == SttProvider.geminiLive) {
-        wsUrl = requestJson['ws_url'];
+      // Use URL from text field for custom providers
+      if (_selectedProvider == SttProvider.custom || _selectedProvider == SttProvider.customLive) {
+        url = _urlController.text.isNotEmpty ? _urlController.text : url;
       }
 
       final config = CustomSttConfig(
         provider: _useCustomStt ? _selectedProvider : SttProvider.omi,
         apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        apiUrl: requestJson['api_url'],
-        wsUrl: wsUrl,
-        host: _hostController.text.isNotEmpty ? _hostController.text : null,
-        port: int.tryParse(_portController.text),
-        headers: requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null,
-        fields: requestJson['fields'] != null ? Map<String, String>.from(requestJson['fields']) : null,
-        audioFieldName: requestJson['audio_field_name'],
-        requestType: requestJson['request_type'],
-        schemaJson: schemaJson.isNotEmpty ? schemaJson : null,
-        fileUploadConfig:
-            requestJson['file_upload'] != null ? Map<String, dynamic>.from(requestJson['file_upload']) : null,
-        streamingParams: requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null,
+        language: _languagePerProvider[_selectedProvider],
+        model: _modelPerProvider[_selectedProvider],
+        url: url,
+        host: _selectedProvider == SttProvider.localWhisper ? _hostController.text : null,
+        port: _selectedProvider == SttProvider.localWhisper ? int.tryParse(_portController.text) : null,
+        requestType: requestType,
+        headers: headers,
+        params: params,
+        audioFieldName: audioFieldName,
+        schemaJson: schemaJson,
       );
 
       final previousConfig = SharedPreferencesUtil().customSttConfig;
       final configChanged = previousConfig.sttConfigId != config.sttConfigId;
 
-      SharedPreferencesUtil().customSttConfig = config;
+      await SharedPreferencesUtil().saveCustomSttConfig(config);
+      debugPrint(SharedPreferencesUtil().customSttConfig.provider.toString());
 
       if (configChanged && mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
@@ -250,7 +341,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _buildProviderSection(),
                     const SizedBox(height: 20),
                     _buildConfigSection(),
-                    const SizedBox(height: 20),
                     _buildAdvancedSection(),
                   ] else ...[
                     _buildOmiFeatures(),
@@ -344,22 +434,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               style: const TextStyle(color: Colors.white, fontSize: 15),
               icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
               items: SttProviderConfig.allProviders.map((config) {
-                final isLive = config.provider == SttProvider.deepgramLive ||
-                    config.provider == SttProvider.geminiLive ||
-                    config.provider == SttProvider.customLive;
                 return DropdownMenuItem<SttProvider>(
                   value: config.provider,
                   child: Row(
                     children: [
                       Expanded(child: Text(config.displayName)),
-                      if (isLive)
+                      if (config.isLive)
                         Container(
                           margin: const EdgeInsets.only(left: 8),
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Live',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                     ],
@@ -368,8 +462,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               }).toList(),
               onChanged: (provider) {
                 if (provider != null) {
-                  // Save current API key before switching
-                  _saveApiKeyForCurrentProvider();
+                  // Save current settings before switching
+                  _saveSettingsForCurrentProvider();
 
                   setState(() {
                     _selectedProvider = provider;
@@ -386,9 +480,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          _currentConfig.description,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _currentConfig.description,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+            ),
+            if (_currentConfig.docsUrl != null)
+              GestureDetector(
+                onTap: () => _launchUrl(_currentConfig.docsUrl!),
+                child: Icon(Icons.open_in_new, color: Colors.grey.shade500, size: 14),
+              ),
+          ],
         ),
       ],
     );
@@ -398,11 +503,166 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     if (_selectedProvider == SttProvider.localWhisper) {
       return _buildLocalWhisperConfig();
     } else if (_selectedProvider == SttProvider.custom) {
-      return const SizedBox.shrink();
+      return _buildCustomPollingConfig();
     } else if (_selectedProvider == SttProvider.customLive) {
       return _buildCustomLiveConfig();
     }
-    return _buildApiKeyInput();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildApiKeyInput(),
+        if (_currentConfig.supportedModels.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          _buildModelSelector(),
+        ],
+        const SizedBox(height: 20),
+        _buildLanguageSelector(),
+      ],
+    );
+  }
+
+  Widget _buildLanguageSelector() {
+    final languages = _currentConfig.supportedLanguages;
+    final suggestions = languages.map((lang) {
+      final name = SttLanguages.common[lang];
+      return name != null ? '$lang ($name)' : lang;
+    }).toList();
+
+    return _buildAutocompleteField(
+      label: 'Language',
+      hint: 'en (English)',
+      value: _formatLanguageDisplay(_currentLanguage),
+      suggestions: suggestions,
+      onChanged: (value) {
+        // Extract language code from "en (English)" format
+        final code = value.split(' ').first.trim();
+        setState(() {
+          _languagePerProvider[_selectedProvider] = code;
+          _onLanguageOrModelChanged();
+        });
+      },
+    );
+  }
+
+  Widget _buildModelSelector() {
+    final models = _currentConfig.supportedModels;
+
+    return _buildAutocompleteField(
+      label: 'Model',
+      hint: _currentConfig.defaultModel,
+      value: _currentModel,
+      suggestions: models,
+      onChanged: (value) {
+        setState(() {
+          _modelPerProvider[_selectedProvider] = value.trim();
+          _onLanguageOrModelChanged();
+        });
+      },
+    );
+  }
+
+  String _formatLanguageDisplay(String code) {
+    final name = SttLanguages.common[code];
+    return name != null ? '$code ($name)' : code;
+  }
+
+  Widget _buildAutocompleteField({
+    required String label,
+    required String hint,
+    required String value,
+    required List<String> suggestions,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+        const SizedBox(height: 10),
+        Autocomplete<String>(
+          key: ValueKey('${_selectedProvider.name}_$label'),
+          initialValue: TextEditingValue(text: value),
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return suggestions;
+            }
+            return suggestions.where((option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(10),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return ListTile(
+                        dense: true,
+                        title: Text(option, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                        onTap: () => onSelected(option),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              onChanged: onChanged,
+              onSubmitted: (_) => onFieldSubmitted(),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: TextStyle(color: Colors.grey.shade700),
+                filled: true,
+                fillColor: const Color(0xFF1A1A1A),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: Colors.grey.shade800),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Colors.white),
+                ),
+              ),
+            );
+          },
+          onSelected: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomPollingConfig() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTextField(
+          controller: _urlController,
+          label: 'API URL',
+          hint: 'https://your-stt-api.com/transcribe',
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Enter your STT HTTP endpoint',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+        ),
+      ],
+    );
   }
 
   Widget _buildCustomLiveConfig() {
@@ -410,7 +670,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildTextField(
-          controller: _wsUrlController,
+          controller: _urlController,
           label: 'WebSocket URL',
           hint: 'wss://your-stt-api.com/live',
         ),
@@ -427,9 +687,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'API Key',
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+        Row(
+          children: [
+            Text(
+              'API Key',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+            const Spacer(),
+            if (_currentConfig.apiKeyUrl != null)
+              GestureDetector(
+                onTap: () => _launchUrl(_currentConfig.apiKeyUrl!),
+                child: Icon(Icons.open_in_new, color: Colors.grey.shade500, size: 14),
+              ),
+          ],
         ),
         const SizedBox(height: 10),
         TextField(
@@ -505,6 +775,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           'http://${_hostController.text}:${_portController.text}/inference',
           style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontFamily: 'monospace'),
         ),
+        const SizedBox(height: 20),
+        _buildLanguageSelector(),
       ],
     );
   }
@@ -550,29 +822,41 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildAdvancedSection() {
+    // Show advanced section for all providers except Omi
+    if (_selectedProvider == SttProvider.omi) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-          child: Row(
-            children: [
-              Text(
-                'Advanced',
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                _showAdvanced ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                color: Colors.grey.shade500,
-                size: 18,
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Text(
+                  'Advanced',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  _showAdvanced ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.grey.shade500,
+                  size: 18,
+                ),
+                const Spacer(),
+              ],
+            ),
           ),
         ),
         if (_showAdvanced) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           _buildJsonEditors(),
+          if (_requestJsonCustomized[_selectedProvider] == true) ...[
+            const SizedBox(height: 12),
+            _buildResetToDefaultButton(),
+          ],
         ],
       ],
     );
@@ -585,6 +869,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _buildJsonEditorButton(
           title: 'Request Configuration',
           jsonContent: _currentRequestJson,
+          isCustomized: _requestJsonCustomized[_selectedProvider] == true,
           onTap: () => _openJsonEditor(
             title: 'Request Configuration',
             jsonContent: _currentRequestJson,
@@ -605,10 +890,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
+  Widget _buildResetToDefaultButton() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _requestJsonCustomized[_selectedProvider] = false;
+          _regenerateRequestJson(_selectedProvider);
+        });
+      },
+      child: Row(
+        children: [
+          Icon(Icons.refresh, color: Colors.grey.shade500, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            'Reset request config to default',
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildJsonEditorButton({
     required String title,
     required String jsonContent,
     required VoidCallback onTap,
+    bool isCustomized = false,
   }) {
     String preview = '';
     try {
@@ -628,7 +935,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey.shade800),
+          border: Border.all(color: isCustomized ? Colors.white : Colors.grey.shade800),
         ),
         child: Row(
           children: [
@@ -636,9 +943,27 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                      ),
+                      if (isCustomized) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Modified',
+                            style: TextStyle(color: Colors.white, fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -660,17 +985,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _openJsonEditor({
     required String title,
     required String jsonContent,
-    required bool isRequest,
+    bool isRequest = false,
   }) async {
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) => _JsonEditorPage(
           title: title,
           initialJson: jsonContent,
-          isRequest: isRequest,
           provider: _selectedProvider,
-          onReset: () =>
-              CustomSttConfig.getFullTemplateJson(_selectedProvider)[isRequest ? 'request' : 'response_schema'],
+          isResponseSchema: !isRequest,
+          onReset: () {
+            if (isRequest) {
+              final config = SttProviderConfig.get(_selectedProvider);
+              return config.buildRequestConfig(
+                apiKey: _apiKeysPerProvider[_selectedProvider] ?? '',
+                language: _languagePerProvider[_selectedProvider] ?? config.defaultLanguage,
+                model: _modelPerProvider[_selectedProvider] ?? config.defaultModel,
+              );
+            }
+            return CustomSttConfig.getFullTemplateJson(_selectedProvider)['response_schema'];
+          },
         ),
       ),
     );
@@ -679,6 +1013,27 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       setState(() {
         if (isRequest) {
           _requestJsonPerProvider[_selectedProvider] = result;
+
+          // Sync UI fields from edited JSON
+          try {
+            final parsed = jsonDecode(result) as Map<String, dynamic>;
+            if (parsed['url'] != null) _urlController.text = parsed['url'].toString();
+            if (parsed['params'] is Map) {
+              final params = parsed['params'] as Map;
+              if (params['language'] != null) _languagePerProvider[_selectedProvider] = params['language'].toString();
+              if (params['model'] != null) _modelPerProvider[_selectedProvider] = params['model'].toString();
+            }
+          } catch (_) {}
+
+          // Mark as customized if it differs from auto-generated
+          final config = SttProviderConfig.get(_selectedProvider);
+          final autoGenerated = config.buildRequestConfig(
+            apiKey: _apiKeysPerProvider[_selectedProvider] ?? '',
+            language: _languagePerProvider[_selectedProvider] ?? config.defaultLanguage,
+            model: _modelPerProvider[_selectedProvider] ?? config.defaultModel,
+          );
+          final autoGeneratedJson = const JsonEncoder.withIndent('  ').convert(autoGenerated);
+          _requestJsonCustomized[_selectedProvider] = result != autoGeneratedJson;
         } else {
           _schemaJsonPerProvider[_selectedProvider] = result;
         }
@@ -745,7 +1100,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _apiKeyController.dispose();
     _hostController.dispose();
     _portController.dispose();
-    _wsUrlController.dispose();
+    _urlController.dispose();
     super.dispose();
   }
 }
@@ -753,43 +1108,39 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 class _JsonEditorPage extends StatefulWidget {
   final String title;
   final String initialJson;
-  final bool isRequest;
   final SttProvider provider;
   final Map<String, dynamic> Function() onReset;
+  final bool isResponseSchema;
 
   const _JsonEditorPage({
     required this.title,
     required this.initialJson,
-    required this.isRequest,
     required this.provider,
     required this.onReset,
+    this.isResponseSchema = false,
   });
 
   @override
   State<_JsonEditorPage> createState() => _JsonEditorPageState();
 }
 
-class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProviderStateMixin {
+class _JsonEditorPageState extends State<_JsonEditorPage> {
   late TextEditingController _controller;
-  late TabController _tabController;
   String? _parseError;
-  Map<String, dynamic>? _parsedJson;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialJson);
-    _tabController = TabController(length: 2, vsync: this);
     _parseJson();
   }
 
   void _parseJson() {
     try {
-      _parsedJson = jsonDecode(_controller.text);
+      jsonDecode(_controller.text);
       _parseError = null;
     } catch (e) {
       _parseError = e.toString();
-      _parsedJson = null;
     }
     setState(() {});
   }
@@ -799,6 +1150,24 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
     _controller.text = const JsonEncoder.withIndent('  ').convert(template);
     _parseJson();
   }
+
+  void _applySchemaTemplate(String templateName) {
+    final schema = SttResponseSchema.templates[templateName];
+    if (schema != null) {
+      _controller.text = const JsonEncoder.withIndent('  ').convert(schema.toJson());
+      _parseJson();
+    }
+  }
+
+  void _applyRequestTemplate(String templateName) {
+    final template = SttProviderConfig.requestTemplates[templateName];
+    if (template != null) {
+      _controller.text = const JsonEncoder.withIndent('  ').convert(template);
+      _parseJson();
+    }
+  }
+
+  bool get _showTemplateSelector => widget.provider == SttProvider.custom || widget.provider == SttProvider.customLive;
 
   @override
   Widget build(BuildContext context) {
@@ -818,31 +1187,98 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
             child: Text('Reset', style: TextStyle(color: Colors.grey.shade400)),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.grey.shade600,
-          tabs: const [
-            Tab(text: 'Edit'),
-            Tab(text: 'Preview'),
-          ],
-        ),
       ),
       body: Column(
         children: [
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildEditorTab(),
-                _buildPreviewTab(),
-              ],
-            ),
-          ),
+          Expanded(child: _buildEditorTab()),
           _buildBottomBar(),
         ],
       ),
+    );
+  }
+
+  Widget _buildTemplateSelector() {
+    final isResponseSchema = widget.isResponseSchema;
+    final templates =
+        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
+    final description = isResponseSchema
+        ? 'Quickly populate with a known provider\'s response format'
+        : 'Quickly populate with a known provider\'s request format';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Use template from',
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade800),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: null,
+              hint: Text(
+                'Select a provider template...',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              ),
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1A1A1A),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
+              items: templates.map((name) {
+                final isLive = isResponseSchema
+                    ? SttResponseSchema.liveTemplates.contains(name)
+                    : SttProviderConfig.liveRequestTemplates.contains(name);
+                return DropdownMenuItem<String>(
+                  value: name,
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(name)),
+                      if (isLive)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Live',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (templateName) {
+                if (templateName != null) {
+                  if (isResponseSchema) {
+                    _applySchemaTemplate(templateName);
+                  } else {
+                    _applyRequestTemplate(templateName);
+                  }
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          description,
+          style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+        ),
+      ],
     );
   }
 
@@ -852,6 +1288,10 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_showTemplateSelector) ...[
+            _buildTemplateSelector(),
+            const SizedBox(height: 16),
+          ],
           if (_parseError != null)
             Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -899,372 +1339,6 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
     );
   }
 
-  Widget _buildPreviewTab() {
-    if (_parsedJson == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, color: Colors.red.shade400, size: 48),
-            const SizedBox(height: 16),
-            Text(
-              'Cannot preview invalid JSON',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 15),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (widget.isRequest) ...[
-            _buildPreviewSection('Request Structure', _buildRequestPreview()),
-          ] else ...[
-            _buildPreviewSection('Response Schema', _buildSchemaPreview()),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPreviewSection(String title, Widget content) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 12),
-        content,
-      ],
-    );
-  }
-
-  Widget _buildRequestPreview() {
-    final json = _parsedJson!;
-    final method = (json['request_type'] ?? 'POST').toString().toUpperCase();
-    final url = json['api_url']?.toString() ?? 'https://api.example.com/transcribe';
-    final headers = json['headers'] as Map<String, dynamic>? ?? {};
-    final fields = json['fields'] as Map<String, dynamic>? ?? {};
-    final audioFieldName = json['audio_field_name']?.toString() ?? 'file';
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade800),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Request line
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0D0D0D),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade800,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    method,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    url,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontFamily: 'monospace'),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Headers section
-          if (headers.isNotEmpty) ...[
-            Text('Headers', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0D0D0D),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: headers.entries.map((e) {
-                  final value = e.value.toString().contains('API_KEY') ? 'Bearer ••••••••••••••••' : e.value.toString();
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '${e.key}: $value',
-                      style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.grey.shade400),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // Body section
-          Text('Body (multipart/form-data)',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0D0D0D),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Audio file field
-                Text(
-                  '$audioFieldName: <audio.wav>',
-                  style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.grey.shade400),
-                ),
-                // Other form fields
-                ...fields.entries.map((e) => Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '${e.key}: ${e.value}',
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                    )),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSchemaPreview() {
-    final json = _parsedJson!;
-
-    // Build example JSON response based on schema
-    final exampleResponse = _buildExampleResponseJson(json);
-    final prettyJson = const JsonEncoder.withIndent('  ').convert(exampleResponse);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Schema mapping info
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade800),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Path Mappings',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 12),
-              if (json['segments_path'] != null) _buildSchemaRow('Segments', json['segments_path'].toString()),
-              if (json['text_field'] != null) _buildSchemaRow('Text Field', json['text_field'].toString()),
-              if (json['start_field'] != null) _buildSchemaRow('Start Time', json['start_field'].toString()),
-              if (json['end_field'] != null) _buildSchemaRow('End Time', json['end_field'].toString()),
-              if (json['speaker_field'] != null) _buildSchemaRow('Speaker', json['speaker_field'].toString()),
-              if (json['raw_text_path'] != null) _buildSchemaRow('Raw Text', json['raw_text_path'].toString()),
-              if (json['language_path'] != null) _buildSchemaRow('Language', json['language_path'].toString()),
-              if (json['duration_path'] != null) _buildSchemaRow('Duration', json['duration_path'].toString()),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Example JSON response
-        Text('Example Response',
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade800),
-          ),
-          child: _buildSyntaxHighlightedJson(prettyJson),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSchemaRow(String label, String path) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              path,
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontFamily: 'monospace'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Map<String, dynamic> _buildExampleResponseJson(Map<String, dynamic> schema) {
-    final result = <String, dynamic>{};
-
-    // Build segments structure based on segments_path
-    final segmentsPath = schema['segments_path'] as String?;
-    final textField = schema['text_field'] as String? ?? 'text';
-    final startField = schema['start_field'] as String?;
-    final endField = schema['end_field'] as String?;
-    final speakerField = schema['speaker_field'] as String?;
-    final confidenceField = schema['confidence_field'] as String?;
-
-    // Build example segment
-    final exampleSegment = <String, dynamic>{};
-    exampleSegment[textField] = 'Hello, this is a sample transcription.';
-    if (startField != null) exampleSegment[startField] = 0.0;
-    if (endField != null) exampleSegment[endField] = 2.5;
-    if (speakerField != null) exampleSegment[speakerField] = 'SPEAKER_00';
-    if (confidenceField != null) exampleSegment[confidenceField] = 0.95;
-
-    // Build nested structure based on path
-    if (segmentsPath != null && segmentsPath.isNotEmpty) {
-      _setNestedValue(result, segmentsPath, [exampleSegment]);
-    }
-
-    // Add raw text path
-    final rawTextPath = schema['raw_text_path'] as String?;
-    if (rawTextPath != null) {
-      _setNestedValue(result, rawTextPath, 'Hello, this is a sample transcription.');
-    }
-
-    // Add language path
-    final languagePath = schema['language_path'] as String?;
-    if (languagePath != null) {
-      _setNestedValue(result, languagePath, 'en');
-    }
-
-    // Add duration path
-    final durationPath = schema['duration_path'] as String?;
-    if (durationPath != null) {
-      _setNestedValue(result, durationPath, 2.5);
-    }
-
-    return result;
-  }
-
-  void _setNestedValue(Map<String, dynamic> obj, String path, dynamic value) {
-    // Parse path like "results.channels[0].alternatives[0].words"
-    final parts = <String>[];
-    final regex = RegExp(r'([^\.\[\]]+)|\[(\d+)\]');
-
-    for (final match in regex.allMatches(path)) {
-      if (match.group(1) != null) {
-        parts.add(match.group(1)!);
-      } else if (match.group(2) != null) {
-        parts.add('[${match.group(2)}]');
-      }
-    }
-
-    dynamic current = obj;
-    for (int i = 0; i < parts.length - 1; i++) {
-      final part = parts[i];
-      final nextPart = parts[i + 1];
-
-      if (part.startsWith('[')) {
-        // Array index - skip for now in simple preview
-        continue;
-      }
-
-      if (current is Map<String, dynamic>) {
-        if (!current.containsKey(part)) {
-          if (nextPart.startsWith('[')) {
-            current[part] = <dynamic>[];
-          } else {
-            current[part] = <String, dynamic>{};
-          }
-        }
-
-        if (nextPart.startsWith('[') && current[part] is List) {
-          if ((current[part] as List).isEmpty) {
-            current[part].add(<String, dynamic>{});
-          }
-          current = current[part][0];
-        } else {
-          current = current[part];
-        }
-      }
-    }
-
-    final lastPart = parts.last;
-    if (!lastPart.startsWith('[') && current is Map<String, dynamic>) {
-      current[lastPart] = value;
-    }
-  }
-
-  Widget _buildSyntaxHighlightedJson(String json) {
-    return Text(
-      json,
-      style: TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.4, color: Colors.grey.shade400),
-    );
-  }
-
-  Widget _buildPreviewRow(String label, String value, {bool indent = false}) {
-    return Padding(
-      padding: EdgeInsets.only(left: indent ? 12 : 0, bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: indent ? 100 : 120,
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'monospace'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildBottomBar() {
     return Container(
       padding: EdgeInsets.only(
@@ -1303,7 +1377,6 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
   @override
   void dispose() {
     _controller.dispose();
-    _tabController.dispose();
     super.dispose();
   }
 }

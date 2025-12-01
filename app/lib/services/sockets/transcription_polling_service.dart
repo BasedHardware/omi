@@ -10,7 +10,20 @@ import 'package:omi/models/stt_result.dart';
 enum SttRequestBodyType {
   multipartForm,
   rawBinary,
-  jsonBase64,
+  jsonBase64;
+
+  /// Convert from string request type (from SttRequestType constants)
+  static SttRequestBodyType fromString(String? type) {
+    switch (type) {
+      case 'raw_binary':
+        return SttRequestBodyType.rawBinary;
+      case 'json_base64':
+        return SttRequestBodyType.jsonBase64;
+      case 'multipart_form':
+      default:
+        return SttRequestBodyType.multipartForm;
+    }
+  }
 }
 
 class SttFileUploadConfig {
@@ -90,10 +103,12 @@ class SchemaBasedSttProvider implements ISttProvider {
     this.defaultHeaders = const {},
     this.defaultFields = const {},
     this.audioFieldName = 'audio',
-    this.requestBodyType = SttRequestBodyType.multipartForm,
+    SttRequestBodyType? requestBodyType,
+    String? requestType, // String version for unified config
     this.jsonBodyBuilder,
     this.fileUploadConfig,
-  }) : _client = http.Client();
+  })  : requestBodyType = requestBodyType ?? SttRequestBodyType.fromString(requestType),
+        _client = http.Client();
 
   factory SchemaBasedSttProvider.openAI({
     required String apiKey,
@@ -160,7 +175,7 @@ class SchemaBasedSttProvider implements ISttProvider {
 
   factory SchemaBasedSttProvider.gemini({
     required String apiKey,
-    String model = 'gemini-2.0-flash',
+    String model = 'gemini-2.5-flash',
     String language = 'en',
   }) {
     return SchemaBasedSttProvider(

@@ -1,61 +1,41 @@
 import 'package:omi/models/stt_response_schema.dart';
 
-/// Helper to extract numeric speaker ID from various string formats
-int? _extractSpeakerIdFromValue(dynamic value) {
-  if (value == null) return null;
-  
-  // Already an int
+/// Helper to extract numeric speaker ID from various formats
+int _extractSpeakerId(dynamic value) {
+  if (value == null) return 0;
   if (value is int) return value;
-  
-  // Numeric value
   if (value is num) return value.toInt();
-  
-  // String handling
   if (value is String) {
-    // Try direct int parse (Deepgram returns 0, 1, 2 as integers or "0", "1", "2")
     final directParse = int.tryParse(value);
     if (directParse != null) return directParse;
-    
-    // Try extracting number from "SPEAKER_0", "speaker_1", "Speaker 2" formats
     final match = RegExp(r'(\d+)').firstMatch(value);
-    return match != null ? int.tryParse(match.group(1)!) : null;
+    return match != null ? (int.tryParse(match.group(1)!) ?? 0) : 0;
   }
-  
-  return null;
+  return 0;
 }
 
-/// A single segment of transcribed text with timing information
+/// A single segment of transcribed text with timing - matches backend TranscriptSegment
 class SttSegment {
   final String text;
   final double start;
   final double end;
-  final String? speaker;
-  final int? speakerId;
-  final double? confidence;
+  final int speakerId;
 
   SttSegment({
     required this.text,
     required this.start,
     required this.end,
-    this.speaker,
-    this.speakerId,
-    this.confidence,
+    this.speakerId = 0,
   });
 }
 
 class SttTranscriptionResult {
   final List<SttSegment> segments;
   final String? rawText;
-  final String? language;
-  final double? duration;
-  final Map<String, dynamic>? metadata;
 
   SttTranscriptionResult({
     this.segments = const [],
     this.rawText,
-    this.language,
-    this.duration,
-    this.metadata,
   });
 
   bool get isEmpty => segments.isEmpty && (rawText == null || rawText!.trim().isEmpty);
@@ -72,16 +52,17 @@ class SttTranscriptionResult {
       final segmentsList = JsonPathNavigator.getList(json, schema.segmentsPath);
       if (segmentsList != null) {
         for (var seg in segmentsList) {
-          final text = JsonPathNavigator.getString(seg, schema.textField)?.trim() ?? '';
+          final text = JsonPathNavigator.getString(seg, schema.segmentsTextField)?.trim() ?? '';
           if (text.isEmpty) continue;
 
           double start = audioOffsetSeconds;
           double end = audioOffsetSeconds + schema.defaultSegmentDuration;
 
-          if (schema.startField != null) {
-            final startValue = JsonPathNavigator.getDouble(seg, schema.startField);
+          if (schema.segmentsStartField != null) {
+            final startValue = JsonPathNavigator.getDouble(seg, schema.segmentsStartField);
             if (startValue != null) {
-              if (schema.startField!.contains('Ticks')) {
+              // Handle Azure's tick format (100 nanoseconds per tick)
+              if (schema.segmentsStartField!.contains('Ticks')) {
                 start = audioOffsetSeconds + (startValue / 10000000.0);
               } else {
                 start = audioOffsetSeconds + startValue;
@@ -89,10 +70,10 @@ class SttTranscriptionResult {
             }
           }
 
-          if (schema.endField != null) {
-            final endValue = JsonPathNavigator.getDouble(seg, schema.endField);
+          if (schema.segmentsEndField != null) {
+            final endValue = JsonPathNavigator.getDouble(seg, schema.segmentsEndField);
             if (endValue != null) {
-              if (schema.endField!.contains('Ticks')) {
+              if (schema.segmentsEndField!.contains('Ticks')) {
                 end = audioOffsetSeconds + (endValue / 10000000.0);
               } else {
                 end = audioOffsetSeconds + endValue;
@@ -100,46 +81,34 @@ class SttTranscriptionResult {
             }
           }
 
-          // Extract speaker info - try dedicated speakerId field first, then derive from speaker field
-          final speakerValue = schema.speakerField != null 
-              ? JsonPathNavigator.getValue(seg, schema.speakerField) 
-              : null;
-          final speakerIdFromField = schema.speakerIdField != null 
-              ? JsonPathNavigator.getInt(seg, schema.speakerIdField) 
-              : null;
-          
-          // Use explicit speakerId field if available, otherwise extract from speaker value
-          final speakerId = speakerIdFromField ?? _extractSpeakerIdFromValue(speakerValue);
-          
+          // Extract speaker ID from speaker field
+          final speakerValue =
+              schema.segmentsSpeakerField != null ? JsonPathNavigator.getValue(seg, schema.segmentsSpeakerField) : null;
+
           segments.add(SttSegment(
             text: text,
             start: start,
             end: end,
-            speaker: speakerValue?.toString(),
-            speakerId: speakerId,
-            confidence:
-                schema.confidenceField != null ? JsonPathNavigator.getDouble(seg, schema.confidenceField) : null,
+            speakerId: _extractSpeakerId(speakerValue),
           ));
         }
       }
     }
 
-    String? rawText = JsonPathNavigator.getString(json, schema.rawTextPath);
+    String? rawText = JsonPathNavigator.getString(json, schema.textPath);
 
+    // Fallback: create single segment from raw text
     if (segments.isEmpty && rawText != null && rawText.trim().isNotEmpty) {
-      final duration = JsonPathNavigator.getDouble(json, schema.durationPath) ?? schema.defaultSegmentDuration;
       segments.add(SttSegment(
         text: rawText.trim(),
         start: audioOffsetSeconds,
-        end: audioOffsetSeconds + duration,
+        end: audioOffsetSeconds + schema.defaultSegmentDuration,
       ));
     }
 
     return SttTranscriptionResult(
       segments: segments,
       rawText: rawText,
-      language: JsonPathNavigator.getString(json, schema.languagePath),
-      duration: JsonPathNavigator.getDouble(json, schema.durationPath),
     );
   }
 }

@@ -166,8 +166,8 @@ class PurePollingSocket implements IPureSocket {
             .where((s) => s.text.trim().isNotEmpty)
             .map((s) => {
                   'text': s.text.trim(),
-                  'speaker': s.speaker ?? 'SPEAKER_00',
-                  'speaker_id': s.speakerId ?? 0,
+                  'speaker': 'SPEAKER_${s.speakerId}',
+                  'speaker_id': s.speakerId,
                   'is_user': false,
                   'start': s.start,
                   'end': s.end,

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -91,12 +92,16 @@ class SharedPreferencesUtil {
     if (configJson.isEmpty) return CustomSttConfig.defaultConfig;
     try {
       return CustomSttConfig.fromJson(jsonDecode(configJson));
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('Error parsing customSttConfig: $e');
+      debugPrint('Stack: $stack');
       return CustomSttConfig.defaultConfig;
     }
   }
 
-  set customSttConfig(CustomSttConfig value) => saveString('customSttConfig', jsonEncode(value.toJson()));
+  Future<bool> saveCustomSttConfig(CustomSttConfig value) async {
+    return await saveString('customSttConfig', jsonEncode(value.toJson()));
+  }
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
@@ -427,39 +432,29 @@ class SharedPreferencesUtil {
 
   //--------------------------- Setters & Getters -----------------------------//
 
-  String getString(String key, {String defaultValue = ''}) =>
-      _preferences?.getString(key) ?? defaultValue;
+  String getString(String key, {String defaultValue = ''}) => _preferences?.getString(key) ?? defaultValue;
 
-  int getInt(String key, {int defaultValue = 0}) =>
-      _preferences?.getInt(key) ?? defaultValue;
+  int getInt(String key, {int defaultValue = 0}) => _preferences?.getInt(key) ?? defaultValue;
 
-  bool getBool(String key, {bool defaultValue = false}) =>
-      _preferences?.getBool(key) ?? defaultValue;
+  bool getBool(String key, {bool defaultValue = false}) => _preferences?.getBool(key) ?? defaultValue;
 
-  double getDouble(String key, {double defaultValue = 0.0}) =>
-      _preferences?.getDouble(key) ?? defaultValue;
+  double getDouble(String key, {double defaultValue = 0.0}) => _preferences?.getDouble(key) ?? defaultValue;
 
   List<String> getStringList(String key, {List<String> defaultValue = const []}) =>
       _preferences?.getStringList(key) ?? defaultValue;
 
-  Future<bool> saveString(String key, String value) async =>
-      await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
 
-  Future<bool> saveInt(String key, int value) async =>
-      await _preferences?.setInt(key, value) ?? false;
+  Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 
-  Future<bool> saveBool(String key, bool value) async =>
-      await _preferences?.setBool(key, value) ?? false;
+  Future<bool> saveBool(String key, bool value) async => await _preferences?.setBool(key, value) ?? false;
 
-  Future<bool> saveDouble(String key, double value) async =>
-      await _preferences?.setDouble(key, value) ?? false;
+  Future<bool> saveDouble(String key, double value) async => await _preferences?.setDouble(key, value) ?? false;
 
   Future<bool> saveStringList(String key, List<String> value) async =>
       await _preferences?.setStringList(key, value) ?? false;
 
-  Future<bool> remove(String key) async =>
-      await _preferences?.remove(key) ?? false;
+  Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
-  Future<bool> clear() async =>
-      await _preferences?.clear() ?? false;
+  Future<bool> clear() async => await _preferences?.clear() ?? false;
 }
