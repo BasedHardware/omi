@@ -117,9 +117,9 @@ class ChatTool {
 
   factory ChatTool.fromJson(Map<String, dynamic> json) {
     return ChatTool(
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      endpoint: json['endpoint'] ?? '',
+      name: json['name'],
+      description: json['description'],
+      endpoint: json['endpoint'],
       method: json['method'] ?? 'POST',
       authRequired: json['auth_required'] ?? true,
       statusMessage: json['status_message'],
