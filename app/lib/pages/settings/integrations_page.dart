@@ -8,7 +8,6 @@ import 'package:omi/services/whoop_service.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
-import 'package:omi/pages/settings/integrations_help_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
@@ -614,18 +613,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           ),
         ),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline, color: Colors.white),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const IntegrationsHelpPage(),
-                ),
-              );
-            },
-          ),
-        ],
       ),
       body: SafeArea(
         child: Padding(
