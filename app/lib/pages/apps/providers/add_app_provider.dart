@@ -84,7 +84,7 @@ class AddAppProvider extends ChangeNotifier {
     appProvider = provider;
   }
 
-  Future init({bool presetForConversationAnalysis = false}) async {
+  Future init({bool presetForConversationAnalysis = false, bool presetExternalIntegration = false}) async {
     setIsLoading(true);
     if (categories.isEmpty) {
       await getCategories();
@@ -113,6 +113,17 @@ class AddAppProvider extends ChangeNotifier {
       appNameController.text = 'My Conversation Analyzer';
       appDescriptionController.text = 'A custom app to analyze and summarize conversations based on my specific needs.';
 
+      checkValidity();
+    }
+
+    // Preset external integration capability
+    if (presetExternalIntegration) {
+      final externalIntegrationCapability = capabilities.firstWhereOrNull(
+        (cap) => cap.id == 'external_integration',
+      );
+      if (externalIntegrationCapability != null && !selectedCapabilities.contains(externalIntegrationCapability)) {
+        selectedCapabilities.add(externalIntegrationCapability);
+      }
       checkValidity();
     }
 

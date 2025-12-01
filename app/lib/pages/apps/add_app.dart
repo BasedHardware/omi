@@ -26,10 +26,12 @@ import 'widgets/chat_tools_widget.dart';
 
 class AddAppPage extends StatefulWidget {
   final bool presetForConversationAnalysis;
+  final bool presetExternalIntegration;
 
   const AddAppPage({
     super.key,
     this.presetForConversationAnalysis = false,
+    this.presetExternalIntegration = false,
   });
 
   @override
@@ -45,6 +47,7 @@ class _AddAppPageState extends State<AddAppPage> {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       await Provider.of<AddAppProvider>(context, listen: false).init(
         presetForConversationAnalysis: widget.presetForConversationAnalysis,
+        presetExternalIntegration: widget.presetExternalIntegration,
       );
     });
     super.initState();

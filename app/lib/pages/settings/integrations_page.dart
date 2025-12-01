@@ -7,8 +7,9 @@ import 'package:omi/services/twitter_service.dart';
 import 'package:omi/services/whoop_service.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
+import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 enum IntegrationApp {
   googleCalendar,
@@ -271,7 +272,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     }
   }
 
-
   Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
     // Capture instances before async operation to avoid use_build_context_synchronously
     final integrationProvider = context.read<IntegrationProvider>();
@@ -492,6 +492,63 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     );
   }
 
+  Widget _buildCreateYourOwnAppTile() {
+    return GestureDetector(
+      onTap: () {
+        routeToPage(
+          context,
+          const AddAppPage(presetExternalIntegration: true),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
+        child: Row(
+          children: [
+            // Icon
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.add_circle_outline,
+                color: Colors.purple,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            // App Name
+            Expanded(
+              child: Text(
+                'Create Your Own App',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            // Arrow icon
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.purple,
+                size: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch provider to rebuild when it changes
@@ -507,7 +564,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Integrations',
+          'Chat Tools',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -525,7 +582,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               // App List
               Expanded(
                 child: ListView(
-                  children: IntegrationApp.values.map(_buildAppTile).toList(),
+                  children: [
+                    ...IntegrationApp.values.map(_buildAppTile).toList(),
+                    _buildCreateYourOwnAppTile(),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
