@@ -219,7 +219,12 @@ class _ChatToolCardState extends State<_ChatToolCard> {
             ),
             style: const TextStyle(color: Colors.white),
             maxLines: 3,
-            onChanged: (_) => _updateTool(),
+onChanged: (_) {
+              // Defer to avoid setState during build
+              SchedulerBinding.instance.addPostFrameCallback((_) {
+                _updateTool();
+              });
+            },
           ),
           const SizedBox(height: 12),
           TextField(
