@@ -88,6 +88,26 @@ class SttResponseSchema {
     rawTextPath: 'candidates[0].content.parts[0].text',
   );
 
+  /// Deepgram live WebSocket response format
+  static const deepgramLive = SttResponseSchema(
+    segmentsPath: 'channel.alternatives[0].words',
+    textField: 'punctuated_word',
+    startField: 'start',
+    endField: 'end',
+    confidenceField: 'confidence',
+    speakerField: 'speaker',
+    rawTextPath: 'channel.alternatives[0].transcript',
+    durationPath: 'duration',
+  );
+
+  /// Gemini Live WebSocket response format
+  static const geminiLive = SttResponseSchema(
+    segmentsPath: null,
+    textField: 'text',
+    rawTextPath: 'serverContent.modelTurn.parts[0].text',
+    defaultSegmentDuration: 3.0,
+  );
+
   factory SttResponseSchema.fromJson(Map<String, dynamic> json) {
     return SttResponseSchema(
       segmentsPath: json['segments_path'] as String?,

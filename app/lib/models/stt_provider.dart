@@ -6,10 +6,13 @@ enum SttProvider {
   omi,
   openai,
   deepgram,
+  deepgramLive,
   falai,
   gemini,
+  geminiLive,
   localWhisper,
-  custom;
+  custom,
+  customLive;
 
   static SttProvider fromString(String value) {
     return SttProvider.values.firstWhere(
@@ -70,7 +73,7 @@ class SttProviderConfig {
     SttProvider.deepgram: SttProviderConfig(
       provider: SttProvider.deepgram,
       displayName: 'Deepgram',
-      description: 'Deepgram Nova - Fast & accurate',
+      description: 'Deepgram Nova - Fast & accurate (polling)',
       icon: FontAwesomeIcons.waveSquare,
       requiresApiKey: true,
       requestConfig: {
@@ -82,6 +85,30 @@ class SttProviderConfig {
         },
       },
       responseSchema: SttResponseSchema.deepgram,
+    ),
+    SttProvider.deepgramLive: SttProviderConfig(
+      provider: SttProvider.deepgramLive,
+      displayName: 'Deepgram Live',
+      description: 'Deepgram Nova - Real-time transcription',
+      icon: FontAwesomeIcons.boltLightning,
+      requiresApiKey: true,
+      requestConfig: {
+        'ws_url': 'wss://api.deepgram.com/v1/listen',
+        'request_type': 'streaming',
+        'headers': {
+          'Authorization': 'Token YOUR_API_KEY',
+        },
+        'params': {
+          'model': 'nova-2',
+          'language': 'en',
+          'smart_format': 'true',
+          'interim_results': 'true',
+          'punctuate': 'true',
+          'encoding': 'linear16',
+          'sample_rate': '16000',
+        },
+      },
+      responseSchema: SttResponseSchema.deepgramLive,
     ),
     SttProvider.falai: SttProviderConfig(
       provider: SttProvider.falai,
@@ -124,6 +151,22 @@ class SttProviderConfig {
       },
       responseSchema: SttResponseSchema.gemini,
     ),
+    SttProvider.geminiLive: SttProviderConfig(
+      provider: SttProvider.geminiLive,
+      displayName: 'Gemini Live',
+      description: 'Google Gemini - Real-time transcription',
+      icon: FontAwesomeIcons.google,
+      requiresApiKey: true,
+      requestConfig: {
+        'ws_url': 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent',
+        'request_type': 'streaming',
+        'headers': {},
+        'params': {
+          'key': 'YOUR_API_KEY',
+        },
+      },
+      responseSchema: SttResponseSchema.geminiLive,
+    ),
     SttProvider.localWhisper: SttProviderConfig(
       provider: SttProvider.localWhisper,
       displayName: 'Local Whisper',
@@ -144,7 +187,7 @@ class SttProviderConfig {
     SttProvider.custom: SttProviderConfig(
       provider: SttProvider.custom,
       displayName: 'Custom',
-      description: 'Define your own STT endpoint',
+      description: 'Define your own STT endpoint (polling)',
       icon: FontAwesomeIcons.code,
       requestConfig: {
         'api_url': 'https://your-stt-api.com/transcribe',
@@ -155,9 +198,35 @@ class SttProviderConfig {
       },
       responseSchema: SttResponseSchema(),
     ),
+    SttProvider.customLive: SttProviderConfig(
+      provider: SttProvider.customLive,
+      displayName: 'Custom Live',
+      description: 'Define your own real-time STT endpoint',
+      icon: FontAwesomeIcons.codeBranch,
+      requestConfig: {
+        'ws_url': 'wss://your-stt-api.com/stream',
+        'request_type': 'streaming',
+        'headers': {},
+        'params': {},
+      },
+      responseSchema: SttResponseSchema(),
+    ),
   };
 
   static SttProviderConfig get(SttProvider provider) => _configs[provider]!;
+
+  /// Safely get display name with fallback to raw string if provider not found
+  static String getDisplayName(String? providerString) {
+    if (providerString == null || providerString.isEmpty) {
+      return 'Unknown';
+    }
+    try {
+      final provider = SttProvider.fromString(providerString);
+      return _configs[provider]?.displayName ?? providerString;
+    } catch (e) {
+      return providerString;
+    }
+  }
 
   static List<SttProviderConfig> get allProviders =>
       SttProvider.values.where((p) => p != SttProvider.omi).map((p) => get(p)).toList();
@@ -180,6 +249,7 @@ class SttProviderConfig {
         headers['Authorization'] = 'Bearer $apiKey';
         break;
       case SttProvider.deepgram:
+      case SttProvider.deepgramLive:
         headers['Authorization'] = 'Token $apiKey';
         break;
       case SttProvider.falai:
@@ -195,6 +265,13 @@ class SttProviderConfig {
       case SttProvider.gemini:
         final url = config['api_url'] as String? ?? '';
         config['api_url'] = url.replaceAll('YOUR_API_KEY', apiKey);
+        break;
+      case SttProvider.geminiLive:
+        if (config['params'] != null) {
+          final params = Map<String, String>.from(config['params']);
+          params['key'] = apiKey;
+          config['params'] = params;
+        }
         break;
       default:
         break;

@@ -27,6 +27,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _hostController = TextEditingController(text: '127.0.0.1');
   final TextEditingController _portController = TextEditingController(text: '8080');
+  final TextEditingController _wsUrlController = TextEditingController(text: 'wss://');
 
   // Store JSON configs per provider
   final Map<SttProvider, String> _requestJsonPerProvider = {};
@@ -55,6 +56,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _apiKeyController.text = _apiKeysPerProvider[_selectedProvider] ?? '';
       _hostController.text = config.host ?? '127.0.0.1';
       _portController.text = (config.port ?? 8080).toString();
+      _wsUrlController.text = config.wsUrl ?? 'wss://';
 
       // Initialize JSON configs for all providers with templates
       _initializeJsonConfigs();
@@ -112,8 +114,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           _validationError = 'Valid port is required';
           return;
         }
+      } else if (_selectedProvider == SttProvider.customLive) {
+        if (_wsUrlController.text.isEmpty || !_wsUrlController.text.startsWith('wss://')) {
+          _validationError = 'Valid WebSocket URL is required (wss://)';
+          return;
+        }
       } else if (_selectedProvider != SttProvider.custom) {
-        if (_apiKeyController.text.isEmpty) {
+        if (_currentConfig.requiresApiKey && _apiKeyController.text.isEmpty) {
           _validationError = 'API key is required';
           return;
         }
@@ -170,10 +177,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         requestJson['api_url'] = 'http://${_hostController.text}:${_portController.text}/inference';
       }
 
+      // Handle WebSocket URL for live providers
+      String? wsUrl;
+      if (_selectedProvider == SttProvider.customLive) {
+        wsUrl = _wsUrlController.text;
+      } else if (_selectedProvider == SttProvider.deepgramLive || _selectedProvider == SttProvider.geminiLive) {
+        wsUrl = requestJson['ws_url'];
+      }
+
       final config = CustomSttConfig(
         provider: _useCustomStt ? _selectedProvider : SttProvider.omi,
         apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
         apiUrl: requestJson['api_url'],
+        wsUrl: wsUrl,
         host: _hostController.text.isNotEmpty ? _hostController.text : null,
         port: int.tryParse(_portController.text),
         headers: requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null,
@@ -183,6 +199,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         schemaJson: schemaJson.isNotEmpty ? schemaJson : null,
         fileUploadConfig:
             requestJson['file_upload'] != null ? Map<String, dynamic>.from(requestJson['file_upload']) : null,
+        streamingParams: requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null,
       );
 
       final previousConfig = SharedPreferencesUtil().customSttConfig;
@@ -271,6 +288,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Widget _buildSourceOption(bool isCustom, String title) {
     final isSelected = _useCustomStt == isCustom;
+    final showLiveDot = !isCustom; // Show dot for Omi
     return GestureDetector(
       onTap: () => setState(() => _useCustomStt = isCustom),
       child: Container(
@@ -284,13 +302,30 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           ),
         ),
         child: Center(
-          child: Text(
-            title,
-            style: TextStyle(
-              color: isSelected ? Colors.black : Colors.grey.shade400,
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-            ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: isSelected ? Colors.black : Colors.grey.shade400,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (showLiveDot) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
@@ -321,9 +356,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               style: const TextStyle(color: Colors.white, fontSize: 15),
               icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
               items: SttProviderConfig.allProviders.map((config) {
+                final isLive = config.provider == SttProvider.deepgramLive ||
+                    config.provider == SttProvider.geminiLive ||
+                    config.provider == SttProvider.customLive;
                 return DropdownMenuItem<SttProvider>(
                   value: config.provider,
-                  child: Text(config.displayName),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(config.displayName)),
+                      if (isLive)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
                 );
               }).toList(),
               onChanged: (provider) {
@@ -359,8 +411,28 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       return _buildLocalWhisperConfig();
     } else if (_selectedProvider == SttProvider.custom) {
       return const SizedBox.shrink();
+    } else if (_selectedProvider == SttProvider.customLive) {
+      return _buildCustomLiveConfig();
     }
     return _buildApiKeyInput();
+  }
+
+  Widget _buildCustomLiveConfig() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildTextField(
+          controller: _wsUrlController,
+          label: 'WebSocket URL',
+          hint: 'wss://your-stt-api.com/live',
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Enter your live STT WebSocket endpoint',
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+        ),
+      ],
+    );
   }
 
   Widget _buildApiKeyInput() {
@@ -609,7 +681,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           initialJson: jsonContent,
           isRequest: isRequest,
           provider: _selectedProvider,
-          onReset: () => CustomSttConfig.getFullTemplateJson(_selectedProvider)[isRequest ? 'request' : 'response_schema'],
+          onReset: () =>
+              CustomSttConfig.getFullTemplateJson(_selectedProvider)[isRequest ? 'request' : 'response_schema'],
         ),
       ),
     );
@@ -631,7 +704,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Using Omi\'s built-in transcription optimized for conversations with automatic speaker detection.',
+          'Omi\'s built-in live transcription is optimized for real-time conversations with automatic speaker detection and diarization.',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
         ),
       ],
@@ -684,6 +757,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _apiKeyController.dispose();
     _hostController.dispose();
     _portController.dispose();
+    _wsUrlController.dispose();
     super.dispose();
   }
 }
@@ -918,7 +992,8 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
                   ),
                   child: Text(
                     method,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -948,9 +1023,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: headers.entries.map((e) {
-                  final value = e.value.toString().contains('API_KEY') 
-                      ? 'Bearer ••••••••••••••••' 
-                      : e.value.toString();
+                  final value = e.value.toString().contains('API_KEY') ? 'Bearer ••••••••••••••••' : e.value.toString();
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
@@ -965,7 +1038,8 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
           ],
 
           // Body section
-          Text('Body (multipart/form-data)', style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w600)),
+          Text('Body (multipart/form-data)',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
@@ -984,12 +1058,12 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
                 ),
                 // Other form fields
                 ...fields.entries.map((e) => Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '${e.key}: ${e.value}',
-                    style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.grey.shade400),
-                  ),
-                )),
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '${e.key}: ${e.value}',
+                        style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.grey.shade400),
+                      ),
+                    )),
               ],
             ),
           ),
@@ -1000,11 +1074,11 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
 
   Widget _buildSchemaPreview() {
     final json = _parsedJson!;
-    
+
     // Build example JSON response based on schema
     final exampleResponse = _buildExampleResponseJson(json);
     final prettyJson = const JsonEncoder.withIndent('  ').convert(exampleResponse);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1019,31 +1093,25 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Path Mappings', style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text('Path Mappings',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
               const SizedBox(height: 12),
-              if (json['segments_path'] != null) 
-                _buildSchemaRow('Segments', json['segments_path'].toString()),
-              if (json['text_field'] != null) 
-                _buildSchemaRow('Text Field', json['text_field'].toString()),
-              if (json['start_field'] != null) 
-                _buildSchemaRow('Start Time', json['start_field'].toString()),
-              if (json['end_field'] != null) 
-                _buildSchemaRow('End Time', json['end_field'].toString()),
-              if (json['speaker_field'] != null) 
-                _buildSchemaRow('Speaker', json['speaker_field'].toString()),
-              if (json['raw_text_path'] != null) 
-                _buildSchemaRow('Raw Text', json['raw_text_path'].toString()),
-              if (json['language_path'] != null) 
-                _buildSchemaRow('Language', json['language_path'].toString()),
-              if (json['duration_path'] != null) 
-                _buildSchemaRow('Duration', json['duration_path'].toString()),
+              if (json['segments_path'] != null) _buildSchemaRow('Segments', json['segments_path'].toString()),
+              if (json['text_field'] != null) _buildSchemaRow('Text Field', json['text_field'].toString()),
+              if (json['start_field'] != null) _buildSchemaRow('Start Time', json['start_field'].toString()),
+              if (json['end_field'] != null) _buildSchemaRow('End Time', json['end_field'].toString()),
+              if (json['speaker_field'] != null) _buildSchemaRow('Speaker', json['speaker_field'].toString()),
+              if (json['raw_text_path'] != null) _buildSchemaRow('Raw Text', json['raw_text_path'].toString()),
+              if (json['language_path'] != null) _buildSchemaRow('Language', json['language_path'].toString()),
+              if (json['duration_path'] != null) _buildSchemaRow('Duration', json['duration_path'].toString()),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // Example JSON response
-        Text('Example Response', style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
+        Text('Example Response',
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
@@ -1086,7 +1154,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
 
   Map<String, dynamic> _buildExampleResponseJson(Map<String, dynamic> schema) {
     final result = <String, dynamic>{};
-    
+
     // Build segments structure based on segments_path
     final segmentsPath = schema['segments_path'] as String?;
     final textField = schema['text_field'] as String? ?? 'text';
@@ -1094,7 +1162,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
     final endField = schema['end_field'] as String?;
     final speakerField = schema['speaker_field'] as String?;
     final confidenceField = schema['confidence_field'] as String?;
-    
+
     // Build example segment
     final exampleSegment = <String, dynamic>{};
     exampleSegment[textField] = 'Hello, this is a sample transcription.';
@@ -1133,7 +1201,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
     // Parse path like "results.channels[0].alternatives[0].words"
     final parts = <String>[];
     final regex = RegExp(r'([^\.\[\]]+)|\[(\d+)\]');
-    
+
     for (final match in regex.allMatches(path)) {
       if (match.group(1) != null) {
         parts.add(match.group(1)!);
@@ -1146,12 +1214,12 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
     for (int i = 0; i < parts.length - 1; i++) {
       final part = parts[i];
       final nextPart = parts[i + 1];
-      
+
       if (part.startsWith('[')) {
         // Array index - skip for now in simple preview
         continue;
       }
-      
+
       if (current is Map<String, dynamic>) {
         if (!current.containsKey(part)) {
           if (nextPart.startsWith('[')) {
@@ -1160,7 +1228,7 @@ class _JsonEditorPageState extends State<_JsonEditorPage> with SingleTickerProvi
             current[part] = <String, dynamic>{};
           }
         }
-        
+
         if (nextPart.startsWith('[') && current[part] is List) {
           if ((current[part] as List).isEmpty) {
             current[part].add(<String, dynamic>{});

@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -629,7 +630,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                         children: [
                                           if (data.sttProvider != null) ...[
                                             Text(
-                                              data.sttProvider!,
+                                              SttProviderConfig.getDisplayName(data.sttProvider),
                                               style: TextStyle(
                                                 color: isUser
                                                     ? Colors.white.withValues(alpha: 0.5)

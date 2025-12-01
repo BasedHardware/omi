@@ -17,6 +17,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 export 'package:omi/utils/audio/audio_transcoder.dart';
 export 'package:omi/services/sockets/composite_transcription_socket.dart';
 export 'package:omi/services/sockets/pure_polling.dart';
+export 'package:omi/services/sockets/pure_streaming_stt.dart';
 export 'package:omi/models/stt_response_schema.dart';
 export 'package:omi/models/stt_result.dart';
 export 'package:omi/services/sockets/transcription_polling_service.dart';
@@ -442,13 +443,13 @@ class TranscriptSocketServiceFactory {
     BleAudioCodec codec,
     String language, {
     required String openAiApiKey,
+    required String sttProvider,
     String openAiModel = 'whisper-1',
     bool includeSpeechProfile = false,
     String? source,
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
     String? sttConfigId,
-    String? sttProvider,
   }) {
     final primarySocket = _createOpenAISocket(
       sampleRate,
@@ -467,7 +468,7 @@ class TranscriptSocketServiceFactory {
       includeSpeechProfile: includeSpeechProfile,
       source: source,
       sttConfigId: sttConfigId,
-      sttProvider: sttProvider ?? 'openai',
+      sttProvider: sttProvider,
     );
   }
 
@@ -476,12 +477,12 @@ class TranscriptSocketServiceFactory {
     BleAudioCodec codec,
     String language, {
     required String deepgramApiKey,
+    required String sttProvider,
     bool includeSpeechProfile = false,
     String? source,
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
     String? sttConfigId,
-    String? sttProvider,
   }) {
     final primarySocket = _createDeepgramSocket(
       sampleRate,
@@ -499,7 +500,7 @@ class TranscriptSocketServiceFactory {
       includeSpeechProfile: includeSpeechProfile,
       source: source,
       sttConfigId: sttConfigId,
-      sttProvider: sttProvider ?? 'deepgram',
+      sttProvider: sttProvider,
     );
   }
 
@@ -507,6 +508,7 @@ class TranscriptSocketServiceFactory {
     int sampleRate,
     BleAudioCodec codec,
     String language, {
+    required String sttProvider,
     String host = '127.0.0.1',
     int port = 8080,
     double temperature = 0.0,
@@ -516,7 +518,6 @@ class TranscriptSocketServiceFactory {
     Duration bufferDuration = const Duration(seconds: 5),
     IAudioTranscoder? transcoder,
     String? sttConfigId,
-    String? sttProvider,
   }) {
     final primarySocket = _createLocalWhisperSocket(
       sampleRate,
@@ -536,7 +537,7 @@ class TranscriptSocketServiceFactory {
       includeSpeechProfile: includeSpeechProfile,
       source: source,
       sttConfigId: sttConfigId,
-      sttProvider: sttProvider ?? 'localWhisper',
+      sttProvider: sttProvider,
     );
   }
 
@@ -546,10 +547,10 @@ class TranscriptSocketServiceFactory {
     String language, {
     required IPureSocket primarySocket,
     required IPureSocket secondarySocket,
+    required String sttProvider,
     bool includeSpeechProfile = false,
     String? source,
     String? suggestedTranscriptType = 'suggested_transcript',
-    String? sttProvider,
   }) {
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
@@ -587,6 +588,222 @@ class TranscriptSocketServiceFactory {
     );
   }
 
+  /// Create live Deepgram socket (WebSocket-based, real-time)
+  static TranscriptSegmentSocketService createLiveDeepgram(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiKey,
+    required String sttProvider,
+    String model = 'nova-3',
+    bool includeSpeechProfile = false,
+    String? source,
+    IAudioTranscoder? transcoder,
+    String? sttConfigId,
+  }) {
+    final streamingSocket = PureStreamingSttSocket(
+      config: StreamingSttConfig.deepgramLive(
+        apiKey: apiKey,
+        model: model,
+        language: language,
+        sampleRate: sampleRate,
+        transcoder: transcoder ??
+            AudioTranscoderFactory.createToRawPcm(
+              sourceCodec: codec,
+              sampleRate: sampleRate,
+            ),
+      ),
+    );
+
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: streamingSocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+      sttConfigId: sttConfigId,
+      sttProvider: sttProvider,
+    );
+  }
+
+  /// Create live socket with custom schema-based configuration
+  static TranscriptSegmentSocketService createLiveSchemaBased(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String wsUrl,
+    required SttResponseSchema schema,
+    required String sttProvider,
+    Map<String, String> headers = const {},
+    bool includeSpeechProfile = false,
+    String? source,
+    IAudioTranscoder? transcoder,
+    String? sttConfigId,
+    int minBytesBeforeSend = 0,
+  }) {
+    final streamingSocket = PureStreamingSttSocket(
+      config: StreamingSttConfig.schemaBased(
+        wsUrl: wsUrl,
+        schema: schema,
+        headers: headers,
+        transcoder: transcoder ??
+            AudioTranscoderFactory.createToRawPcm(
+              sourceCodec: codec,
+              sampleRate: sampleRate,
+            ),
+        minBytesBeforeSend: minBytesBeforeSend,
+      ),
+    );
+
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: streamingSocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+      sttConfigId: sttConfigId,
+      sttProvider: sttProvider,
+    );
+  }
+
+  /// Composite with live Deepgram as primary
+  static TranscriptSegmentSocketService createCompositeWithLiveDeepgram(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String deepgramApiKey,
+    required String sttProvider,
+    String model = 'nova-3',
+    bool includeSpeechProfile = false,
+    String? source,
+    IAudioTranscoder? transcoder,
+    String? sttConfigId,
+  }) {
+    return createLiveDeepgram(
+      sampleRate,
+      codec,
+      language,
+      apiKey: deepgramApiKey,
+      model: model,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+      transcoder: transcoder,
+      sttConfigId: sttConfigId,
+      sttProvider: sttProvider,
+    );
+  }
+
+  /// Create live Gemini socket (WebSocket-based, real-time)
+  static TranscriptSegmentSocketService createLiveGemini(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String apiKey,
+    required String sttProvider,
+    String model = 'gemini-2.0-flash-exp',
+    bool includeSpeechProfile = false,
+    String? source,
+    IAudioTranscoder? transcoder,
+    String? sttConfigId,
+  }) {
+    final liveSocket = GeminiStreamingSttSocket(
+      apiKey: apiKey,
+      model: model,
+      language: language,
+      sampleRate: sampleRate,
+      transcoder: transcoder ??
+          AudioTranscoderFactory.createToRawPcm(
+            sourceCodec: codec,
+            sampleRate: sampleRate,
+          ),
+    );
+
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: liveSocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+      sttConfigId: sttConfigId,
+      sttProvider: sttProvider,
+    );
+  }
+
+  /// Composite with live Gemini as primary
+  static TranscriptSegmentSocketService createCompositeWithLiveGemini(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String geminiApiKey,
+    required String sttProvider,
+    String model = 'gemini-2.0-flash-exp',
+    bool includeSpeechProfile = false,
+    String? source,
+    IAudioTranscoder? transcoder,
+    String? sttConfigId,
+  }) {
+    return createLiveGemini(
+      sampleRate,
+      codec,
+      language,
+      apiKey: geminiApiKey,
+      model: model,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+      transcoder: transcoder,
+      sttConfigId: sttConfigId,
+      sttProvider: sttProvider,
+    );
+  }
+
+  /// Create custom live socket with user-provided configuration
+  static TranscriptSegmentSocketService createLive(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    required String wsUrl,
+    required SttResponseSchema schema,
+    required String sttProvider,
+    Map<String, String> headers = const {},
+    bool includeSpeechProfile = false,
+    String? source,
+    IAudioTranscoder? transcoder,
+    String? sttConfigId,
+    int minBytesBeforeSend = 0,
+    bool sendKeepAlive = false,
+    Duration keepAliveInterval = const Duration(seconds: 10),
+  }) {
+    final streamingSocket = PureStreamingSttSocket(
+      config: StreamingSttConfig.schemaBased(
+        wsUrl: wsUrl,
+        schema: schema,
+        headers: headers,
+        transcoder: transcoder ??
+            AudioTranscoderFactory.createToRawPcm(
+              sourceCodec: codec,
+              sampleRate: sampleRate,
+            ),
+        minBytesBeforeSend: minBytesBeforeSend,
+        sendKeepAlive: sendKeepAlive,
+        keepAliveInterval: keepAliveInterval,
+      ),
+    );
+
+    return _createCompositeService(
+      sampleRate,
+      codec,
+      language,
+      primarySocket: streamingSocket,
+      includeSpeechProfile: includeSpeechProfile,
+      source: source,
+      sttConfigId: sttConfigId,
+      sttProvider: sttProvider,
+    );
+  }
+
   static TranscriptSegmentSocketService createFromCustomConfig(
     int sampleRate,
     BleAudioCodec codec,
@@ -601,22 +818,48 @@ class TranscriptSocketServiceFactory {
       case SttProvider.openai:
         return createCompositeWithOpenAI(sampleRate, codec, language,
             openAiApiKey: config.apiKey ?? '',
+            sttProvider: config.provider.name,
             source: source,
-            sttConfigId: sttConfigId,
-            sttProvider: config.provider.name);
+            sttConfigId: sttConfigId);
       case SttProvider.deepgram:
         return createCompositeWithDeepgram(sampleRate, codec, language,
             deepgramApiKey: config.apiKey ?? '',
+            sttProvider: config.provider.name,
             source: source,
-            sttConfigId: sttConfigId,
-            sttProvider: config.provider.name);
+            sttConfigId: sttConfigId);
+      case SttProvider.deepgramLive:
+        return createCompositeWithLiveDeepgram(sampleRate, codec, language,
+            deepgramApiKey: config.apiKey ?? '',
+            sttProvider: config.provider.name,
+            source: source,
+            sttConfigId: sttConfigId);
+      case SttProvider.geminiLive:
+        return createCompositeWithLiveGemini(sampleRate, codec, language,
+            geminiApiKey: config.apiKey ?? '',
+            sttProvider: config.provider.name,
+            source: source,
+            sttConfigId: sttConfigId);
+      case SttProvider.customLive:
+        return createLive(
+          sampleRate,
+          codec,
+          language,
+          wsUrl: config.wsUrl ?? '',
+          schema: config.schema,
+          sttProvider: config.provider.name,
+          headers: config.headers ?? {},
+          source: source,
+          sttConfigId: sttConfigId,
+          minBytesBeforeSend: int.tryParse(config.streamingParams?['min_bytes'] ?? '0') ?? 0,
+          sendKeepAlive: config.streamingParams?['keep_alive'] == 'true',
+        );
       case SttProvider.localWhisper:
         return createCompositeWithLocalWhisper(sampleRate, codec, language,
+            sttProvider: config.provider.name,
             host: config.host ?? '127.0.0.1',
             port: config.port ?? 8080,
             source: source,
-            sttConfigId: sttConfigId,
-            sttProvider: config.provider.name);
+            sttConfigId: sttConfigId);
       case SttProvider.falai:
       case SttProvider.gemini:
         if (config.apiKey?.isNotEmpty == true) {

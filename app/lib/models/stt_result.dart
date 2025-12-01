@@ -1,5 +1,29 @@
 import 'package:omi/models/stt_response_schema.dart';
 
+/// Helper to extract numeric speaker ID from various string formats
+int? _extractSpeakerIdFromValue(dynamic value) {
+  if (value == null) return null;
+  
+  // Already an int
+  if (value is int) return value;
+  
+  // Numeric value
+  if (value is num) return value.toInt();
+  
+  // String handling
+  if (value is String) {
+    // Try direct int parse (Deepgram returns 0, 1, 2 as integers or "0", "1", "2")
+    final directParse = int.tryParse(value);
+    if (directParse != null) return directParse;
+    
+    // Try extracting number from "SPEAKER_0", "speaker_1", "Speaker 2" formats
+    final match = RegExp(r'(\d+)').firstMatch(value);
+    return match != null ? int.tryParse(match.group(1)!) : null;
+  }
+  
+  return null;
+}
+
 /// A single segment of transcribed text with timing information
 class SttSegment {
   final String text;
@@ -76,12 +100,23 @@ class SttTranscriptionResult {
             }
           }
 
+          // Extract speaker info - try dedicated speakerId field first, then derive from speaker field
+          final speakerValue = schema.speakerField != null 
+              ? JsonPathNavigator.getValue(seg, schema.speakerField) 
+              : null;
+          final speakerIdFromField = schema.speakerIdField != null 
+              ? JsonPathNavigator.getInt(seg, schema.speakerIdField) 
+              : null;
+          
+          // Use explicit speakerId field if available, otherwise extract from speaker value
+          final speakerId = speakerIdFromField ?? _extractSpeakerIdFromValue(speakerValue);
+          
           segments.add(SttSegment(
             text: text,
             start: start,
             end: end,
-            speaker: schema.speakerField != null ? JsonPathNavigator.getString(seg, schema.speakerField) : null,
-            speakerId: schema.speakerIdField != null ? JsonPathNavigator.getInt(seg, schema.speakerIdField) : null,
+            speaker: speakerValue?.toString(),
+            speakerId: speakerId,
             confidence:
                 schema.confidenceField != null ? JsonPathNavigator.getDouble(seg, schema.confidenceField) : null,
           ));

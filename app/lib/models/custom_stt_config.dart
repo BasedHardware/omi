@@ -8,6 +8,7 @@ class CustomSttConfig {
   final SttProvider provider;
   final String? apiKey;
   final String? apiUrl;
+  final String? wsUrl;
   final String? host;
   final int? port;
   final Map<String, String>? headers;
@@ -16,11 +17,13 @@ class CustomSttConfig {
   final String? requestType;
   final Map<String, dynamic>? schemaJson;
   final Map<String, dynamic>? fileUploadConfig;
+  final Map<String, String>? streamingParams;
 
   const CustomSttConfig({
     required this.provider,
     this.apiKey,
     this.apiUrl,
+    this.wsUrl,
     this.host,
     this.port,
     this.headers,
@@ -29,7 +32,15 @@ class CustomSttConfig {
     this.requestType,
     this.schemaJson,
     this.fileUploadConfig,
+    this.streamingParams,
   });
+
+  bool get isLive =>
+      provider == SttProvider.deepgramLive ||
+      provider == SttProvider.geminiLive ||
+      provider == SttProvider.customLive ||
+      requestType == 'streaming' ||
+      wsUrl != null;
 
   bool get isEnabled => provider != SttProvider.omi;
 
@@ -48,6 +59,7 @@ class CustomSttConfig {
     final configData = {
       'api_key': apiKey,
       'api_url': apiUrl,
+      'ws_url': wsUrl,
       'host': host,
       'port': port,
       'headers': headers,
@@ -56,6 +68,7 @@ class CustomSttConfig {
       'request_type': requestType,
       'schema': schemaJson,
       'file_upload_config': fileUploadConfig,
+      'streaming_params': streamingParams,
     };
 
     final jsonStr = jsonEncode(configData);
@@ -69,6 +82,7 @@ class CustomSttConfig {
         'provider': provider.name,
         'api_key': apiKey,
         'api_url': apiUrl,
+        'ws_url': wsUrl,
         'host': host,
         'port': port,
         'headers': headers,
@@ -77,6 +91,7 @@ class CustomSttConfig {
         'request_type': requestType,
         'schema': schemaJson,
         'file_upload_config': fileUploadConfig,
+        'streaming_params': streamingParams,
       };
 
   factory CustomSttConfig.fromJson(Map<String, dynamic> json) {
@@ -84,6 +99,7 @@ class CustomSttConfig {
       provider: SttProvider.fromString(json['provider'] ?? 'omi'),
       apiKey: json['api_key'],
       apiUrl: json['api_url'],
+      wsUrl: json['ws_url'],
       host: json['host'],
       port: json['port'],
       headers: json['headers'] != null ? Map<String, String>.from(json['headers']) : null,
@@ -93,6 +109,8 @@ class CustomSttConfig {
       schemaJson: json['schema'] != null ? Map<String, dynamic>.from(json['schema']) : null,
       fileUploadConfig:
           json['file_upload_config'] != null ? Map<String, dynamic>.from(json['file_upload_config']) : null,
+      streamingParams:
+          json['streaming_params'] != null ? Map<String, String>.from(json['streaming_params']) : null,
     );
   }
 
