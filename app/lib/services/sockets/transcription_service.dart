@@ -391,7 +391,7 @@ class TranscriptSocketServiceFactory {
       sampleRate,
       codec,
       language,
-      _createWhisperCppSocket(sampleRate, codec,
+      _createLocalWhisperSocket(sampleRate, codec,
           host: host,
           port: port,
           temperature: temperature,
@@ -503,7 +503,7 @@ class TranscriptSocketServiceFactory {
     );
   }
 
-  static TranscriptSegmentSocketService createCompositeWithWhisperCpp(
+  static TranscriptSegmentSocketService createCompositeWithLocalWhisper(
     int sampleRate,
     BleAudioCodec codec,
     String language, {
@@ -518,7 +518,7 @@ class TranscriptSocketServiceFactory {
     String? sttConfigId,
     String? sttProvider,
   }) {
-    final primarySocket = _createWhisperCppSocket(
+    final primarySocket = _createLocalWhisperSocket(
       sampleRate,
       codec,
       host: host,
@@ -536,7 +536,7 @@ class TranscriptSocketServiceFactory {
       includeSpeechProfile: includeSpeechProfile,
       source: source,
       sttConfigId: sttConfigId,
-      sttProvider: sttProvider ?? 'whisperCpp',
+      sttProvider: sttProvider ?? 'localWhisper',
     );
   }
 
@@ -600,13 +600,23 @@ class TranscriptSocketServiceFactory {
     switch (config.provider) {
       case SttProvider.openai:
         return createCompositeWithOpenAI(sampleRate, codec, language,
-            openAiApiKey: config.apiKey ?? '', source: source, sttConfigId: sttConfigId, sttProvider: config.provider.name);
+            openAiApiKey: config.apiKey ?? '',
+            source: source,
+            sttConfigId: sttConfigId,
+            sttProvider: config.provider.name);
       case SttProvider.deepgram:
         return createCompositeWithDeepgram(sampleRate, codec, language,
-            deepgramApiKey: config.apiKey ?? '', source: source, sttConfigId: sttConfigId, sttProvider: config.provider.name);
-      case SttProvider.whisperCpp:
-        return createCompositeWithWhisperCpp(sampleRate, codec, language,
-            host: config.host ?? '127.0.0.1', port: config.port ?? 8080, source: source, sttConfigId: sttConfigId, sttProvider: config.provider.name);
+            deepgramApiKey: config.apiKey ?? '',
+            source: source,
+            sttConfigId: sttConfigId,
+            sttProvider: config.provider.name);
+      case SttProvider.localWhisper:
+        return createCompositeWithLocalWhisper(sampleRate, codec, language,
+            host: config.host ?? '127.0.0.1',
+            port: config.port ?? 8080,
+            source: source,
+            sttConfigId: sttConfigId,
+            sttProvider: config.provider.name);
       case SttProvider.falai:
       case SttProvider.gemini:
         if (config.apiKey?.isNotEmpty == true) {
@@ -790,7 +800,7 @@ class TranscriptSocketServiceFactory {
         transcoder: transcoder,
       );
 
-  static PurePollingSocket _createWhisperCppSocket(
+  static PurePollingSocket _createLocalWhisperSocket(
     int sampleRate,
     BleAudioCodec codec, {
     String host = '127.0.0.1',
@@ -803,7 +813,7 @@ class TranscriptSocketServiceFactory {
       _createPollingSocket(
         sampleRate,
         codec,
-        SchemaBasedSttProvider.whisperCpp(
+        SchemaBasedSttProvider.localWhisper(
           host: host,
           port: port,
           temperature: temperature,

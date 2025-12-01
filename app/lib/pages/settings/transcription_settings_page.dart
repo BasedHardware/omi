@@ -63,7 +63,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   void _loadStoredApiKeys() {
     for (final provider in SttProvider.values) {
-      if (provider != SttProvider.omi && provider != SttProvider.whisperCpp && provider != SttProvider.custom) {
+      if (provider != SttProvider.omi && provider != SttProvider.localWhisper && provider != SttProvider.custom) {
         final storedKey = SharedPreferencesUtil().getString('stt_api_key_${provider.name}');
         if (storedKey.isNotEmpty) {
           _apiKeysPerProvider[provider] = storedKey;
@@ -103,7 +103,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         return;
       }
 
-      if (_selectedProvider == SttProvider.whisperCpp) {
+      if (_selectedProvider == SttProvider.localWhisper) {
         if (_hostController.text.isEmpty) {
           _validationError = 'Host is required';
           return;
@@ -166,7 +166,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         requestJson = _currentConfig.getRequestConfigWithApiKey(_apiKeyController.text);
       }
 
-      if (_selectedProvider == SttProvider.whisperCpp) {
+      if (_selectedProvider == SttProvider.localWhisper) {
         requestJson['api_url'] = 'http://${_hostController.text}:${_portController.text}/inference';
       }
 
@@ -355,8 +355,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildConfigSection() {
-    if (_selectedProvider == SttProvider.whisperCpp) {
-      return _buildWhisperCppConfig();
+    if (_selectedProvider == SttProvider.localWhisper) {
+      return _buildLocalWhisperConfig();
     } else if (_selectedProvider == SttProvider.custom) {
       return const SizedBox.shrink();
     }
@@ -414,7 +414,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
-  Widget _buildWhisperCppConfig() {
+  Widget _buildLocalWhisperConfig() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -196,7 +196,7 @@ class SchemaBasedSttProvider implements ISttProvider {
   }
 
   // ref: https://github.com/ggml-org/whisper.cpp
-  factory SchemaBasedSttProvider.whisperCpp({
+  factory SchemaBasedSttProvider.localWhisper({
     String host = '127.0.0.1',
     int port = 8080,
     String responseFormat = 'verbose_json',

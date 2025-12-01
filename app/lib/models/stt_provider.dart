@@ -8,7 +8,7 @@ enum SttProvider {
   deepgram,
   falai,
   gemini,
-  whisperCpp,
+  localWhisper,
   custom;
 
   static SttProvider fromString(String value) {
@@ -124,8 +124,8 @@ class SttProviderConfig {
       },
       responseSchema: SttResponseSchema.gemini,
     ),
-    SttProvider.whisperCpp: SttProviderConfig(
-      provider: SttProvider.whisperCpp,
+    SttProvider.localWhisper: SttProviderConfig(
+      provider: SttProvider.localWhisper,
       displayName: 'Local Whisper',
       description: 'Self-hosted Whisper server',
       icon: FontAwesomeIcons.server,
@@ -204,8 +204,8 @@ class SttProviderConfig {
     return config;
   }
 
-  static Map<String, dynamic> getWhisperCppConfigWithHost(String host, int port) {
-    final config = Map<String, dynamic>.from(get(SttProvider.whisperCpp).requestConfig);
+  static Map<String, dynamic> getLocalWhisperConfigWithHost(String host, int port) {
+    final config = Map<String, dynamic>.from(get(SttProvider.localWhisper).requestConfig);
     config['api_url'] = 'http://$host:$port/inference';
     return config;
   }

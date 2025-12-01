@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 
@@ -60,6 +61,7 @@ class CustomSttConfig {
     final jsonStr = jsonEncode(configData);
     final hashValue = jsonStr.hashCode.abs();
     final hash = hashValue.toRadixString(16).padLeft(8, '0').substring(0, 8);
+    debugPrint('${provider.name}:$hash');
     return '${provider.name}:$hash';
   }
 
