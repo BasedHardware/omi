@@ -70,6 +70,56 @@ class _AppDetailPageState extends State<AppDetailPage> {
     return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)}';
   }
 
+  IconData _getCategoryIcon(String category) {
+    switch (category) {
+      case 'conversation-analysis':
+        return FontAwesomeIcons.solidComments;
+      case 'personality-emulation':
+        return FontAwesomeIcons.solidUser;
+      case 'health-and-wellness':
+        return FontAwesomeIcons.solidHeart;
+      case 'education-and-learning':
+        return FontAwesomeIcons.graduationCap;
+      case 'communication-improvement':
+        return FontAwesomeIcons.solidMessage;
+      case 'emotional-and-mental-support':
+        return FontAwesomeIcons.brain;
+      case 'productivity-and-organization':
+        return FontAwesomeIcons.listCheck;
+      case 'entertainment-and-fun':
+        return FontAwesomeIcons.gamepad;
+      case 'financial':
+        return FontAwesomeIcons.solidCreditCard;
+      case 'travel-and-exploration':
+        return FontAwesomeIcons.plane;
+      case 'safety-and-security':
+        return FontAwesomeIcons.shieldHalved;
+      case 'shopping-and-commerce':
+        return FontAwesomeIcons.cartShopping;
+      case 'social-and-relationships':
+        return FontAwesomeIcons.userGroup;
+      case 'news-and-information':
+        return FontAwesomeIcons.solidNewspaper;
+      case 'utilities-and-tools':
+        return FontAwesomeIcons.toolbox;
+      case 'popular':
+        return FontAwesomeIcons.fire;
+      default:
+        return FontAwesomeIcons.solidCircleQuestion;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final day = date.day;
+    final month = months[date.month - 1];
+    if (date.year == now.year) {
+      return '$day $month';
+    }
+    return '$day $month ${date.year}';
+  }
+
   checkSetupCompleted() {
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
@@ -984,103 +1034,208 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    app.ratingCount == 0
-                        ? const Column(
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Ratings section - App Store style
+                          Column(
                             children: [
                               Text(
-                                '0.0',
+                                app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
-                              SizedBox(height: 4),
-                              Text("no reviews"),
-                            ],
-                          )
-                        : Column(
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    app.getRatingAvg() ?? '0.0',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  RatingBar.builder(
-                                    initialRating: app.ratingAvg ?? 0,
-                                    minRating: 1,
-                                    ignoreGestures: true,
-                                    direction: Axis.horizontal,
-                                    allowHalfRating: true,
-                                    itemCount: 1,
-                                    itemSize: 16,
-                                    tapOnlyMode: false,
-                                    itemPadding: const EdgeInsets.symmetric(horizontal: 1),
-                                    itemBuilder: (context, _) =>
-                                        const Icon(FontAwesomeIcons.solidStar, color: Colors.deepPurple),
-                                    maxRating: 5.0,
-                                    onRatingUpdate: (rating) {},
-                                  ),
-                                ],
+                              const SizedBox(height: 6),
+                              Text(
+                                app.getRatingAvg() ?? '0.0',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade400,
+                                ),
                               ),
-                              const SizedBox(height: 4),
-                              Text('${app.ratingCount}+ reviews'),
+                              const SizedBox(height: 6),
+                              RatingBar.builder(
+                                initialRating: app.ratingAvg ?? 0,
+                                minRating: 1,
+                                ignoreGestures: true,
+                                direction: Axis.horizontal,
+                                allowHalfRating: true,
+                                itemCount: 5,
+                                itemSize: 12,
+                                tapOnlyMode: false,
+                                itemPadding: const EdgeInsets.symmetric(horizontal: 1),
+                                itemBuilder: (context, _) => Icon(
+                                  FontAwesomeIcons.solidStar,
+                                  color: Colors.grey.shade500,
+                                ),
+                                maxRating: 5.0,
+                                onRatingUpdate: (rating) {},
+                              ),
                             ],
                           ),
-                    const Spacer(),
-                    const SizedBox(
-                      height: 36,
-                      child: VerticalDivider(
-                        color: Colors.white,
-                        endIndent: 2,
-                        indent: 2,
-                        width: 4,
+                          const SizedBox(width: 20),
+                          VerticalDivider(
+                            color: Colors.grey.shade800,
+                            width: 4,
+                          ),
+                          const SizedBox(width: 20),
+                          // Installs
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${(app.installs / 10).round() * 10}+',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'INSTALLS',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 20),
+                          VerticalDivider(
+                            color: Colors.grey.shade800,
+                            width: 4,
+                          ),
+                          const SizedBox(width: 20),
+                          // Pricing
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _getPricingText(app),
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'PRICE',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 20),
+                          VerticalDivider(
+                            color: Colors.grey.shade800,
+                            width: 4,
+                          ),
+                          const SizedBox(width: 20),
+                          // Category
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              FaIcon(
+                                _getCategoryIcon(app.category),
+                                size: 20,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                app.getCategoryName().split(' ').first.toUpperCase(),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade500,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (app.getLastUpdatedDate() != null) ...[
+                            const SizedBox(width: 20),
+                            VerticalDivider(
+                              color: Colors.grey.shade800,
+                              width: 4,
+                            ),
+                            const SizedBox(width: 20),
+                            // Updated/Created
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _formatDate(app.getLastUpdatedDate()!),
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  app.updatedAt != null ? 'UPDATED' : 'CREATED',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (app.isPopular == true) ...[
+                            const SizedBox(width: 20),
+                            VerticalDivider(
+                              color: Colors.grey.shade800,
+                              width: 4,
+                            ),
+                            const SizedBox(width: 20),
+                            // Featured
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FaIcon(
+                                  FontAwesomeIcons.trophy,
+                                  size: 20,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'FEATURED',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    const Spacer(),
-                    Column(
-                      children: [
-                        Text(
-                          '${(app.installs / 10).round() * 10}+',
-                          style: const TextStyle(
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text("installs"),
-                      ],
-                    ),
-                    const Spacer(),
-                    const SizedBox(
-                      height: 36,
-                      child: VerticalDivider(
-                        color: Colors.white,
-                        endIndent: 2,
-                        indent: 2,
-                        width: 4,
-                      ),
-                    ),
-                    const Spacer(),
-                    Column(
-                      children: [
-                        Text(
-                          _getPricingText(app),
-                          style: const TextStyle(
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text("pricing"),
-                      ],
-                    ),
-                    const Spacer(),
-                  ],
+                  ),
                 ),
                 // Cancel Subscription
                 !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
