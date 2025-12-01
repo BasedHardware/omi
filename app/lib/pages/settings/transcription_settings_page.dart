@@ -360,16 +360,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Source',
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        ),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(child: _buildSourceOption(false, 'Omi')),
             const SizedBox(width: 10),
-            Expanded(child: _buildSourceOption(true, 'Custom')),
+            Expanded(child: _buildSourceOption(true, 'Bring your own')),
           ],
         ),
       ],
