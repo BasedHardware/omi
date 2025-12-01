@@ -39,7 +39,7 @@ class InfoCardWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 description.decodeString.characters.length > 200
                     ? const Icon(
