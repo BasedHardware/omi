@@ -57,6 +57,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _setupCheckTimer;
   late App app;
   Set<String> _expandedChatTools = {};
+  Set<String> _expandedPermissions = {};
 
   String _getPricingText(App app) {
     if (!app.isPaid || app.price == null || app.price == 0) {
@@ -317,43 +318,176 @@ class _AppDetailPageState extends State<AppDetailPage> {
     final actions = app.externalIntegration?.actions ?? [];
     final trigger = app.externalIntegration?.getTriggerOnString();
 
-    final permissions = <String>[];
+    final List<_PermissionItem> permissionItems = [];
+
+    // Read permissions
     if (actions.any((a) => a.action == 'read_conversations')) {
-      permissions.add('conversations');
+      permissionItems.add(_PermissionItem(
+        title: 'Read Conversations',
+        type: 'Access',
+        description: 'This app can access your conversations.',
+      ));
     }
     if (actions.any((a) => a.action == 'read_memories')) {
-      permissions.add('memories');
+      permissionItems.add(_PermissionItem(
+        title: 'Read Memories',
+        type: 'Access',
+        description: 'This app can access your memories.',
+      ));
     }
 
-    final creations = <String>[];
+    // Create permissions
     if (actions.any((a) => a.action == 'create_conversation')) {
-      creations.add('new conversations');
+      permissionItems.add(_PermissionItem(
+        title: 'Create Conversations',
+        type: 'Create',
+        description: 'This app can create new conversations.',
+      ));
     }
     if (actions.any((a) => a.action == 'create_facts')) {
-      creations.add('new memories');
+      permissionItems.add(_PermissionItem(
+        title: 'Create Memories',
+        type: 'Create',
+        description: 'This app can create new memories.',
+      ));
     }
 
-    final List<String> descriptions = [];
-    if (permissions.isNotEmpty) {
-      descriptions.add('• Accesses your ${permissions.join(' and ')}.');
-    }
-    if (creations.isNotEmpty) {
-      descriptions.add('• Can create ${creations.join(' and ')}.');
-    }
+    // Trigger
     if (trigger != null && trigger != 'Unknown') {
-      descriptions.add('• Runs when: $trigger.');
+      permissionItems.add(_PermissionItem(
+        title: trigger,
+        type: 'Trigger',
+        description: 'This app runs automatically when: $trigger',
+      ));
     }
 
-    if (descriptions.isEmpty) {
+    if (permissionItems.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return InfoCardWidget(
-      onTap: () {},
-      title: 'Permissions & Triggers',
-      description: descriptions.join('\n'),
-      showChips: false,
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16.0),
+      margin: EdgeInsets.only(
+        left: MediaQuery.of(context).size.width * 0.05,
+        right: MediaQuery.of(context).size.width * 0.05,
+        top: 12,
+        bottom: 6,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Permissions & Triggers',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          ...permissionItems.asMap().entries.map((entry) {
+            final permission = entry.value;
+            final isLast = entry.key == permissionItems.length - 1;
+            return _buildPermissionItem(permission, isLast);
+          }).toList(),
+        ],
+      ),
     );
+  }
+
+  Widget _buildPermissionItem(_PermissionItem permission, bool isLast) {
+    final isExpanded = _expandedPermissions.contains(permission.title);
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (isExpanded) {
+            _expandedPermissions.remove(permission.title);
+          } else {
+            _expandedPermissions.add(permission.title);
+          }
+        });
+      },
+      child: Container(
+        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2A2A2F),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF35343B)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getPermissionTypeColor(permission.type).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: _getPermissionTypeColor(permission.type).withOpacity(0.5)),
+                  ),
+                  child: Text(
+                    permission.type,
+                    style: TextStyle(
+                      color: _getPermissionTypeColor(permission.type),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    permission.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.grey,
+                  size: 20,
+                ),
+              ],
+            ),
+            if (isExpanded) ...[
+              const SizedBox(height: 12),
+              Text(
+                permission.description,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getPermissionTypeColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'access':
+        return Colors.green;
+      case 'create':
+        return Colors.orange;
+      case 'trigger':
+        return Colors.blue;
+      default:
+        return Colors.blue;
+    }
   }
 
   Widget _buildChatToolsCard(App app) {
@@ -1514,6 +1648,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
       });
     }
   }
+}
+
+class _PermissionItem {
+  final String title;
+  final String type;
+  final String description;
+
+  _PermissionItem({
+    required this.title,
+    required this.type,
+    required this.description,
+  });
 }
 
 class RecentReviewsSection extends StatelessWidget {
