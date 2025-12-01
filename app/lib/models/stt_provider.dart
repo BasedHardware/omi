@@ -99,8 +99,8 @@ class SttProviderConfig {
           'Authorization': 'Token YOUR_API_KEY',
         },
         'params': {
-          'model': 'nova-2',
-          'language': 'en',
+          'model': 'nova-3',
+          'language': 'multi',
           'smart_format': 'true',
           'interim_results': 'true',
           'punctuate': 'true',
@@ -158,7 +158,8 @@ class SttProviderConfig {
       icon: FontAwesomeIcons.google,
       requiresApiKey: true,
       requestConfig: {
-        'ws_url': 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent',
+        'ws_url':
+            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent',
         'request_type': 'streaming',
         'headers': {},
         'params': {

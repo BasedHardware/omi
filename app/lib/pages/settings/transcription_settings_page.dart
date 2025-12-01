@@ -288,7 +288,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Widget _buildSourceOption(bool isCustom, String title) {
     final isSelected = _useCustomStt == isCustom;
-    final showLiveDot = !isCustom; // Show dot for Omi
     return GestureDetector(
       onTap: () => setState(() => _useCustomStt = isCustom),
       child: Container(
@@ -314,17 +313,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              if (showLiveDot) ...[
-                const SizedBox(width: 6),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: Colors.green,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
             ],
           ),
         ),

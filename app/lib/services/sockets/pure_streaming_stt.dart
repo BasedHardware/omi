@@ -92,7 +92,8 @@ class StreamingSttConfig {
     IAudioTranscoder? transcoder,
   }) {
     return StreamingSttConfig(
-      wsUrl: 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey',
+      wsUrl:
+          'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey',
       headers: {},
       responseSchema: SttResponseSchema.geminiLive,
       transcoder: transcoder,
@@ -156,7 +157,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
   GeminiStreamingSttSocket({
     required this.apiKey,
-    this.model = 'gemini-2.0-flash-exp',
+    this.model = 'gemini-2.5-flash-tts',
     this.language = 'en',
     this.sampleRate = 16000,
     this.transcoder,
@@ -258,13 +259,24 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 
   void _handleMessage(dynamic message) {
-    if (message is! String) {
-      debugPrint("[GeminiStreaming] Non-string message received");
+    String messageStr;
+    if (message is String) {
+      messageStr = message;
+    } else if (message is List<int>) {
+      // Binary WebSocket frame - decode as UTF-8
+      try {
+        messageStr = utf8.decode(message);
+      } catch (e) {
+        debugPrint("[GeminiStreaming] Failed to decode binary message: $e");
+        return;
+      }
+    } else {
+      debugPrint("[GeminiStreaming] Unsupported message type: ${message.runtimeType}");
       return;
     }
 
     try {
-      final json = jsonDecode(message);
+      final json = jsonDecode(messageStr);
 
       if (json.containsKey('setupComplete')) {
         debugPrint("[GeminiStreaming] Setup complete");
@@ -332,24 +344,28 @@ class GeminiStreamingSttSocket implements IPureSocket {
       return;
     }
 
-    final combined = Uint8List(_bufferedBytes);
-    int offset = 0;
-    for (final frame in _frameBuffer) {
-      combined.setRange(offset, offset + frame.length, frame);
-      offset += frame.length;
+    Uint8List pcmData;
+    if (transcoder != null) {
+      // Transcode individual frames (important for Opus which needs frame boundaries)
+      try {
+        pcmData = transcoder!.transcodeFrames(_frameBuffer);
+      } catch (e) {
+        debugPrint("[GeminiStreaming] Transcode error: $e");
+        _frameBuffer.clear();
+        _bufferedBytes = 0;
+        return;
+      }
+    } else {
+      // Only combine if no transcoding needed (raw PCM)
+      pcmData = Uint8List(_bufferedBytes);
+      int offset = 0;
+      for (final frame in _frameBuffer) {
+        pcmData.setRange(offset, offset + frame.length, frame);
+        offset += frame.length;
+      }
     }
     _frameBuffer.clear();
     _bufferedBytes = 0;
-
-    Uint8List pcmData = combined;
-    if (transcoder != null) {
-      try {
-        pcmData = transcoder!.transcodeFrames([combined]);
-      } catch (e) {
-        debugPrint("[GeminiStreaming] Transcode error: $e");
-        return;
-      }
-    }
 
     final realtimeInput = {
       'realtimeInput': {
@@ -696,25 +712,37 @@ class PureStreamingSttSocket implements IPureSocket {
         return;
       }
 
-      // Combine buffered frames
-      final combined = Uint8List(_bufferedBytes);
-      int offset = 0;
-      for (final frame in _frameBuffer) {
-        combined.setRange(offset, offset + frame.length, frame);
-        offset += frame.length;
+      // Transcode individual frames (important for Opus which needs frame boundaries)
+      if (config.transcoder != null) {
+        try {
+          audioData = config.transcoder!.transcodeFrames(_frameBuffer);
+        } catch (e) {
+          debugPrint("[StreamingSTT] Transcode error: $e");
+          _frameBuffer.clear();
+          _bufferedBytes = 0;
+          return;
+        }
+      } else {
+        // Only combine if no transcoding needed (raw PCM)
+        final combined = Uint8List(_bufferedBytes);
+        int offset = 0;
+        for (final frame in _frameBuffer) {
+          combined.setRange(offset, offset + frame.length, frame);
+          offset += frame.length;
+        }
+        audioData = combined;
       }
       _frameBuffer.clear();
       _bufferedBytes = 0;
-      audioData = combined;
-    }
-
-    // Transcode if needed (e.g., opus to raw PCM)
-    if (config.transcoder != null) {
-      try {
-        audioData = config.transcoder!.transcodeFrames([audioData]);
-      } catch (e) {
-        debugPrint("[StreamingSTT] Transcode error: $e");
-        return;
+    } else {
+      // No buffering - transcode single frame
+      if (config.transcoder != null) {
+        try {
+          audioData = config.transcoder!.transcodeFrames([audioData]);
+        } catch (e) {
+          debugPrint("[StreamingSTT] Transcode error: $e");
+          return;
+        }
       }
     }
 
