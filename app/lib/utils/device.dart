@@ -90,7 +90,7 @@ class DeviceUtils {
               return Assets.images.omiGlass.path;
             }
 
-            if (upperName.contains('DEVKIT') || (upperName.contains('FRIEND'))) {
+            if (upperName.contains('DEVKIT') || upperName.contains('DEV') || (upperName.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
           }
