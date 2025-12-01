@@ -11,7 +11,7 @@ import uuid
 import asyncio
 import contextvars
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator, Tuple
+from typing import List, Optional, AsyncGenerator, Tuple, Any
 
 import database.notifications as notification_db
 
@@ -52,22 +52,33 @@ from utils.retrieval.tools import (
     close_github_issue_tool,
     search_files_tool,
 )
+from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
 
 
-def get_tool_display_name(tool_name: str) -> str:
+def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str:
     """
     Convert tool name to user-friendly display name.
 
     Args:
         tool_name: Internal tool name (e.g., 'search_notion_pages_tool')
+        tool_obj: Optional tool object that may have status_message attribute
 
     Returns:
         User-friendly display name (e.g., 'Searching Notion')
     """
+    # Check if tool has a custom status_message (for app tools)
+    # First check the global mapping
+    status_msg = get_tool_status_message(tool_name)
+    if status_msg:
+        return status_msg
+
+    # Fallback: check if tool object has status_message attribute
+    if tool_obj and hasattr(tool_obj, 'status_message') and tool_obj.status_message:
+        return tool_obj.status_message
     tool_display_map = {
         'search_notion_pages_tool': 'Searching Notion',
         'get_whoop_sleep_tool': 'Checking Whoop sleep data',
@@ -225,6 +236,15 @@ def execute_agentic_chat(
         search_files_tool,
     ]
 
+    # Load tools from enabled apps
+    try:
+        app_tools = load_app_tools(uid)
+        tools.extend(app_tools)
+        if app_tools:
+            print(f"🔧 Added {len(app_tools)} app tools to chat")
+    except Exception as e:
+        print(f"⚠️ Error loading app tools: {e}")
+
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
     lc_messages.extend(_messages_to_langchain(messages))
@@ -315,6 +335,15 @@ async def execute_agentic_chat_stream(
         search_files_tool,
     ]
 
+    # Load tools from enabled apps
+    try:
+        app_tools = load_app_tools(uid)
+        tools.extend(app_tools)
+        if app_tools:
+            print(f"🔧 Added {len(app_tools)} app tools to chat")
+    except Exception as e:
+        print(f"⚠️ Error loading app tools: {e}")
+
     # Convert messages to LangChain format and prepend system message
     lc_messages = [SystemMessage(content=system_prompt)]
     lc_messages.extend(_messages_to_langchain(messages))
@@ -341,6 +370,7 @@ async def execute_agentic_chat_stream(
             "conversations_collected": conversations_collected,
             "safety_guard": safety_guard,
             "chat_session_id": chat_session.id if chat_session else None,
+            "tools": tools,  # Store tools for status message lookup
         }
     }
 
@@ -444,7 +474,15 @@ async def _run_agent_stream(
                 print(f"🔧 Tool started: {tool_name}")
 
                 # Send user-friendly tool call message to frontend
-                tool_display_name = get_tool_display_name(tool_name)
+                # Get tool object to check for custom status_message
+                tool_obj = None
+                tools_list = config.get('configurable', {}).get('tools', [])
+                for tool in tools_list:
+                    if hasattr(tool, 'name') and tool.name == tool_name:
+                        tool_obj = tool
+                        break
+
+                tool_display_name = get_tool_display_name(tool_name, tool_obj)
                 await callback.put_thought(tool_display_name)
 
                 # Validate tool call with safety guard

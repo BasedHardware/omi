@@ -14,6 +14,7 @@ import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/external_trigger_fields_widget.dart';
 import 'widgets/payment_details_widget.dart';
 import 'widgets/prompt_text_field.dart';
+import 'widgets/chat_tools_widget.dart';
 
 class UpdateAppPage extends StatefulWidget {
   final App app;
@@ -332,6 +333,14 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                             ],
                           ),
                         const ExternalTriggerFieldsWidget(),
+                        if (provider.isCapabilitySelectedById('external_integration'))
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: 18),
+                              const ChatToolsWidget(),
+                            ],
+                          ),
                         if (provider.isCapabilitySelectedById('proactive_notification'))
                           Column(
                             children: [

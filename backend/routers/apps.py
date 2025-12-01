@@ -360,7 +360,12 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    add_app_to_db(app.model_dump(exclude_unset=True))
+    # Ensure chat_tools are included even if empty
+    app_dict = app.model_dump(exclude_unset=True)
+    if 'chat_tools' in data:
+        app_dict['chat_tools'] = data['chat_tools']
+
+    add_app_to_db(app_dict)
 
     # payment link
     upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
@@ -577,7 +582,12 @@ def update_app(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    update_app_in_db(update_app.model_dump(exclude_unset=True))
+    # Ensure chat_tools are included if provided
+    update_dict = update_app.model_dump(exclude_unset=True)
+    if 'chat_tools' in data:
+        update_dict['chat_tools'] = data['chat_tools']
+
+    update_app_in_db(update_dict)
 
     # payment link
     upsert_app_payment_link(
