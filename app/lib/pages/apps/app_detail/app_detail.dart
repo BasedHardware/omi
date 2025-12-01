@@ -265,7 +265,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
         }
       }
-      if (!app.enabled) {
+      // Always check setup completed status when there are auth steps
+      if (app.externalIntegration?.authSteps.isNotEmpty == true) {
+        checkSetupCompleted();
+      } else if (!app.enabled) {
         checkSetupCompleted();
       }
     }
