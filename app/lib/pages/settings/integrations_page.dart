@@ -8,6 +8,7 @@ import 'package:omi/services/whoop_service.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/settings/integrations_help_page.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
@@ -346,6 +347,22 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     return context.read<IntegrationProvider>().isAppConnected(app);
   }
 
+  Widget _buildOverlappingLogo(String path, double size) {
+    return Container(
+      width: size,
+      height: size,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.asset(
+          path,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
   Widget _buildAppTile(IntegrationApp app) {
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
@@ -374,23 +391,62 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
         child: Row(
           children: [
-            // App Icon/Logo
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: app.logoPath != null
-                  ? ClipRRect(
+            // App Icon/Logo - Stacked for Google, single for others
+            app == IntegrationApp.googleCalendar
+                ? SizedBox(
+                    width: 68, // Width for 2 overlapping logos (40px icon + 28px offset)
+                    height: 40,
+                    child: Stack(
+                      children: [
+                        // Gmail logo
+                        Positioned(
+                          left: 0,
+                          child: _buildOverlappingLogo(
+                            'assets/integration_app_logos/gmail-logo.jpeg',
+                            40,
+                          ),
+                        ),
+                        // Calendar logo
+                        Positioned(
+                          left: 28,
+                          child: _buildOverlappingLogo(
+                            'assets/integration_app_logos/google-calendar.png',
+                            40,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(
-                        app.logoPath!,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
+                    ),
+                    child: app.logoPath != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.asset(
+                              app.logoPath!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    app.icon,
+                                    color: isAvailable ? app.iconColor : Colors.grey,
+                                    size: 24,
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : Container(
                             decoration: BoxDecoration(
                               color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
@@ -400,22 +456,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                               color: isAvailable ? app.iconColor : Colors.grey,
                               size: 24,
                             ),
-                          );
-                        },
-                      ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        app.icon,
-                        color: isAvailable ? app.iconColor : Colors.grey,
-                        size: 24,
-                      ),
-                    ),
-            ),
+                          ),
+                  ),
             const SizedBox(width: 16),
             // App Name and Status
             Expanded(
@@ -564,7 +606,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Chat Tools',
+          'Integrations',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -572,6 +614,18 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           ),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline, color: Colors.white),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const IntegrationsHelpPage(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
