@@ -606,7 +606,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Integrations',
+          'Chat Tools',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
