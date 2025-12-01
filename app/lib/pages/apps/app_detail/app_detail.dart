@@ -429,7 +429,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
+        color: const Color(0xFF1F1F25).withOpacity(0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -467,7 +467,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2F),
+          color: const Color(0xFF2A2A2F).withOpacity(0.7),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF35343B)),
         ),
@@ -559,7 +559,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
+        color: const Color(0xFF1F1F25).withOpacity(0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -597,7 +597,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2F),
+          color: const Color(0xFF2A2A2F).withOpacity(0.7),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFF35343B)),
         ),
@@ -1392,7 +1392,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             bottom: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25),
+                            color: const Color(0xFF1F1F25).withOpacity(0.8),
                             borderRadius: BorderRadius.circular(16.0),
                             border: Border.all(
                               color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
@@ -1648,7 +1648,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             bottom: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25),
+                            color: const Color(0xFF1F1F25).withOpacity(0.8),
                             borderRadius: BorderRadius.circular(16.0),
                           ),
                           child: Column(

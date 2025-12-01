@@ -57,7 +57,7 @@ class CapabilitiesCard extends StatelessWidget {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
+        color: const Color(0xFF1F1F25).withOpacity(0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
