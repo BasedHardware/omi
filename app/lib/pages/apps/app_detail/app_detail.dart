@@ -31,6 +31,7 @@ import 'dart:async';
 import '../../../backend/schema/app.dart';
 import '../../../backend/http/api/payment.dart';
 import '../widgets/show_app_options_sheet.dart';
+import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
 
 import 'package:timeago/timeago.dart' as timeago;
@@ -1397,12 +1398,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   },
                   title: 'About the ${app.isNotPersona() ? 'App' : 'Persona'}',
                   description: app.description,
-                  showChips: true,
-                  capabilityChips: app
-                      .getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities)
-                      .map((e) => e.title)
-                      .toList(),
-                  connectionChips: app.getConnectedAccountNames(),
+                  showChips: false,
+                ),
+                CapabilitiesCard(
+                  capabilities: app.getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities),
                 ),
                 _buildPermissionsCard(app),
                 app.conversationPrompt != null
