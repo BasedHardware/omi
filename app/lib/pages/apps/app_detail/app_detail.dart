@@ -1035,7 +1035,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     const SizedBox(width: 20),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Padding(
