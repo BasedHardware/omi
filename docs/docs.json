@@ -74,6 +74,7 @@
           "doc/developer/apps/Introduction",
           "doc/developer/apps/PromptBased",
           "doc/developer/apps/Integrations",
+          "doc/developer/apps/ChatTools",
           {
             "group": "Examples",
             "pages": [

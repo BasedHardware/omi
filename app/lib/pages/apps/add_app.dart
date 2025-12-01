@@ -22,13 +22,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/prompt_text_field.dart';
+import 'widgets/chat_tools_widget.dart';
 
 class AddAppPage extends StatefulWidget {
   final bool presetForConversationAnalysis;
+  final bool presetExternalIntegration;
 
   const AddAppPage({
     super.key,
     this.presetForConversationAnalysis = false,
+    this.presetExternalIntegration = false,
   });
 
   @override
@@ -44,6 +47,7 @@ class _AddAppPageState extends State<AddAppPage> {
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       await Provider.of<AddAppProvider>(context, listen: false).init(
         presetForConversationAnalysis: widget.presetForConversationAnalysis,
+        presetExternalIntegration: widget.presetExternalIntegration,
       );
     });
     super.initState();
@@ -347,6 +351,14 @@ class _AddAppPageState extends State<AddAppPage> {
                               ],
                             ),
                           const ExternalTriggerFieldsWidget(),
+                          if (provider.isCapabilitySelectedById('external_integration'))
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 18),
+                                const ChatToolsWidget(),
+                              ],
+                            ),
                           if (provider.isCapabilitySelectedById('proactive_notification'))
                             Column(
                               children: [

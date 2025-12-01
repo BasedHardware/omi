@@ -164,22 +164,20 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     (() async {
       final provider = context.read<MemoriesProvider>();
       await provider.init();
+      if (!mounted) return;
 
       // Apply the date-based default filter
       _applyFilter(_currentFilter);
 
-      // Mark initial load as complete
-      if (mounted) {
-        setState(() {
-          _isInitialLoad = false;
-        });
-      }
+      setState(() {
+        _isInitialLoad = false;
+      });
 
-      if (!mounted) return;
-      final unreviewedMemories = provider.unreviewed;
+      final unreviewed = provider.unreviewed;
       final home = context.read<HomeProvider>();
-      if (unreviewedMemories.isNotEmpty && home.selectedIndex == 2) {
-        _showReviewSheet(context, unreviewedMemories, provider);
+
+      if (unreviewed.isNotEmpty && home.selectedIndex == 2) {
+        _showReviewSheet(context, unreviewed, provider);
       }
     }).withPostFrameCallback();
   }
@@ -187,7 +185,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   void _applyFilter(FilterOption option) {
     setState(() {
       _currentFilter = option;
-
       switch (option) {
         case FilterOption.interesting:
           _filterByCategory(MemoryCategory.interesting);
@@ -202,7 +199,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           MixpanelManager().memoriesFiltered('manual');
           break;
         case FilterOption.all:
-          _filterByCategory(null); // null means no category filter
+          _filterByCategory(null);
           MixpanelManager().memoriesFiltered('all');
           break;
       }
@@ -211,11 +208,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   void _filterByCategory(MemoryCategory? category) {
     if (!mounted) return;
-
     setState(() {
       _selectedCategory = category;
     });
-
     final provider = context.read<MemoriesProvider>();
     provider.setCategoryFilter(category);
   }
