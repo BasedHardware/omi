@@ -590,12 +590,12 @@ class CaptureProvider extends ChangeNotifier
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
-    final configKey = customSttConfig.configKey;
+    final sttConfigId = customSttConfig.sttConfigId;
 
     if (language != _socket?.language ||
         codec != _socket?.codec ||
         _socket?.state != SocketServiceState.connected ||
-        _socket?.configKey != configKey) {
+        _socket?.sttConfigId != sttConfigId) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }

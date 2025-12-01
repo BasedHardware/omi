@@ -186,7 +186,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       );
 
       final previousConfig = SharedPreferencesUtil().customSttConfig;
-      final configChanged = previousConfig.configKey != config.configKey;
+      final configChanged = previousConfig.sttConfigId != config.sttConfigId;
 
       SharedPreferencesUtil().customSttConfig = config;
 

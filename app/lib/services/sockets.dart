@@ -55,19 +55,19 @@ class SocketServicePool extends ISocketService {
   }) async {
     await _mutex.acquire();
     try {
-      final configKey = customSttConfig?.configKey ?? 'omi:default';
+      final sttConfigId = customSttConfig?.sttConfigId ?? 'omi:default';
 
       // Check if we can reuse existing socket (same codec, sample rate, config, and connected)
       if (!force &&
           _socket?.codec == codec &&
           _socket?.sampleRate == sampleRate &&
           _socket?.state == SocketServiceState.connected &&
-          _socket?.configKey == configKey) {
+          _socket?.sttConfigId == sttConfigId) {
         debugPrint("Reusing existing socket connection");
         return _socket;
       }
 
-      debugPrint("_connect force=$force state=${_socket?.state} configChanged=${_socket?.configKey != configKey}");
+      debugPrint("_connect force=$force state=${_socket?.state} configChanged=${_socket?.sttConfigId != sttConfigId}");
 
       // new socket
       await _socket?.stop();
@@ -81,7 +81,7 @@ class SocketServicePool extends ISocketService {
           source: source,
         );
       } else {
-        _socket = TranscriptSocketServiceFactory.createDefault(sampleRate, codec, language, source: source, configKey: configKey);
+        _socket = TranscriptSocketServiceFactory.createDefault(sampleRate, codec, language, source: source, sttConfigId: sttConfigId);
       }
 
       await _socket?.start();

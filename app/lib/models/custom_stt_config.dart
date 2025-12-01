@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 
@@ -39,9 +41,26 @@ class CustomSttConfig {
     return providerConfig.responseSchema;
   }
 
-  String get configKey {
+  String get sttConfigId {
     if (!isEnabled) return 'omi:default';
-    return '${provider.name}:${apiKey ?? ""}:${apiUrl ?? ""}:${host ?? ""}:${port ?? 0}';
+
+    final configData = {
+      'api_key': apiKey,
+      'api_url': apiUrl,
+      'host': host,
+      'port': port,
+      'headers': headers,
+      'fields': fields,
+      'audio_field_name': audioFieldName,
+      'request_type': requestType,
+      'schema': schemaJson,
+      'file_upload_config': fileUploadConfig,
+    };
+
+    final jsonStr = jsonEncode(configData);
+    final hashValue = jsonStr.hashCode.abs();
+    final hash = hashValue.toRadixString(16).padLeft(8, '0').substring(0, 8);
+    return '${provider.name}:$hash';
   }
 
   Map<String, dynamic> toJson() => {
