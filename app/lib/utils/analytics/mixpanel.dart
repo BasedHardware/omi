@@ -977,6 +977,26 @@ class MixpanelManager {
     });
   }
 
+  // ============================================================================
+  // TRANSCRIPTION / CUSTOM STT TRACKING
+  // ============================================================================
+
+  void transcriptionSourceSelected({
+    required String source, // 'omi' or 'custom'
+  }) {
+    track('Transcription Source Selected', properties: {
+      'source': source,
+    });
+  }
+
+  void transcriptionProviderSelected({
+    required String provider, // e.g. 'openai', 'deepgram', 'gemini', 'local_whisper', 'custom', 'custom_live'
+  }) {
+    track('Transcription Provider Selected', properties: {
+      'provider': provider,
+    });
+  }
+
   void actionItemExported({
     required String actionItemId,
     required String appName,
