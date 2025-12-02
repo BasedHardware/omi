@@ -202,6 +202,28 @@ def get_conversation_recording_if_exists(uid: str, memory_id: str) -> str:
     return None
 
 
+def get_conversation_recording_signed_url(uid: str, memory_id: str, expiry_minutes: int = 60) -> str:
+    """
+    Get a signed URL for a conversation recording.
+
+    Used by diarization refinement service to pass audio URL to Modal.
+
+    Args:
+        uid: User ID
+        memory_id: Conversation/memory ID
+        expiry_minutes: URL expiry time (default 60 minutes)
+
+    Returns:
+        Signed URL or None if recording doesn't exist
+    """
+    bucket = storage_client.bucket(memories_recordings_bucket)
+    path = f'{uid}/{memory_id}.wav'
+    blob = bucket.blob(path)
+    if blob.exists():
+        return _get_signed_url(blob, expiry_minutes)
+    return None
+
+
 def delete_all_conversation_recordings(uid: str):
     if not uid:
         return
