@@ -37,7 +37,12 @@ from datetime import datetime
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
-from utils.subscription import get_plan_limits, get_plan_features, get_monthly_usage_for_subscription
+from utils.subscription import (
+    get_plan_limits,
+    get_plan_features,
+    get_monthly_usage_for_subscription,
+    reconcile_basic_plan_with_stripe,
+)
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -548,6 +553,11 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
             available_plans=[],
             show_subscription_ui=False,
         )
+    # First, reconcile any "basic but actually unlimited" inconsistencies against Stripe once.
+    raw_subscription = get_user_subscription(uid)
+    reconcile_basic_plan_with_stripe(uid, raw_subscription)
+
+    # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
     if not subscription:
         # Return default basic plan if no valid subscription

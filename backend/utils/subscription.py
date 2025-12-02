@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 import os
 import stripe
@@ -194,3 +194,60 @@ def has_transcription_credits(uid: str) -> bool:
             return False
 
     return True
+
+
+def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
+    """
+    If Firestore says `basic` but there is a Stripe subscription with a future period end
+    that actually maps to an unlimited plan, fix it once by reconciling with Stripe.
+    """
+    if (
+        not subscription
+        or subscription.plan != PlanType.basic
+        or not subscription.stripe_subscription_id
+        or not subscription.current_period_end
+    ):
+        return subscription
+
+    try:
+        period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+        # Only bother reconciling if the stored period end is still in the future.
+        if period_end_dt < datetime.now(timezone.utc):
+            return subscription
+
+        stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+        stripe_sub_dict = stripe_sub.to_dict() if stripe_sub else None
+        if not stripe_sub_dict:
+            return subscription
+
+        items = stripe_sub_dict.get('items', {}).get('data') or []
+        price_id = None
+        if items and items[0].get('price'):
+            price_id = items[0]['price'].get('id')
+
+        stripe_status = stripe_sub_dict.get('status')
+        if stripe_status not in ('active', 'trialing') or not price_id:
+            return subscription
+
+        try:
+            plan_type = get_plan_type_from_price_id(price_id)
+        except ValueError:
+            plan_type = None
+
+        # If Stripe says this is actually an unlimited plan, fix our local record.
+        if plan_type == PlanType.unlimited:
+            subscription.plan = PlanType.unlimited
+            subscription.status = SubscriptionStatus.active
+            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
+            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+            subscription.current_price_id = price_id
+            subscription.limits = get_plan_limits(plan_type)
+
+            # Persist the corrected subscription back to Firestore (without dynamic fields).
+            users_db.update_user_subscription(uid, subscription.dict())
+
+    except Exception as e:
+        # Don't break user flows on reconciliation issues; just log and continue with existing data.
+        print(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
+
+    return subscription
