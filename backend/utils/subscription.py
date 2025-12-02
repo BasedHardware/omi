@@ -91,34 +91,40 @@ def get_plan_features(plan: PlanType) -> List[str]:
 def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
-    
+
     Args:
         uid: User ID
         target_price_id: Optional target price ID to check if this is an upgrade/downgrade
-    
+
     Returns:
         tuple: (can_pay: bool, reason: str)
     """
     subscription = users_db.get_user_valid_subscription(uid)
-    
+
     # If no subscription or basic plan, user can pay
     if not subscription or subscription.plan == PlanType.basic:
         return True, "User can make payment"
-    
+
     # If unlimited plan but inactive, user can pay
     if subscription.plan == PlanType.unlimited and subscription.status == SubscriptionStatus.inactive:
         return True, "User can make payment"
-    
+
+    # If subscription is canceled (cancel_at_period_end=True), allow resubscription
+    # This handles the case where user canceled but period hasn't ended yet
+    if subscription.cancel_at_period_end:
+        return True, "User can resubscribe (current subscription is scheduled for cancellation)"
+
     # If unlimited plan and active, check if this is a plan change
     if subscription.plan == PlanType.unlimited and subscription.status == SubscriptionStatus.active:
         if subscription.current_period_end:
             from datetime import datetime, timezone
+
             period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-            
+
             # If subscription has expired, user can pay
             if period_end_dt <= datetime.now(timezone.utc):
                 return True, "User's subscription has expired, can make new payment"
-            
+
             # If target price is provided, check if it's different from current plan
             if target_price_id:
                 current_price_id = None
@@ -132,19 +138,19 @@ def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, 
                                 current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
                     except Exception as e:
                         print(f"Error retrieving current price ID: {e}")
-                
+
                 # If different price, allow upgrade/downgrade
                 if current_price_id and current_price_id != target_price_id:
                     return True, "User can upgrade/downgrade to different plan"
                 elif not current_price_id:
                     return True, "User can make payment (current price unknown)"
-            
+
             # Same plan, active subscription
             return False, "User already has an active subscription for this plan"
-    
+
     return True, "User can make payment"
 
-  
+
 def get_monthly_usage_for_subscription(uid: str) -> dict:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
