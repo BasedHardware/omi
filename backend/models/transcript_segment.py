@@ -23,7 +23,7 @@ class TranscriptSegment(BaseModel):
     end: float
     translations: Optional[List[Translation]] = []
     speech_profile_processed: bool = True
-    stt_provider: Optional[str] = None  # Tracks which custom STT provider was used, None means default/backend STT
+    stt_provider: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -109,6 +109,8 @@ class TranscriptSegment(BaseModel):
         # Combined
         def _merge(a, b: TranscriptSegment):
             if not a or not b:
+                return a, b
+            if b.stt_provider != a.stt_provider:
                 return a, b
             if (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))

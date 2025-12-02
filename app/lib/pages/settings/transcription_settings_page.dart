@@ -34,17 +34,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   BleAudioCodec? _connectedDeviceCodec;
   String? _connectedDeviceName;
 
-  // Store settings per provider
-  final Map<SttProvider, String> _apiKeysPerProvider = {};
-  final Map<SttProvider, String> _languagePerProvider = {};
-  final Map<SttProvider, String> _modelPerProvider = {};
+  // Store complete config per provider
+  final Map<SttProvider, CustomSttConfig> _configsPerProvider = {};
 
   final TextEditingController _apiKeyController = TextEditingController();
   final TextEditingController _hostController = TextEditingController(text: '127.0.0.1');
   final TextEditingController _portController = TextEditingController(text: '8080');
   final TextEditingController _urlController = TextEditingController(text: '');
 
-  // Store JSON configs per provider
+  // Store JSON configs per provider (for editing UI)
   final Map<SttProvider, String> _requestJsonPerProvider = {};
   final Map<SttProvider, String> _schemaJsonPerProvider = {};
   final Map<SttProvider, bool> _requestJsonCustomized = {};
@@ -52,8 +50,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showApiKey = false;
 
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
-  String get _currentLanguage => _languagePerProvider[_selectedProvider] ?? _currentConfig.defaultLanguage;
-  String get _currentModel => _modelPerProvider[_selectedProvider] ?? _currentConfig.defaultModel;
+  CustomSttConfig? get _currentProviderConfig => _configsPerProvider[_selectedProvider];
+  String get _currentLanguage => _currentProviderConfig?.language ?? _currentConfig.defaultLanguage;
+  String get _currentModel => _currentProviderConfig?.model ?? _currentConfig.defaultModel;
   String get _currentRequestJson => _requestJsonPerProvider[_selectedProvider] ?? '{}';
   String get _currentSchemaJson => _schemaJsonPerProvider[_selectedProvider] ?? '{}';
 
@@ -91,78 +90,75 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   void _loadConfig() {
-    final config = SharedPreferencesUtil().customSttConfig;
+    final activeConfig = SharedPreferencesUtil().customSttConfig;
     setState(() {
-      _useCustomStt = config.isEnabled;
-      _selectedProvider = config.provider == SttProvider.omi ? SttProvider.openai : config.provider;
+      _useCustomStt = activeConfig.isEnabled;
+      _selectedProvider = activeConfig.provider == SttProvider.omi ? SttProvider.openai : activeConfig.provider;
 
-      // Load stored settings per provider from preferences
-      _loadStoredSettings();
+      // Load all provider configs from preferences
+      _loadAllProviderConfigs();
 
-      // Set current provider's settings
-      _apiKeyController.text = _apiKeysPerProvider[_selectedProvider] ?? '';
-      _hostController.text = config.host ?? '127.0.0.1';
-      _portController.text = (config.port ?? 8080).toString();
-      _urlController.text = config.url ?? '';
+      // If current provider has no saved config but active config matches, use it
+      if (_configsPerProvider[_selectedProvider] == null && activeConfig.provider == _selectedProvider) {
+        _configsPerProvider[_selectedProvider] = activeConfig;
+      }
 
-      // Initialize JSON configs for custom providers
+      // Populate UI from current provider's config
+      _populateUIFromConfig(_configsPerProvider[_selectedProvider]);
+
+      // Initialize JSON configs for all providers
       _initializeJsonConfigs();
-
-      // Restore saved custom configuration if it exists
-      _restoreSavedConfig(config);
     });
   }
 
-  void _restoreSavedConfig(CustomSttConfig config) {
-    if (!config.isEnabled) return;
-
-    // Check if there are customized request values (these are only saved when advanced was customized)
-    final hasCustomRequest =
-        config.requestType != null || config.headers != null || config.params != null || config.audioFieldName != null;
-
-    if (hasCustomRequest) {
-      // Rebuild request JSON from saved config values
-      final providerConfig = SttProviderConfig.get(config.provider);
-      final defaults = providerConfig.buildRequestConfig(
-        apiKey: config.apiKey,
-        language: config.language ?? providerConfig.defaultLanguage,
-        model: config.model ?? providerConfig.defaultModel,
-      );
-
-      final requestConfig = <String, dynamic>{};
-      requestConfig['url'] = config.url ?? defaults['url'];
-      requestConfig['request_type'] = config.requestType ?? defaults['request_type'];
-      requestConfig['headers'] = config.headers ?? defaults['headers'];
-      requestConfig['params'] = config.params ?? defaults['params'];
-      if (config.audioFieldName != null || defaults['audio_field_name'] != null) {
-        requestConfig['audio_field_name'] = config.audioFieldName ?? defaults['audio_field_name'];
+  void _loadAllProviderConfigs() {
+    for (final provider in SttProvider.values) {
+      if (provider != SttProvider.omi) {
+        final savedConfig = SharedPreferencesUtil().getConfigForProvider(provider);
+        if (savedConfig != null) {
+          _configsPerProvider[provider] = savedConfig;
+        }
       }
-
-      _requestJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
-      _requestJsonCustomized[config.provider] = true;
-    }
-
-    // Restore custom schema if it exists
-    if (config.schemaJson != null) {
-      _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
     }
   }
 
-  void _loadStoredSettings() {
-    for (final provider in SttProvider.values) {
-      if (provider != SttProvider.omi) {
-        final storedKey = SharedPreferencesUtil().getString('stt_api_key_${provider.name}');
-        if (storedKey.isNotEmpty) {
-          _apiKeysPerProvider[provider] = storedKey;
+  void _populateUIFromConfig(CustomSttConfig? config) {
+    final providerDefaults = SttProviderConfig.get(_selectedProvider);
+    
+    _apiKeyController.text = config?.apiKey ?? '';
+    _hostController.text = config?.host ?? '127.0.0.1';
+    _portController.text = (config?.port ?? 8080).toString();
+    _urlController.text = config?.url ?? '';
+
+    // Restore JSON configs if customized
+    if (config != null) {
+      final hasCustomRequest = config.requestType != null || 
+          config.headers != null || 
+          config.params != null || 
+          config.audioFieldName != null;
+
+      if (hasCustomRequest) {
+        final defaults = providerDefaults.buildRequestConfig(
+          apiKey: config.apiKey,
+          language: config.language ?? providerDefaults.defaultLanguage,
+          model: config.model ?? providerDefaults.defaultModel,
+        );
+
+        final requestConfig = <String, dynamic>{};
+        requestConfig['url'] = config.url ?? defaults['url'];
+        requestConfig['request_type'] = config.requestType ?? defaults['request_type'];
+        requestConfig['headers'] = config.headers ?? defaults['headers'];
+        requestConfig['params'] = config.params ?? defaults['params'];
+        if (config.audioFieldName != null || defaults['audio_field_name'] != null) {
+          requestConfig['audio_field_name'] = config.audioFieldName ?? defaults['audio_field_name'];
         }
-        final storedLang = SharedPreferencesUtil().getString('stt_language_${provider.name}');
-        if (storedLang.isNotEmpty) {
-          _languagePerProvider[provider] = storedLang;
-        }
-        final storedModel = SharedPreferencesUtil().getString('stt_model_${provider.name}');
-        if (storedModel.isNotEmpty) {
-          _modelPerProvider[provider] = storedModel;
-        }
+
+        _requestJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
+        _requestJsonCustomized[_selectedProvider] = true;
+      }
+
+      if (config.schemaJson != null) {
+        _schemaJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
       }
     }
   }
@@ -178,38 +174,121 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   void _regenerateRequestJson(SttProvider provider) {
-    final config = SttProviderConfig.get(provider);
-    final apiKey = _apiKeysPerProvider[provider] ?? '';
-    final language = _languagePerProvider[provider] ?? config.defaultLanguage;
-    final model = _modelPerProvider[provider] ?? config.defaultModel;
+    final providerDefaults = SttProviderConfig.get(provider);
+    final savedConfig = _configsPerProvider[provider];
+    
+    final apiKey = savedConfig?.apiKey ?? _apiKeyController.text;
+    final language = savedConfig?.language ?? providerDefaults.defaultLanguage;
+    final model = savedConfig?.model ?? providerDefaults.defaultModel;
+    final host = savedConfig?.host ?? _hostController.text;
+    final port = savedConfig?.port ?? int.tryParse(_portController.text);
 
-    final requestConfig = config.buildRequestConfig(
+    final requestConfig = providerDefaults.buildRequestConfig(
       apiKey: apiKey,
       language: language,
       model: model,
+      host: host,
+      port: port,
     );
     _requestJsonPerProvider[provider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
   }
 
-  void _onLanguageOrModelChanged() {
-    // Only regenerate if user hasn't customized the JSON
+  void _onLanguageOrModelChanged(String? newLanguage, String? newModel) {
+    // Update the stored config with new language/model
+    _updateCurrentProviderConfig(language: newLanguage, model: newModel);
+    
+    // Only regenerate JSON if user hasn't customized it
     if (_requestJsonCustomized[_selectedProvider] != true) {
       _regenerateRequestJson(_selectedProvider);
     }
   }
 
-  void _saveSettingsForCurrentProvider() {
-    if (_apiKeyController.text.isNotEmpty) {
-      _apiKeysPerProvider[_selectedProvider] = _apiKeyController.text;
-      SharedPreferencesUtil().saveString('stt_api_key_${_selectedProvider.name}', _apiKeyController.text);
+  void _updateCurrentProviderConfig({
+    String? apiKey,
+    String? language,
+    String? model,
+    String? url,
+    String? host,
+    int? port,
+  }) {
+    final current = _configsPerProvider[_selectedProvider];
+    final providerDefaults = SttProviderConfig.get(_selectedProvider);
+    
+    _configsPerProvider[_selectedProvider] = CustomSttConfig(
+      provider: _selectedProvider,
+      apiKey: apiKey ?? current?.apiKey ?? _apiKeyController.text,
+      language: language ?? current?.language ?? providerDefaults.defaultLanguage,
+      model: model ?? current?.model ?? providerDefaults.defaultModel,
+      url: url ?? current?.url ?? _urlController.text,
+      host: host ?? current?.host ?? _hostController.text,
+      port: port ?? current?.port ?? int.tryParse(_portController.text),
+      requestType: current?.requestType,
+      headers: current?.headers,
+      params: current?.params,
+      audioFieldName: current?.audioFieldName,
+      schemaJson: current?.schemaJson,
+    );
+  }
+
+  Future<void> _saveCurrentProviderConfig() async {
+    // Build complete config from current UI state
+    final config = _buildCurrentConfig();
+    _configsPerProvider[_selectedProvider] = config;
+    await SharedPreferencesUtil().saveConfigForProvider(_selectedProvider, config);
+  }
+
+  CustomSttConfig _buildCurrentConfig() {
+    Map<String, dynamic>? requestJson;
+    Map<String, dynamic>? schemaJson;
+
+    if (_showAdvanced && _currentRequestJson.isNotEmpty) {
+      try {
+        requestJson = jsonDecode(_currentRequestJson);
+      } catch (_) {}
     }
-    if (_languagePerProvider[_selectedProvider] != null) {
-      SharedPreferencesUtil()
-          .saveString('stt_language_${_selectedProvider.name}', _languagePerProvider[_selectedProvider]!);
+    if (_showAdvanced && _currentSchemaJson.isNotEmpty) {
+      try {
+        schemaJson = jsonDecode(_currentSchemaJson);
+      } catch (_) {}
     }
-    if (_modelPerProvider[_selectedProvider] != null) {
-      SharedPreferencesUtil().saveString('stt_model_${_selectedProvider.name}', _modelPerProvider[_selectedProvider]!);
+
+    // Extract values from request JSON if customized
+    String? url;
+    String? requestType;
+    Map<String, String>? headers;
+    Map<String, String>? params;
+    String? audioFieldName;
+
+    if (requestJson != null && _requestJsonCustomized[_selectedProvider] == true) {
+      url = requestJson['url'];
+      requestType = requestJson['request_type'];
+      headers = requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null;
+      params = requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null;
+      audioFieldName = requestJson['audio_field_name'];
     }
+
+    // Use URL from text field for custom providers
+    if (_selectedProvider == SttProvider.custom || _selectedProvider == SttProvider.customLive) {
+      url = _urlController.text.isNotEmpty ? _urlController.text : url;
+    }
+
+    final current = _configsPerProvider[_selectedProvider];
+    final providerDefaults = SttProviderConfig.get(_selectedProvider);
+
+    return CustomSttConfig(
+      provider: _selectedProvider,
+      apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
+      language: current?.language ?? providerDefaults.defaultLanguage,
+      model: current?.model ?? providerDefaults.defaultModel,
+      url: url,
+      host: _selectedProvider == SttProvider.localWhisper ? _hostController.text : null,
+      port: _selectedProvider == SttProvider.localWhisper ? int.tryParse(_portController.text) : null,
+      requestType: requestType,
+      headers: headers,
+      params: params,
+      audioFieldName: audioFieldName,
+      schemaJson: schemaJson,
+    );
   }
 
   void _validateAndSetError() {
@@ -282,58 +361,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     setState(() => _isSaving = true);
 
     try {
-      // Save current settings for this provider
-      _saveSettingsForCurrentProvider();
+      // Save current provider's complete config
+      await _saveCurrentProviderConfig();
 
-      Map<String, dynamic>? requestJson;
-      Map<String, dynamic>? schemaJson;
-
-      if (_showAdvanced && _currentRequestJson.isNotEmpty) {
-        requestJson = jsonDecode(_currentRequestJson);
-      }
-      if (_showAdvanced && _currentSchemaJson.isNotEmpty) {
-        schemaJson = jsonDecode(_currentSchemaJson);
-      }
-
-      // Extract values from request JSON if customized
-      String? url;
-      String? requestType;
-      Map<String, String>? headers;
-      Map<String, String>? params;
-      String? audioFieldName;
-
-      if (requestJson != null && _requestJsonCustomized[_selectedProvider] == true) {
-        url = requestJson['url'];
-        requestType = requestJson['request_type'];
-        headers = requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null;
-        params = requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null;
-        audioFieldName = requestJson['audio_field_name'];
-      }
-
-      // Use URL from text field for custom providers
-      if (_selectedProvider == SttProvider.custom || _selectedProvider == SttProvider.customLive) {
-        url = _urlController.text.isNotEmpty ? _urlController.text : url;
-      }
-
-      final config = CustomSttConfig(
-        provider: _useCustomStt ? _selectedProvider : SttProvider.omi,
-        apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-        language: _languagePerProvider[_selectedProvider],
-        model: _modelPerProvider[_selectedProvider],
-        url: url,
-        host: _selectedProvider == SttProvider.localWhisper ? _hostController.text : null,
-        port: _selectedProvider == SttProvider.localWhisper ? int.tryParse(_portController.text) : null,
-        requestType: requestType,
-        headers: headers,
-        params: params,
-        audioFieldName: audioFieldName,
-        schemaJson: schemaJson,
-      );
+      // Build the active config (with correct provider based on _useCustomStt)
+      final currentConfig = _buildCurrentConfig();
+      final activeConfig = _useCustomStt 
+          ? currentConfig 
+          : CustomSttConfig(provider: SttProvider.omi);
 
       final previousConfig = SharedPreferencesUtil().customSttConfig;
-      final configChanged = previousConfig.sttConfigId != config.sttConfigId;
+      final configChanged = previousConfig.sttConfigId != activeConfig.sttConfigId;
 
-      await SharedPreferencesUtil().saveCustomSttConfig(config);
+      await SharedPreferencesUtil().saveCustomSttConfig(activeConfig);
       debugPrint(SharedPreferencesUtil().customSttConfig.provider.toString());
 
       if (configChanged && mounted) {
@@ -575,15 +615,22 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   ),
                 ),
               ],
-              onChanged: (provider) {
+              onChanged: (provider) async {
                 if (provider != null) {
-                  // Save current settings before switching
-                  _saveSettingsForCurrentProvider();
+                  // Save current provider's complete config before switching
+                  await _saveCurrentProviderConfig();
 
                   setState(() {
                     _selectedProvider = provider;
-                    // Load API key for new provider
-                    _apiKeyController.text = _apiKeysPerProvider[provider] ?? '';
+                    
+                    // Load saved config for new provider
+                    _populateUIFromConfig(_configsPerProvider[provider]);
+                    
+                    // Regenerate JSON if not customized
+                    if (_requestJsonCustomized[provider] != true) {
+                      _regenerateRequestJson(provider);
+                    }
+                    
                     if (provider == SttProvider.custom) {
                       _showAdvanced = true;
                     }
@@ -648,8 +695,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         // Extract language code from "en (English)" format
         final code = value.split(' ').first.trim();
         setState(() {
-          _languagePerProvider[_selectedProvider] = code;
-          _onLanguageOrModelChanged();
+          _onLanguageOrModelChanged(code, null);
         });
       },
     );
@@ -665,8 +711,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       suggestions: models,
       onChanged: (value) {
         setState(() {
-          _modelPerProvider[_selectedProvider] = value.trim();
-          _onLanguageOrModelChanged();
+          _onLanguageOrModelChanged(null, value.trim());
         });
       },
     );
@@ -1015,6 +1060,25 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       onTap: () {
         setState(() {
           _requestJsonCustomized[_selectedProvider] = false;
+          // Clear customized request fields from stored config
+          final current = _configsPerProvider[_selectedProvider];
+          if (current != null) {
+            _configsPerProvider[_selectedProvider] = CustomSttConfig(
+              provider: _selectedProvider,
+              apiKey: current.apiKey,
+              language: current.language,
+              model: current.model,
+              url: current.url,
+              host: current.host,
+              port: current.port,
+              // Clear the customized fields
+              requestType: null,
+              headers: null,
+              params: null,
+              audioFieldName: null,
+              schemaJson: current.schemaJson,
+            );
+          }
           _regenerateRequestJson(_selectedProvider);
         });
       },
@@ -1116,11 +1180,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           isResponseSchema: !isRequest,
           onReset: () {
             if (isRequest) {
-              final config = SttProviderConfig.get(_selectedProvider);
-              return config.buildRequestConfig(
-                apiKey: _apiKeysPerProvider[_selectedProvider] ?? '',
-                language: _languagePerProvider[_selectedProvider] ?? config.defaultLanguage,
-                model: _modelPerProvider[_selectedProvider] ?? config.defaultModel,
+              final providerDefaults = SttProviderConfig.get(_selectedProvider);
+              final savedConfig = _configsPerProvider[_selectedProvider];
+              return providerDefaults.buildRequestConfig(
+                apiKey: savedConfig?.apiKey ?? _apiKeyController.text,
+                language: savedConfig?.language ?? providerDefaults.defaultLanguage,
+                model: savedConfig?.model ?? providerDefaults.defaultModel,
               );
             }
             return CustomSttConfig.getFullTemplateJson(_selectedProvider)['response_schema'];
@@ -1135,27 +1200,56 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           _requestJsonPerProvider[_selectedProvider] = result;
 
           // Sync UI fields from edited JSON
+          String? newLanguage;
+          String? newModel;
           try {
             final parsed = jsonDecode(result) as Map<String, dynamic>;
             if (parsed['url'] != null) _urlController.text = parsed['url'].toString();
             if (parsed['params'] is Map) {
               final params = parsed['params'] as Map;
-              if (params['language'] != null) _languagePerProvider[_selectedProvider] = params['language'].toString();
-              if (params['model'] != null) _modelPerProvider[_selectedProvider] = params['model'].toString();
+              if (params['language'] != null) newLanguage = params['language'].toString();
+              if (params['model'] != null) newModel = params['model'].toString();
             }
           } catch (_) {}
 
+          // Update stored config with values from JSON
+          if (newLanguage != null || newModel != null) {
+            _updateCurrentProviderConfig(language: newLanguage, model: newModel);
+          }
+
           // Mark as customized if it differs from auto-generated
-          final config = SttProviderConfig.get(_selectedProvider);
-          final autoGenerated = config.buildRequestConfig(
-            apiKey: _apiKeysPerProvider[_selectedProvider] ?? '',
-            language: _languagePerProvider[_selectedProvider] ?? config.defaultLanguage,
-            model: _modelPerProvider[_selectedProvider] ?? config.defaultModel,
+          final providerDefaults = SttProviderConfig.get(_selectedProvider);
+          final savedConfig = _configsPerProvider[_selectedProvider];
+          final autoGenerated = providerDefaults.buildRequestConfig(
+            apiKey: savedConfig?.apiKey ?? _apiKeyController.text,
+            language: savedConfig?.language ?? providerDefaults.defaultLanguage,
+            model: savedConfig?.model ?? providerDefaults.defaultModel,
           );
           final autoGeneratedJson = const JsonEncoder.withIndent('  ').convert(autoGenerated);
           _requestJsonCustomized[_selectedProvider] = result != autoGeneratedJson;
         } else {
           _schemaJsonPerProvider[_selectedProvider] = result;
+          // Update stored config with schema
+          final current = _configsPerProvider[_selectedProvider];
+          if (current != null) {
+            try {
+              final schemaJson = jsonDecode(result);
+              _configsPerProvider[_selectedProvider] = CustomSttConfig(
+                provider: current.provider,
+                apiKey: current.apiKey,
+                language: current.language,
+                model: current.model,
+                url: current.url,
+                host: current.host,
+                port: current.port,
+                requestType: current.requestType,
+                headers: current.headers,
+                params: current.params,
+                audioFieldName: current.audioFieldName,
+                schemaJson: schemaJson,
+              );
+            } catch (_) {}
+          }
         }
       });
       _validateAndSetError();

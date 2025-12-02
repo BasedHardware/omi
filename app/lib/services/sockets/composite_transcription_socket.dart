@@ -19,6 +19,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   // Reconnection
   int _reconnectRetries = 0;
   Timer? _reconnectTimer;
+  bool _stopped = false;  // Prevents reconnects after stop() is called
   static const int _maxReconnectRetries = 8;
   static const int _initialBackoffMs = 1000;
   static const double _backoffMultiplier = 1.5;
@@ -49,6 +50,10 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
+    if (_stopped) {
+      CustomSttLogService.instance.info('Composite', 'Connect ignored - socket was stopped');
+      return false;
+    }
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
@@ -104,6 +109,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   @override
   Future stop() async {
     CustomSttLogService.instance.info('Composite', 'Stopping...');
+    _stopped = true;  // Prevent any further reconnect attempts
     _cancelReconnect();
 
     await Future.wait([
@@ -151,6 +157,10 @@ class CompositeTranscriptionSocket implements IPureSocket {
   }
 
   void _scheduleReconnect() {
+    if (_stopped) {
+      CustomSttLogService.instance.info('Composite', 'Reconnect skipped - socket was stopped');
+      return;
+    }
     if (_reconnectTimer != null) {
       return; // Already scheduled
     }
@@ -171,10 +181,16 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
     _reconnectTimer = Timer(Duration(milliseconds: waitMs), () async {
       _reconnectTimer = null;
+      
+      // Double-check stopped flag before attempting reconnect
+      if (_stopped) {
+        CustomSttLogService.instance.info('Composite', 'Reconnect timer fired but socket was stopped');
+        return;
+      }
+      
       _reconnectRetries++;
-
       final success = await connect();
-      if (!success) {
+      if (!success && !_stopped) {
         _scheduleReconnect();
       }
     });
