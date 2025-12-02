@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -14,6 +15,13 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
   IPureSocketListener? _listener;
+
+  // Reconnection
+  int _reconnectRetries = 0;
+  Timer? _reconnectTimer;
+  static const int _maxReconnectRetries = 8;
+  static const int _initialBackoffMs = 1000;
+  static const double _backoffMultiplier = 1.5;
 
   late final _PrimarySocketListener _primaryListener;
   late final _SecondarySocketListener _secondaryListener;
@@ -53,43 +61,41 @@ class CompositeTranscriptionSocket implements IPureSocket {
       secondarySocket.connect(),
     ]);
 
-    final primaryConnected = results[0];
-    final secondaryConnected = results[1];
+    final primaryOk = results[0] && primarySocket.status == PureSocketStatus.connected;
+    final secondaryOk = results[1] && secondarySocket.status == PureSocketStatus.connected;
 
-    if (primaryConnected && secondaryConnected) {
+    if (primaryOk && secondaryOk) {
       _status = PureSocketStatus.connected;
+      _reconnectRetries = 0;
       CustomSttLogService.instance.info('Composite', 'Both sockets connected');
       onConnected();
       return true;
     }
 
-    if (!secondaryConnected) {
-      CustomSttLogService.instance.error('Composite', 'Secondary socket (Omi backend) failed to connect');
-      _status = PureSocketStatus.notConnected;
-      if (primaryConnected) {
-        await primarySocket.disconnect();
-      }
-      return false;
-    }
-
-    if (!primaryConnected) {
-      CustomSttLogService.instance.warning('Composite', 'Primary socket (custom STT) failed, continuing with secondary only');
-      _status = PureSocketStatus.connected;
-      onConnected();
-      return true;
-    }
-
+    // Either failed - disconnect both and fail
+    CustomSttLogService.instance.error(
+      'Composite',
+      'Connection failed - primary: $primaryOk, secondary: $secondaryOk',
+    );
+    await _disconnectBothQuietly();
+    _status = PureSocketStatus.notConnected;
     return false;
+  }
+
+  /// Disconnect both sockets without triggering composite callbacks
+  Future<void> _disconnectBothQuietly() async {
+    await Future.wait([
+      primarySocket.disconnect(),
+      secondarySocket.disconnect(),
+    ]);
   }
 
   @override
   Future disconnect() async {
     CustomSttLogService.instance.info('Composite', 'Disconnecting...');
+    _cancelReconnect();
 
-    await Future.wait([
-      primarySocket.disconnect(),
-      secondarySocket.disconnect(),
-    ]);
+    await _disconnectBothQuietly();
 
     _status = PureSocketStatus.disconnected;
     onClosed();
@@ -98,6 +104,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   @override
   Future stop() async {
     CustomSttLogService.instance.info('Composite', 'Stopping...');
+    _cancelReconnect();
 
     await Future.wait([
       primarySocket.stop(),
@@ -107,26 +114,94 @@ class CompositeTranscriptionSocket implements IPureSocket {
     _status = PureSocketStatus.disconnected;
   }
 
+  void _cancelReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
+
+  /// Called when either socket closes unexpectedly
+  void _onSocketClosed(String name, int? closeCode) {
+    if (_status != PureSocketStatus.connected) {
+      return; // Already handling disconnection
+    }
+
+    CustomSttLogService.instance.warning(
+      'Composite',
+      '$name socket closed (code: $closeCode), disconnecting composite',
+    );
+
+    _status = PureSocketStatus.disconnected;
+    _disconnectBothQuietly();
+    onClosed(closeCode);
+    _scheduleReconnect();
+  }
+
+  /// Called when either socket errors
+  void _onSocketError(String name, Object err, StackTrace trace) {
+    if (_status != PureSocketStatus.connected) {
+      return;
+    }
+
+    CustomSttLogService.instance.error('Composite', '$name socket error: $err');
+
+    _status = PureSocketStatus.disconnected;
+    _disconnectBothQuietly();
+    onError(err, trace);
+    // Note: onClosed will likely follow, which will trigger reconnect
+  }
+
+  void _scheduleReconnect() {
+    if (_reconnectTimer != null) {
+      return; // Already scheduled
+    }
+    if (_reconnectRetries >= _maxReconnectRetries) {
+      CustomSttLogService.instance.warning(
+        'Composite',
+        'Max reconnect retries reached ($_maxReconnectRetries)',
+      );
+      _listener?.onMaxRetriesReach();
+      return;
+    }
+
+    final waitMs = (pow(_backoffMultiplier, _reconnectRetries) * _initialBackoffMs).toInt();
+    CustomSttLogService.instance.info(
+      'Composite',
+      'Scheduling reconnect in ${waitMs}ms (attempt ${_reconnectRetries + 1}/$_maxReconnectRetries)',
+    );
+
+    _reconnectTimer = Timer(Duration(milliseconds: waitMs), () async {
+      _reconnectTimer = null;
+      _reconnectRetries++;
+
+      final success = await connect();
+      if (!success) {
+        _scheduleReconnect();
+      }
+    });
+  }
+
   @override
   void send(dynamic message) {
+    if (_status != PureSocketStatus.connected) {
+      return;
+    }
     primarySocket.send(message);
     secondarySocket.send(message);
   }
 
-  void _onPrimaryTranscript(dynamic message) {
-    _forwardSuggestedTranscript(message);
+  void _onPrimaryMessage(dynamic message) {
+    _forwardAsSuggestedTranscript(message);
   }
 
-  void _forwardSuggestedTranscript(dynamic message) {
-    try {
-      dynamic segments;
-      if (message is String) {
-        segments = jsonDecode(message);
-      } else {
-        segments = message;
-      }
+  void _forwardAsSuggestedTranscript(dynamic message) {
+    if (_status != PureSocketStatus.connected) {
+      return;
+    }
 
-      final Map<String, dynamic> payload = {
+    try {
+      dynamic segments = message is String ? jsonDecode(message) : message;
+
+      final payload = <String, dynamic>{
         'type': suggestedTranscriptType,
         'segments': segments,
       };
@@ -135,15 +210,13 @@ class CompositeTranscriptionSocket implements IPureSocket {
         payload['stt_provider'] = sttProvider;
       }
 
-      final suggestedMessage = suggestedTranscriptType != null ? jsonEncode(payload) : message;
-
-      secondarySocket.send(suggestedMessage);
+      secondarySocket.send(jsonEncode(payload));
     } catch (e) {
       CustomSttLogService.instance.error('Composite', 'Error forwarding transcript: $e');
     }
   }
 
-  void _onSecondaryTranscript(dynamic message) {
+  void _onSecondaryMessage(dynamic message) {
     onMessage(message);
   }
 
@@ -159,7 +232,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   @override
   void onClosed([int? closeCode]) {
-    _status = PureSocketStatus.disconnected;
     _listener?.onClosed(closeCode);
   }
 
@@ -175,79 +247,50 @@ class CompositeTranscriptionSocket implements IPureSocket {
   }
 }
 
+// Simplified listeners - just delegate to composite
 class _PrimarySocketListener implements IPureSocketListener {
   final CompositeTranscriptionSocket _composite;
-
   _PrimarySocketListener(this._composite);
 
   @override
-  void onConnected() {
-    debugPrint("[Composite/Primary] Connected");
-  }
+  void onConnected() => debugPrint("[Composite/Primary] Connected");
 
   @override
-  void onMessage(dynamic message) {
-    _composite._onPrimaryTranscript(message);
-  }
+  void onMessage(dynamic message) => _composite._onPrimaryMessage(message);
 
   @override
-  void onClosed([int? closeCode]) {
-    debugPrint("[Composite/Primary] Closed with code: $closeCode");
-  }
+  void onClosed([int? closeCode]) => _composite._onSocketClosed('Primary', closeCode);
 
   @override
-  void onError(Object err, StackTrace trace) {
-    debugPrint("[Composite/Primary] Error: $err");
-  }
+  void onError(Object err, StackTrace trace) => _composite._onSocketError('Primary', err, trace);
 
   @override
-  void onInternetConnectionFailed() {
-    debugPrint("[Composite/Primary] Internet connection failed");
-  }
+  void onInternetConnectionFailed() => debugPrint("[Composite/Primary] Internet failed");
 
   @override
-  void onMaxRetriesReach() {
-    debugPrint("[Composite/Primary] Max retries reached");
-  }
+  void onMaxRetriesReach() => debugPrint("[Composite/Primary] Max retries");
 }
 
 class _SecondarySocketListener implements IPureSocketListener {
   final CompositeTranscriptionSocket _composite;
-
   _SecondarySocketListener(this._composite);
 
   @override
-  void onConnected() {
-    debugPrint("[Composite/Secondary] Connected");
-  }
+  void onConnected() => debugPrint("[Composite/Secondary] Connected");
 
   @override
-  void onMessage(dynamic message) {
-    _composite._onSecondaryTranscript(message);
-  }
+  void onMessage(dynamic message) => _composite._onSecondaryMessage(message);
 
   @override
-  void onClosed([int? closeCode]) {
-    debugPrint("[Composite/Secondary] Closed with code: $closeCode");
-    _composite.onClosed(closeCode);
-  }
+  void onClosed([int? closeCode]) => _composite._onSocketClosed('Secondary', closeCode);
 
   @override
-  void onError(Object err, StackTrace trace) {
-    debugPrint("[Composite/Secondary] Error: $err");
-    _composite.onError(err, trace);
-  }
+  void onError(Object err, StackTrace trace) => _composite._onSocketError('Secondary', err, trace);
 
   @override
-  void onInternetConnectionFailed() {
-    debugPrint("[Composite/Secondary] Internet connection failed");
-    _composite._listener?.onInternetConnectionFailed();
-  }
+  void onInternetConnectionFailed() => _composite._listener?.onInternetConnectionFailed();
 
   @override
-  void onMaxRetriesReach() {
-    debugPrint("[Composite/Secondary] Max retries reached");
-    _composite._listener?.onMaxRetriesReach();
-  }
+  void onMaxRetriesReach() {} // Composite handles its own retries
 }
 
