@@ -62,11 +62,16 @@ def pyannote_diarize_cloud(
     webhook_url: Optional[str] = None,
     poll_interval: float = 2.0,
     timeout: float = 300.0,
+    num_speakers: Optional[int] = None,
 ) -> list[DiarizationSegment]:
     """
     Run pyannote diarization using the pyannote.ai cloud API.
 
     This is easier to set up than local diarization - no GPU or model downloads needed.
+
+    Note: This is a synchronous function. When calling from async code, use
+    `await asyncio.to_thread(pyannote_diarize_cloud, audio_path, ...)` to avoid
+    blocking the event loop.
 
     Args:
         audio_path: Path to audio file
@@ -74,6 +79,7 @@ def pyannote_diarize_cloud(
         webhook_url: Optional webhook URL for async results
         poll_interval: Seconds between status polls (default 2s)
         timeout: Maximum wait time in seconds (default 300s)
+        num_speakers: Optional hint for expected number of speakers
 
     Returns:
         List of DiarizationSegment with speaker labels
@@ -229,6 +235,7 @@ def merge_with_transcript(
     Merge pyannote diarization results with transcript words.
 
     Assigns pyannote speaker labels to words based on timestamp overlap.
+    Uses O(N+M) algorithm since both lists are sorted by time.
 
     Args:
         words: List of word dicts with 'word', 'start', 'end', 'speaker' keys
@@ -245,15 +252,22 @@ def merge_with_transcript(
     unique_speakers = sorted(set(seg.speaker for seg in diarization_segments))
     speaker_map = {s: f"{speaker_prefix}{i:02d}" for i, s in enumerate(unique_speakers)}
 
+    # Sort segments by start time for O(N+M) lookup
+    sorted_segments = sorted(diarization_segments, key=lambda s: s.start)
+    segment_idx = 0
+
     for word in words:
         word_mid = (word.get('start', 0) + word.get('end', 0)) / 2
 
-        # Find the diarization segment that contains this word
-        for seg in diarization_segments:
-            if seg.start <= word_mid <= seg.end:
-                word['speaker'] = speaker_map.get(seg.speaker, seg.speaker)
-                word['diarization_source'] = 'pyannote'
-                break
+        # Advance segment_idx to find a potential match (O(N+M) total)
+        while segment_idx < len(sorted_segments) and sorted_segments[segment_idx].end < word_mid:
+            segment_idx += 1
+
+        # Check if current segment covers this word
+        if segment_idx < len(sorted_segments) and sorted_segments[segment_idx].start <= word_mid:
+            seg = sorted_segments[segment_idx]
+            word['speaker'] = speaker_map.get(seg.speaker, seg.speaker)
+            word['diarization_source'] = 'pyannote'
         else:
             # No matching segment found, keep original
             word['diarization_source'] = 'original'

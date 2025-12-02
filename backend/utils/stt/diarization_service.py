@@ -253,6 +253,7 @@ async def _fallback_local_refinement(
     Fallback to local/cloud Pyannote if Modal is unavailable.
 
     Uses pyannote.ai cloud API or local processing.
+    All blocking I/O is wrapped in asyncio.to_thread to avoid blocking the event loop.
     """
     try:
         from utils.stt.pyannote_diarization import pyannote_diarize_cloud, merge_with_transcript
@@ -262,22 +263,29 @@ async def _fallback_local_refinement(
         if api_key:
             logger.info(f"[{conversation_id}] Falling back to Pyannote cloud API")
 
-            # Download audio to temp file
+            # Download audio to temp file (blocking I/O - run in thread)
             import tempfile
             import requests
 
-            response = requests.get(audio_url, timeout=300)
-            response.raise_for_status()
+            def _download_and_save():
+                response = requests.get(audio_url, timeout=300)
+                response.raise_for_status()
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    f.write(response.content)
+                    return f.name
 
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(response.content)
-                audio_path = f.name
+            audio_path = await asyncio.to_thread(_download_and_save)
 
             try:
-                segments = pyannote_diarize_cloud(
-                    audio_path=audio_path,
-                    api_key=api_key,
-                    num_speakers=num_speakers
+                # Cloud API call is blocking - run in thread
+                segments = await asyncio.to_thread(
+                    pyannote_diarize_cloud,
+                    audio_path,
+                    api_key,
+                    None,  # webhook_url
+                    2.0,   # poll_interval
+                    300.0, # timeout
+                    num_speakers
                 )
 
                 if segments:
