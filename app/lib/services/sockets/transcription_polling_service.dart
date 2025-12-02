@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/services/sockets/pure_polling.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
 
@@ -323,6 +324,7 @@ class SchemaBasedSttProvider implements ISttProvider {
       }
 
       if (response.statusCode == 200) {
+        CustomSttLogService.instance.info('SchemaSTT', 'Transcription successful');
         return SttTranscriptionResult.fromJsonWithSchema(
           jsonDecode(response.body),
           schema,
@@ -330,10 +332,11 @@ class SchemaBasedSttProvider implements ISttProvider {
         );
       }
 
-      debugPrint('[SchemaSTT] Error: ${response.statusCode} - ${response.body}');
+      final errorMsg = 'HTTP ${response.statusCode} - ${response.body}';
+      CustomSttLogService.instance.error('SchemaSTT', errorMsg);
       return null;
     } catch (e) {
-      debugPrint('[SchemaSTT] Exception: $e');
+      CustomSttLogService.instance.error('SchemaSTT', 'Exception: $e');
       rethrow;
     }
   }

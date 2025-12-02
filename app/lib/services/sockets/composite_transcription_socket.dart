@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 
 class CompositeTranscriptionSocket implements IPureSocket {
   final IPureSocket primarySocket;
@@ -44,7 +45,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
       return false;
     }
 
-    debugPrint("[Composite] Connecting both sockets...");
+    CustomSttLogService.instance.info('Composite', 'Connecting both sockets...');
     _status = PureSocketStatus.connecting;
 
     final results = await Future.wait([
@@ -57,13 +58,13 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
     if (primaryConnected && secondaryConnected) {
       _status = PureSocketStatus.connected;
-      debugPrint("[Composite] Both sockets connected");
+      CustomSttLogService.instance.info('Composite', 'Both sockets connected');
       onConnected();
       return true;
     }
 
     if (!secondaryConnected) {
-      debugPrint("[Composite] Secondary socket failed to connect");
+      CustomSttLogService.instance.error('Composite', 'Secondary socket (Omi backend) failed to connect');
       _status = PureSocketStatus.notConnected;
       if (primaryConnected) {
         await primarySocket.disconnect();
@@ -72,7 +73,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
     }
 
     if (!primaryConnected) {
-      debugPrint("[Composite] Primary socket failed, continuing with secondary only");
+      CustomSttLogService.instance.warning('Composite', 'Primary socket (custom STT) failed, continuing with secondary only');
       _status = PureSocketStatus.connected;
       onConnected();
       return true;
@@ -83,7 +84,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   @override
   Future disconnect() async {
-    debugPrint("[Composite] Disconnecting...");
+    CustomSttLogService.instance.info('Composite', 'Disconnecting...');
 
     await Future.wait([
       primarySocket.disconnect(),
@@ -96,7 +97,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   @override
   Future stop() async {
-    debugPrint("[Composite] Stopping...");
+    CustomSttLogService.instance.info('Composite', 'Stopping...');
 
     await Future.wait([
       primarySocket.stop(),
@@ -137,9 +138,8 @@ class CompositeTranscriptionSocket implements IPureSocket {
       final suggestedMessage = suggestedTranscriptType != null ? jsonEncode(payload) : message;
 
       secondarySocket.send(suggestedMessage);
-      debugPrint("[Composite] Forwarded suggested transcript to secondary (provider: $sttProvider)");
     } catch (e) {
-      debugPrint("[Composite] Error forwarding suggested transcript: $e");
+      CustomSttLogService.instance.error('Composite', 'Error forwarding transcript: $e');
     }
   }
 

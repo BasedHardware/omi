@@ -224,9 +224,9 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.streaming,
       supportedLanguages: SttLanguages.geminiSupported,
-      supportedModels: const ['gemini-2.5-flash', 'gemini-2.5-pro'],
+      supportedModels: const ['gemini-2.0-flash-live-001'],
       defaultLanguage: 'en',
-      defaultModel: 'gemini-2.5-flash',
+      defaultModel: 'gemini-2.0-flash-live-001',
       responseSchema: SttResponseSchema.geminiLive,
       apiKeyUrl: 'https://aistudio.google.com/apikey',
       docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini',
@@ -404,7 +404,7 @@ class SttProviderConfig {
         config['url'] =
             'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
         config['params'] = {
-          'model': mdl.isNotEmpty ? mdl : 'gemini-2.5-flash',
+          'model': mdl.isNotEmpty ? mdl : 'gemini-2.0-flash-live-001',
           'language': lang,
         };
         break;
