@@ -531,8 +531,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
           ),
           const SizedBox(height: 16),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 12,
+            runSpacing: 12,
             children: app.chatTools!.map((tool) => _buildChatToolChip(tool)).toList(),
           ),
         ],
@@ -541,18 +541,18 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Widget _buildChatToolChip(ChatTool tool) {
+    final color = Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2F).withOpacity(0.7),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF35343B)),
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         _formatToolName(tool.name),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
+        style: TextStyle(
+          color: color,
+          fontSize: 13,
           fontWeight: FontWeight.w500,
         ),
       ),
