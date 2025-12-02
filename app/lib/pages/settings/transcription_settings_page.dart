@@ -26,6 +26,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
+  bool _showLogs = false;
   bool _isSaving = false;
   String? _validationError;
 
@@ -378,8 +379,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     _buildProviderSection(),
                     const SizedBox(height: 20),
                     _buildConfigSection(),
+                    const SizedBox(height: 10),
                     _buildAdvancedSection(),
-                    const SizedBox(height: 20),
                     _buildLogsSection(),
                   ] else ...[
                     _buildOmiFeatures(),
@@ -625,10 +626,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildApiKeyInput(),
-        if (_currentConfig.supportedModels.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          _buildModelSelector(),
-        ],
         const SizedBox(height: 20),
         _buildLanguageSelector(),
       ],
@@ -966,6 +963,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         ),
         if (_showAdvanced) ...[
           const SizedBox(height: 4),
+          if (_currentConfig.supportedModels.isNotEmpty) ...[
+            _buildModelSelector(),
+            const SizedBox(height: 16),
+          ],
           _buildJsonEditors(),
           if (_requestJsonCustomized[_selectedProvider] == true) ...[
             const SizedBox(height: 12),
@@ -980,6 +981,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'Configuration',
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+        ),
+        const SizedBox(height: 10),
         _buildJsonEditorButton(
           title: 'Request Configuration',
           jsonContent: _currentRequestJson,
@@ -1163,65 +1169,80 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              'Logs',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-            ),
-            const Spacer(),
-            if (logs.isNotEmpty) ...[
-              GestureDetector(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: logService.logsAsText));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
-                  );
-                },
-                child: Row(
-                  children: [
-                    Icon(Icons.copy, color: Colors.grey.shade500, size: 14),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Copy',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _showLogs = !_showLogs),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Text(
+                  'Logs',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  _showLogs ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                  color: Colors.grey.shade500,
+                  size: 18,
+                ),
+                const Spacer(),
+                if (_showLogs) ...[
+                  if (logs.isNotEmpty) ...[
+                    GestureDetector(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: logService.logsAsText));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
+                        );
+                      },
+                      child: Row(
+                        children: [
+                          Icon(Icons.copy, color: Colors.grey.shade500, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Copy',
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                  GestureDetector(
+                    onTap: () => setState(() {}),
+                    child: Row(
+                      children: [
+                        Icon(Icons.refresh, color: Colors.grey.shade500, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Refresh',
+                          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (logs.isNotEmpty) ...[
+                    const SizedBox(width: 16),
+                    GestureDetector(
+                      onTap: () {
+                        logService.clear();
+                        setState(() {});
+                      },
+                      child: Text(
+                        'Clear',
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                      ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 16),
-            ],
-            GestureDetector(
-              onTap: () => setState(() {}),
-              child: Row(
-                children: [
-                  Icon(Icons.refresh, color: Colors.grey.shade500, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Refresh',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                  ),
                 ],
-              ),
+              ],
             ),
-            if (logs.isNotEmpty) ...[
-              const SizedBox(width: 16),
-              GestureDetector(
-                onTap: () {
-                  logService.clear();
-                  setState(() {});
-                },
-                child: Text(
-                  'Clear',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
-        const SizedBox(height: 10),
-        Container(
-          constraints: const BoxConstraints(maxHeight: 200),
+        if (_showLogs)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
           decoration: BoxDecoration(
             color: const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(10),
