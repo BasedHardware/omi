@@ -406,7 +406,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         const SizedBox(height: 12),
         if (_useCustomStt)
           Text(
-            'Use your own STT provider for free. You only pay your provider directly.',
+            'Freely use omi. You only pay your STT provider directly.',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           )
         else
