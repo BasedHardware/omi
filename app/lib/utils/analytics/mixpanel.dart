@@ -28,9 +28,8 @@ class MixpanelManager {
           }
         } else {
           // Use mixpanel_analytics for desktop platforms
-          _mixpanelAnalytics ??= MixpanelAnalytics.batch(
+          _mixpanelAnalytics ??= MixpanelAnalytics(
             token: Env.mixpanelProjectToken!,
-            uploadInterval: const Duration(seconds: 3),
             userId$: Stream.value(_preferences.uid),
             useIp: true,
             verbose: false,
