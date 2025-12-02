@@ -81,6 +81,8 @@ def merge_words_with_segments(
     For each word, find the Pyannote segment that covers its midpoint
     and assign that speaker label.
 
+    Uses O(N+M) algorithm since both words and segments are sorted by time.
+
     Args:
         words: Deepgram words with {start, end, text, speaker, ...}
         diarization_segments: Pyannote segments with speaker labels
@@ -96,15 +98,19 @@ def merge_words_with_segments(
     sorted_segments = sorted(diarization_segments, key=lambda s: s.start)
 
     refined_words = []
+    segment_idx = 0
+
     for word in words:
         word_mid = (word['start'] + word['end']) / 2.0
 
+        # Advance segment_idx to find a potential match (O(N+M) total)
+        while segment_idx < len(sorted_segments) and sorted_segments[segment_idx].end < word_mid:
+            segment_idx += 1
+
         # Find segment covering this word's midpoint
         assigned_speaker = None
-        for seg in sorted_segments:
-            if seg.start <= word_mid <= seg.end:
-                assigned_speaker = seg.speaker
-                break
+        if segment_idx < len(sorted_segments) and sorted_segments[segment_idx].start <= word_mid:
+            assigned_speaker = sorted_segments[segment_idx].speaker
 
         # Create refined word with new speaker (or keep original)
         refined_word = word.copy()

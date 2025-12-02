@@ -61,7 +61,7 @@ async def trigger_diarization_refinement(
     """
     try:
         # Check if we have audio for this conversation
-        audio_url = await get_conversation_recording_signed_url(uid, conversation_id)
+        audio_url = await asyncio.to_thread(get_conversation_recording_signed_url, uid, conversation_id)
         if not audio_url:
             logger.info(f"[{conversation_id}] No audio recording available, skipping diarization refinement")
             return DiarizationStatus.SKIPPED
@@ -286,8 +286,8 @@ async def _fallback_local_refinement(
                         diarization_segments=segments
                     )
 
-                    # Update conversation
-                    await process_diarization_result(uid, conversation_id, {
+                    # Update conversation (sync function, run in thread)
+                    await asyncio.to_thread(process_diarization_result, uid, conversation_id, {
                         "status": "success",
                         "words": refined_words
                     })

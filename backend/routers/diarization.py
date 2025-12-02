@@ -44,10 +44,15 @@ async def diarization_webhook(
     Called when Pyannote diarization completes (success or failure).
     Updates the conversation with refined speaker labels.
 
-    Security: Optionally verify x-modal-secret header matches configured secret.
+    Security: Verify x-modal-secret header matches configured secret.
     """
+    import os
+    modal_secret = os.getenv("MODAL_WEBHOOK_SECRET")
+    if modal_secret and x_modal_secret != modal_secret:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
     uid = request.uid
-    result = request.result.dict()
+    result = request.result.model_dump()
 
     logger.info(f"[{result['recording_id']}] Received diarization webhook for user {uid}")
 
