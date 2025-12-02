@@ -233,7 +233,7 @@ class SttProviderConfig {
     ),
     SttProvider.localWhisper: SttProviderConfig(
       provider: SttProvider.localWhisper,
-      displayName: 'Whisper',
+      displayName: 'Local Whisper',
       description: 'Self-hosted Whisper server',
       icon: FontAwesomeIcons.server,
       requestType: SttRequestType.multipartForm,

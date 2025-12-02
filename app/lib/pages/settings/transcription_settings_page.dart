@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
@@ -402,6 +403,40 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             Expanded(child: _buildSourceOption(true, 'Bring your own')),
           ],
         ),
+        const SizedBox(height: 12),
+        if (_useCustomStt)
+          Text(
+            'Use your own STT provider for free. You only pay your provider directly.',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          )
+        else
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)),
+            ),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '1,200 free minutes/month included. Unlimited with ',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                  TextSpan(
+                    text: 'Omi Unlimited',
+                    style: TextStyle(
+                      color: Colors.grey.shade400,
+                      fontSize: 12,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '.',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
