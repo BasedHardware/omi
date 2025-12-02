@@ -46,6 +46,8 @@ from database.redis_db import (
     get_conversation_summary_app_ids,
     add_conversation_summary_app_id,
     remove_conversation_summary_app_id,
+    get_apps_installs_count,
+    get_apps_reviews,
 )
 from utils.apps import (
     get_available_apps,
@@ -228,11 +230,23 @@ def search_apps(
 
     user_enabled = set(get_enabled_apps(uid))
 
+    app_ids = [app['id'] for app in apps_data]
+    apps_installs = get_apps_installs_count(app_ids)
+    apps_reviews = get_apps_reviews(app_ids)
+
     apps = []
 
     for app_dict in apps_data:
         app_dict['enabled'] = app_dict['id'] in user_enabled
         app_dict['rejected'] = app_dict.get('approved') is False
+        app_dict['installs'] = apps_installs.get(app_dict['id'], 0)
+
+        # Calculate average from reviews
+        reviews = apps_reviews.get(app_dict['id'], {})
+        sorted_reviews = list(reviews.values())
+        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+        app_dict['rating_avg'] = rating_avg
+        app_dict['rating_count'] = len(sorted_reviews)
 
         apps.append(App(**app_dict))
 
