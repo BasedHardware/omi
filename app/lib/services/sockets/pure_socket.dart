@@ -49,6 +49,7 @@ class PureSocket implements IPureSocket {
   StreamSubscription<bool>? _connectionStateListener;
   bool _isConnected = ConnectivityService().isConnected;
   Timer? _internetLostDelayTimer;
+  bool _stopped = false;  // Prevents reconnects after stop() is called
 
   WebSocketChannel? _channel;
   WebSocketChannel get channel {
@@ -83,6 +84,10 @@ class PureSocket implements IPureSocket {
   }
 
   Future<bool> _connect() async {
+    if (_stopped) {
+      debugPrint("[Socket] Connect ignored - socket was stopped");
+      return false;
+    }
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
@@ -162,6 +167,7 @@ class PureSocket implements IPureSocket {
   }
 
   Future stop() async {
+    _stopped = true;  // Prevent any further reconnect attempts
     await disconnect();
     await _cleanUp();
   }
@@ -200,6 +206,10 @@ class PureSocket implements IPureSocket {
   }
 
   void _reconnect() async {
+    if (_stopped) {
+      debugPrint("[Socket] Reconnect skipped - socket was stopped");
+      return;
+    }
     debugPrint("[Socket] reconnect...${_retries + 1}...");
     const int initialBackoffTimeMs = 1000; // 1 second
     const double multiplier = 1.5;
@@ -220,6 +230,13 @@ class PureSocket implements IPureSocket {
     // retry
     int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
+    
+    // Double-check stopped flag after delay
+    if (_stopped) {
+      debugPrint("[Socket] Reconnect aborted after delay - socket was stopped");
+      return;
+    }
+    
     _retries++;
     if (_retries > maxRetries) {
       debugPrint("[Socket] Reach max retries $maxRetries");
