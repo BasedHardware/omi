@@ -49,10 +49,7 @@ def get_pipeline():
         if not hf_token:
             raise ValueError("HUGGINGFACE_TOKEN not found in environment")
 
-        pipeline = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1",
-            token=hf_token
-        )
+        pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", token=hf_token)
 
         # Move to GPU if available
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -65,15 +62,14 @@ def get_pipeline():
 @dataclass
 class DiarizationSegment:
     """A single diarization segment."""
+
     start: float
     end: float
     speaker: str
 
 
 def merge_words_with_segments(
-    words: List[dict],
-    diarization_segments: List[DiarizationSegment],
-    speaker_prefix: str = "SPEAKER_"
+    words: List[dict], diarization_segments: List[DiarizationSegment], speaker_prefix: str = "SPEAKER_"
 ) -> List[dict]:
     """
     Merge Deepgram words with Pyannote speaker segments.
@@ -151,12 +147,7 @@ def download_audio(audio_url: str) -> bytes:
     keep_warm=1,  # Keep one instance warm for faster response
     allow_concurrent_inputs=4,
 )
-def refine_diarization(
-    recording_id: str,
-    audio_url: str,
-    dg_result: dict,
-    num_speakers: Optional[int] = None
-) -> dict:
+def refine_diarization(recording_id: str, audio_url: str, dg_result: dict, num_speakers: Optional[int] = None) -> dict:
     """
     Refine speaker diarization using Pyannote.
 
@@ -192,7 +183,7 @@ def refine_diarization(
                 "segments": [],
                 "num_speakers": 0,
                 "status": "success",
-                "message": "No words to process"
+                "message": "No words to process",
             }
 
         # Use provided speaker count or from Deepgram
@@ -228,11 +219,7 @@ def refine_diarization(
             # Extract segments
             segments = []
             for turn, _, speaker in diarization.itertracks(yield_label=True):
-                segments.append(DiarizationSegment(
-                    start=turn.start,
-                    end=turn.end,
-                    speaker=str(speaker)
-                ))
+                segments.append(DiarizationSegment(start=turn.start, end=turn.end, speaker=str(speaker)))
 
             print(f"[{recording_id}] Found {len(segments)} segments, {len(set(s.speaker for s in segments))} speakers")
 
@@ -244,7 +231,7 @@ def refine_diarization(
                 "words": refined_words,
                 "segments": [{"start": s.start, "end": s.end, "speaker": s.speaker} for s in segments],
                 "num_speakers": len(set(s.speaker for s in segments)),
-                "status": "success"
+                "status": "success",
             }
 
         finally:
@@ -260,7 +247,7 @@ def refine_diarization(
             "segments": [],
             "num_speakers": 0,
             "status": "error",
-            "error": str(e)
+            "error": str(e),
         }
 
 
@@ -288,7 +275,7 @@ def main():
                 {"start": 0.0, "end": 1.0, "text": "hello", "speaker": "SPEAKER_0"},
                 {"start": 1.0, "end": 2.0, "text": "world", "speaker": "SPEAKER_1"},
             ],
-            "num_speakers": 2
-        }
+            "num_speakers": 2,
+        },
     )
     print(f"Result: {result}")

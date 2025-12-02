@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 class DiarizationStatus(str, Enum):
     """Status of diarization refinement for a conversation."""
+
     NOT_STARTED = "not_started"
     PENDING = "pending"
     PROCESSING = "processing"
@@ -38,7 +39,7 @@ async def trigger_diarization_refinement(
     conversation_id: str,
     transcript_segments: List[dict],
     num_speakers: Optional[int] = None,
-    force: bool = False
+    force: bool = False,
 ) -> DiarizationStatus:
     """
     Trigger async diarization refinement for a conversation.
@@ -81,10 +82,7 @@ async def trigger_diarization_refinement(
             num_speakers = len(speakers) if speakers else None
 
         # Prepare Deepgram result for Modal
-        dg_result = {
-            "words": words,
-            "num_speakers": num_speakers
-        }
+        dg_result = {"words": words, "num_speakers": num_speakers}
 
         # Spawn Modal function (non-blocking)
         logger.info(f"[{conversation_id}] Triggering Pyannote refinement (speakers: {num_speakers})")
@@ -92,14 +90,12 @@ async def trigger_diarization_refinement(
         # Import Modal client
         try:
             from modal import Function
+
             refine_fn = Function.lookup("pyannote-diarization", "refine_diarization")
 
             # Spawn async - returns immediately
             refine_fn.spawn(
-                recording_id=conversation_id,
-                audio_url=audio_url,
-                dg_result=dg_result,
-                num_speakers=num_speakers
+                recording_id=conversation_id, audio_url=audio_url, dg_result=dg_result, num_speakers=num_speakers
             )
 
             return DiarizationStatus.PENDING
@@ -107,20 +103,14 @@ async def trigger_diarization_refinement(
         except Exception as modal_error:
             logger.error(f"[{conversation_id}] Failed to spawn Modal function: {modal_error}")
             # Fall back to sync processing if Modal unavailable
-            return await _fallback_local_refinement(
-                uid, conversation_id, audio_url, dg_result, num_speakers
-            )
+            return await _fallback_local_refinement(uid, conversation_id, audio_url, dg_result, num_speakers)
 
     except Exception as e:
         logger.error(f"[{conversation_id}] Error triggering diarization refinement: {e}")
         return DiarizationStatus.FAILED
 
 
-def process_diarization_result(
-    uid: str,
-    recording_id: str,
-    result: dict
-) -> bool:
+def process_diarization_result(uid: str, recording_id: str, result: dict) -> bool:
     """
     Process the result from Modal diarization function.
 
@@ -151,10 +141,7 @@ def process_diarization_result(
         conversations_db.update_conversation(
             uid=uid,
             conversation_id=recording_id,
-            update_data={
-                'transcript_segments': segments,
-                'diarization_refined': True
-            }
+            update_data={'transcript_segments': segments, 'diarization_refined': True},
         )
 
         logger.info(f"[{recording_id}] Diarization refinement complete, updated {len(segments)} segments")
@@ -177,20 +164,24 @@ def _extract_words_from_segments(segments: List[dict]) -> List[dict]:
         # Check if segment has word-level data
         if 'words' in seg and isinstance(seg['words'], list):
             for word in seg['words']:
-                words.append({
-                    'start': word.get('start', seg.get('start', 0)),
-                    'end': word.get('end', seg.get('end', 0)),
-                    'text': word.get('text', word.get('word', '')),
-                    'speaker': seg.get('speaker', 'SPEAKER_0'),
-                })
+                words.append(
+                    {
+                        'start': word.get('start', seg.get('start', 0)),
+                        'end': word.get('end', seg.get('end', 0)),
+                        'text': word.get('text', word.get('word', '')),
+                        'speaker': seg.get('speaker', 'SPEAKER_0'),
+                    }
+                )
         else:
             # Segment-level only - treat whole segment as one unit
-            words.append({
-                'start': seg.get('start', 0),
-                'end': seg.get('end', 0),
-                'text': seg.get('text', ''),
-                'speaker': seg.get('speaker', 'SPEAKER_0'),
-            })
+            words.append(
+                {
+                    'start': seg.get('start', 0),
+                    'end': seg.get('end', 0),
+                    'text': seg.get('text', ''),
+                    'speaker': seg.get('speaker', 'SPEAKER_0'),
+                }
+            )
 
     return words
 
@@ -243,11 +234,7 @@ def _words_to_transcript_segments(words: List[dict]) -> List[dict]:
 
 
 async def _fallback_local_refinement(
-    uid: str,
-    conversation_id: str,
-    audio_url: str,
-    dg_result: dict,
-    num_speakers: Optional[int]
+    uid: str, conversation_id: str, audio_url: str, dg_result: dict, num_speakers: Optional[int]
 ) -> DiarizationStatus:
     """
     Fallback to local/cloud Pyannote if Modal is unavailable.
@@ -283,22 +270,18 @@ async def _fallback_local_refinement(
                     audio_path,
                     api_key,
                     None,  # webhook_url
-                    2.0,   # poll_interval
-                    300.0, # timeout
-                    num_speakers
+                    2.0,  # poll_interval
+                    300.0,  # timeout
+                    num_speakers,
                 )
 
                 if segments:
-                    refined_words = merge_with_transcript(
-                        words=dg_result['words'],
-                        diarization_segments=segments
-                    )
+                    refined_words = merge_with_transcript(words=dg_result['words'], diarization_segments=segments)
 
                     # Update conversation (sync function, run in thread)
-                    await asyncio.to_thread(process_diarization_result, uid, conversation_id, {
-                        "status": "success",
-                        "words": refined_words
-                    })
+                    await asyncio.to_thread(
+                        process_diarization_result, uid, conversation_id, {"status": "success", "words": refined_words}
+                    )
 
                     return DiarizationStatus.COMPLETED
 
@@ -320,7 +303,7 @@ def trigger_diarization_refinement_sync(
     conversation_id: str,
     transcript_segments: List[dict],
     num_speakers: Optional[int] = None,
-    force: bool = False
+    force: bool = False,
 ) -> DiarizationStatus:
     """Synchronous wrapper for trigger_diarization_refinement."""
     try:

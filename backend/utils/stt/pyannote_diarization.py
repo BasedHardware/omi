@@ -32,18 +32,23 @@ import httpx
 from typing import Optional
 from dataclasses import dataclass
 
+
 # PyTorch 2.6+ changed weights_only default to True, which breaks pyannote model loading
 # Apply patch BEFORE any torch/pyannote imports
 def _patch_torch_load():
     try:
         import torch
+
         _original = torch.load
+
         def _patched(*args, **kwargs):
             kwargs['weights_only'] = False
             return _original(*args, **kwargs)
+
         torch.load = _patched
     except ImportError:
         pass
+
 
 _patch_torch_load()
 
@@ -51,6 +56,7 @@ _patch_torch_load()
 @dataclass
 class DiarizationSegment:
     """A speaker segment from diarization."""
+
     start: float
     end: float
     speaker: str
@@ -109,9 +115,7 @@ def pyannote_diarize_cloud(
     }
 
     # Submit diarization job
-    payload = {
-        "data": f"data:{media_type};base64,{audio_data}"
-    }
+    payload = {"data": f"data:{media_type};base64,{audio_data}"}
     if webhook_url:
         payload["webhook"] = webhook_url
 
@@ -155,11 +159,13 @@ def pyannote_diarize_cloud(
     diarization = output.get("diarization", [])
 
     for item in diarization:
-        segments.append(DiarizationSegment(
-            start=item.get("start", 0),
-            end=item.get("end", 0),
-            speaker=item.get("speaker", "UNKNOWN"),
-        ))
+        segments.append(
+            DiarizationSegment(
+                start=item.get("start", 0),
+                end=item.get("end", 0),
+                speaker=item.get("speaker", "UNKNOWN"),
+            )
+        )
 
     return segments
 
@@ -191,10 +197,7 @@ def pyannote_diarize(
         raise ValueError("HuggingFace token required. Set HF_TOKEN or HUGGINGFACE_ACCESS_TOKEN env var.")
 
     # Load the pretrained pipeline
-    pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1",
-        token=token
-    )
+    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", token=token)
 
     # Run diarization with optional speaker hints
     diarization_params = {}
@@ -217,19 +220,13 @@ def pyannote_diarize(
     # Convert to segment list
     segments = []
     for turn, _, speaker in diarization.itertracks(yield_label=True):
-        segments.append(DiarizationSegment(
-            start=turn.start,
-            end=turn.end,
-            speaker=speaker
-        ))
+        segments.append(DiarizationSegment(start=turn.start, end=turn.end, speaker=speaker))
 
     return segments
 
 
 def merge_with_transcript(
-    words: list[dict],
-    diarization_segments: list[DiarizationSegment],
-    speaker_prefix: str = "SPEAKER_"
+    words: list[dict], diarization_segments: list[DiarizationSegment], speaker_prefix: str = "SPEAKER_"
 ) -> list[dict]:
     """
     Merge pyannote diarization results with transcript words.

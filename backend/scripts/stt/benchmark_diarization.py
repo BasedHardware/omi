@@ -19,12 +19,14 @@ from typing import Optional
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
 @dataclass
 class DiarizationResult:
     """Result from a diarization provider."""
+
     provider: str
     words: list[dict]  # [{word, start, end, speaker}]
     segments: list[dict]  # [{start, end, speaker, text}]
@@ -53,21 +55,21 @@ def transcribe_deepgram(audio_path: str) -> DiarizationResult:
     )
 
     start = time.time()
-    response = client.listen.rest.v("1").transcribe_file(
-        {"buffer": audio_data}, options
-    )
+    response = client.listen.rest.v("1").transcribe_file({"buffer": audio_data}, options)
     elapsed = time.time() - start
 
     words = []
     if response.results and response.results.channels:
         for alt in response.results.channels[0].alternatives:
             for word in alt.words:
-                words.append({
-                    'word': word.word,
-                    'start': word.start,
-                    'end': word.end,
-                    'speaker': word.speaker if hasattr(word, 'speaker') else None,
-                })
+                words.append(
+                    {
+                        'word': word.word,
+                        'start': word.start,
+                        'end': word.end,
+                        'speaker': word.speaker if hasattr(word, 'speaker') else None,
+                    }
+                )
 
     # Build segments from words
     segments = []
@@ -78,12 +80,14 @@ def transcribe_deepgram(audio_path: str) -> DiarizationResult:
 
         for w in words[1:]:
             if w['speaker'] != current_speaker:
-                segments.append({
-                    'start': current_start,
-                    'end': words[words.index(w) - 1]['end'] if words.index(w) > 0 else current_start,
-                    'speaker': current_speaker,
-                    'text': ' '.join(current_words)
-                })
+                segments.append(
+                    {
+                        'start': current_start,
+                        'end': words[words.index(w) - 1]['end'] if words.index(w) > 0 else current_start,
+                        'speaker': current_speaker,
+                        'text': ' '.join(current_words),
+                    }
+                )
                 current_speaker = w['speaker']
                 current_start = w['start']
                 current_words = [w['word']]
@@ -91,21 +95,19 @@ def transcribe_deepgram(audio_path: str) -> DiarizationResult:
                 current_words.append(w['word'])
 
         # Last segment
-        segments.append({
-            'start': current_start,
-            'end': words[-1]['end'],
-            'speaker': current_speaker,
-            'text': ' '.join(current_words)
-        })
+        segments.append(
+            {
+                'start': current_start,
+                'end': words[-1]['end'],
+                'speaker': current_speaker,
+                'text': ' '.join(current_words),
+            }
+        )
 
     num_speakers = len(set(w['speaker'] for w in words if w['speaker'] is not None))
 
     return DiarizationResult(
-        provider="deepgram",
-        words=words,
-        segments=segments,
-        num_speakers=num_speakers,
-        processing_time=elapsed
+        provider="deepgram", words=words, segments=segments, num_speakers=num_speakers, processing_time=elapsed
     )
 
 
@@ -136,30 +138,30 @@ def transcribe_assemblyai(audio_path: str) -> DiarizationResult:
 
     words = []
     for word in transcript.words or []:
-        words.append({
-            'word': word.text,
-            'start': word.start / 1000,  # ms to seconds
-            'end': word.end / 1000,
-            'speaker': word.speaker,
-        })
+        words.append(
+            {
+                'word': word.text,
+                'start': word.start / 1000,  # ms to seconds
+                'end': word.end / 1000,
+                'speaker': word.speaker,
+            }
+        )
 
     segments = []
     for utt in transcript.utterances or []:
-        segments.append({
-            'start': utt.start / 1000,
-            'end': utt.end / 1000,
-            'speaker': utt.speaker,
-            'text': utt.text,
-        })
+        segments.append(
+            {
+                'start': utt.start / 1000,
+                'end': utt.end / 1000,
+                'speaker': utt.speaker,
+                'text': utt.text,
+            }
+        )
 
     num_speakers = len(set(w['speaker'] for w in words if w['speaker']))
 
     return DiarizationResult(
-        provider="assemblyai",
-        words=words,
-        segments=segments,
-        num_speakers=num_speakers,
-        processing_time=elapsed
+        provider="assemblyai", words=words, segments=segments, num_speakers=num_speakers, processing_time=elapsed
     )
 
 
@@ -173,12 +175,14 @@ def diarize_pyannote(audio_path: str) -> DiarizationResult:
 
     segments = []
     for seg in segments_raw:
-        segments.append({
-            'start': seg.start,
-            'end': seg.end,
-            'speaker': seg.speaker,
-            'text': '',  # Pyannote doesn't do transcription
-        })
+        segments.append(
+            {
+                'start': seg.start,
+                'end': seg.end,
+                'speaker': seg.speaker,
+                'text': '',  # Pyannote doesn't do transcription
+            }
+        )
 
     num_speakers = len(set(seg.speaker for seg in segments_raw))
 
@@ -187,15 +191,11 @@ def diarize_pyannote(audio_path: str) -> DiarizationResult:
         words=[],  # Pyannote doesn't provide word-level
         segments=segments,
         num_speakers=num_speakers,
-        processing_time=elapsed
+        processing_time=elapsed,
     )
 
 
-def compute_der(
-    hypothesis_segments: list[dict],
-    reference_segments: list[dict],
-    collar: float = 0.25
-) -> dict:
+def compute_der(hypothesis_segments: list[dict], reference_segments: list[dict], collar: float = 0.25) -> dict:
     """
     Compute Diarization Error Rate.
 
@@ -343,20 +343,24 @@ def main():
     # Save results
     output_path = audio_path.replace('.wav', '_benchmark.json')
     with open(output_path, 'w') as f:
-        json.dump({
-            'audio': audio_path,
-            'ground_truth': ground_truth,
-            'results': [
-                {
-                    'provider': r.provider,
-                    'num_speakers': r.num_speakers,
-                    'processing_time': r.processing_time,
-                    'words': r.words,
-                    'segments': r.segments,
-                }
-                for r in results
-            ]
-        }, f, indent=2)
+        json.dump(
+            {
+                'audio': audio_path,
+                'ground_truth': ground_truth,
+                'results': [
+                    {
+                        'provider': r.provider,
+                        'num_speakers': r.num_speakers,
+                        'processing_time': r.processing_time,
+                        'words': r.words,
+                        'segments': r.segments,
+                    }
+                    for r in results
+                ],
+            },
+            f,
+            indent=2,
+        )
     print(f"\nResults saved: {output_path}")
 
 

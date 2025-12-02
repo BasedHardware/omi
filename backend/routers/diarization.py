@@ -19,6 +19,7 @@ router = APIRouter()
 
 class DiarizationResultPayload(BaseModel):
     """Payload from Modal diarization function."""
+
     recording_id: str
     words: list
     segments: list
@@ -29,15 +30,13 @@ class DiarizationResultPayload(BaseModel):
 
 class DiarizationWebhookRequest(BaseModel):
     """Webhook request from Modal."""
+
     uid: str
     result: DiarizationResultPayload
 
 
 @router.post("/v1/diarization/webhook")
-async def diarization_webhook(
-    request: DiarizationWebhookRequest,
-    x_modal_secret: Optional[str] = Header(None)
-):
+async def diarization_webhook(request: DiarizationWebhookRequest, x_modal_secret: Optional[str] = Header(None)):
     """
     Webhook endpoint for Modal diarization function to report results.
 
@@ -47,6 +46,7 @@ async def diarization_webhook(
     Security: Verify x-modal-secret header matches configured secret.
     """
     import os
+
     modal_secret = os.getenv("MODAL_WEBHOOK_SECRET")
     if modal_secret and x_modal_secret != modal_secret:
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -57,11 +57,7 @@ async def diarization_webhook(
     logger.info(f"[{result['recording_id']}] Received diarization webhook for user {uid}")
 
     # Process the result
-    success = process_diarization_result(
-        uid=uid,
-        recording_id=result['recording_id'],
-        result=result
-    )
+    success = process_diarization_result(uid=uid, recording_id=result['recording_id'], result=result)
 
     if success:
         return {"status": "ok", "message": "Diarization result processed"}
@@ -70,10 +66,7 @@ async def diarization_webhook(
 
 
 @router.get("/v1/diarization/status/{conversation_id}")
-async def get_diarization_status(
-    conversation_id: str,
-    uid: str
-):
+async def get_diarization_status(conversation_id: str, uid: str):
     """
     Get the diarization refinement status for a conversation.
 
@@ -98,5 +91,5 @@ async def get_diarization_status(
         "conversation_id": conversation_id,
         "diarization_refined": refined,
         "num_speakers": len(speakers),
-        "status": DiarizationStatus.COMPLETED if refined else DiarizationStatus.NOT_STARTED
+        "status": DiarizationStatus.COMPLETED if refined else DiarizationStatus.NOT_STARTED,
     }
