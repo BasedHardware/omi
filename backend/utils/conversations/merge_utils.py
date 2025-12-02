@@ -13,11 +13,14 @@ Gotchas handled:
 - Gotcha 8: Discarded conversations cannot be merged
 """
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
+
 from fastapi import HTTPException
 
 from database import conversations as conversations_db
+from database import action_items as action_items_db
 
 
 def validate_conversations_for_merge(
@@ -276,8 +279,6 @@ def deduplicate_action_items(
     # NOTE: Actual deduplication happens in LLM call
     # This function just prepares the context
 
-    from database import action_items as action_items_db
-
     # Get existing action items from past N days for context
     existing_action_items = action_items_db.get_action_items_from_last_n_days(
         uid, days=context_days
@@ -295,7 +296,6 @@ def generate_merged_conversation_id() -> str:
     Returns:
         UUID string prefixed with 'merged-'
     """
-    import uuid
     return f"merged-{uuid.uuid4()}"
 
 
@@ -306,5 +306,4 @@ def generate_merge_id() -> str:
     Returns:
         UUID string
     """
-    import uuid
     return str(uuid.uuid4())

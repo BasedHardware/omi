@@ -90,10 +90,14 @@ class MergeConversationsResponse {
   });
 
   factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
+    final rollbackUntil = DateTime.tryParse(json['rollback_available_until'] ?? '');
+    if (json['merged_conversation'] == null || rollbackUntil == null) {
+      throw FormatException('Invalid API response for MergeConversationsResponse. Received: $json');
+    }
     return MergeConversationsResponse(
       mergedConversation: ServerConversation.fromJson(json['merged_conversation']),
       mergeId: json['merge_id'] ?? '',
-      rollbackAvailableUntil: DateTime.parse(json['rollback_available_until']).toLocal(),
+      rollbackAvailableUntil: rollbackUntil.toLocal(),
       mergeMetadata: MergeMetadata.fromJson(json['merge_metadata'] ?? {}),
     );
   }
@@ -111,13 +115,17 @@ class RollbackMergeResponse {
   });
 
   factory RollbackMergeResponse.fromJson(Map<String, dynamic> json) {
+    final rollbackTime = DateTime.tryParse(json['rollback_time'] ?? '');
+    if (rollbackTime == null) {
+      throw FormatException('Invalid API response for RollbackMergeResponse: missing rollback_time. Received: $json');
+    }
     return RollbackMergeResponse(
       restoredConversations: (json['restored_conversations'] as List<dynamic>?)
               ?.map((conv) => ServerConversation.fromJson(conv))
               .toList() ??
           [],
       mergeId: json['merge_id'] ?? '',
-      rollbackTime: DateTime.parse(json['rollback_time']).toLocal(),
+      rollbackTime: rollbackTime.toLocal(),
     );
   }
 }

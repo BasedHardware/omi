@@ -17,10 +17,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
+from google.cloud import firestore
 
 import database.conversations as conversations_db
 import database.action_items as action_items_db
 from database import merge_history as merge_history_db
+from database._client import db
 from database.vector_db import delete_vector, upsert_vector
 from models.conversation import (
     Conversation,
@@ -269,21 +271,28 @@ def merge_conversations(
         'merge_time': None
     }
 
-    # 7. Execute database operations
+    # 7. Execute database operations atomically using batch writes
     try:
+        batch = db.batch()
+
         # Create merged conversation
-        conversations_db.upsert_conversation(uid, merged_conversation_dict)
+        merged_conv_ref = db.collection('users').document(uid).collection('conversations').document(merged_conversation_id)
+        batch.set(merged_conv_ref, merged_conversation_dict)
 
         # Mark source conversations as merged (soft delete via discarded flag - Gotcha 8)
         for conv in conversations:
-            update_data = {
+            conv_ref = db.collection('users').document(uid).collection('conversations').document(conv['id'])
+            batch.update(conv_ref, {
                 'discarded': True,
                 'merged_into_id': merged_conversation_id,
                 'merge_time': merge_time
-            }
-            conversations_db.update_conversation(uid, conv['id'], update_data)
+            })
+
+        # Commit all changes atomically
+        batch.commit()
 
         # Update vector database (Gotcha 2: use full {uid}-{id} format)
+        # Note: Vector operations are outside the batch as they use a different DB
         for conv in conversations:
             try:
                 delete_vector(f"{uid}-{conv['id']}")
@@ -367,8 +376,10 @@ def rollback_merge(
     merged_conversation_id = merge_history['merged_conversation_id']
     rollback_time = datetime.now(timezone.utc)
 
-    # 4. Execute rollback
+    # 4. Execute rollback atomically using batch writes
     try:
+        batch = db.batch()
+
         # Restore source conversations (clear merged flags)
         for conv in source_conversations:
             # Remove merge tracking fields
@@ -377,12 +388,25 @@ def rollback_merge(
             conv['merge_time'] = None
 
             # Restore conversation
-            conversations_db.upsert_conversation(uid, conv)
+            conv_ref = db.collection('users').document(uid).collection('conversations').document(conv['id'])
+            batch.set(conv_ref, conv)
 
         # Delete merged conversation (hard delete this time)
-        conversations_db.delete_conversation(uid, merged_conversation_id)
+        merged_conv_ref = db.collection('users').document(uid).collection('conversations').document(merged_conversation_id)
+        batch.delete(merged_conv_ref)
 
-        # Delete merged conversation vector
+        # Mark merge as rolled back
+        merge_history_ref = db.collection('users').document(uid).collection('merge_history').document(merge_id)
+        batch.update(merge_history_ref, {
+            'rolled_back': True,
+            'rollback_time': rollback_time,
+            'rollback_reason': 'User requested rollback'
+        })
+
+        # Commit all changes atomically
+        batch.commit()
+
+        # Delete merged conversation vector (outside batch - different DB)
         try:
             delete_vector(f"{uid}-{merged_conversation_id}")
         except Exception as e:
@@ -390,13 +414,6 @@ def rollback_merge(
 
         # Restore source conversation vectors (if they were deleted)
         # (Simplified - actual implementation would regenerate embeddings)
-
-        # Mark merge as rolled back
-        merge_history_db.update_merge_history(uid, merge_id, {
-            'rolled_back': True,
-            'rollback_time': rollback_time,
-            'rollback_reason': 'User requested rollback'
-        })
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Rollback operation failed: {str(e)}")

@@ -10,6 +10,7 @@ TTL: 24 hours from merge_time (configurable)
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 
+from google.cloud import firestore
 from ._client import db
 
 

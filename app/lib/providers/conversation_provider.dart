@@ -710,8 +710,8 @@ class ConversationProvider extends ChangeNotifier {
     return selectedConvos.length >= 2;
   }
 
-  Future<void> executeMerge({String? customTitle}) async {
-    if (!canMergeSelected()) return;
+  Future<MergeConversationsResponse?> executeMerge({String? customTitle}) async {
+    if (!canMergeSelected()) return null;
 
     isMergingConversations = true;
     notifyListeners();
@@ -728,7 +728,15 @@ class ConversationProvider extends ChangeNotifier {
 
         // Analytics
         MixpanelManager().conversationsMerged(selectedIds.length);
+
+        return result;
+      } else {
+        debugPrint('executeMerge: Merge API call returned null');
+        return null;
       }
+    } catch (e) {
+      debugPrint('executeMerge error: $e');
+      return null;
     } finally {
       isMergingConversations = false;
       notifyListeners();
