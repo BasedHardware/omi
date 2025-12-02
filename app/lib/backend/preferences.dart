@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -104,6 +105,22 @@ class SharedPreferencesUtil {
   }
 
   bool get useCustomStt => customSttConfig.isEnabled;
+
+  // Per-provider config storage
+  CustomSttConfig? getConfigForProvider(SttProvider provider) {
+    final json = getString('sttConfig_${provider.name}');
+    if (json.isEmpty) return null;
+    try {
+      return CustomSttConfig.fromJson(jsonDecode(json));
+    } catch (e) {
+      debugPrint('Error loading config for ${provider.name}: $e');
+      return null;
+    }
+  }
+
+  Future<bool> saveConfigForProvider(SttProvider provider, CustomSttConfig config) {
+    return saveString('sttConfig_${provider.name}', jsonEncode(config.toJson()));
+  }
 
   //----------------------------- Permissions ---------------------------------//
 
