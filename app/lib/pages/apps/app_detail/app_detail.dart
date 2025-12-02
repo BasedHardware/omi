@@ -1513,7 +1513,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   },
                 ),
                 app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
-                _buildPermissionsCard(app),
                 app.conversationPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
@@ -1539,6 +1538,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         maxLines: 3,
                       )
                     : const SizedBox.shrink(),
+                _buildPermissionsCard(app),
                 (app.ratingCount > 0 || app.reviews.isNotEmpty)
                     ? GestureDetector(
                         onTap: () {
