@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uuid
 import time
+from urllib.parse import urljoin
 
 from database import (
     users as users_db,
@@ -775,7 +776,6 @@ async def stripe_cancel():
 @router.post('/v1/payments/customer-portal')
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
-    from urllib.parse import urljoin
 
     customer_id = users_db.get_stripe_customer_id(uid)
 
