@@ -57,8 +57,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
   late App app;
-  Set<String> _expandedChatTools = {};
-  Set<String> _expandedPermissions = {};
 
   String _getPricingText(App app) {
     if (!app.isPaid || app.price == null || app.price == 0) {
@@ -408,10 +406,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     // Trigger
     if (trigger != null && trigger != 'Unknown') {
+      final displayTrigger = trigger == 'Transcript Segment Processed' ? 'Realtime Listening' : trigger;
       permissionItems.add(_PermissionItem(
-        title: trigger,
+        title: displayTrigger,
         type: 'Trigger',
-        description: 'This app runs automatically when: $trigger',
+        description: 'This app runs automatically when: $displayTrigger',
       ));
     }
 
@@ -439,7 +438,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             'Permissions & Triggers',
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           ...permissionItems.asMap().entries.map((entry) {
             final permission = entry.value;
             final isLast = entry.key == permissionItems.length - 1;
@@ -451,82 +450,37 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Widget _buildPermissionItem(_PermissionItem permission, bool isLast) {
-    final isExpanded = _expandedPermissions.contains(permission.title);
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isExpanded) {
-            _expandedPermissions.remove(permission.title);
-          } else {
-            _expandedPermissions.add(permission.title);
-          }
-        });
-      },
-      child: Container(
-        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2F).withOpacity(0.7),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF35343B)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _getPermissionTypeColor(permission.type).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _getPermissionTypeColor(permission.type).withOpacity(0.5)),
-                  ),
-                  child: Text(
-                    permission.type,
-                    style: TextStyle(
-                      color: _getPermissionTypeColor(permission.type),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    permission.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.grey,
-                  size: 20,
-                ),
-              ],
+    return Container(
+      margin: EdgeInsets.only(bottom: isLast ? 0 : 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: _getPermissionTypeColor(permission.type).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            if (isExpanded) ...[
-              const SizedBox(height: 12),
-              Text(
-                permission.description,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
+            child: Text(
+              permission.type,
+              style: TextStyle(
+                color: _getPermissionTypeColor(permission.type).withOpacity(0.8),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ],
-        ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              permission.title,
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -542,6 +496,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
       default:
         return Colors.blue;
     }
+  }
+
+  /// Converts snake_case to Title Case (e.g., "send_slack_message" -> "Send Slack Message")
+  String _formatToolName(String name) {
+    return name
+        .split('_')
+        .map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : '')
+        .join(' ');
   }
 
   Widget _buildChatToolsCard(App app) {
@@ -566,131 +528,34 @@ class _AppDetailPageState extends State<AppDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Chat Tools',
+            'Chat Features',
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 16),
-          ...app.chatTools!.asMap().entries.map((entry) {
-            final tool = entry.value;
-            final isLast = entry.key == app.chatTools!.length - 1;
-            return _buildChatToolItem(tool, isLast);
-          }).toList(),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: app.chatTools!.map((tool) => _buildChatToolChip(tool)).toList(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildChatToolItem(ChatTool tool, bool isLast) {
-    final isExpanded = _expandedChatTools.contains(tool.name);
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isExpanded) {
-            _expandedChatTools.remove(tool.name);
-          } else {
-            _expandedChatTools.add(tool.name);
-          }
-        });
-      },
-      child: Container(
-        margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2A2A2F).withOpacity(0.7),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF35343B)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.blue.withOpacity(0.5)),
-                  ),
-                  child: Text(
-                    tool.method,
-                    style: const TextStyle(
-                      color: Colors.blue,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    tool.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.grey,
-                  size: 20,
-                ),
-              ],
-            ),
-            if (isExpanded) ...[
-              const SizedBox(height: 12),
-              Text(
-                tool.description,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
-              if (tool.statusMessage != null && tool.statusMessage!.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 14,
-                      color: Colors.grey.shade400,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Status: ${tool.statusMessage}',
-                        style: TextStyle(
-                          color: Colors.grey.shade400,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                tool.endpoint,
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ],
+  Widget _buildChatToolChip(ChatTool tool) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2F).withOpacity(0.7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF35343B)),
+      ),
+      child: Text(
+        _formatToolName(tool.name),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
@@ -1602,37 +1467,33 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 CapabilitiesCard(
                   capabilities: app.getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities),
                 ),
+                app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
                 _buildPermissionsCard(app),
                 app.conversationPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
-                          if (app.conversationPrompt!.decodeString.characters.length > 200) {
-                            routeToPage(
-                                context,
-                                MarkdownViewer(
-                                    title: 'Conversation Prompt', markdown: app.conversationPrompt!.decodeString));
-                          }
+                          routeToPage(context,
+                              MarkdownViewer(title: 'Summary Prompt', markdown: app.conversationPrompt!.decodeString));
                         },
-                        title: 'Conversation Prompt',
+                        title: 'Summary Prompt',
                         description: app.conversationPrompt!,
                         showChips: false,
+                        maxLines: 3,
                       )
                     : const SizedBox.shrink(),
 
                 app.chatPrompt != null
                     ? InfoCardWidget(
                         onTap: () {
-                          if (app.chatPrompt!.decodeString.characters.length > 200) {
-                            routeToPage(context,
-                                MarkdownViewer(title: 'Chat Personality', markdown: app.chatPrompt!.decodeString));
-                          }
+                          routeToPage(context,
+                              MarkdownViewer(title: 'Chat Personality', markdown: app.chatPrompt!.decodeString));
                         },
                         title: 'Chat Personality',
                         description: app.chatPrompt!,
                         showChips: false,
+                        maxLines: 3,
                       )
                     : const SizedBox.shrink(),
-                app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
                 (app.ratingCount > 0 || app.reviews.isNotEmpty)
                     ? GestureDetector(
                         onTap: () {

@@ -25,20 +25,7 @@ class CapabilitiesCard extends StatelessWidget {
   }
 
   Color _getCapabilityColor(String id) {
-    switch (id) {
-      case 'chat':
-        return const Color(0xFF00D4FF); // Bright Cyan
-      case 'memories':
-        return const Color(0xFFFBBF24); // Bright Amber
-      case 'external_integration':
-        return const Color(0xFF34D399); // Bright Emerald
-      case 'persona':
-        return const Color(0xFFF472B6); // Bright Pink
-      case 'proactive_notification':
-        return const Color(0xFFFF6B6B); // Bright Coral
-      default:
-        return const Color(0xFF9CA3AF); // Light Gray
-    }
+    return Colors.grey;
   }
 
   @override
@@ -76,9 +63,8 @@ class CapabilitiesCard extends StatelessWidget {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withOpacity(0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
