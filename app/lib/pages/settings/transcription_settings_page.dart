@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -11,6 +12,7 @@ import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:provider/provider.dart';
 
 class TranscriptionSettingsPage extends StatefulWidget {
@@ -377,6 +379,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     const SizedBox(height: 20),
                     _buildConfigSection(),
                     _buildAdvancedSection(),
+                    const SizedBox(height: 20),
+                    _buildLogsSection(),
                   ] else ...[
                     _buildOmiFeatures(),
                   ],
@@ -1150,6 +1154,148 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       });
       _validateAndSetError();
     }
+  }
+
+  Widget _buildLogsSection() {
+    final logService = CustomSttLogService.instance;
+    final logs = logService.logs;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Logs',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+            const Spacer(),
+            if (logs.isNotEmpty) ...[
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: logService.logsAsText));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
+                  );
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.copy, color: Colors.grey.shade500, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Copy',
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
+            GestureDetector(
+              onTap: () => setState(() {}),
+              child: Row(
+                children: [
+                  Icon(Icons.refresh, color: Colors.grey.shade500, size: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Refresh',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (logs.isNotEmpty) ...[
+              const SizedBox(width: 16),
+              GestureDetector(
+                onTap: () {
+                  logService.clear();
+                  setState(() {});
+                },
+                child: Text(
+                  'Clear',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
+        Container(
+          constraints: const BoxConstraints(maxHeight: 200),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade800),
+          ),
+          child: logs.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Center(
+                    child: Text(
+                      'No logs yet. Start recording to see custom STT activity.',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(8),
+                  itemCount: logs.length,
+                  itemBuilder: (context, index) {
+                    final log = logs[index];
+                    final isError = log.level == CustomSttLogLevel.error;
+                    final isWarning = log.level == CustomSttLogLevel.warning;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            log.formattedTime,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            isError
+                                ? Icons.error_outline
+                                : isWarning
+                                    ? Icons.warning_amber_outlined
+                                    : Icons.info_outline,
+                            size: 12,
+                            color: isError
+                                ? Colors.red.shade400
+                                : isWarning
+                                    ? Colors.orange.shade400
+                                    : Colors.grey.shade500,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '[${log.source}] ${log.message}',
+                              style: TextStyle(
+                                color: isError
+                                    ? Colors.red.shade300
+                                    : isWarning
+                                        ? Colors.orange.shade300
+                                        : Colors.grey.shade400,
+                                fontSize: 11,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 
   Widget _buildOmiFeatures() {

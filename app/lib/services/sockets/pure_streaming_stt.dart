@@ -9,6 +9,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
@@ -117,7 +118,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
       return false;
     }
 
-    debugPrint("[GeminiStreaming] Connecting...");
+    CustomSttLogService.instance.info('GeminiStreaming', 'Connecting...');
     _status = PureSocketStatus.connecting;
 
     try {
@@ -145,19 +146,19 @@ class GeminiStreamingSttSocket implements IPureSocket {
       onConnected();
       return true;
     } on TimeoutException catch (e) {
-      debugPrint("[GeminiStreaming] Connection timeout: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Connection timeout: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     } on SocketException catch (e) {
-      debugPrint("[GeminiStreaming] Socket error: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Socket error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     } on WebSocketChannelException catch (e) {
-      debugPrint("[GeminiStreaming] WebSocket error: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'WebSocket error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     } catch (e) {
-      debugPrint("[GeminiStreaming] Connection error: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Connection error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     }
@@ -188,9 +189,9 @@ class GeminiStreamingSttSocket implements IPureSocket {
     try {
       _channel!.sink.add(jsonEncode(setupMessage));
       _setupSent = true;
-      debugPrint("[GeminiStreaming] Setup message sent");
+      CustomSttLogService.instance.info('GeminiStreaming', 'Setup message sent');
     } catch (e) {
-      debugPrint("[GeminiStreaming] Failed to send setup: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Failed to send setup: $e');
     }
   }
 
@@ -215,7 +216,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
       final json = jsonDecode(messageStr);
 
       if (json.containsKey('setupComplete')) {
-        debugPrint("[GeminiStreaming] Setup complete");
+        CustomSttLogService.instance.info('GeminiStreaming', 'Setup complete');
         return;
       }
 
@@ -252,7 +253,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
         onMessage(jsonEncode([segment]));
       }
     } catch (e, trace) {
-      debugPrint("[GeminiStreaming] Parse error: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Parse error: $e');
       debugPrintStack(stackTrace: trace);
     }
   }
@@ -269,7 +270,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
     } else if (message is List<int>) {
       audioData = Uint8List.fromList(message);
     } else {
-      debugPrint("[GeminiStreaming] Unsupported message type: ${message.runtimeType}");
+      CustomSttLogService.instance.warning('GeminiStreaming', 'Unsupported message type: ${message.runtimeType}');
       return;
     }
 
@@ -286,7 +287,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
       try {
         pcmData = transcoder!.transcodeFrames(_frameBuffer);
       } catch (e) {
-        debugPrint("[GeminiStreaming] Transcode error: $e");
+        CustomSttLogService.instance.error('GeminiStreaming', 'Transcode error: $e');
         _frameBuffer.clear();
         _bufferedBytes = 0;
         return;
@@ -317,7 +318,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
     try {
       _channel!.sink.add(jsonEncode(realtimeInput));
     } catch (e) {
-      debugPrint("[GeminiStreaming] Send error: $e");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Send error: $e');
     }
   }
 
@@ -360,7 +361,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
     _channel?.sink.close();
     _status = PureSocketStatus.disconnected;
-    debugPrint("[GeminiStreaming] Disconnected");
+    CustomSttLogService.instance.info('GeminiStreaming', 'Disconnected');
     onClosed();
   }
 
@@ -381,7 +382,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
   @override
   void onConnected() {
-    debugPrint("[GeminiStreaming] Connected");
+    CustomSttLogService.instance.info('GeminiStreaming', 'Connected');
     _listener?.onConnected();
   }
 
@@ -393,18 +394,18 @@ class GeminiStreamingSttSocket implements IPureSocket {
   @override
   void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
-    debugPrint("[GeminiStreaming] Closed with code: $closeCode");
+    CustomSttLogService.instance.warning('GeminiStreaming', 'Closed with code: $closeCode');
     _listener?.onClosed(closeCode);
   }
 
   @override
   void onError(Object err, StackTrace trace) {
-    debugPrint("[GeminiStreaming] Error: $err");
+    CustomSttLogService.instance.error('GeminiStreaming', 'Error: $err');
     _listener?.onError(err, trace);
   }
 
   void _reconnect() async {
-    debugPrint("[GeminiStreaming] Reconnecting...${_retries + 1}...");
+    CustomSttLogService.instance.info('GeminiStreaming', 'Reconnecting... attempt ${_retries + 1}');
     const int initialBackoffTimeMs = 1000;
     const double multiplier = 1.5;
     const int maxRetries = 8;
@@ -422,7 +423,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
     if (_retries > maxRetries) {
-      debugPrint("[GeminiStreaming] Max retries reached");
+      CustomSttLogService.instance.error('GeminiStreaming', 'Max retries reached');
       _listener?.onMaxRetriesReach();
       return;
     }
@@ -431,7 +432,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
   @override
   void onConnectionStateChanged(bool isConnected) {
-    debugPrint("[GeminiStreaming] Internet connection changed: $isConnected, status: $_status");
+    CustomSttLogService.instance.info('GeminiStreaming', 'Internet: $isConnected, status: $_status');
     _isConnected = isConnected;
     if (isConnected) {
       if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
@@ -490,7 +491,7 @@ class PureStreamingSttSocket implements IPureSocket {
       return false;
     }
 
-    debugPrint("[StreamingSTT] Connecting to ${config.serviceId}...");
+    CustomSttLogService.instance.info(config.serviceId, 'Connecting...');
     _status = PureSocketStatus.connecting;
 
     try {
@@ -518,19 +519,19 @@ class PureStreamingSttSocket implements IPureSocket {
 
       return true;
     } on TimeoutException catch (e) {
-      debugPrint("[StreamingSTT] Connection timeout: $e");
+      CustomSttLogService.instance.error(config.serviceId, 'Connection timeout: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     } on SocketException catch (e) {
-      debugPrint("[StreamingSTT] Socket error: $e");
+      CustomSttLogService.instance.error(config.serviceId, 'Socket error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     } on WebSocketChannelException catch (e) {
-      debugPrint("[StreamingSTT] WebSocket error: $e");
+      CustomSttLogService.instance.error(config.serviceId, 'WebSocket error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     } catch (e) {
-      debugPrint("[StreamingSTT] Connection error: $e");
+      CustomSttLogService.instance.error(config.serviceId, 'Connection error: $e');
       _status = PureSocketStatus.notConnected;
       return false;
     }
@@ -545,7 +546,7 @@ class PureStreamingSttSocket implements IPureSocket {
         try {
           _channel!.sink.add(jsonEncode({'type': 'KeepAlive'}));
         } catch (e) {
-          debugPrint("[StreamingSTT] Keep-alive error: $e");
+          CustomSttLogService.instance.warning(config.serviceId, 'Keep-alive error: $e');
         }
       }
     });
@@ -553,7 +554,7 @@ class PureStreamingSttSocket implements IPureSocket {
 
   void _handleMessage(dynamic message) {
     if (message is! String) {
-      debugPrint("[StreamingSTT] Non-string message received");
+      CustomSttLogService.instance.warning(config.serviceId, 'Non-string message received');
       return;
     }
 
@@ -614,7 +615,7 @@ class PureStreamingSttSocket implements IPureSocket {
         }
       }
     } catch (e, trace) {
-      debugPrint("[StreamingSTT] Parse error: $e");
+      CustomSttLogService.instance.error(config.serviceId, 'Parse error: $e');
       debugPrintStack(stackTrace: trace);
     }
   }
@@ -631,7 +632,7 @@ class PureStreamingSttSocket implements IPureSocket {
     } else if (message is List<int>) {
       audioData = Uint8List.fromList(message);
     } else {
-      debugPrint("[StreamingSTT] Unsupported message type: ${message.runtimeType}");
+      CustomSttLogService.instance.warning(config.serviceId, 'Unsupported message type: ${message.runtimeType}');
       return;
     }
 
@@ -649,7 +650,7 @@ class PureStreamingSttSocket implements IPureSocket {
         try {
           audioData = config.transcoder!.transcodeFrames(_frameBuffer);
         } catch (e) {
-          debugPrint("[StreamingSTT] Transcode error: $e");
+          CustomSttLogService.instance.error(config.serviceId, 'Transcode error: $e');
           _frameBuffer.clear();
           _bufferedBytes = 0;
           return;
@@ -672,7 +673,7 @@ class PureStreamingSttSocket implements IPureSocket {
         try {
           audioData = config.transcoder!.transcodeFrames([audioData]);
         } catch (e) {
-          debugPrint("[StreamingSTT] Transcode error: $e");
+          CustomSttLogService.instance.error(config.serviceId, 'Transcode error: $e');
           return;
         }
       }
@@ -682,7 +683,7 @@ class PureStreamingSttSocket implements IPureSocket {
     try {
       _channel!.sink.add(audioData);
     } catch (e) {
-      debugPrint("[StreamingSTT] Send error: $e");
+      CustomSttLogService.instance.error(config.serviceId, 'Send error: $e');
     }
   }
 
@@ -692,7 +693,7 @@ class PureStreamingSttSocket implements IPureSocket {
       try {
         _channel!.sink.add(jsonEncode({'type': 'CloseStream'}));
       } catch (e) {
-        debugPrint("[StreamingSTT] Close signal error: $e");
+        CustomSttLogService.instance.warning(config.serviceId, 'Close signal error: $e');
       }
     }
   }
@@ -707,7 +708,7 @@ class PureStreamingSttSocket implements IPureSocket {
 
     _channel?.sink.close();
     _status = PureSocketStatus.disconnected;
-    debugPrint("[StreamingSTT] Disconnected");
+    CustomSttLogService.instance.info(config.serviceId, 'Disconnected');
     onClosed();
   }
 
@@ -728,7 +729,7 @@ class PureStreamingSttSocket implements IPureSocket {
 
   @override
   void onConnected() {
-    debugPrint("[StreamingSTT] Connected to ${config.serviceId}");
+    CustomSttLogService.instance.info(config.serviceId, 'Connected');
     _listener?.onConnected();
   }
 
@@ -740,18 +741,18 @@ class PureStreamingSttSocket implements IPureSocket {
   @override
   void onClosed([int? closeCode]) {
     _status = PureSocketStatus.disconnected;
-    debugPrint("[StreamingSTT] Closed with code: $closeCode");
+    CustomSttLogService.instance.warning(config.serviceId, 'Closed with code: $closeCode');
     _listener?.onClosed(closeCode);
   }
 
   @override
   void onError(Object err, StackTrace trace) {
-    debugPrint("[StreamingSTT] Error: $err");
+    CustomSttLogService.instance.error(config.serviceId, 'Error: $err');
     _listener?.onError(err, trace);
   }
 
   void _reconnect() async {
-    debugPrint("[StreamingSTT] Reconnecting...${_retries + 1}...");
+    CustomSttLogService.instance.info(config.serviceId, 'Reconnecting... attempt ${_retries + 1}');
     const int initialBackoffTimeMs = 1000;
     const double multiplier = 1.5;
     const int maxRetries = 8;
@@ -769,7 +770,7 @@ class PureStreamingSttSocket implements IPureSocket {
     await Future.delayed(Duration(milliseconds: waitInMilliseconds));
     _retries++;
     if (_retries > maxRetries) {
-      debugPrint("[StreamingSTT] Max retries reached");
+      CustomSttLogService.instance.error(config.serviceId, 'Max retries reached');
       _listener?.onMaxRetriesReach();
       return;
     }
@@ -778,7 +779,7 @@ class PureStreamingSttSocket implements IPureSocket {
 
   @override
   void onConnectionStateChanged(bool isConnected) {
-    debugPrint("[StreamingSTT] Internet connection changed: $isConnected, status: $_status");
+    CustomSttLogService.instance.info(config.serviceId, 'Internet: $isConnected, status: $_status');
     _isConnected = isConnected;
     if (isConnected) {
       if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
