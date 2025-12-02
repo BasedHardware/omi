@@ -320,28 +320,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   ),
 
-                // Load More button (fallback for manual loading)
-                if (!provider.isFetching && provider.hasMore && provider.actionItems.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Center(
-                        child: ElevatedButton(
-                          onPressed: () => provider.loadMoreActionItems(),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurpleAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: const Text('Load More'),
-                        ),
-                      ),
-                    ),
-                  ),
-
                 const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
               ],
             ),
