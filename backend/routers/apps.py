@@ -257,6 +257,8 @@ def search_apps(
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
     elif sort == 'name_desc':
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower(), reverse=True)
+    elif sort == 'installs_desc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
     else:
         # Default: sort by name
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())

@@ -635,6 +635,8 @@ class AppProvider extends BaseProvider {
           return (a, b) => (b.ratingAvg ?? -1.0).compareTo(a.ratingAvg ?? -1.0);
         case 'Lowest Rating':
           return (a, b) => (a.ratingAvg ?? -1.0).compareTo(b.ratingAvg ?? -1.0);
+        case 'Most Installs':
+          return (a, b) => b.installs.compareTo(a.installs);
         default:
           return null;
       }
