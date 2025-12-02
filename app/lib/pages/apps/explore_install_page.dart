@@ -6,6 +6,7 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/pages/apps/widgets/category_apps_page.dart';
+import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
@@ -139,7 +140,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
   }
 
   Widget _buildCategorizedAppsSlivers() {
-    // Render v2 groups directly from provider (no client-side categorization)
+    // Render v2 groups directly from provider (grouped by capability)
     return Selector<AppProvider, List<Map<String, dynamic>>>(
       selector: (context, provider) => provider.groupedApps,
       builder: (context, groups, child) {
@@ -149,30 +150,53 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             itemCount: groups.length,
             itemBuilder: (context, index) {
               final group = groups[index];
+              // Support capability-based grouping (new) and category-based (legacy)
+              final capabilityMap = group['capability'] as Map<String, dynamic>?;
               final categoryMap = group['category'] as Map<String, dynamic>?;
-              final categoryTitle = (categoryMap != null ? (categoryMap['title'] as String? ?? '') : '').trim();
-              final categoryId = categoryMap != null ? (categoryMap['id'] as String? ?? '') : '';
-              final categoryApps = group['data'] as List<App>? ?? <App>[];
+
+              final groupMap = capabilityMap ?? categoryMap;
+              final groupTitle = (groupMap != null ? (groupMap['title'] as String? ?? '') : '').trim();
+              final groupId = groupMap != null ? (groupMap['id'] as String? ?? '') : '';
+              final groupApps = group['data'] as List<App>? ?? <App>[];
 
               return CategorySection(
-                categoryName: categoryTitle.isEmpty ? 'Apps' : categoryTitle,
-                apps: categoryApps,
-                showViewAll: categoryApps.length > 9,
+                categoryName: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                apps: groupApps,
+                showViewAll: groupApps.length > 9,
                 onViewAll: () {
-                  final category = context.read<AddAppProvider>().categories.firstWhere(
-                        (cat) => cat.id == categoryId || cat.title == categoryTitle,
-                        orElse: () => Category(
-                          title: categoryTitle.isEmpty ? 'Apps' : categoryTitle,
-                          id: categoryId.isEmpty ? categoryTitle.toLowerCase().replaceAll(' ', '-') : categoryId,
-                        ),
-                      );
-                  routeToPage(
-                    context,
-                    CategoryAppsPage(
-                      category: category,
-                      apps: categoryApps,
-                    ),
-                  );
+                  if (capabilityMap != null) {
+                    // Capability-based navigation
+                    final capability = context.read<AddAppProvider>().capabilities.firstWhere(
+                          (cap) => cap.id == groupId || cap.title == groupTitle,
+                          orElse: () => AppCapability(
+                            title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                            id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '_') : groupId,
+                          ),
+                        );
+                    routeToPage(
+                      context,
+                      CapabilityAppsPage(
+                        capability: capability,
+                        apps: groupApps,
+                      ),
+                    );
+                  } else {
+                    // Legacy category-based navigation
+                    final category = context.read<AddAppProvider>().categories.firstWhere(
+                          (cat) => cat.id == groupId || cat.title == groupTitle,
+                          orElse: () => Category(
+                            title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                            id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
+                          ),
+                        );
+                    routeToPage(
+                      context,
+                      CategoryAppsPage(
+                        category: category,
+                        apps: groupApps,
+                      ),
+                    );
+                  }
                 },
               );
             },

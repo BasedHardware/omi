@@ -68,11 +68,15 @@ from utils.apps import (
     generate_api_key,
     get_popular_apps,
     filter_apps_by_category,
+    filter_apps_by_capability,
     sort_apps_by_installs,
     paginate_apps,
     build_pagination_metadata,
     group_apps_by_category,
     build_category_groups_response,
+    group_apps_by_capability,
+    build_capability_groups_response,
+    get_capabilities_list,
     normalize_app_numeric_fields,
 )
 
@@ -127,25 +131,27 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
 
 @router.get('/v2/apps', tags=['v2'])
 def get_apps_v2(
-    category: str | None = Query(default=None, description='Filter by category id'),
+    capability: str | None = Query(default=None, description='Filter by capability id'),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
     include_reviews: bool = Query(default=False),
 ):
-    """Public omi apps, paginated. If category is provided, returns a flat
-    list for that category. If not, returns groups by category (each limited).
+    """Public omi apps, paginated by capability groups.
 
     Notes:
     - Uses approved public apps only (no private/tester apps).
-    - Groups include pagination hints so the client can fetch more via category filter.
+    - Groups: Popular, Chat, Conversations, External Integration.
+    - Chat excludes apps with external_integration capability.
+    - Conversations excludes apps with external_integration or chat capability.
+    - Popular section is shown first.
     """
 
-    categories = _get_categories()
+    capabilities = get_capabilities_list()
 
-    if category:
-        cache_key = f"apps:category:{category}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+    if capability:
+        cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
     else:
-        cache_key = f"apps:groups:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+        cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
 
     cached = get_generic_cache(cache_key)
     if cached:
@@ -157,33 +163,33 @@ def get_apps_v2(
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
 
-    # Category-specific response
-    if category:
-        filtered_apps = filter_apps_by_category(approved_apps, category)
+    # Capability-specific response
+    if capability:
+        filtered_apps = filter_apps_by_capability(approved_apps, capability)
         sorted_apps = sort_apps_by_installs(filtered_apps)
         page = paginate_apps(sorted_apps, offset, limit)
 
         res = {
             'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
-            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, category),
-            'category': {
-                'id': category,
+            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, capability),
+            'capability': {
+                'id': capability,
                 'title': next(
-                    (c['title'] for c in categories if c['id'] == category), category.title().replace('-', ' ')
+                    (c['title'] for c in capabilities if c['id'] == capability), capability.title().replace('_', ' ')
                 ),
             },
         }
         set_generic_cache(cache_key, res, ttl=60 * 10)
         return res
 
-    # Grouped response
-    grouped_apps = group_apps_by_category(approved_apps, categories)
-    groups = build_category_groups_response(grouped_apps, categories, offset, limit)
+    # Grouped response by capability
+    grouped_apps = group_apps_by_capability(approved_apps, capabilities)
+    groups = build_capability_groups_response(grouped_apps, capabilities, offset, limit)
 
     res = {
         'groups': groups,
         'meta': {
-            'categories': categories,
+            'capabilities': capabilities,
             'groupCount': len(groups),
             'limit': limit,
             'offset': offset,
