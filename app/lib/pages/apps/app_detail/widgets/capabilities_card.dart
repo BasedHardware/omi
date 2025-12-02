@@ -12,13 +12,15 @@ class CapabilitiesCard extends StatelessWidget {
       case 'chat':
         return FontAwesomeIcons.solidComment;
       case 'memories':
-        return FontAwesomeIcons.solidLightbulb;
+        return FontAwesomeIcons.solidFileLines;
       case 'external_integration':
         return FontAwesomeIcons.puzzlePiece;
       case 'persona':
         return FontAwesomeIcons.userAstronaut;
       case 'proactive_notification':
         return FontAwesomeIcons.solidBell;
+      case 'push_to_talk':
+        return FontAwesomeIcons.walkieTalkie;
       default:
         return FontAwesomeIcons.cubes;
     }
@@ -76,7 +78,7 @@ class CapabilitiesCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      capability.title,
+                      capability.id == 'memories' ? 'Summary' : capability.title,
                       style: TextStyle(
                         color: color,
                         fontSize: 13,

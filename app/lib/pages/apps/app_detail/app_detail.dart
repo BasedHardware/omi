@@ -1462,8 +1462,39 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   description: app.description,
                   showChips: false,
                 ),
-                CapabilitiesCard(
-                  capabilities: app.getCapabilitiesFromIds(context.read<AddAppProvider>().capabilities),
+                Builder(
+                  builder: (context) {
+                    final allCapabilities = context.read<AddAppProvider>().capabilities;
+                    var capabilitiesList = app.getCapabilitiesFromIds(allCapabilities);
+
+                    // If app has chat tools, add chat capability if not already present
+                    if (app.chatTools != null && app.chatTools!.isNotEmpty) {
+                      final hasChatCapability = capabilitiesList.any((cap) => cap.id == 'chat');
+                      if (!hasChatCapability) {
+                        final chatCapability = allCapabilities.firstWhereOrNull((cap) => cap.id == 'chat');
+                        if (chatCapability != null) {
+                          capabilitiesList = [...capabilitiesList, chatCapability];
+                        }
+                      }
+
+                      // Add "Push to Talk" capability
+                      final hasPushToTalkCapability = capabilitiesList.any((cap) => cap.id == 'push_to_talk');
+                      if (!hasPushToTalkCapability) {
+                        capabilitiesList = [
+                          ...capabilitiesList,
+                          AppCapability(
+                            title: 'Push to Talk',
+                            id: 'push_to_talk',
+                          ),
+                        ];
+                      }
+                    }
+
+                    // Filter out external_integration capability
+                    capabilitiesList = capabilitiesList.where((cap) => cap.id != 'external_integration').toList();
+
+                    return CapabilitiesCard(capabilities: capabilitiesList);
+                  },
                 ),
                 app.chatTools != null && app.chatTools!.isNotEmpty ? _buildChatToolsCard(app) : const SizedBox.shrink(),
                 _buildPermissionsCard(app),
