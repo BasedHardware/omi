@@ -553,6 +553,16 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         # Return default basic plan if no valid subscription
         subscription = get_default_basic_subscription()
 
+    # Get current price ID from Stripe if subscription exists
+    if subscription.stripe_subscription_id:
+        try:
+            stripe_sub = stripe_utils.stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+            stripe_sub_dict = stripe_sub.to_dict()
+            if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
+                subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
+        except Exception as e:
+            print(f"Error retrieving current price ID: {e}")
+
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
     subscription.features = get_plan_features(subscription.plan)

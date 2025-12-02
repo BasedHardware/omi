@@ -28,7 +28,7 @@ from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, se
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
 
-from utils.stripe import create_connect_account, refresh_connect_account_link, is_onboarding_complete
+from utils.stripe import base_url, create_connect_account, refresh_connect_account_link, is_onboarding_complete
 from utils import subscription as subscription_utils
 import os
 
@@ -110,6 +110,50 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
                 print(f"Subscription for user {uid} updated from session {session.id}.")
 
 
+def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
+    """
+    Attempts to reactivate a canceled subscription if possible.
+
+    Returns:
+        dict with reactivation details if successful, None otherwise
+    """
+    current_subscription = users_db.get_user_subscription(uid)
+    if not current_subscription or not current_subscription.stripe_subscription_id:
+        return None
+
+    try:
+        # Retrieve current subscription from Stripe to check status
+        stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id)
+        stripe_sub_dict = stripe_sub.to_dict()
+
+        # Check if subscription is active but scheduled to cancel
+        if stripe_sub_dict['status'] == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
+            current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
+
+            # If resubscribing to the same plan, just remove cancellation
+            if current_price_id == target_price_id:
+                stripe.Subscription.modify(current_subscription.stripe_subscription_id, cancel_at_period_end=False)
+
+                # Update our database
+                current_subscription.cancel_at_period_end = False
+                users_db.update_user_subscription(uid, current_subscription.dict())
+
+                # Calculate next billing date
+                from datetime import datetime
+
+                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
+
+                return {
+                    "status": "reactivated",
+                    "message": f"Your subscription has been reactivated! No charge now - your plan will automatically renew on {next_billing}.",
+                    "next_billing_date": stripe_sub_dict['current_period_end'],
+                }
+    except Exception as e:
+        print(f"Error checking for reactivation: {e}")
+
+    return None
+
+
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
 def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Get available subscription plans with their price IDs and billing intervals."""
@@ -130,7 +174,14 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         current_price_id = None
         scheduled_price_id = None
 
-        if current_subscription and current_subscription.status == SubscriptionStatus.active:
+        # Only mark plans as active if user has an unlimited plan that's actually active AND not scheduled for cancellation
+        if (
+            current_subscription
+            and current_subscription.plan == PlanType.unlimited
+            and current_subscription.status == SubscriptionStatus.active
+            and current_subscription.stripe_subscription_id
+            and not current_subscription.cancel_at_period_end
+        ):
             try:
                 stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
                 if stripe_sub and stripe_sub['items']['data']:
@@ -159,7 +210,7 @@ def get_available_plans_endpoint(uid: str = Depends(auth.get_current_user_uid)):
             except Exception as e:
                 print(f"Error retrieving current subscription: {e}")
         else:
-            print(f"No active subscription found for user {uid}")
+            print(f"No active unlimited subscription found for user {uid}")
 
         # Create pricing options
         monthly_option = PricingOption(
@@ -196,9 +247,13 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     if not can_pay:
         raise HTTPException(status_code=400, detail=reason)
 
-    # idempotency key to prevent duplicate payments
-    idempotency_key = str(uuid.uuid4())
+    # Try to reactivate canceled subscription (Scenario A)
+    reactivation_result = _try_reactivate_subscription(uid, request.price_id)
+    if reactivation_result:
+        return reactivation_result
 
+    # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
+    idempotency_key = str(uuid.uuid4())
     session = stripe_utils.create_subscription_checkout_session(uid, request.price_id, idempotency_key)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
@@ -711,6 +766,50 @@ async def stripe_cancel():
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
                 <h1>Payment Cancelled</h1>
                 <p>Your payment process was cancelled. You can return to the app.</p>
+            </body>
+        </html>
+    """
+    )
+
+
+@router.post('/v1/payments/customer-portal')
+def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
+    from urllib.parse import urljoin
+
+    customer_id = users_db.get_stripe_customer_id(uid)
+
+    # If no customer ID stored, try to get it from subscription
+    if not customer_id:
+        subscription = users_db.get_user_subscription(uid)
+        if subscription and subscription.stripe_subscription_id:
+            stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+            customer_id = stripe_sub.customer
+            if customer_id:
+                users_db.set_stripe_customer_id(uid, customer_id)
+
+    if not customer_id:
+        raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
+
+    return_url = urljoin(base_url, 'v1/payments/portal-return')
+
+    portal_session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=return_url,
+    )
+
+    return {"url": portal_session.url}
+
+
+@router.get("/v1/payments/portal-return", response_class=HTMLResponse)
+async def portal_return():
+    return HTMLResponse(
+        content="""
+        <html>
+            <head><title>Portal Complete</title></head>
+            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
+                <h1>Settings Updated</h1>
+                <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
     """
