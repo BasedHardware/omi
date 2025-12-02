@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
@@ -97,6 +98,15 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
         if (completionChanged) {
           await provider.updateActionItemState(widget.actionItem!, _isCompleted);
         }
+
+        // Track action item edit
+        if (descriptionChanged || dueDateChanged) {
+          MixpanelManager().actionItemEdited(
+            actionItemId: widget.actionItem!.id,
+            titleChanged: descriptionChanged,
+            dateChanged: dueDateChanged,
+          );
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -120,13 +130,19 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       }
 
       try {
-        final success = await provider.createActionItem(
+        final createdItem = await provider.createActionItem(
           description: _textController.text.trim(),
           dueAt: _selectedDueDate,
           completed: _isCompleted,
         );
 
-        if (!success && mounted) {
+        if (createdItem != null) {
+          // Track manually added action item
+          MixpanelManager().actionItemManuallyAdded(
+            actionItemId: createdItem.id,
+            timestamp: DateTime.now(),
+          );
+        } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Failed to create action item'),

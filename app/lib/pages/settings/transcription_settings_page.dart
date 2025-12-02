@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -489,7 +490,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Widget _buildSourceOption(bool isCustom, String title) {
     final isSelected = _useCustomStt == isCustom;
     return GestureDetector(
-      onTap: () => setState(() => _useCustomStt = isCustom),
+      onTap: () {
+        if (_useCustomStt == isCustom) return;
+
+        setState(() => _useCustomStt = isCustom);
+
+        // Track source selection: 'omi' vs 'custom'
+        MixpanelManager().transcriptionSourceSelected(
+          source: isCustom ? 'custom' : 'omi',
+        );
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
@@ -635,6 +645,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                       _showAdvanced = true;
                     }
                   });
+
+                  // Track which provider was selected (name only, no keys/URLs)
+                  MixpanelManager().transcriptionProviderSelected(
+                    provider: provider.name,
+                  );
+
                   _validateAndSetError();
                 }
               },
@@ -1337,78 +1353,78 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         if (_showLogs)
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade800),
-          ),
-          child: logs.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: Text(
-                      'No logs yet. Start recording to see custom STT activity.',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                      textAlign: TextAlign.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade800),
+            ),
+            child: logs.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: Text(
+                        'No logs yet. Start recording to see custom STT activity.',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.all(8),
-                  itemCount: logs.length,
-                  itemBuilder: (context, index) {
-                    final log = logs[index];
-                    final isError = log.level == CustomSttLogLevel.error;
-                    final isWarning = log.level == CustomSttLogLevel.warning;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            log.formattedTime,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 10,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Icon(
-                            isError
-                                ? Icons.error_outline
-                                : isWarning
-                                    ? Icons.warning_amber_outlined
-                                    : Icons.info_outline,
-                            size: 12,
-                            color: isError
-                                ? Colors.red.shade400
-                                : isWarning
-                                    ? Colors.orange.shade400
-                                    : Colors.grey.shade500,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              '[${log.source}] ${log.message}',
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.all(8),
+                    itemCount: logs.length,
+                    itemBuilder: (context, index) {
+                      final log = logs[index];
+                      final isError = log.level == CustomSttLogLevel.error;
+                      final isWarning = log.level == CustomSttLogLevel.warning;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              log.formattedTime,
                               style: TextStyle(
-                                color: isError
-                                    ? Colors.red.shade300
-                                    : isWarning
-                                        ? Colors.orange.shade300
-                                        : Colors.grey.shade400,
-                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                                fontSize: 10,
                                 fontFamily: 'monospace',
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-        ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              isError
+                                  ? Icons.error_outline
+                                  : isWarning
+                                      ? Icons.warning_amber_outlined
+                                      : Icons.info_outline,
+                              size: 12,
+                              color: isError
+                                  ? Colors.red.shade400
+                                  : isWarning
+                                      ? Colors.orange.shade400
+                                      : Colors.grey.shade500,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '[${log.source}] ${log.message}',
+                                style: TextStyle(
+                                  color: isError
+                                      ? Colors.red.shade300
+                                      : isWarning
+                                          ? Colors.orange.shade300
+                                          : Colors.grey.shade400,
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
       ],
     );
   }
