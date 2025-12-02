@@ -282,7 +282,6 @@ class SttProviderConfig {
   static const _visibleProviders = [
     SttProvider.openai,
     SttProvider.deepgramLive,
-    SttProvider.falai,
     SttProvider.geminiLive,
     SttProvider.localWhisper,
     SttProvider.customLive,

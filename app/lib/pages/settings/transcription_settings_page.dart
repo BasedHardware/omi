@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:provider/provider.dart';
 
 class TranscriptionSettingsPage extends StatefulWidget {
@@ -22,6 +25,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showAdvanced = false;
   bool _isSaving = false;
   String? _validationError;
+
+  // Device codec compatibility
+  BleAudioCodec? _connectedDeviceCodec;
+  String? _connectedDeviceName;
 
   // Store settings per provider
   final Map<SttProvider, String> _apiKeysPerProvider = {};
@@ -50,6 +57,33 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void initState() {
     super.initState();
     _loadConfig();
+    _checkConnectedDevice();
+  }
+
+  Future<void> _checkConnectedDevice() async {
+    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+    if (captureProvider.havingRecordingDevice) {
+      try {
+        final device = captureProvider.recordingDevice;
+        if (device != null) {
+          final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+          if (connection != null && mounted) {
+            final codec = await connection.getAudioCodec();
+            setState(() {
+              _connectedDeviceCodec = codec;
+              _connectedDeviceName = device.name;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error checking device codec: $e');
+      }
+    }
+  }
+
+  bool get _isCodecCompatible {
+    if (_connectedDeviceCodec == null) return true;
+    return TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(_connectedDeviceCodec!);
   }
 
   void _loadConfig() {
@@ -406,10 +440,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
+  Widget _buildCodecWarning() {
+    if (_isCodecCompatible || !_useCustomStt) return const SizedBox.shrink();
+
+    final codecReason = _connectedDeviceCodec?.customSttUnsupportedReason ?? 'unsupported format';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              '${_connectedDeviceName ?? 'Device'} uses $codecReason. Omi will be used.',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildProviderSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildCodecWarning(),
         Text(
           'Provider',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
@@ -429,33 +485,56 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               dropdownColor: const Color(0xFF1A1A1A),
               style: const TextStyle(color: Colors.white, fontSize: 15),
               icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
-              items: SttProviderConfig.allProviders.map((config) {
-                return DropdownMenuItem<SttProvider>(
-                  value: config.provider,
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(config.displayName)),
-                      if (config.isLive)
-                        Container(
-                          margin: const EdgeInsets.only(left: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'Live',
-                            style: TextStyle(
-                              color: Colors.green,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+              items: [
+                ...SttProviderConfig.allProviders.map((config) {
+                  return DropdownMenuItem<SttProvider>(
+                    value: config.provider,
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(config.displayName)),
+                        if (config.isLive)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'Live',
+                              style: TextStyle(
+                                color: Colors.green,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
+                      ],
+                    ),
+                  );
+                }),
+                DropdownMenuItem<SttProvider>(
+                  value: null,
+                  enabled: false,
+                  child: Row(
+                    children: [
+                      const Expanded(child: Text('On Device')),
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        child: Text(
+                          'Coming Soon',
+                          style: TextStyle(
+                            color: Colors.orange.withOpacity(0.5),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                      ),
                     ],
                   ),
-                );
-              }).toList(),
+                ),
+              ],
               onChanged: (provider) {
                 if (provider != null) {
                   // Save current settings before switching

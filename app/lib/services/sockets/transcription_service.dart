@@ -257,6 +257,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 class TranscriptSocketServiceFactory {
   TranscriptSocketServiceFactory._();
 
+  /// Codecs supported by custom STT providers
+  static const List<BleAudioCodec> _customSttSupportedCodecs = [
+    BleAudioCodec.pcm8,
+    BleAudioCodec.pcm16,
+    BleAudioCodec.opus,
+    BleAudioCodec.opusFS320,
+  ];
+
+  /// Check if a codec is supported for custom STT
+  static bool isCodecSupportedForCustomStt(BleAudioCodec codec) {
+    return _customSttSupportedCodecs.contains(codec);
+  }
+
   /// Create default Omi transcription service
   static TranscriptSegmentSocketService createDefault(
     int sampleRate,

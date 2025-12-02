@@ -20,9 +20,9 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -225,6 +225,8 @@ class CaptureProvider extends ChangeNotifier
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
+  BtDevice? get recordingDevice => _recordingDevice;
+
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
     notifyListeners();
@@ -338,14 +340,21 @@ class CaptureProvider extends ChangeNotifier
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
 
-    // Connect to the transcript socket with custom STT config
+    // Check codec compatibility for custom STT - fallback to default if incompatible
+    CustomSttConfig? effectiveConfig = customSttConfig.isEnabled ? customSttConfig : null;
+    if (effectiveConfig != null && !TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
+      debugPrint('[CustomSTT] Codec $codec not supported, falling back to Omi');
+      effectiveConfig = null;
+    }
+
+    // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
           codec: codec,
           sampleRate: sampleRate,
           language: language,
           force: force,
           source: source,
-          customSttConfig: customSttConfig.isEnabled ? customSttConfig : null,
+          customSttConfig: effectiveConfig,
         );
     if (_socket == null) {
       _startKeepAliveServices();

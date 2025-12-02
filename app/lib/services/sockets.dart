@@ -93,8 +93,6 @@ class SocketServicePool extends ISocketService {
     } finally {
       _mutex.release();
     }
-
-    return null;
   }
 
   @override
