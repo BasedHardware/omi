@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class ActionFieldsWidget extends StatelessWidget {
   const ActionFieldsWidget({super.key});
@@ -24,7 +23,7 @@ class ActionFieldsWidget extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(left: 8.0, bottom: 12.0),
                   child: Text(
-                    'Import',
+                    'Permissions',
                     style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
                   ),
                 ),
@@ -34,124 +33,34 @@ class ActionFieldsWidget extends StatelessWidget {
                     ...provider.getActionTypes().map((actionType) {
                       final isSelected = provider.actions.any((action) => action['action'] == actionType.id);
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8.0),
-                        decoration: BoxDecoration(
-                          color: Color(0xFF35343B),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Row(
                           children: [
-                            SizedBox(
-                              height: 90,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            actionType.title,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Allow this app to ${actionType.title.toLowerCase()}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade400,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: isSelected,
-                                      onChanged: (value) {
-                                        if (value) {
-                                          provider.addSpecificAction(actionType.id);
-                                        } else {
-                                          provider.removeActionByType(actionType.id);
-                                        }
-                                      },
-                                    ),
-                                  ],
+                            Expanded(
+                              child: Text(
+                                actionType.title,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
-
-                            // Description
-                            if (isSelected)
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      actionType.description ??
-                                          (actionType.id == 'create_conversation'
-                                              ? 'Extend user conversations by making a POST request to the OMI System.'
-                                              : actionType.id == 'create_facts'
-                                                  ? 'Create new memories for the user through the OMI System.'
-                                                  : actionType.id == 'read_conversations'
-                                                      ? 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
-                                                      : actionType.id == 'read_memories'
-                                                          ? 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
-                                                          : 'Enable this action for your app.'),
-                                      style: TextStyle(
-                                        color: Colors.grey.shade400,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    GestureDetector(
-                                      onTap: () {
-                                        if (actionType.docUrl != null) {
-                                          launchUrl(Uri.parse(actionType.docUrl!));
-                                        } else {
-                                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Import'));
-                                        }
-                                      },
-                                      child: Text(
-                                        'Learn more.',
-                                        style: TextStyle(
-                                          color: Colors.blue.shade300,
-                                          fontSize: 14,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            Switch(
+                              value: isSelected,
+                              onChanged: (value) {
+                                if (value) {
+                                  provider.addSpecificAction(actionType.id);
+                                } else {
+                                  provider.removeActionByType(actionType.id);
+                                }
+                              },
+                            ),
                           ],
                         ),
                       );
                     }).toList(),
-
-                    // Add button for future actions
-                    if (provider.getActionTypes().length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                          'Select multiple actions as needed for your app.',
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ],
