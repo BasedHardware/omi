@@ -55,6 +55,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
   late App app;
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _reviewsSectionKey = GlobalKey();
 
   String _getPricingText(App app) {
     if (!app.isPaid || app.price == null || app.price == 0) {
@@ -320,6 +322,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   void dispose() {
     _paymentCheckTimer?.cancel();
     _setupCheckTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -781,6 +784,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         body: SingleChildScrollView(
+          controller: _scrollController,
           child: Skeletonizer(
             enabled: isLoading,
             child: Column(
@@ -910,45 +914,57 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           // Ratings section - App Store style
-                          Column(
-                            children: [
-                              Text(
-                                app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
+                          GestureDetector(
+                            onTap: () {
+                              if ((app.ratingCount > 0 || app.reviews.isNotEmpty) &&
+                                  _reviewsSectionKey.currentContext != null) {
+                                Scrollable.ensureVisible(
+                                  _reviewsSectionKey.currentContext!,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeInOut,
+                                );
+                              }
+                            },
+                            child: Column(
+                              children: [
+                                Text(
+                                  app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                app.getRatingAvg() ?? '0.0',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade400,
+                                const SizedBox(height: 6),
+                                Text(
+                                  app.getRatingAvg() ?? '0.0',
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              RatingBar.builder(
-                                initialRating: app.ratingAvg ?? 0,
-                                minRating: 1,
-                                ignoreGestures: true,
-                                direction: Axis.horizontal,
-                                allowHalfRating: true,
-                                itemCount: 5,
-                                itemSize: 12,
-                                tapOnlyMode: false,
-                                itemPadding: const EdgeInsets.symmetric(horizontal: 1),
-                                itemBuilder: (context, _) => Icon(
-                                  FontAwesomeIcons.solidStar,
-                                  color: Colors.grey.shade500,
+                                const SizedBox(height: 6),
+                                RatingBar.builder(
+                                  initialRating: app.ratingAvg ?? 0,
+                                  minRating: 1,
+                                  ignoreGestures: true,
+                                  direction: Axis.horizontal,
+                                  allowHalfRating: true,
+                                  itemCount: 5,
+                                  itemSize: 12,
+                                  tapOnlyMode: false,
+                                  itemPadding: const EdgeInsets.symmetric(horizontal: 1),
+                                  itemBuilder: (context, _) => Icon(
+                                    FontAwesomeIcons.solidStar,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  maxRating: 5.0,
+                                  onRatingUpdate: (rating) {},
                                 ),
-                                maxRating: 5.0,
-                                onRatingUpdate: (rating) {},
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                           const SizedBox(width: 20),
                           VerticalDivider(
@@ -1531,6 +1547,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           }
                         },
                         child: Container(
+                          key: _reviewsSectionKey,
                           width: double.infinity,
                           padding: const EdgeInsets.all(16.0),
                           margin: EdgeInsets.only(
