@@ -167,9 +167,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SizedBox(width: 16),
             // Selection count
             Expanded(
-              child: Text(
-                '$selectedCount selected',
-                style: const TextStyle(color: Colors.white, fontSize: 16),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  '$selectedCount selected',
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
               ),
             ),
             // Merge button
@@ -177,7 +180,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               onPressed: canMerge && !provider.isMergingConversations
                   ? () async {
                       HapticFeedback.mediumImpact();
-                      await provider.executeMerge();
+                      await _showMergePreviewDialog(provider);
                     }
                   : null,
               icon: provider.isMergingConversations
@@ -206,6 +209,99 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         ),
       ),
     );
+  }
+
+  Future<void> _showMergePreviewDialog(ConversationProvider provider) async {
+    final selectedConvos = provider.conversations
+        .where((c) => provider.selectedConversationIds.contains(c.id))
+        .toList();
+
+    // Sort by creation date
+    selectedConvos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        title: const Text(
+          'Merge Conversations',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are about to merge ${selectedConvos.length} conversations:',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              ...selectedConvos.map((convo) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      convo.structured.emoji,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        convo.structured.title,
+                        style: const TextStyle(color: Colors.white),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+              const SizedBox(height: 16),
+              const Text(
+                'This will combine all transcripts in chronological order. You can undo this action for 24 hours.',
+                style: TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurpleAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Merge'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && mounted) {
+      final mergeResult = await provider.executeMerge();
+
+      if (mergeResult != null && mounted) {
+        // Show undo snackbar
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Conversations merged successfully'),
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'Undo',
+              textColor: Colors.deepPurpleAccent,
+              onPressed: () async {
+                await provider.undoMerge(mergeResult.mergedConversationId);
+              },
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -306,7 +402,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             Positioned(
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: 80,
               child: _buildMergeToolbar(convoProvider),
             ),
         ],

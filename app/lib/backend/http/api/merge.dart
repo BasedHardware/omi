@@ -89,6 +89,8 @@ class MergeConversationsResponse {
     required this.mergeMetadata,
   });
 
+  String get mergedConversationId => mergedConversation.id;
+
   factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
     final rollbackUntil = DateTime.tryParse(json['rollback_available_until'] ?? '');
     if (json['merged_conversation'] == null || rollbackUntil == null) {
@@ -186,7 +188,7 @@ Future<MergeConversationsResponse?> mergeConversations(
     return null;
   }
 
-  var body = {
+  Map<String, dynamic> body = {
     'conversation_ids': conversationIds,
   };
   if (customTitle != null && customTitle.isNotEmpty) {
@@ -246,6 +248,39 @@ Future<RollbackMergeResponse?> rollbackMerge(String mergeId) async {
     return null;
   } else {
     debugPrint('rollbackMerge error ${response.statusCode}: ${response.body}');
+    return null;
+  }
+}
+
+/// Unmerge a merged conversation by its conversation ID
+///
+/// Convenience wrapper that looks up the merge by conversation ID
+/// and calls the rollback endpoint.
+///
+/// [conversationId]: The merged conversation ID
+///
+/// Returns RollbackMergeResponse with restored conversations
+Future<RollbackMergeResponse?> unmergeConversation(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/unmerge',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+
+  if (response == null) return null;
+  debugPrint('unmergeConversation: ${response.statusCode}');
+
+  if (response.statusCode == 200) {
+    return RollbackMergeResponse.fromJson(jsonDecode(response.body));
+  } else if (response.statusCode == 400) {
+    debugPrint('unmergeConversation not available: ${response.body}');
+    return null;
+  } else if (response.statusCode == 404) {
+    debugPrint('unmergeConversation: Conversation not found or not merged');
+    return null;
+  } else {
+    debugPrint('unmergeConversation error ${response.statusCode}: ${response.body}');
     return null;
   }
 }

@@ -339,6 +339,40 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ),
                     ),
                   ),
+                // Show "Merged" badge if this conversation was created from a merge
+                if (widget.conversation.sourceConversationIds.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.merge_type,
+                          size: 12,
+                          color: Colors.deepPurpleAccent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Merged',
+                          style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                            color: Colors.deepPurpleAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

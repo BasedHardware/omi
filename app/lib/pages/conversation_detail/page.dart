@@ -253,9 +253,47 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await provider.reprocessConversation();
         }
         break;
+      case 'unmerge':
+        _handleUnmerge(context, provider);
+        break;
       case 'delete':
         _handleDelete(context, provider);
         break;
+    }
+  }
+
+  void _handleUnmerge(BuildContext context, ConversationDetailProvider provider) {
+    HapticFeedback.mediumImpact();
+    final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+    if (connectivityProvider.isConnected) {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () async {
+            Navigator.pop(context); // Close dialog
+            await context.read<ConversationProvider>().undoMerge(provider.conversation.id);
+            Navigator.pop(context, {'unmerged': true}); // Close detail page
+          },
+          'Unmerge Conversation?',
+          'This will restore the original conversations that were merged. You can re-merge them later if needed.',
+          okButtonText: 'Unmerge',
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (c) => getDialog(
+          context,
+          () => Navigator.pop(context),
+          () => Navigator.pop(context),
+          'Unable to Unmerge Conversation',
+          'Please check your internet connection and try again.',
+          singleButton: true,
+          okButtonText: 'OK',
+        ),
+      );
     }
   }
 
@@ -540,6 +578,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 title: 'Reprocess Conversation',
                                 iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'reprocess', provider),
+                              ),
+                            if (provider.conversation.sourceConversationIds.isNotEmpty)
+                              PullDownMenuItem(
+                                title: 'Unmerge Conversation',
+                                iconWidget: FaIcon(FontAwesomeIcons.arrowsSplitUpAndLeft, size: 16, color: Colors.deepPurpleAccent),
+                                onTap: () => _handleMenuSelection(context, 'unmerge', provider),
                               ),
                             PullDownMenuItem(
                               title: 'Delete Conversation',

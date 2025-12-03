@@ -742,4 +742,26 @@ class ConversationProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> undoMerge(String mergedConversationId) async {
+    try {
+      debugPrint('undoMerge: Attempting to undo merge for conversation $mergedConversationId');
+
+      final response = await unmergeConversation(mergedConversationId);
+
+      if (response != null) {
+        debugPrint('undoMerge: Successfully unmerged conversation');
+
+        // Refresh conversations list to show restored conversations
+        await getInitialConversations();
+
+        // Analytics
+        MixpanelManager().conversationUnmerged(mergedConversationId);
+      } else {
+        debugPrint('undoMerge: Unmerge API call returned null');
+      }
+    } catch (e) {
+      debugPrint('undoMerge error: $e');
+    }
+  }
 }
