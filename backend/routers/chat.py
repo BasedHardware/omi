@@ -21,6 +21,7 @@ from models.chat import (
     ResponseMessage,
     MessageConversation,
     FileChat,
+    UpdateChatSessionTitleRequest,
 )
 from models.conversation import Conversation
 from routers.sync import retrieve_file_paths, decode_files_to_wav
@@ -52,11 +53,51 @@ def filter_messages(messages, app_id):
 
 
 def acquire_chat_session(uid: str, app_id: Optional[str] = None):
+    """Get or create a chat session for an app"""
     chat_session = chat_db.get_chat_session(uid, app_id=app_id)
     if chat_session is None:
-        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
+        chat_session = chat_db.create_chat_session(uid, app_id=app_id)
     return chat_session
+
+
+def should_generate_title(session: dict) -> bool:
+    """Only generate title after we have enough context (3+ messages)"""
+    return (session.get('title') is None or session.get('title') == 'New Chat') and len(
+        session.get('message_ids', [])
+    ) >= 3
+
+
+def generate_session_title(uid: str, session: dict) -> str:
+    """
+    Generate concise title from first user message (not AI greeting).
+    Simple heuristic: Take first 5 words of first human message.
+    """
+    message_ids = session.get('message_ids', [])
+
+    # Find first human message (skip AI greeting at index 0)
+    first_human_text = None
+    for msg_id in message_ids:
+        msg_result = chat_db.get_message(uid, msg_id)
+        if msg_result and msg_result[0].sender == 'human':
+            first_human_text = msg_result[0].text
+            break
+
+    if not first_human_text:
+        return "New Chat"
+
+    # Clean and split message
+    words = first_human_text.strip().split()[:5]
+    title = ' '.join(words)
+
+    # Capitalize first letter
+    if title:
+        title = title[0].upper() + title[1:] if len(title) > 1 else title.upper()
+
+    # Add ellipsis if truncated
+    if len(first_human_text.split()) > 5:
+        title += '...'
+
+    return title if title else "New Chat"
 
 
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
@@ -64,17 +105,36 @@ def send_message(
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
-    print('send_message', data.text, compat_app_id, uid)
+    print('send_message', data.text, compat_app_id, chat_session_id, uid)
 
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+    # Session selection logic
+    chat_session = None
+    if chat_session_id:
+        # Explicit session ID provided (new clients)
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        # No session ID (old clients) - get most recent session for app
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        if not chat_session:
+            chat_session = chat_db.create_chat_session(uid, app_id=compat_app_id)
+
     chat_session = ChatSession(**chat_session) if chat_session else None
+
+    # Update session activity
+    if chat_session and chat_session.id:
+        try:
+            chat_db.update_session_activity(uid, chat_session.id)
+        except Exception as e:
+            print(f"Failed to update session activity: {e}")
 
     message = Message(
         id=str(uuid.uuid4()),
@@ -106,7 +166,16 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    messages = list(
+        reversed(
+            [
+                Message(**msg)
+                for msg in chat_db.get_messages(
+                    uid, limit=10, app_id=compat_app_id, chat_session_id=chat_session.id if chat_session else None
+                )
+            ]
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -162,6 +231,14 @@ def send_message(
                 response = callback_data.get('answer')
                 if response:
                     ai_message, ask_for_nps = process_message(response, callback_data)
+
+                    # Update session activity after AI reply
+                    if chat_session and chat_session.id:
+                        try:
+                            chat_db.update_session_activity(uid, chat_session.id)
+                        except:
+                            pass
+
                     ai_message_dict = ai_message.dict()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
@@ -186,31 +263,36 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
 
 @router.delete('/v2/messages', tags=['chat'], response_model=Message)
 def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    app_id: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get current chat session
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # Session selection logic
+    if not chat_session_id:
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        chat_session_id = chat_session['id'] if chat_session else None
+    else:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
         raise HTTPException(status_code=500, detail='Failed to clear chat')
 
-    # clean thread chat file
-    if chat_session and chat_session.get('id'):
+    # Clean thread chat file and OpenAI resources
+    if chat_session_id:
         try:
-            fc_tool = FileChatTool(uid, chat_session['id'])
+            fc_tool = FileChatTool(uid, chat_session_id)
             fc_tool.cleanup()
         except ValueError:
-            # Session not found, continue with cleanup
             pass
 
-    # clear session
-    if chat_session_id is not None:
+    # Delete the session (user expects fresh start)
+    if chat_session_id:
         chat_db.delete_chat_session(uid, chat_session_id)
 
     return initial_message_util(uid, compat_app_id)
@@ -266,19 +348,31 @@ def create_initial_message(
 
 @router.get('/v2/messages', response_model=List[Message], tags=['chat'])
 def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+    plugin_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # Session selection logic
+    if chat_session_id:
+        # New client: Use specific session
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if not chat_session:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+        session_id = chat_session['id']
+    else:
+        # Old client: Get most recent session
+        chat_session = chat_db.get_chat_session(uid, app_id=compat_app_id)
+        session_id = chat_session['id'] if chat_session else None
 
     messages = chat_db.get_messages(
-        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
+        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=session_id
     )
-    print('get_messages', len(messages), compat_app_id)
+    print('get_messages', len(messages), compat_app_id, session_id)
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages
@@ -401,6 +495,103 @@ def upload_file_chat(files: List[UploadFile] = File(...), uid: str = Depends(aut
     response = [fc.dict() for fc in files_chat]
 
     return response
+
+
+# *************************************
+# ******* SESSION MANAGEMENT **********
+# *************************************
+
+
+@router.get('/v2/chat-sessions', response_model=List[ChatSession], tags=['chat'])
+def get_chat_sessions_endpoint(
+    app_id: Optional[str] = None,
+    all_apps: bool = True,  # Default to all apps for sidebar
+    limit: int = 50,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get all chat sessions for a user.
+    Sorted by most recent activity.
+
+    Args:
+        app_id: Filter by app (ignored if all_apps=True)
+        all_apps: If True (default), return sessions across all apps
+        limit: Max number of sessions to return
+    """
+    if app_id in ['null', '']:
+        app_id = None
+
+    sessions = chat_db.get_chat_sessions(uid, app_id=app_id, all_apps=all_apps, limit=limit)
+
+    # Lazy title generation (only for sessions with 3+ messages)
+    for session in sessions:
+        if should_generate_title(session):
+            title = generate_session_title(uid, session)
+            session['title'] = title
+            # Save it for next time
+            try:
+                chat_db.update_chat_session_title(uid, session['id'], title)
+            except:
+                pass
+        elif not session.get('title'):
+            session['title'] = 'New Chat'
+
+    return [ChatSession(**session) for session in sessions]
+
+
+@router.post('/v2/chat-sessions', response_model=ChatSession, tags=['chat'])
+def create_chat_session_endpoint(
+    app_id: Optional[str] = None, title: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Create a new chat session.
+    Returns the created session with ID.
+    """
+    if app_id in ['null', '']:
+        app_id = None
+
+    session = chat_db.create_chat_session(uid, app_id, title)
+    return ChatSession(**session)
+
+
+@router.put('/v2/chat-sessions/{session_id}/title', response_model=dict, tags=['chat'])
+def update_session_title_endpoint(
+    session_id: str, request: UpdateChatSessionTitleRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    """Update the title of a chat session"""
+    # Verify session exists and belongs to user
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+
+    chat_db.update_chat_session_title(uid, session_id, request.title)
+    return {'message': 'Title updated successfully'}
+
+
+@router.delete('/v2/chat-sessions/{session_id}', response_model=dict, tags=['chat'])
+def delete_session_endpoint(session_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Delete a chat session and all its messages.
+    """
+    # Verify session exists and belongs to user
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail='Chat session not found')
+
+    # Delete all messages in the session
+    chat_db.clear_chat(uid, app_id=session.get('plugin_id'), chat_session_id=session_id)
+
+    # Clean up OpenAI resources
+    try:
+        fc_tool = FileChatTool(uid, session_id)
+        fc_tool.cleanup()
+    except ValueError:
+        pass
+
+    # Delete the session
+    chat_db.delete_chat_session(uid, session_id)
+
+    return {'message': 'Chat session deleted successfully'}
 
 
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------

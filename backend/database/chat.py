@@ -367,22 +367,56 @@ def add_chat_session(uid: str, chat_session_data: dict):
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None):
+    """
+    Get the most recent session for an app.
+    Returns most recent by created_at (requires composite index: plugin_id ASC, created_at DESC)
+    """
     session_ref = (
         db.collection('users')
         .document(uid)
         .collection('chat_sessions')
         .where(filter=FieldFilter('plugin_id', '==', app_id))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
 
-    sessions = session_ref.stream()
-    for session in sessions:
-        return session.to_dict()
+    sessions = list(session_ref.stream())
+    if sessions:
+        return sessions[0].to_dict()
 
     return None
 
 
-def get_chat_session_by_id(uid: str, chat_session_id: str):
+def get_chat_sessions(uid: str, app_id: Optional[str] = None, all_apps: bool = False, limit: int = 50) -> List[dict]:
+    """
+    Get all chat sessions for a user.
+    Sorted by activity (updated_at) with fallback to created_at.
+
+    Args:
+        uid: User ID
+        app_id: Filter by app ID (ignored if all_apps=True)
+        all_apps: If True, return sessions across ALL apps
+        limit: Max sessions to return
+    """
+    sessions_ref = db.collection('users').document(uid).collection('chat_sessions')
+
+    if all_apps:
+        # Get ALL sessions regardless of app
+        query = sessions_ref
+    else:
+        # Filter by specific app
+        query = sessions_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
+
+    sessions = [doc.to_dict() for doc in query.stream()]
+
+    # Sort in Python: use updated_at if exists, else created_at
+    # This handles mixed sessions (some with updated_at, some without)
+    sessions.sort(key=lambda s: s.get('updated_at', s.get('created_at')), reverse=True)
+
+    return sessions[:limit]
+
+
+def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[dict]:
     """Get a specific chat session by its ID"""
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
@@ -394,7 +428,45 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     return None
 
 
-def delete_chat_session(uid, chat_session_id):
+def create_chat_session(uid: str, app_id: Optional[str] = None, title: Optional[str] = None) -> dict:
+    """
+    Create a new chat session with all fields initialized.
+    """
+    session_data = {
+        'id': str(uuid.uuid4()),
+        'created_at': datetime.now(timezone.utc),
+        'updated_at': datetime.now(timezone.utc),
+        'plugin_id': app_id,
+        'app_id': app_id,
+        'message_ids': [],
+        'file_ids': [],
+        'title': title or 'New Chat',
+    }
+    return add_chat_session(uid, session_data)
+
+
+def update_session_activity(uid: str, session_id: str):
+    """
+    Update session's last activity timestamp.
+    Creates field if it doesn't exist (no migration needed).
+    """
+    session_ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
+    try:
+        session_ref.update({'updated_at': datetime.now(timezone.utc)})
+    except Exception:
+        # Field doesn't exist or document not found, use set with merge
+        session_ref.set({'updated_at': datetime.now(timezone.utc)}, merge=True)
+
+
+def update_chat_session_title(uid: str, chat_session_id: str, title: str):
+    """Update the title of a chat session"""
+    user_ref = db.collection('users').document(uid)
+    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
+    session_ref.update({"title": title})
+
+
+def delete_chat_session(uid: str, chat_session_id: str):
+    """Delete a chat session"""
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.delete()

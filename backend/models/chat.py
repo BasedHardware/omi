@@ -177,6 +177,8 @@ class ChatSession(BaseModel):
     created_at: datetime
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
+    title: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
     @model_validator(mode='before')
     @classmethod
@@ -201,3 +203,7 @@ class ChatSession(BaseModel):
     def retrieve_new_file(self, file_ids) -> List:
         existing_files = set(self.file_ids or [])
         return list(set(file_ids) - existing_files)
+
+
+class UpdateChatSessionTitleRequest(BaseModel):
+    title: str
