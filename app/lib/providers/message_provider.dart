@@ -305,12 +305,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future refreshMessages({bool dropdownSelected = false}) async {
+  Future refreshMessages({bool dropdownSelected = false, String? chatSessionId}) async {
     setLoadingMessages(true);
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
     }
-    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected);
+    messages = await getMessagesFromServer(dropdownSelected: dropdownSelected, chatSessionId: chatSessionId);
     if (messages.isEmpty) {
       messages = SharedPreferencesUtil().cachedMessages;
     } else {
@@ -329,7 +329,10 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
+  Future<List<ServerMessage>> getMessagesFromServer({
+    bool dropdownSelected = false,
+    String? chatSessionId,
+  }) async {
     if (!hasCachedMessages) {
       firstTimeLoadingText = 'Reading your memories...';
       notifyListeners();
@@ -337,6 +340,7 @@ class MessageProvider extends ChangeNotifier {
     setLoadingMessages(true);
     var mes = await getMessagesServer(
       appId: appProvider?.selectedChatAppId,
+      chatSessionId: chatSessionId,
       dropdownSelected: dropdownSelected,
     );
     if (!hasCachedMessages) {
@@ -355,9 +359,12 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future clearChat() async {
+  Future clearChat({String? chatSessionId}) async {
     setClearingChat(true);
-    var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+    var mes = await clearChatServer(
+      appId: appProvider?.selectedChatAppId,
+      chatSessionId: chatSessionId,
+    );
     messages = mes;
     setClearingChat(false);
     notifyListeners();
@@ -471,7 +478,7 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageStreamToServer(String text) async {
+  Future sendMessageStreamToServer(String text, {String? chatSessionId}) async {
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -511,7 +518,12 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(
+        text,
+        appId: currentAppId,
+        chatSessionId: chatSessionId,
+        filesId: fileIds,
+      )) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);

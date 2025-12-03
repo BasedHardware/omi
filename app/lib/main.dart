@@ -37,6 +37,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/calendar_provider.dart';
@@ -238,7 +239,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final context = MyApp.navigatorKey.currentContext;
       if (context == null) return;
-      
+
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       if (captureProvider.recordingState == RecordingState.stop) {
         await captureProvider.streamSystemAudioRecording();
@@ -285,6 +286,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, MessageProvider? previous) =>
                 (previous?..updateAppProvider(value)) ?? MessageProvider(),
           ),
+          ChangeNotifierProvider(create: (context) => ChatSessionProvider()),
           ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
               CaptureProvider>(
             create: (context) => CaptureProvider(),

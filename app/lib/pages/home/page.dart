@@ -26,6 +26,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -247,24 +248,53 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           break;
         case "chat":
           print('inside chat alias $detailPageId');
+          // Extract session_id from query parameters
+          String? sessionId = navigateToUri?.queryParameters['session_id'];
+
           if (detailPageId != null && detailPageId.isNotEmpty) {
             var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
             if (mounted) {
               var appProvider = Provider.of<AppProvider>(context, listen: false);
               var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+              var sessionProvider = Provider.of<ChatSessionProvider>(context, listen: false);
               App? selectedApp;
               if (appId.isNotEmpty) {
                 selectedApp = await appProvider.getAppFromId(appId);
               }
               appProvider.setSelectedChatAppId(appId);
-              await messageProvider.refreshMessages();
+
+              // Load sessions for this app
+              await sessionProvider.loadSessions(appId.isEmpty ? null : appId);
+
+              // If session_id provided, switch to that session
+              if (sessionId != null && sessionId.isNotEmpty) {
+                sessionProvider.setCurrentSessionId(sessionId);
+              }
+
+              // Refresh messages for the current/specified session
+              await messageProvider.refreshMessages(
+                chatSessionId: sessionProvider.currentSessionId,
+              );
               if (messageProvider.messages.isEmpty) {
                 messageProvider.sendInitialAppMessage(selectedApp);
               }
             }
           } else {
             if (mounted) {
-              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
+              var sessionProvider = Provider.of<ChatSessionProvider>(context, listen: false);
+              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
+
+              // Load sessions
+              await sessionProvider.loadSessions(null);
+
+              // If session_id provided, switch to that session
+              if (sessionId != null && sessionId.isNotEmpty) {
+                sessionProvider.setCurrentSessionId(sessionId);
+              }
+
+              await messageProvider.refreshMessages(
+                chatSessionId: sessionProvider.currentSessionId,
+              );
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar

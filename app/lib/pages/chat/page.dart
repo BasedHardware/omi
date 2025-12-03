@@ -14,9 +14,11 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/pages/chat/widgets/chat_sessions_drawer.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/providers/chat_session_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -97,8 +99,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
+      var sessionProvider = context.read<ChatSessionProvider>();
+      var appProvider = context.read<AppProvider>();
+
+      // Load sessions for current app
+      await sessionProvider.loadSessions(appProvider.selectedChatAppId);
+
+      // Load messages for current session (or most recent)
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        provider.refreshMessages(chatSessionId: sessionProvider.currentSessionId);
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
@@ -133,7 +142,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          // endDrawer: _buildSessionsDrawer(context),
+          endDrawer: Consumer<AppProvider>(
+            builder: (context, appProvider, _) {
+              return ChatSessionsDrawer(
+                currentAppId: appProvider.selectedChatAppId,
+                onSessionSelected: () {
+                  scrollToBottom();
+                },
+              );
+            },
+          ),
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -630,11 +648,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
   }
 
-  _sendMessageUtil(String text) {
+  _sendMessageUtil(String text) async {
     // Remove focus from text field
     textFieldFocusNode.unfocus();
 
     var provider = context.read<MessageProvider>();
+    var sessionProvider = context.read<ChatSessionProvider>();
+
+    final isFirstMessage = sessionProvider.currentSessionId == null;
+
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     textController.clear();
@@ -644,9 +666,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       scrollToBottom();
     });
 
-    provider.sendMessageStreamToServer(text);
+    // Pass session ID to ensure message goes to correct session
+    await provider.sendMessageStreamToServer(
+      text,
+      chatSessionId: sessionProvider.currentSessionId,
+    );
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+
+    // If this was the first message (no session existed), sync to pick up new session
+    if (isFirstMessage && mounted) {
+      await sessionProvider.syncAfterMessageSent();
+    }
   }
 
   sendInitialAppMessage(App? app) async {
@@ -708,7 +739,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           Navigator.of(context).pop();
         }, () {
           if (mounted) {
-            context.read<MessageProvider>().clearChat();
+            final sessionProvider = context.read<ChatSessionProvider>();
+            // Clear current session's chat (this deletes the session)
+            context.read<MessageProvider>().clearChat(
+                  chatSessionId: sessionProvider.currentSessionId,
+                );
+            // Refresh sessions to reflect the deletion
+            sessionProvider.refreshSessions();
             Navigator.of(context).pop();
           }
         }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
@@ -735,6 +772,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     // Store references before async operation
     final messageProvider = mounted ? context.read<MessageProvider>() : null;
+    final sessionProvider = mounted ? context.read<ChatSessionProvider>() : null;
     if (messageProvider == null) return;
 
     // Set the selected app
@@ -747,8 +785,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Check if widget is still mounted after delay
     if (!mounted) return;
 
-    // Perform async operation
-    await messageProvider.refreshMessages(dropdownSelected: true);
+    // Force reload sessions when switching apps to pick up latest
+    if (sessionProvider != null) {
+      await sessionProvider.loadSessions(
+        appId == 'no_selected' ? null : appId,
+        forceReload: true, // Force reload to get fresh data
+      );
+    }
+
+    // Perform async operation - load messages for current session
+    // Note: sessionProvider.currentSessionId may be null if no session exists for this app
+    await messageProvider.refreshMessages(
+      dropdownSelected: true,
+      chatSessionId: sessionProvider?.currentSessionId,
+    );
 
     // Check if widget is still mounted before proceeding
     if (!mounted) return;
@@ -756,7 +806,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Get the selected app and send initial message if needed
     var app = appProvider.getSelectedApp();
     if (messageProvider.messages.isEmpty) {
-      messageProvider.sendInitialAppMessage(app);
+      // This will create a new session on backend if none exists
+      await messageProvider.sendInitialAppMessage(app);
+      // Sync sessions to pick up the newly created session
+      await sessionProvider?.syncAfterMessageSent();
     }
   }
 
@@ -774,16 +827,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         },
       ),
       centerTitle: true,
-      actions: const [
-        // IconButton(
-        //   icon: const Icon(Icons.history, color: Colors.white),
-        //   onPressed: () {
-        //     HapticFeedback.mediumImpact();
-        //     // Dismiss keyboard before opening drawer
-        //     FocusScope.of(context).unfocus();
-        //     scaffoldKey.currentState?.openEndDrawer();
-        //   },
-        // ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.history, color: Colors.white),
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            // Dismiss keyboard before opening drawer
+            FocusScope.of(context).unfocus();
+            scaffoldKey.currentState?.openEndDrawer();
+          },
+        ),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
