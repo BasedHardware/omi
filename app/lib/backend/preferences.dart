@@ -428,39 +428,29 @@ class SharedPreferencesUtil {
 
   //--------------------------- Setters & Getters -----------------------------//
 
-  String getString(String key, {String defaultValue = ''}) =>
-      _preferences?.getString(key) ?? defaultValue;
+  String getString(String key, {String defaultValue = ''}) => _preferences?.getString(key) ?? defaultValue;
 
-  int getInt(String key, {int defaultValue = 0}) =>
-      _preferences?.getInt(key) ?? defaultValue;
+  int getInt(String key, {int defaultValue = 0}) => _preferences?.getInt(key) ?? defaultValue;
 
-  bool getBool(String key, {bool defaultValue = false}) =>
-      _preferences?.getBool(key) ?? defaultValue;
+  bool getBool(String key, {bool defaultValue = false}) => _preferences?.getBool(key) ?? defaultValue;
 
-  double getDouble(String key, {double defaultValue = 0.0}) =>
-      _preferences?.getDouble(key) ?? defaultValue;
+  double getDouble(String key, {double defaultValue = 0.0}) => _preferences?.getDouble(key) ?? defaultValue;
 
   List<String> getStringList(String key, {List<String> defaultValue = const []}) =>
       _preferences?.getStringList(key) ?? defaultValue;
 
-  Future<bool> saveString(String key, String value) async =>
-      await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
 
-  Future<bool> saveInt(String key, int value) async =>
-      await _preferences?.setInt(key, value) ?? false;
+  Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 
-  Future<bool> saveBool(String key, bool value) async =>
-      await _preferences?.setBool(key, value) ?? false;
+  Future<bool> saveBool(String key, bool value) async => await _preferences?.setBool(key, value) ?? false;
 
-  Future<bool> saveDouble(String key, double value) async =>
-      await _preferences?.setDouble(key, value) ?? false;
+  Future<bool> saveDouble(String key, double value) async => await _preferences?.setDouble(key, value) ?? false;
 
   Future<bool> saveStringList(String key, List<String> value) async =>
       await _preferences?.setStringList(key, value) ?? false;
 
-  Future<bool> remove(String key) async =>
-      await _preferences?.remove(key) ?? false;
+  Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
-  Future<bool> clear() async =>
-      await _preferences?.clear() ?? false;
+  Future<bool> clear() async => await _preferences?.clear() ?? false;
 }

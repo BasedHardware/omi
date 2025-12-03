@@ -324,105 +324,105 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       widget.conversation.structured.getEmoji(),
                       style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
                     ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
+                  if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
+                    const SizedBox(width: 8),
+                  if (widget.conversation.structured.category.isNotEmpty)
+                    Flexible(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: widget.conversation.getTagColor(),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: Text(
+                          widget.conversation.getTag(),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium!
+                              .copyWith(color: widget.conversation.getTagTextColor()),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  // Show "Merged" badge if this conversation was created from a merge
+                  if (widget.conversation.sourceConversationIds.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
                       decoration: BoxDecoration(
-                        color: widget.conversation.getTagColor(),
-                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                          width: 1,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.merge_type,
+                            size: 12,
+                            color: Colors.deepPurpleAccent,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Merged',
+                            style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                                  color: Colors.deepPurpleAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                // Show "Merged" badge if this conversation was created from a merge
-                if (widget.conversation.sourceConversationIds.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
-                        width: 1,
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            // 🕒 Timestamp + Duration or New
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: isNew
+                  ? const ConversationNewStatusIndicator(text: "New 🚀")
+                  : Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.merge_type,
-                          size: 12,
-                          color: Colors.deepPurpleAccent,
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          'Merged',
-                          style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                            color: Colors.deepPurpleAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                          dateTimeFormat(
+                            'h:mm a',
+                            widget.conversation.startedAt ?? widget.conversation.createdAt,
                           ),
+                          style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
+                          maxLines: 1,
                         ),
+                        if (_getConversationDuration().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF35343B),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _getConversationDuration(),
+                                style: const TextStyle(color: Colors.white, fontSize: 11),
+                                maxLines: 1,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
-                  ),
-                ],
-              ],
             ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration or New
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: isNew
-                ? const ConversationNewStatusIndicator(text: "New 🚀")
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        dateTimeFormat(
-                          'h:mm a',
-                          widget.conversation.startedAt ?? widget.conversation.createdAt,
-                        ),
-                        style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
-                        maxLines: 1,
-                      ),
-                      if (_getConversationDuration().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF35343B),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _getConversationDuration(),
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                              maxLines: 1,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),
+      );
     });
   }
 

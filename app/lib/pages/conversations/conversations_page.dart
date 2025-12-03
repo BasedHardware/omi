@@ -219,9 +219,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   }
 
   Future<void> _showMergePreviewDialog(ConversationProvider provider) async {
-    final selectedConvos = provider.conversations
-        .where((c) => provider.selectedConversationIds.contains(c.id))
-        .toList();
+    final selectedConvos =
+        provider.conversations.where((c) => provider.selectedConversationIds.contains(c.id)).toList();
 
     // Sort by creation date
     selectedConvos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -245,25 +244,25 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               ),
               const SizedBox(height: 16),
               ...selectedConvos.map((convo) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Text(
-                      convo.structured.emoji,
-                      style: const TextStyle(fontSize: 20),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          convo.structured.emoji,
+                          style: const TextStyle(fontSize: 20),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            convo.structured.title,
+                            style: const TextStyle(color: Colors.white),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        convo.structured.title,
-                        style: const TextStyle(color: Colors.white),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              )),
+                  )),
               const SizedBox(height: 16),
               const Text(
                 'This will combine all transcripts in chronological order. You can undo this action for 24 hours.',
@@ -319,91 +318,91 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       return Stack(
         children: [
           RefreshIndicator(
-        onRefresh: () async {
-          HapticFeedback.mediumImpact();
-          Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-          await convoProvider.getInitialConversations();
-          return;
-        },
-        color: Colors.deepPurpleAccent,
-        backgroundColor: Colors.white,
-        child: CustomScrollView(
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
-            const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
-            const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
-            const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 12)), // above search widget
-            const SliverToBoxAdapter(child: SearchWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
-            const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
-            getProcessingConversationsWidget(convoProvider.processingConversations),
-            if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
-              const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(),
-                  ),
-                ),
-              )
-            else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
-              _buildLoadingShimmer()
-            else
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  childCount: convoProvider.groupedConversations.length + 1,
-                  (context, index) {
-                    if (index == convoProvider.groupedConversations.length) {
-                      debugPrint('loading more conversations');
-                      if (convoProvider.isLoadingConversations) {
-                        return _buildLoadMoreShimmer();
-                      }
-                      // widget.loadMoreMemories(); // CALL this only when visible
-                      return VisibilityDetector(
-                        key: const Key('conversations-key'),
-                        onVisibilityChanged: (visibilityInfo) {
-                          var provider = Provider.of<ConversationProvider>(context, listen: false);
-                          if (provider.previousQuery.isNotEmpty) {
-                            if (visibilityInfo.visibleFraction > 0 &&
-                                !provider.isLoadingConversations &&
-                                (provider.totalSearchPages > provider.currentSearchPage)) {
-                              provider.searchMoreConversations();
-                            }
-                          } else {
-                            if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
-                              convoProvider.getMoreConversationsFromServer();
-                            }
+            onRefresh: () async {
+              HapticFeedback.mediumImpact();
+              Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+              await convoProvider.getInitialConversations();
+              return;
+            },
+            color: Colors.deepPurpleAccent,
+            backgroundColor: Colors.white,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
+                const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
+                const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
+                const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)), // above search widget
+                const SliverToBoxAdapter(child: SearchWidget()),
+                const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
+                const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
+                getProcessingConversationsWidget(convoProvider.processingConversations),
+                if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
+                  const SliverToBoxAdapter(
+                    child: Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 32.0),
+                        child: EmptyConversationsWidget(),
+                      ),
+                    ),
+                  )
+                else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
+                  _buildLoadingShimmer()
+                else
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      childCount: convoProvider.groupedConversations.length + 1,
+                      (context, index) {
+                        if (index == convoProvider.groupedConversations.length) {
+                          debugPrint('loading more conversations');
+                          if (convoProvider.isLoadingConversations) {
+                            return _buildLoadMoreShimmer();
                           }
-                        },
-                        child: const SizedBox(height: 20, width: double.maxFinite),
-                      );
-                    } else {
-                      var date = convoProvider.groupedConversations.keys.elementAt(index);
-                      List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (index == 0) const SizedBox(height: 10),
-                          ConversationsGroupWidget(
-                            isFirst: index == 0,
-                            conversations: memoriesForDate,
-                            date: date,
-                          ),
-                        ],
-                      );
-                    }
-                  },
+                          // widget.loadMoreMemories(); // CALL this only when visible
+                          return VisibilityDetector(
+                            key: const Key('conversations-key'),
+                            onVisibilityChanged: (visibilityInfo) {
+                              var provider = Provider.of<ConversationProvider>(context, listen: false);
+                              if (provider.previousQuery.isNotEmpty) {
+                                if (visibilityInfo.visibleFraction > 0 &&
+                                    !provider.isLoadingConversations &&
+                                    (provider.totalSearchPages > provider.currentSearchPage)) {
+                                  provider.searchMoreConversations();
+                                }
+                              } else {
+                                if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
+                                  convoProvider.getMoreConversationsFromServer();
+                                }
+                              }
+                            },
+                            child: const SizedBox(height: 20, width: double.maxFinite),
+                          );
+                        } else {
+                          var date = convoProvider.groupedConversations.keys.elementAt(index);
+                          List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (index == 0) const SizedBox(height: 10),
+                              ConversationsGroupWidget(
+                                isFirst: index == 0,
+                                conversations: memoriesForDate,
+                                date: date,
+                              ),
+                            ],
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 80),
                 ),
-              ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 80),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
           // Merge mode toolbar
           if (convoProvider.isMergeMode)
             Positioned(

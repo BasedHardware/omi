@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/flavors.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/auth_service.dart';
@@ -55,7 +56,14 @@ class AuthenticationProvider extends BaseProvider {
     });
   }
 
-  bool isSignedIn() => _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+  bool isSignedIn() {
+    final user = _auth.currentUser;
+    if (F.env != Environment.prod) {
+      // In dev mode, accept any authenticated user (including anonymous)
+      return user != null;
+    }
+    return user != null && !user.isAnonymous;
+  }
 
   void setLoading(bool value) {
     _loading = value;

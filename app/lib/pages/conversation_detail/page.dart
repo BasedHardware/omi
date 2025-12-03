@@ -582,7 +582,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             if (provider.conversation.sourceConversationIds.isNotEmpty)
                               PullDownMenuItem(
                                 title: 'Unmerge Conversation',
-                                iconWidget: FaIcon(FontAwesomeIcons.arrowsSplitUpAndLeft, size: 16, color: Colors.deepPurpleAccent),
+                                iconWidget: FaIcon(FontAwesomeIcons.arrowsSplitUpAndLeft,
+                                    size: 16, color: Colors.deepPurpleAccent),
                                 onTap: () => _handleMenuSelection(context, 'unmerge', provider),
                               ),
                             PullDownMenuItem(

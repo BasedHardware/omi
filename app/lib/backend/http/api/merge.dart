@@ -66,10 +66,9 @@ class MergePreviewResponse {
   factory MergePreviewResponse.fromJson(Map<String, dynamic> json) {
     return MergePreviewResponse(
       previewConversation: json['preview_conversation'] ?? {},
-      sourceConversations: (json['source_conversations'] as List<dynamic>?)
-              ?.map((conv) => ServerConversation.fromJson(conv))
-              .toList() ??
-          [],
+      sourceConversations:
+          (json['source_conversations'] as List<dynamic>?)?.map((conv) => ServerConversation.fromJson(conv)).toList() ??
+              [],
       mergeMetadata: MergeMetadata.fromJson(json['merge_metadata'] ?? {}),
       warnings: (json['warnings'] as List<dynamic>?)?.map((w) => w.toString()).toList() ?? [],
     );

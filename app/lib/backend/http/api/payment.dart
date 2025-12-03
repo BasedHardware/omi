@@ -64,7 +64,6 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
   return null;
 }
 
-
 Future<Map<String, dynamic>?> getAvailablePlans() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/available-plans',
@@ -79,7 +78,7 @@ Future<Map<String, dynamic>?> getAvailablePlans() async {
   }
   return null;
 }
-    
+
 Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/$appId/subscription',
