@@ -78,6 +78,8 @@ class AppProvider extends BaseProvider {
   }
 
   void addOrRemoveFilter(String filter, String filterGroup) {
+    bool isAdding = !filters.containsKey(filterGroup) || filters[filterGroup] != filter;
+
     if (filters.containsKey(filterGroup)) {
       if (filters[filterGroup] == filter) {
         filters.remove(filterGroup);
@@ -88,10 +90,31 @@ class AppProvider extends BaseProvider {
       filters.addAll({filterGroup: filter});
     }
 
+    // Track filter changes
+    if (filterGroup == 'Apps') {
+      if (filter == 'My Apps') {
+        MixpanelManager().appsFilterMyApps(enabled: isAdding);
+      } else if (filter == 'Installed Apps') {
+        MixpanelManager().appsFilterInstalled(enabled: isAdding);
+      }
+    } else if (filterGroup == 'Rating') {
+      if (isAdding) {
+        String ratingStr = filter.replaceAll('+ Stars', '').trim();
+        int? rating = int.tryParse(ratingStr);
+        if (rating != null) {
+          MixpanelManager().appsFilterRating(rating: rating);
+        }
+      }
+    } else if (filterGroup == 'Sort' && isAdding) {
+      MixpanelManager().appsSortChanged(sortOption: filter);
+    }
+
     notifyListeners();
   }
 
   void addOrRemoveCategoryFilter(Category category) {
+    bool isAdding = !filters.containsKey('Category') || filters['Category'] != category;
+
     if (filters.containsKey('Category')) {
       if (filters['Category'] == category) {
         filters.remove('Category');
@@ -102,10 +125,17 @@ class AppProvider extends BaseProvider {
       filters.addAll({'Category': category});
     }
 
+    // Track category filter
+    if (isAdding) {
+      MixpanelManager().appsFilterCategory(category: category.title);
+    }
+
     notifyListeners();
   }
 
   void addOrRemoveCapabilityFilter(AppCapability capability) {
+    bool isAdding = !filters.containsKey('Capabilities') || filters['Capabilities'] != capability;
+
     if (filters.containsKey('Capabilities')) {
       if (filters['Capabilities'] == capability) {
         filters.remove('Capabilities');
@@ -114,6 +144,11 @@ class AppProvider extends BaseProvider {
       }
     } else {
       filters.addAll({'Capabilities': capability});
+    }
+
+    // Track capability filter
+    if (isAdding) {
+      MixpanelManager().appsFilterCapability(capability: capability.title);
     }
 
     notifyListeners();
@@ -224,6 +259,14 @@ class AppProvider extends BaseProvider {
 
       searchResults = result.apps;
       filteredApps = result.apps;
+
+      // Track search if there was a query
+      if (searchQuery.isNotEmpty) {
+        MixpanelManager().appsSearched(
+          searchTerm: searchQuery,
+          resultCount: result.apps.length,
+        );
+      }
     } catch (e) {
       filterApps();
     } finally {

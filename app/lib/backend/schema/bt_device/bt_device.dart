@@ -85,6 +85,31 @@ enum BleAudioCodec {
   int getFrameSize() {
     return this == BleAudioCodec.opusFS320 ? 320 : 160;
   }
+
+  /// Check if this codec is supported for custom STT providers
+  bool get isCustomSttSupported {
+    return this == BleAudioCodec.pcm8 ||
+        this == BleAudioCodec.pcm16 ||
+        this == BleAudioCodec.opus ||
+        this == BleAudioCodec.opusFS320;
+  }
+
+  /// Get a user-friendly description of why custom STT isn't supported
+  String get customSttUnsupportedReason {
+    switch (this) {
+      case BleAudioCodec.mulaw8:
+      case BleAudioCodec.mulaw16:
+        return 'µ-law audio format';
+      case BleAudioCodec.aac:
+        return 'AAC audio format';
+      case BleAudioCodec.lc3FS1030:
+        return 'LC3 audio format';
+      case BleAudioCodec.unknown:
+        return 'unknown audio format';
+      default:
+        return 'this audio format';
+    }
+  }
 }
 
 String mapCodecToName(BleAudioCodec codec) {

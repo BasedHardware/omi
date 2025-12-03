@@ -20,13 +20,13 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
@@ -35,7 +35,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
-    implements ITransctipSegmentSocketServiceListener {
+    implements ITransctiptSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
@@ -225,6 +225,8 @@ class CaptureProvider extends ChangeNotifier
 
   bool get havingRecordingDevice => _recordingDevice != null;
 
+  BtDevice? get recordingDevice => _recordingDevice;
+
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
     notifyListeners();
@@ -260,6 +262,48 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
+  /// Called when transcription settings are changed (e.g., custom STT provider)
+  /// This resets the socket connection to use the new configuration
+  Future<void> onTranscriptionSettingsChanged() async {
+    debugPrint("Transcription settings changed, refreshing socket connection...");
+
+    // Handle device recording
+    if (_recordingDevice != null) {
+      await _socket?.stop(reason: 'transcription settings changed');
+      BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+      await _initiateWebsocket(
+        audioCodec: codec,
+        force: true,
+        source: _getConversationSourceFromDevice(),
+      );
+      return;
+    }
+
+    // Handle phone mic recording
+    if (recordingState == RecordingState.record) {
+      await _socket?.stop(reason: 'transcription settings changed');
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        force: true,
+        source: ConversationSource.phone.name,
+      );
+      return;
+    }
+
+    // Handle system audio recording (desktop)
+    if (recordingState == RecordingState.systemAudioRecord) {
+      await _socket?.stop(reason: 'transcription settings changed');
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        force: true,
+        source: ConversationSource.desktop.name,
+      );
+      return;
+    }
+  }
+
   Future<void> changeAudioRecordProfile({
     required BleAudioCodec audioCodec,
     int? sampleRate,
@@ -289,13 +333,29 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('is ws null: ${_socket == null}');
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
-    // Connect to the transcript socket
+    // Get language and custom STT config
     String language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
-    _socket = await ServiceManager.instance()
-        .socket
-        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force, source: source);
+    Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
+
+    // Check codec compatibility for custom STT - fallback to default if incompatible
+    CustomSttConfig? effectiveConfig = customSttConfig.isEnabled ? customSttConfig : null;
+    if (effectiveConfig != null && !TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
+      debugPrint('[CustomSTT] Codec $codec not supported, falling back to Omi');
+      effectiveConfig = null;
+    }
+
+    // Connect to the transcript socket
+    _socket = await ServiceManager.instance().socket.conversation(
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -541,7 +601,13 @@ class CaptureProvider extends ChangeNotifier
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
-    if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
+    final customSttConfig = SharedPreferencesUtil().customSttConfig;
+    final sttConfigId = customSttConfig.sttConfigId;
+
+    if (language != _socket?.language ||
+        codec != _socket?.codec ||
+        _socket?.state != SocketServiceState.connected ||
+        _socket?.sttConfigId != sttConfigId) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }

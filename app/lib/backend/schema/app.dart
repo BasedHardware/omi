@@ -274,6 +274,7 @@ class App {
   List<ChatTool>? chatTools;
   DateTime? createdAt;
   DateTime? updatedAt;
+  double? score; // Computed ranking score for sorting (temporary debug field)
 
   App({
     required this.id,
@@ -315,6 +316,7 @@ class App {
     this.chatTools,
     this.createdAt,
     this.updatedAt,
+    this.score,
   });
 
   String getName() {
@@ -397,6 +399,7 @@ class App {
       chatTools: ChatTool.fromJsonList(json['chat_tools']),
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
       updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
+      score: json['score']?.toDouble(),
     );
   }
 
