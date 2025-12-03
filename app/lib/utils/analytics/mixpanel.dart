@@ -930,4 +930,310 @@ class MixpanelManager {
       'action': action,
     });
   }
+
+  // ============================================================================
+  // ACTION ITEMS TRACKING
+  // ============================================================================
+
+  void actionItemChecked({
+    required String actionItemId,
+    required bool completed,
+    required DateTime timestamp,
+  }) {
+    track('Action Item Checked', properties: {
+      'action_item_id': actionItemId,
+      'completed': completed,
+      'timestamp': timestamp.toIso8601String(),
+    });
+  }
+
+  void exportTasksBannerClicked() {
+    track('Export Tasks Banner Clicked');
+  }
+
+  void taskIntegrationEnabled({
+    required String appName,
+    required bool success,
+  }) {
+    track('Task Integration Enabled', properties: {
+      'app_name': appName,
+      'success': success,
+    });
+  }
+
+  void taskIntegrationAuthFailed({
+    required String appName,
+  }) {
+    track('Task Integration Auth Failed', properties: {
+      'app_name': appName,
+    });
+  }
+
+  void taskIntegrationSettingsOpened({
+    required String appName,
+  }) {
+    track('Task Integration Settings Opened', properties: {
+      'app_name': appName,
+    });
+  }
+
+  // ============================================================================
+  // TRANSCRIPTION / CUSTOM STT TRACKING
+  // ============================================================================
+
+  void transcriptionSourceSelected({
+    required String source, // 'omi' or 'custom'
+  }) {
+    track('Transcription Source Selected', properties: {
+      'source': source,
+    });
+  }
+
+  void transcriptionProviderSelected({
+    required String provider, // e.g. 'openai', 'deepgram', 'gemini', 'local_whisper', 'custom', 'custom_live'
+  }) {
+    track('Transcription Provider Selected', properties: {
+      'provider': provider,
+    });
+  }
+
+  void actionItemExported({
+    required String actionItemId,
+    required String appName,
+    required DateTime timestamp,
+  }) {
+    track('Action Item Exported', properties: {
+      'action_item_id': actionItemId,
+      'app_name': appName,
+      'timestamp': timestamp.toIso8601String(),
+    });
+  }
+
+  void actionItemManuallyAdded({
+    required String actionItemId,
+    required DateTime timestamp,
+  }) {
+    track('Action Item Manually Added', properties: {
+      'action_item_id': actionItemId,
+      'timestamp': timestamp.toIso8601String(),
+    });
+  }
+
+  void actionItemEdited({
+    required String actionItemId,
+    required bool titleChanged,
+    required bool dateChanged,
+  }) {
+    track('Action Item Edited', properties: {
+      'action_item_id': actionItemId,
+      'title_changed': titleChanged,
+      'date_changed': dateChanged,
+    });
+  }
+
+  // ============================================================================
+  // SETTINGS PAGE TRACKING
+  // ============================================================================
+
+  void settingsPageOpened({
+    required String pageName,
+  }) {
+    track('Settings Page Opened', properties: {
+      'page_name': pageName,
+    });
+  }
+
+  void usageTabChanged({
+    required String tabName,
+  }) {
+    track('Usage Tab Changed', properties: {
+      'tab_name': tabName,
+    });
+  }
+
+  // ============================================================================
+  // APPS PAGE TRACKING
+  // ============================================================================
+
+  void appsSearched({
+    required String searchTerm,
+    required int resultCount,
+  }) {
+    track('Apps Searched', properties: {
+      'search_term': searchTerm,
+      'result_count': resultCount,
+    });
+  }
+
+  void appsFilterMyApps({
+    required bool enabled,
+  }) {
+    track('Apps Filter My Apps', properties: {
+      'enabled': enabled,
+    });
+  }
+
+  void appsFilterInstalled({
+    required bool enabled,
+  }) {
+    track('Apps Filter Installed', properties: {
+      'enabled': enabled,
+    });
+  }
+
+  void appsFilterRating({
+    required int rating,
+  }) {
+    track('Apps Filter Rating', properties: {
+      'rating': rating,
+    });
+  }
+
+  void appsFilterCategory({
+    required String category,
+  }) {
+    track('Apps Filter Category', properties: {
+      'category': category,
+    });
+  }
+
+  void appsSortChanged({
+    required String sortOption,
+  }) {
+    track('Apps Sort Changed', properties: {
+      'sort_option': sortOption,
+    });
+  }
+
+  void appsFilterCapability({
+    required String capability,
+  }) {
+    track('Apps Filter Capability', properties: {
+      'capability': capability,
+    });
+  }
+
+  void appsCategoryPageOpened({
+    required String category,
+    required int appCount,
+  }) {
+    track('Apps Category Page Opened', properties: {
+      'category': category,
+      'app_count': appCount,
+    });
+  }
+
+  // ============================================================================
+  // APP DETAIL PAGE TRACKING
+  // ============================================================================
+
+  void appDetailViewed({
+    required String appId,
+    required String appName,
+    String? category,
+    double? rating,
+    int? installs,
+    bool? isInstalled,
+  }) {
+    track('App Detail Viewed', properties: {
+      'app_id': appId,
+      'app_name': appName,
+      if (category != null) 'category': category,
+      if (rating != null) 'rating': rating,
+      if (installs != null) 'installs': installs,
+      if (isInstalled != null) 'is_installed': isInstalled,
+    });
+  }
+
+  void appDetailSectionViewed({
+    required String appId,
+    required String sectionName,
+  }) {
+    track('App Detail Section Viewed', properties: {
+      'app_id': appId,
+      'section_name': sectionName,
+    });
+  }
+
+  void appDetailShared({
+    required String appId,
+    required String appName,
+  }) {
+    track('App Detail Shared', properties: {
+      'app_id': appId,
+      'app_name': appName,
+    });
+  }
+
+  void appDetailReviewsOpened({
+    required String appId,
+    required int reviewCount,
+  }) {
+    track('App Detail Reviews Opened', properties: {
+      'app_id': appId,
+      'review_count': reviewCount,
+    });
+  }
+
+  void appDetailReviewAdded({
+    required String appId,
+    required int rating,
+    required bool hasComment,
+  }) {
+    track('App Detail Review Added', properties: {
+      'app_id': appId,
+      'rating': rating,
+      'has_comment': hasComment,
+    });
+  }
+
+  void appDetailSettingsOpened({
+    required String appId,
+  }) {
+    track('App Detail Settings Opened', properties: {
+      'app_id': appId,
+    });
+  }
+
+  void appDetailSubscribeClicked({
+    required String appId,
+    required String appName,
+    double? price,
+  }) {
+    track('App Detail Subscribe Clicked', properties: {
+      'app_id': appId,
+      'app_name': appName,
+      if (price != null) 'price': price,
+    });
+  }
+
+  void appDetailSubscriptionCancelled({
+    required String appId,
+    required String appName,
+  }) {
+    track('App Detail Subscription Cancelled', properties: {
+      'app_id': appId,
+      'app_name': appName,
+    });
+  }
+
+  void appDetailPreviewImageViewed({
+    required String appId,
+    required int imageIndex,
+  }) {
+    track('App Detail Preview Image Viewed', properties: {
+      'app_id': appId,
+      'image_index': imageIndex,
+    });
+  }
+
+  void appDetailChatClicked({
+    required String appId,
+    required String appName,
+  }) {
+    track('App Detail Chat Clicked', properties: {
+      'app_id': appId,
+      'app_name': appName,
+    });
+  }
 }

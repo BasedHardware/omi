@@ -57,8 +57,19 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
 
   @override
   void initState() {
-    super.initState();
     app = widget.app;
+
+    // Track app detail page viewed
+    MixpanelManager().appDetailViewed(
+      appId: app.id,
+      appName: app.name,
+      category: app.category,
+      rating: app.ratingAvg,
+      installs: app.installs,
+      isInstalled: app.enabled,
+    );
+
+    super.initState();
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -505,6 +516,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
         width: double.infinity,
         child: ElevatedButton.icon(
           onPressed: () async {
+            MixpanelManager().appDetailSubscribeClicked(
+              appId: app.id,
+              appName: app.name,
+            );
             if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
               _checkPaymentStatus(app.id);
               await launchUrl(Uri.parse(app.paymentLink!));
@@ -833,6 +848,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
             itemBuilder: (context, index) {
               return GestureDetector(
                 onTap: () {
+                  MixpanelManager().appDetailPreviewImageViewed(
+                    appId: app.id,
+                    imageIndex: index,
+                  );
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -1064,6 +1083,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           child: InkWell(
             onTap: () {
               if (app.reviews.isNotEmpty) {
+                MixpanelManager().appDetailReviewsOpened(
+                  appId: app.id,
+                  reviewCount: app.reviews.length,
+                );
                 routeToPage(context, ReviewsListPage(app: app));
               }
             },
@@ -1215,6 +1238,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
 
   // Action handlers
   void _handleChatTap() async {
+    MixpanelManager().appDetailChatClicked(
+      appId: app.id,
+      appName: app.name,
+    );
     await _handleClose();
     // Same logic as mobile
     context.read<HomeProvider>().setIndex(1);
@@ -1245,7 +1272,10 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
   }
 
   void _handleShareTap() {
-    MixpanelManager().track('App Shared', properties: {'appId': app.id});
+    MixpanelManager().appDetailShared(
+      appId: app.id,
+      appName: app.name,
+    );
     if (app.isNotPersona()) {
       Share.share(
         'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
@@ -1260,6 +1290,9 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
   }
 
   void _handleSettingsTap() async {
+    MixpanelManager().appDetailSettingsOpened(
+      appId: app.id,
+    );
     await showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(

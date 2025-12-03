@@ -190,6 +190,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
     try {
       final result = await cancelAppSubscription(widget.app.id);
       if (result != null && result['status'] == 'success') {
+        // Track subscription cancellation
+        MixpanelManager().appDetailSubscriptionCancelled(
+          appId: widget.app.id,
+          appName: widget.app.name,
+        );
+
         await _loadSubscriptionData();
 
         if (mounted) {
@@ -238,6 +244,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
   @override
   void initState() {
     app = widget.app;
+
+    // Track app detail page viewed
+    MixpanelManager().appDetailViewed(
+      appId: app.id,
+      appName: app.name,
+      category: app.category,
+      rating: app.ratingAvg,
+      installs: app.installs,
+      isInstalled: app.enabled,
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Automatically open app home page if conditions are met
       if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
@@ -652,6 +669,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               messageProvider.sendInitialAppMessage(selectedApp);
                             }
 
+                            // Track chat button clicked
+                            MixpanelManager().appDetailChatClicked(
+                              appId: app.id,
+                              appName: app.name,
+                            );
+
                             // Navigate directly to chat page
                             if (mounted) {
                               Navigator.push(
@@ -722,6 +745,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           onPressed: () async {
                             HapticFeedback.mediumImpact();
                             MixpanelManager().track('App Shared', properties: {'appId': app.id});
+
+                            // Track share button clicked
+                            MixpanelManager().appDetailShared(
+                              appId: app.id,
+                              appName: app.name,
+                            );
 
                             // Get the position of the share button for iOS
                             final RenderBox? box = context.findRenderObject() as RenderBox?;
@@ -857,6 +886,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                             height: 32,
                                             text: "Subscribe",
                                             onPressed: () async {
+                                              // Track subscribe button clicked
+                                              MixpanelManager().appDetailSubscribeClicked(
+                                                appId: app.id,
+                                                appName: app.name,
+                                              );
+
                                               if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
                                                 _checkPaymentStatus(app.id);
                                                 await launchUrl(Uri.parse(app.paymentLink!));
@@ -1403,6 +1438,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       itemBuilder: (context, index) {
                         return GestureDetector(
                           onTap: () {
+                            // Track preview image viewed
+                            MixpanelManager().appDetailPreviewImageViewed(
+                              appId: app.id,
+                              imageIndex: index,
+                            );
+
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -1543,6 +1584,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ? GestureDetector(
                         onTap: () {
                           if (app.reviews.isNotEmpty) {
+                            // Track reviews page opened
+                            MixpanelManager().appDetailReviewsOpened(
+                              appId: app.id,
+                              reviewCount: app.reviews.length,
+                            );
+
                             routeToPage(context, ReviewsListPage(app: app));
                           }
                         },

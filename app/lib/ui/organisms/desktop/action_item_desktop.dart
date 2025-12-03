@@ -637,6 +637,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         isCompleted: newValue,
       );
     }
+
+    MixpanelManager().actionItemChecked(
+      actionItemId: widget.actionItem.id,
+      completed: newValue,
+      timestamp: DateTime.now(),
+    );
+
     context.read<ActionItemsProvider>().updateActionItemState(widget.actionItem, newValue);
 
     widget.onChanged?.call();
