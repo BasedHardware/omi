@@ -137,14 +137,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     bool canMerge = provider.canMergeSelected();
 
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
@@ -168,7 +175,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             // Selection count
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
                   '$selectedCount selected',
                   style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -402,7 +409,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             Positioned(
               left: 0,
               right: 0,
-              bottom: 80,
+              bottom: 95,
               child: _buildMergeToolbar(convoProvider),
             ),
         ],
