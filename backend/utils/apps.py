@@ -811,6 +811,11 @@ def filter_apps_by_category(apps: List[App], category: str) -> List[App]:
         return [app for app in apps if (app.category or 'other') == category]
 
 
+def sort_apps_by_installs_only(apps: List[App]) -> List[App]:
+    """Sort apps by install count only (no score calculation)."""
+    return sorted(apps, key=lambda a: a.installs, reverse=True)
+
+
 def sort_apps_by_installs(apps: List[App]) -> List[App]:
     """Sort apps by computed score in descending order.
 
@@ -858,17 +863,17 @@ def group_apps_by_category(apps: List[App], categories: List[dict]) -> Dict[str,
     """Group apps by category, including special 'popular' category."""
     grouped = defaultdict(list)
 
-    # Add popular group first if there are popular apps
+    # Add popular group first if there are popular apps (sorted by installs only)
     popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
     if popular_apps:
-        grouped['popular'] = sort_apps_by_installs(popular_apps)
+        grouped['popular'] = sort_apps_by_installs_only(popular_apps)
 
     # Group remaining apps by their actual category
     for app in apps:
         category_id = app.category or 'other'
         grouped[category_id].append(app)
 
-    # Sort each category by installs
+    # Sort each category by score (except popular which is already sorted by installs)
     for category_id in grouped:
         if category_id != 'popular':
             grouped[category_id] = sort_apps_by_installs(grouped[category_id])
@@ -913,7 +918,7 @@ def build_category_groups_response(
 def get_capabilities_list() -> List[dict]:
     """Get the list of app capabilities for grouping."""
     return [
-        {'title': 'Popular', 'id': 'popular'},
+        {'title': 'Featured', 'id': 'popular'},
         {'title': 'Integrations', 'id': 'external_integration'},
         {'title': 'Chat Assistants', 'id': 'chat'},
         {'title': 'Summary Apps', 'id': 'memories'},
@@ -931,11 +936,11 @@ def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[
     """
     grouped = defaultdict(list)
 
-    # Add popular group first if there are popular apps
+    # Add popular group first if there are popular apps (sorted by installs only)
     popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
     popular_app_ids = {app.id for app in popular_apps}
     if popular_apps:
-        grouped['popular'] = sort_apps_by_installs(popular_apps)
+        grouped['popular'] = sort_apps_by_installs_only(popular_apps)
 
     # Group apps by their capabilities with filtering rules
     # Exclude popular apps from other sections
@@ -962,7 +967,7 @@ def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[
         if 'external_integration' in app_capabilities:
             grouped['external_integration'].append(app)
 
-    # Sort each capability group by installs
+    # Sort each capability group by score (except popular which is already sorted by installs)
     for cap_id in grouped:
         if cap_id != 'popular':
             grouped[cap_id] = sort_apps_by_installs(grouped[cap_id])
