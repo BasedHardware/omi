@@ -18,6 +18,7 @@ class Subscription {
   final SubscriptionStatus status;
   final int? currentPeriodEnd;
   final String? stripeSubscriptionId;
+  final String? currentPriceId;
   @JsonKey(defaultValue: [])
   final List<String> features;
   @JsonKey(defaultValue: false)
@@ -28,6 +29,7 @@ class Subscription {
     required this.status,
     this.currentPeriodEnd,
     this.stripeSubscriptionId,
+    this.currentPriceId,
     this.features = const [],
     this.cancelAtPeriodEnd = false,
   });
