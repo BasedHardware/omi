@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 
-Future<Map<String, String>?> createCheckoutSession({required String priceId}) async {
+Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},
@@ -13,6 +13,17 @@ Future<Map<String, String>?> createCheckoutSession({required String priceId}) as
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
     debugPrint('createCheckoutSession response: ${response.body}');
+
+    // Check if this is a reactivation response
+    if (jsonResponse.containsKey('status') && jsonResponse['status'] == 'reactivated') {
+      return {
+        'status': jsonResponse['status'] as String,
+        'message': jsonResponse['message'] as String?,
+        'next_billing_date': jsonResponse['next_billing_date'],
+      };
+    }
+
+    // Otherwise, it's a checkout session
     return {
       'url': jsonResponse['url'] as String,
       'session_id': jsonResponse['session_id'] as String,
@@ -75,6 +86,23 @@ Future<Map<String, dynamic>?> getAvailablePlans() async {
     var jsonResponse = jsonDecode(response.body);
     debugPrint('getAvailablePlans response: ${response.body}');
     return jsonResponse;
+  }
+  return null;
+}
+
+Future<Map<String, String>?> createCustomerPortalSession() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/customer-portal',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response != null && response.statusCode == 200) {
+    var jsonResponse = jsonDecode(response.body);
+    debugPrint('createCustomerPortalSession response: ${response.body}');
+    return {
+      'url': jsonResponse['url'] as String,
+    };
   }
   return null;
 }
