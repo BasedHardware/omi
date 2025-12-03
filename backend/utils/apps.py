@@ -1,3 +1,4 @@
+import math
 import os
 import threading
 from collections import defaultdict
@@ -111,6 +112,26 @@ def weighted_rating(app):
     R = app.rating_avg or 0
     v = app.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
+
+
+def compute_app_score(app: App) -> float:
+    """
+    Compute app ranking score using the formula:
+    score = ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
+
+    - Power of 2 on rating makes ratings below 3.0 fall steeply
+    - sqrt on installs reduces dependence on install count
+
+    Rating factor with power of 2:
+      5.0 -> 1.0, 4.0 -> 0.64, 3.0 -> 0.36, 2.0 -> 0.16, 1.0 -> 0.04
+    """
+    rating_avg = app.rating_avg or 0
+    rating_count = app.rating_count or 0
+    installs = app.installs or 0
+
+    rating_factor = (rating_avg / 5) ** 2  # Steep drop for low ratings
+    score = rating_factor * math.log(1 + rating_count) * math.sqrt(math.log(1 + installs))
+    return round(score, 4)
 
 
 def get_popular_apps() -> List[App]:
@@ -791,8 +812,16 @@ def filter_apps_by_category(apps: List[App], category: str) -> List[App]:
 
 
 def sort_apps_by_installs(apps: List[App]) -> List[App]:
-    """Sort apps by install count in descending order."""
-    return sorted(apps, key=lambda a: a.installs, reverse=True)
+    """Sort apps by computed score in descending order.
+
+    Score formula: ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
+    This balances review quality, review quantity, and popularity.
+    """
+    # Compute and assign scores to each app
+    for app in apps:
+        app.score = compute_app_score(app)
+
+    return sorted(apps, key=lambda a: a.score or 0, reverse=True)
 
 
 def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:
