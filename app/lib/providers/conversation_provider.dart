@@ -752,6 +752,9 @@ class ConversationProvider extends ChangeNotifier {
       if (response != null) {
         debugPrint('undoMerge: Successfully unmerged conversation');
 
+        // Clear cache to ensure fresh data
+        SharedPreferencesUtil().cachedConversations = [];
+
         // Refresh conversations list to show restored conversations
         await getInitialConversations();
 

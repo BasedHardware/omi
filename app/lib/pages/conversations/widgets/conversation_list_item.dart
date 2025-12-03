@@ -114,11 +114,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);
 
-          await routeToPage(
+          final result = await routeToPage(
             context,
             ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
           );
           if (mounted) {
+            // Check if conversation was unmerged
+            if (result is Map && result['unmerged'] == true) {
+              // Force refresh to show restored conversations
+              await provider.getInitialConversations();
+            }
+
             String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
             if (startingTitle != newTitle) {
               widget.conversation.structured.title = newTitle;
