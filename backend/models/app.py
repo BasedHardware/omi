@@ -106,6 +106,7 @@ class App(BaseModel):
     enabled: bool = False
     trigger_workflow_memories: bool = True  # default true
     installs: int = 0
+    score: Optional[float] = None  # Computed ranking score for sorting
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
     money_made: Optional[float] = None

@@ -30,10 +30,8 @@ class CategorySection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Sort apps by downloads (most downloaded first) and show max 9 apps
-    final sortedApps = List<App>.from(apps);
-    sortedApps.sort((a, b) => b.installs.compareTo(a.installs));
-    final displayedApps = sortedApps.take(9).toList();
+    // Apps are already sorted by score on the backend, just take first 9
+    final displayedApps = apps.take(9).toList();
 
     // --- Configuration Constants ---
     const double targetItemHeight = 85.0;
@@ -235,6 +233,14 @@ class SectionAppItemCard extends StatelessWidget {
                                 fontSize: 11,
                                 fontWeight: FontWeight.w500,
                                 color: Colors.grey.shade300,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${app.ratingCount})',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade500,
                               ),
                             ),
                           ],
