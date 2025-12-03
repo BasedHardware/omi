@@ -8,7 +8,6 @@ from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import Response
 
 from routers.firmware import get_omi_github_releases, extract_key_value_pairs
-from utils.other.storage import get_desktop_update_signed_url
 from database.redis_db import delete_generic_cache
 
 
@@ -110,13 +109,35 @@ def _parse_changelog_to_changes(changelog: List[str], release_body: str) -> List
     return changes
 
 
-def _get_gcs_bucket_url() -> str:
+def _get_sparkle_zip_download_url(release: Dict, version: str, platform: str) -> Optional[str]:
     """
-    Get the GCS bucket URL for desktop updates.
-    Can be configured via environment variable or use default.
+    Get the Sparkle ZIP download URL from GitHub release assets.
+
+    Args:
+        release: GitHub release object
+        version: Version string (e.g., "1.0.78+474")
+        platform: Platform name (macos, windows, linux)
+
+    Returns:
+        Download URL for the Sparkle ZIP file, or None if not found
     """
-    bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
-    return f'https://storage.googleapis.com/{bucket}'
+    assets = release.get("assets", [])
+
+    # Look for the Sparkle ZIP file: {version}-{platform}.zip
+    expected_filename = f"{version}-{platform}.zip"
+
+    for asset in assets:
+        asset_name = asset.get("name", "")
+        if asset_name == expected_filename:
+            return asset.get("browser_download_url")
+
+    # Fallback: look for any zip file that matches the pattern
+    for asset in assets:
+        asset_name = asset.get("name", "")
+        if asset_name.endswith(f"-{platform}.zip"):
+            return asset.get("browser_download_url")
+
+    return None
 
 
 async def _get_live_desktop_releases(platform: str) -> List[Dict]:
@@ -216,17 +237,14 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
 
         SubElement(item, 'pubDate').text = release_item['date']
 
-        # Generate signed URL for download (1 hour expiration)
-        # Blob path format: "1.0.78+474-macos/1.0.78+474-macos.zip"
-        folder_name = f"{version}-{platform}"
-        zip_filename = f"{version}-{platform}.zip"
-        blob_path = f"{folder_name}/{zip_filename}"
-
-        download_url = get_desktop_update_signed_url(blob_path, expiration_hours=1)
+        # Get download URL from release item
+        url = release_item.get('url')
+        if not url:
+            continue
 
         # Enclosure with signature and OS
         enclosure_attrs = {
-            'url': download_url,
+            'url': url,
             'type': 'application/octet-stream',
             '{http://www.andymatuschak.org/xml-namespaces/sparkle}os': platform,
         }
@@ -268,7 +286,6 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
             raise HTTPException(status_code=404, detail=f"No desktop releases found for platform: {platform}")
 
         # Transform to items format
-        gcs_bucket_url = _get_gcs_bucket_url()
         items = []
 
         for entry in desktop_releases:
@@ -286,9 +303,12 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
             # Use build number directly for sparkle:version
             short_version = version_info["build"]
 
-            # Construct GCS URL for the release folder
-            folder_name = f"{version_info['version']}-{platform}"
-            url = f"{gcs_bucket_url}/{folder_name}/"
+            # Get Sparkle ZIP download URL from GitHub release assets
+            download_url = _get_sparkle_zip_download_url(release, version_info["version"], platform)
+
+            # Skip if no download URL found
+            if not download_url:
+                continue
 
             items.append(
                 {
@@ -297,7 +317,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
                     "changes": changes,
                     "date": release.get("published_at"),
                     "mandatory": mandatory,
-                    "url": url,
+                    "url": download_url,
                     "platform": platform,
                     "edSignature": ed_signature,
                 }

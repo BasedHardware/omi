@@ -692,10 +692,8 @@ workflows:
       groups:
         - app_env
         - firebase
-        - google_play
         - appstore_credentials
       vars:
-        GCS_BUCKET: "gs://omi_macos_updates"
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
       flutter: 3.35.3
@@ -766,9 +764,12 @@ workflows:
       - name: Extract version from tag
         script: |
           # Extract version from tag (supports both -desktop-cm and -macos-cm)
-          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          TAG_NAME="$CM_TAG"
+          # BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          # BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          # TAG_NAME="$CM_TAG"
+          BUILD_NAME="1.0.78"
+          BUILD_NUMBER="474"
+          TAG_NAME="v1.0.78+474-desktop-cm"
 
           # Export to environment for all subsequent steps
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
@@ -1131,27 +1132,6 @@ workflows:
 
           echo "$SIGNATURE" > "$DIST_DIR/signature.txt"
 
-      - name: Set up Google Cloud SDK
-        script: |
-          # Install gcloud if not already installed
-          if ! command -v gcloud &> /dev/null; then
-            curl https://sdk.cloud.google.com | bash
-            exec -l $SHELL
-            source $HOME/google-cloud-sdk/path.bash.inc
-          fi
-
-          # Authenticate with service account (reuse Play Store credentials)
-          echo "$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS" > /tmp/gcp-key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp-key.json
-
-      - name: Upload to Google Cloud Storage
-        script: |
-          FOLDER_NAME="${VERSION}-${PLATFORM}"
-
-          gsutil -m cp -r "dist/${FOLDER_NAME}" "${GCS_BUCKET}/"
-          gsutil ls "${GCS_BUCKET}/${FOLDER_NAME}/"
-
-
       - name: Create GitHub Release
         script: |
           # Get the recent commits for changelog
@@ -1191,13 +1171,40 @@ workflows:
           # Find the DMG file
           DMG_FILE=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
 
-          # Create GitHub release with DMG attachment
+          # Find the Sparkle ZIP and signature files
+          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/${VERSION}-${PLATFORM}.zip"
+          SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
+
+          # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
           if [ -f "$DMG_FILE" ]; then
+            # Create the release with the DMG first
             gh release create "$TAG_NAME" \
               --title "Omi Desktop v${BUILD_NAME} (${BUILD_NUMBER})" \
               --notes-file /tmp/release_notes.md \
               --repo BasedHardware/omi \
               "$DMG_FILE"
+
+            # Upload Sparkle ZIP if it exists
+            if [ -f "$SPARKLE_ZIP" ]; then
+              echo "Uploading Sparkle ZIP: $SPARKLE_ZIP"
+              gh release upload "$TAG_NAME" \
+                "$SPARKLE_ZIP" \
+                --repo BasedHardware/omi \
+                --clobber
+            else
+              echo "WARNING: Sparkle ZIP not found at $SPARKLE_ZIP"
+            fi
+
+            # Upload signature file if it exists
+            if [ -f "$SIGNATURE_FILE" ]; then
+              echo "Uploading signature file: $SIGNATURE_FILE"
+              gh release upload "$TAG_NAME" \
+                "$SIGNATURE_FILE" \
+                --repo BasedHardware/omi \
+                --clobber
+            else
+              echo "WARNING: Signature file not found at $SIGNATURE_FILE"
+            fi
           else
             echo "ERROR: DMG file not found"
             exit 1
