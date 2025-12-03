@@ -293,6 +293,14 @@ class MixpanelManager {
     });
   }
 
+  void conversationsMerged(int count) {
+    track('Conversations Merged', properties: {'conversations_count': count});
+  }
+
+  void conversationUnmerged(String conversationId) {
+    track('Conversation Unmerged', properties: {'conversation_id': conversationId});
+  }
+
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
     track('All Facts Visibility Changed', properties: {
       'new_visibility': newVisibility.name,

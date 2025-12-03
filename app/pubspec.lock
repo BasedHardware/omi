@@ -1368,10 +1368,11 @@ packages:
   mixpanel_flutter:
     dependency: "direct main"
     description:
-      name: mixpanel_flutter
-      sha256: "0ecd870cceed1cf4600c403e5544b88efa65b8fd3f30fad679702d1ae9e0ac15"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: f9234e9
+      resolved-ref: f9234e9e4f94f9f24b88f3775230c11a734ed7cd
+      url: "https://github.com/beastoin/mixpanel-flutter.git"
+    source: git
     version: "2.4.4"
   nested:
     dependency: transitive

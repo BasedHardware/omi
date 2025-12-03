@@ -135,6 +135,24 @@ Future _init() async {
 
   await SharedPreferencesUtil.init();
 
+  // Dev auth bypass - sign in anonymously in dev mode
+  if (F.env != Environment.prod) {
+    // Always set dev bypass flags
+    SharedPreferencesUtil().onboardingCompleted = true;
+    SharedPreferencesUtil().userPrimaryLanguage = 'en';
+    SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+        debugPrint('Dev auth bypass: signed in anonymously');
+      } catch (error, stack) {
+        debugPrint('Dev auth bypass failed to sign in anonymously: $error');
+        CrashlyticsManager.instance.reportCrash(error, stack);
+      }
+    }
+  }
+
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
   if (isAuth) PlatformManager.instance.mixpanel.identify();
   if (PlatformService.isMobile) initOpus(await opus_flutter.load());
@@ -238,7 +256,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final context = MyApp.navigatorKey.currentContext;
       if (context == null) return;
-      
+
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       if (captureProvider.recordingState == RecordingState.stop) {
         await captureProvider.streamSystemAudioRecording();

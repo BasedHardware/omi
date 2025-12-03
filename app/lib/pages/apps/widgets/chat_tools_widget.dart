@@ -219,7 +219,7 @@ class _ChatToolCardState extends State<_ChatToolCard> {
             ),
             style: const TextStyle(color: Colors.white),
             maxLines: 3,
-onChanged: (_) {
+            onChanged: (_) {
               // Defer to avoid setState during build
               SchedulerBinding.instance.addPostFrameCallback((_) {
                 _updateTool();
@@ -249,7 +249,7 @@ onChanged: (_) {
             ),
             style: const TextStyle(color: Colors.white),
             keyboardType: TextInputType.url,
-onChanged: (_) {
+            onChanged: (_) {
               // Defer to avoid setState during build
               SchedulerBinding.instance.addPostFrameCallback((_) {
                 _updateTool();
@@ -281,7 +281,7 @@ onChanged: (_) {
               ),
             ),
             style: const TextStyle(color: Colors.white),
-onChanged: (_) {
+            onChanged: (_) {
               // Defer to avoid setState during build
               SchedulerBinding.instance.addPostFrameCallback((_) {
                 _updateTool();

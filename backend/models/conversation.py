@@ -322,6 +322,16 @@ class Conversation(BaseModel):
     is_locked: bool = False
     data_protection_level: Optional[str] = None
 
+    # Conversation merge tracking
+    # For source conversations that have been merged
+    merged_into_id: Optional[str] = None  # ID of the merged conversation this was combined into
+    merge_time: Optional[datetime] = None  # When this conversation was merged
+
+    # For merged conversations (created by combining multiple conversations)
+    is_merged: bool = False  # True if this conversation was created by merging others
+    source_conversation_ids: List[str] = []  # IDs of source conversations that were combined
+    merge_id: Optional[str] = None  # Reference to MergeHistory document for rollback
+
     def __init__(self, **data):
         super().__init__(**data)
         # Update plugins_results based on apps_results
@@ -531,3 +541,49 @@ class SearchRequest(BaseModel):
 
 class TestPromptRequest(BaseModel):
     prompt: str
+
+
+# ==================== Conversation Merge Models ====================
+
+class MergePreviewRequest(BaseModel):
+    conversation_ids: List[str] = Field(..., min_length=2, description="IDs of conversations to merge (min 2)")
+
+
+class MergeMetadata(BaseModel):
+    """Metadata about the merge operation."""
+    total_segments: int = Field(..., description="Total transcript segments combined")
+    total_duration_seconds: float = Field(..., description="Combined duration in seconds")
+    action_items_combined: int = Field(..., description="Action items before deduplication")
+    action_items_deduplicated: int = Field(..., description="Action items after deduplication")
+    events_combined: int = Field(..., description="Total events from all conversations")
+    photos_combined: int = Field(default=0, description="Total photos combined")
+    audio_files_combined: int = Field(default=0, description="Total audio files combined")
+    estimated_processing_time_seconds: int = Field(default=5, description="Estimated time to process merge")
+
+
+class MergePreviewResponse(BaseModel):
+    """Preview of merged conversation without committing changes."""
+    preview_conversation: Dict = Field(..., description="Preview of the merged conversation data")
+    source_conversations: List[Dict] = Field(..., description="Original conversations being merged")
+    merge_metadata: MergeMetadata = Field(..., description="Statistics about the merge")
+    warnings: List[str] = Field(default_factory=list, description="Any warnings about the merge")
+
+
+class MergeConversationsRequest(BaseModel):
+    conversation_ids: List[str] = Field(..., min_length=2, description="IDs of conversations to merge (min 2)")
+    custom_title: Optional[str] = Field(None, description="Optional custom title (overrides AI-generated title)")
+
+
+class MergeConversationsResponse(BaseModel):
+    """Response after successfully executing a merge."""
+    merged_conversation: Conversation = Field(..., description="The newly created merged conversation")
+    merge_id: str = Field(..., description="Merge operation ID for rollback")
+    rollback_available_until: datetime = Field(..., description="Rollback deadline (24 hours from merge)")
+    merge_metadata: MergeMetadata = Field(..., description="Statistics about the merge operation")
+
+
+class RollbackMergeResponse(BaseModel):
+    """Response after successfully rolling back a merge."""
+    restored_conversations: List[Conversation] = Field(..., description="Conversations restored from merge")
+    merge_id: str = Field(..., description="Merge operation ID that was rolled back")
+    rollback_time: datetime = Field(..., description="When the rollback was performed")

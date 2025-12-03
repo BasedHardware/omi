@@ -67,7 +67,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
     Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
+        onLongPress: () {
+          // Long-press activates merge mode and selects this conversation
+          if (!widget.conversation.isLocked && !widget.conversation.discarded) {
+            HapticFeedback.mediumImpact();
+            provider.enterMergeMode();
+            provider.toggleConversationSelection(widget.conversation.id);
+          }
+        },
         onTap: () async {
+          // Merge mode: toggle selection instead of opening detail
+          if (provider.isMergeMode) {
+            HapticFeedback.lightImpact();
+            provider.toggleConversationSelection(widget.conversation.id);
+            return;
+          }
+
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -99,11 +114,17 @@ class _ConversationListItemState extends State<ConversationListItem> {
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);
 
-          await routeToPage(
+          final result = await routeToPage(
             context,
             ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
           );
           if (mounted) {
+            // Check if conversation was unmerged
+            if (result is Map && result['unmerged'] == true) {
+              // Force refresh to show restored conversations
+              await provider.getInitialConversations();
+            }
+
             String newTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
             if (startingTitle != newTitle) {
               widget.conversation.structured.title = newTitle;
@@ -268,87 +289,141 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: widget.conversation.getTagColor(),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium!
-                            .copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
+    return Consumer<ConversationProvider>(builder: (context, provider, child) {
+      bool isSelected = provider.isConversationSelected(widget.conversation.id);
+
+      return Padding(
+        padding: const EdgeInsets.only(left: 4.0, right: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Merge mode checkbox
+            if (provider.isMergeMode) ...[
+              Checkbox(
+                value: isSelected,
+                onChanged: (bool? value) {
+                  HapticFeedback.lightImpact();
+                  provider.toggleConversationSelection(widget.conversation.id);
+                },
+                activeColor: Colors.deepPurpleAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+
+            // 🧠 Emoji + Tag
+            Flexible(
+              fit: FlexFit.tight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!widget.conversation.discarded)
+                    Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                    ),
+                  if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
+                    const SizedBox(width: 8),
+                  if (widget.conversation.structured.category.isNotEmpty)
+                    Flexible(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: widget.conversation.getTagColor(),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: Text(
+                          widget.conversation.getTag(),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium!
+                              .copyWith(color: widget.conversation.getTagTextColor()),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration or New
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: isNew
-                ? const ConversationNewStatusIndicator(text: "New 🚀")
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        dateTimeFormat(
-                          'h:mm a',
-                          widget.conversation.startedAt ?? widget.conversation.createdAt,
+                  // Show "Merged" badge if this conversation was created from a merge
+                  if (widget.conversation.sourceConversationIds.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                          width: 1,
                         ),
-                        style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
-                        maxLines: 1,
                       ),
-                      if (_getConversationDuration().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF35343B),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _getConversationDuration(),
-                              style: const TextStyle(color: Colors.white, fontSize: 11),
-                              maxLines: 1,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.merge_type,
+                            size: 12,
+                            color: Colors.deepPurpleAccent,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Merged',
+                            style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                                  color: Colors.deepPurpleAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            // 🕒 Timestamp + Duration or New
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: isNew
+                  ? const ConversationNewStatusIndicator(text: "New 🚀")
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          dateTimeFormat(
+                            'h:mm a',
+                            widget.conversation.startedAt ?? widget.conversation.createdAt,
+                          ),
+                          style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
+                          maxLines: 1,
+                        ),
+                        if (_getConversationDuration().isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF35343B),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _getConversationDuration(),
+                                style: const TextStyle(color: Colors.white, fontSize: 11),
+                                maxLines: 1,
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
-    );
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   String _getConversationDuration() {

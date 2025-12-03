@@ -13,7 +13,7 @@ Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
   if (!context.mounted) {
     return Future.value();
   }
-  
+
   var route = Platform.isIOS ? CupertinoPageRoute(builder: (c) => page) : MaterialPageRoute(builder: (c) => page);
   if (replace) {
     return Navigator.of(context).pushAndRemoveUntil(route, (route) => false);
