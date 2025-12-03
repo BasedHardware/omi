@@ -764,12 +764,9 @@ workflows:
       - name: Extract version from tag
         script: |
           # Extract version from tag (supports both -desktop-cm and -macos-cm)
-          # BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
-          # BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
-          # TAG_NAME="$CM_TAG"
-          BUILD_NAME="1.0.78"
-          BUILD_NUMBER="474"
-          TAG_NAME="v1.0.78+474-desktop-cm"
+          BUILD_NAME=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\1/')
+          BUILD_NUMBER=$(echo $CM_TAG | sed -E 's/^v([0-9.]+)\+([0-9]+)-(desktop|macos)-cm$/\2/')
+          TAG_NAME="$CM_TAG"
 
           # Export to environment for all subsequent steps
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
