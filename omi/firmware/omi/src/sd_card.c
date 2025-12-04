@@ -497,23 +497,33 @@ static void update_chunking_mode(void)
         // Switching back to single file mode - flush any pending data first
         LOG_INF("[SD_WORK] Device connected, switching back to single file mode");
         flush_pending_batch();
-        is_chunking_mode = false;
+        
         // Close current chunk file and switch back to default file
         if (strlen(current_chunk_file_path) > 0) {
             fs_close(&fil_data);
             fs_file_t_init(&fil_data);
             current_chunk_file_path[0] = '\0';
         }
-        // Reopen default file
+        
+        // Reopen default file - only switch out of chunking mode if successful
         int res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
         if (res < 0) {
-            LOG_ERR("[SD_WORK] Failed to reopen default file: %d\n", res);
+            LOG_ERR("[SD_WORK] Failed to reopen default file: %d. Staying in chunking mode to prevent inconsistent state.\n", res);
+            // Don't switch out of chunking mode if we can't open the default file
+            // This prevents leaving the system in a broken state
+            return;
+        }
+        
+        // Successfully opened default file, now switch out of chunking mode
+        is_chunking_mode = false;
+        fs_seek(&fil_data, 0, FS_SEEK_END);
+        
+        struct fs_dirent data_stat;
+        if (fs_stat(FILE_DATA_PATH, &data_stat) == 0) {
+            current_file_size = data_stat.size;
         } else {
-            fs_seek(&fil_data, 0, FS_SEEK_END);
-            struct fs_dirent data_stat;
-            if (fs_stat(FILE_DATA_PATH, &data_stat) == 0) {
-                current_file_size = data_stat.size;
-            }
+            // Reset file size if stat fails to prevent inconsistent state
+            current_file_size = 0;
         }
     }
 }
@@ -837,7 +847,7 @@ void sd_worker_thread(void)
             static int64_t last_check_time = 0;
             int64_t current_time = k_uptime_get();
             // Check every 500ms when idle
-            if (current_time - last_check_time > 500) {
+            if (current_time - last_check_time >= 500) {
                 update_chunking_mode();
                 last_check_time = current_time;
             }
