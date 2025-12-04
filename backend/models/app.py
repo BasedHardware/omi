@@ -52,6 +52,8 @@ class ExternalIntegration(BaseModel):
     auth_steps: Optional[List[AuthStep]] = []
     app_home_url: Optional[str] = None
     actions: Optional[List[Action]] = []
+    # URL to fetch chat tools manifest from (e.g., https://my-app.com/.well-known/omi-tools.json)
+    chat_tools_manifest_url: Optional[str] = None
 
 
 class ProactiveNotification(BaseModel):

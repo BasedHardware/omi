@@ -40,6 +40,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
   TextEditingController appHomeUrlController = TextEditingController();
+  TextEditingController chatToolsManifestUrlController = TextEditingController();
 
   // Pricing
   TextEditingController priceController = TextEditingController();
@@ -64,9 +65,6 @@ class AddAppProvider extends ChangeNotifier {
   List<AppCapability> selectedCapabilities = [];
   List<NotificationScope> selectedScopes = [];
   List<AppCapability> capabilities = [];
-
-  // Chat Tools
-  List<Map<String, dynamic>> chatTools = [];
 
   bool isLoading = false;
   bool isUpdating = false;
@@ -182,6 +180,7 @@ class AddAppProvider extends ChangeNotifier {
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath ?? '';
       appHomeUrlController.text = app.externalIntegration!.appHomeUrl ?? '';
+      chatToolsManifestUrlController.text = app.externalIntegration!.chatToolsManifestUrl ?? '';
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
       }
@@ -211,21 +210,6 @@ class AddAppProvider extends ChangeNotifier {
     thumbnailUrls = app.thumbnailUrls;
     thumbnailIds = app.thumbnailIds;
 
-    // Load chat tools if they exist
-    chatTools = [];
-    if (app.chatTools != null && app.chatTools!.isNotEmpty) {
-      for (var tool in app.chatTools!) {
-        chatTools.add({
-          'name': tool.name,
-          'description': tool.description,
-          'endpoint': tool.endpoint,
-          'method': tool.method,
-          'auth_required': tool.authRequired,
-          'status_message': tool.statusMessage,
-        });
-      }
-    }
-
     isValid = false;
     setIsLoading(false);
     notifyListeners();
@@ -244,6 +228,7 @@ class AddAppProvider extends ChangeNotifier {
     instructionsController.clear();
     authUrlController.clear();
     appHomeUrlController.clear();
+    chatToolsManifestUrlController.clear();
     priceController.clear();
     selectePaymentPlan = null;
     termsAgreed = false;
@@ -257,7 +242,6 @@ class AddAppProvider extends ChangeNotifier {
     thumbnailUrls = [];
     thumbnailIds = [];
     actions.clear();
-    chatTools.clear(); // Clear chat tools when clearing form
   }
 
   void addSpecificAction(String actionTypeId) {
@@ -535,33 +519,6 @@ class AddAppProvider extends ChangeNotifier {
       'thumbnails': thumbnailIds,
     };
 
-    // Add chat tools if any are defined
-    if (chatTools.isNotEmpty) {
-      // Validate chat tools before updating
-      final validChatTools = chatTools.where((tool) {
-        return tool['name']?.toString().isNotEmpty == true &&
-            tool['description']?.toString().isNotEmpty == true &&
-            tool['endpoint']?.toString().isNotEmpty == true;
-      }).toList();
-
-      if (validChatTools.isNotEmpty) {
-        data['chat_tools'] = validChatTools.map((tool) {
-          final toolData = {
-            'name': tool['name'],
-            'description': tool['description'],
-            'endpoint': tool['endpoint'],
-            'method': tool['method'] ?? 'POST',
-            'auth_required': tool['auth_required'] ?? true,
-          };
-          // Only include status_message if it's not empty
-          if (tool['status_message'] != null && tool['status_message'].toString().isNotEmpty) {
-            toolData['status_message'] = tool['status_message'];
-          }
-          return toolData;
-        }).toList();
-      }
-    }
-
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
         data['external_integration'] = {
@@ -570,6 +527,7 @@ class AddAppProvider extends ChangeNotifier {
           'setup_completed_url': setupCompletedController.text.trim(),
           'setup_instructions_file_path': instructionsController.text.trim(),
           'app_home_url': appHomeUrlController.text.trim(),
+          'chat_tools_manifest_url': chatToolsManifestUrlController.text.trim(),
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {
@@ -633,33 +591,6 @@ class AddAppProvider extends ChangeNotifier {
       'thumbnails': thumbnailIds,
     };
 
-    // Add chat tools if any are defined
-    if (chatTools.isNotEmpty) {
-      // Validate chat tools before submitting
-      final validChatTools = chatTools.where((tool) {
-        return tool['name']?.toString().isNotEmpty == true &&
-            tool['description']?.toString().isNotEmpty == true &&
-            tool['endpoint']?.toString().isNotEmpty == true;
-      }).toList();
-
-      if (validChatTools.isNotEmpty) {
-        data['chat_tools'] = validChatTools.map((tool) {
-          final toolData = {
-            'name': tool['name'],
-            'description': tool['description'],
-            'endpoint': tool['endpoint'],
-            'method': tool['method'] ?? 'POST',
-            'auth_required': tool['auth_required'] ?? true,
-          };
-          // Only include status_message if it's not empty
-          if (tool['status_message'] != null && tool['status_message'].toString().isNotEmpty) {
-            toolData['status_message'] = tool['status_message'];
-          }
-          return toolData;
-        }).toList();
-      }
-    }
-
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
         data['external_integration'] = {
@@ -668,6 +599,7 @@ class AddAppProvider extends ChangeNotifier {
           'setup_completed_url': setupCompletedController.text.trim(),
           'setup_instructions_file_path': instructionsController.text.trim(),
           'app_home_url': appHomeUrlController.text.trim(),
+          'chat_tools_manifest_url': chatToolsManifestUrlController.text.trim(),
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {
@@ -909,10 +841,6 @@ class AddAppProvider extends ChangeNotifier {
   void addOrRemoveCapability(AppCapability capability) {
     if (selectedCapabilities.contains(capability)) {
       selectedCapabilities.remove(capability);
-      // Clear chat tools if external_integration is removed
-      if (capability.id == 'external_integration') {
-        chatTools.clear();
-      }
     } else {
       if (selectedCapabilities.length == 1 && selectedCapabilities.first.id == 'persona') {
         AppSnackbar.showSnackbarError('Other capabilities cannot be selected with Persona');
@@ -1042,38 +970,5 @@ class AddAppProvider extends ChangeNotifier {
   Future<void> deleteApiKey(String appId, String keyId) async {
     await deleteApiKeyServer(appId, keyId);
     await loadApiKeys(appId);
-  }
-
-  // Chat Tools methods
-  void addChatTool() {
-    chatTools.add({
-      'name': '',
-      'description': '',
-      'endpoint': '',
-      'method': 'POST',
-      'auth_required': true,
-      'status_message': '',
-    });
-    checkValidity();
-    notifyListeners();
-  }
-
-  void removeChatTool(int index) {
-    if (index >= 0 && index < chatTools.length) {
-      chatTools.removeAt(index);
-      checkValidity();
-      notifyListeners();
-    }
-  }
-
-  void updateChatTool(int index, Map<String, dynamic> updatedTool) {
-    if (index >= 0 && index < chatTools.length) {
-      chatTools[index] = updatedTool;
-      notifyListeners();
-      // Defer checkValidity to avoid setState during build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        checkValidity();
-      });
-    }
   }
 }

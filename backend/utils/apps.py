@@ -1034,3 +1034,153 @@ def build_capability_groups_response(
         )
 
     return groups
+
+
+# ********************************
+# *** CHAT TOOLS MANIFEST FETCH **
+# ********************************
+
+
+def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> List[Dict[str, Any]] | None:
+    """
+    Fetch chat tools definitions from an app's manifest endpoint.
+
+    The manifest endpoint should return a JSON object with a 'tools' array containing
+    tool definitions with: name, description, endpoint, method, parameters, auth_required, status_message.
+
+    Args:
+        manifest_url: Full URL to the manifest endpoint (e.g., https://my-app.com/.well-known/omi-tools.json)
+        timeout: Request timeout in seconds
+
+    Returns:
+        List of chat tool definitions, or None if fetch fails
+
+    Example manifest response:
+    {
+        "tools": [
+            {
+                "name": "add_to_playlist",
+                "description": "Add a song to a Spotify playlist",
+                "endpoint": "/tools/add_to_playlist",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "song_name": {"type": "string", "description": "Name of the song"},
+                        "artist_name": {"type": "string", "description": "Artist name"}
+                    },
+                    "required": ["song_name"]
+                },
+                "auth_required": true,
+                "status_message": "Adding to playlist..."
+            }
+        ]
+    }
+    """
+    import requests
+
+    if not manifest_url:
+        return None
+
+    try:
+        print(f"📥 Fetching chat tools manifest from: {manifest_url}")
+
+        response = requests.get(
+            manifest_url, timeout=timeout, headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'}
+        )
+
+        if response.status_code != 200:
+            print(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
+            return None
+
+        data = response.json()
+
+        # Validate response structure
+        if not isinstance(data, dict):
+            print(f"⚠️ Invalid manifest format (not a dict): {manifest_url}")
+            return None
+
+        tools = data.get('tools', [])
+
+        if not isinstance(tools, list):
+            print(f"⚠️ Invalid manifest format ('tools' is not a list): {manifest_url}")
+            return None
+
+        # Validate and normalize each tool
+        validated_tools = []
+        for tool in tools:
+            validated_tool = _validate_tool_definition(tool)
+            if validated_tool:
+                validated_tools.append(validated_tool)
+            else:
+                print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
+
+        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest")
+        return validated_tools if validated_tools else None
+
+    except requests.Timeout:
+        print(f"⚠️ Manifest fetch timed out: {manifest_url}")
+        return None
+    except requests.RequestException as e:
+        print(f"⚠️ Manifest fetch request error: {e}")
+        return None
+    except ValueError as e:
+        print(f"⚠️ Invalid JSON in manifest response: {e}")
+        return None
+    except Exception as e:
+        print(f"⚠️ Unexpected error fetching manifest: {e}")
+        return None
+
+
+def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
+    """
+    Validate and normalize a single tool definition from the manifest.
+
+    Required fields: name, description, endpoint
+    Optional fields: method, parameters, auth_required, status_message
+
+    Returns normalized tool dict or None if invalid.
+    """
+    if not isinstance(tool, dict):
+        return None
+
+    # Check required fields
+    name = tool.get('name')
+    description = tool.get('description')
+    endpoint = tool.get('endpoint')
+
+    if not name or not isinstance(name, str):
+        print(f"⚠️ Tool missing required 'name' field")
+        return None
+
+    if not description or not isinstance(description, str):
+        print(f"⚠️ Tool '{name}' missing required 'description' field")
+        return None
+
+    if not endpoint or not isinstance(endpoint, str):
+        print(f"⚠️ Tool '{name}' missing required 'endpoint' field")
+        return None
+
+    # Build normalized tool definition
+    validated = {
+        'name': name.strip(),
+        'description': description.strip(),
+        'endpoint': endpoint.strip(),
+        'method': tool.get('method', 'POST').upper(),
+        'auth_required': tool.get('auth_required', True),
+    }
+
+    # Optional: status_message
+    if tool.get('status_message'):
+        validated['status_message'] = str(tool['status_message']).strip()
+
+    # Optional: parameters (JSON schema format)
+    parameters = tool.get('parameters')
+    if parameters and isinstance(parameters, dict):
+        # Validate parameters schema structure
+        if 'properties' in parameters and isinstance(parameters['properties'], dict):
+            validated['parameters'] = {
+                'properties': parameters['properties'],
+                'required': parameters.get('required', []) if isinstance(parameters.get('required'), list) else [],
+            }
+
+    return validated
