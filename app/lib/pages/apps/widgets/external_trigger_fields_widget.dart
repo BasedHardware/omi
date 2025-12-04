@@ -416,6 +416,75 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: Text(
+                                'Chat Tools Manifest URL (optional)',
+                                style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.info_outline,
+                                color: Colors.white60,
+                                size: 20,
+                              ),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    backgroundColor: const Color(0xFF1F1F25),
+                                    title: Text(
+                                      'Chat Tools Manifest URL',
+                                      style: TextStyle(color: Colors.grey.shade100),
+                                    ),
+                                    content: Text(
+                                      'URL to a JSON endpoint that defines your app\'s chat tools. Omi will fetch tool definitions from this URL when you create or update your app.\n\nExample: https://your-app.com/.well-known/omi-tools.json',
+                                      style: TextStyle(color: Colors.grey.shade300),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        style: TextButton.styleFrom(
+                                          backgroundColor: Theme.of(context).colorScheme.secondary,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('OK'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+                          margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 0, bottom: 6),
+                          decoration: BoxDecoration(
+                            color: Color(0xFF35343B),
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          width: double.infinity,
+                          child: TextFormField(
+                            validator: (value) {
+                              if (value != null && value.isNotEmpty && !isValidUrl(value)) {
+                                return 'Please enter a valid URL';
+                              }
+                              return null;
+                            },
+                            controller: provider.chatToolsManifestUrlController,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              border: InputBorder.none,
+                              hintText: 'https://your-app.com/.well-known/omi-tools.json',
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],

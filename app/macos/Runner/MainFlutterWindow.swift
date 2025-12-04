@@ -35,6 +35,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private var calendarChannel: FlutterMethodChannel!
     private var calendarEventChannel: FlutterEventChannel!
 
+    // Shortcuts
+    private var shortcutChannel: FlutterMethodChannel!
+
     // Recording source tracking - determines auto-stop behavior
     private enum RecordingSource {
         case none
@@ -82,6 +85,11 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         calendarEventChannel = FlutterEventChannel(
             name: "com.omi/calendar/events",
+            binaryMessenger: flutterViewController.engine.binaryMessenger)
+
+        // Setup shortcuts channel
+        shortcutChannel = FlutterMethodChannel(
+            name: "com.omi/shortcuts",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
         // Configure the shared window manager
@@ -138,6 +146,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
 
         // Setup calendar monitoring
         setupCalendarMonitoring()
+
+        // Setup shortcuts channel
+        setupShortcutsChannel()
 
         floatingControlBarChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
@@ -688,6 +699,62 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         }
     }
 
+    // MARK: - Shortcuts Setup
+
+    private func setupShortcutsChannel() {
+        shortcutChannel.setMethodCallHandler { [weak self] (call, result) in
+            guard self != nil else { return }
+
+            switch call.method {
+            case "getAskAIShortcut":
+                let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
+                result([
+                    "keyCode": keyCode,
+                    "modifiers": Int(modifiers),
+                    "displayString": GlobalShortcutManager.shared.getAskAIShortcutString()
+                ])
+
+            case "setAskAIShortcut":
+                if let args = call.arguments as? [String: Any],
+                   let keyCode = args["keyCode"] as? Int,
+                   let modifiers = args["modifiers"] as? Int {
+                    GlobalShortcutManager.shared.setAskAIShortcut(
+                        keyCode: keyCode,
+                        modifiers: UInt32(modifiers)
+                    )
+                    result(true)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments", details: nil))
+                }
+
+            case "resetAskAIShortcut":
+                GlobalShortcutManager.shared.resetAskAIShortcut()
+                result(true)
+
+            case "validateShortcut":
+                if let args = call.arguments as? [String: Any],
+                   let keyCode = args["keyCode"] as? Int,
+                   let modifiers = args["modifiers"] as? Int {
+                    let isValid = ShortcutValidator.isValid(keyCode: keyCode, modifiers: UInt32(modifiers))
+                    result(isValid)
+                } else {
+                    result(false)
+                }
+
+            case "getToggleControlBarShortcut":
+                // Fixed shortcut: Cmd+\
+                result([
+                    "keyCode": 42,
+                    "modifiers": 256, // cmdKey
+                    "displayString": "⌘\\"
+                ])
+
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
     @objc private func handleNubStartRecording(_ notification: Notification) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else {
@@ -799,6 +866,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             name: MenuBarManager.openChatWindowNotification,
             object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarOpenKeyboardShortcuts),
+            name: MenuBarManager.openKeyboardShortcutsNotification,
+            object: nil
+        )
     }
 
     private func handleOpenWindow() {
@@ -833,7 +907,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
                 self.menuBarManager?.observeFloatingControlBar(self.floatingControlBar!)
 
-                self.floatingControlBar?.onAskAI = { fileUrl in
+                self.floatingControlBar?.onAskAI = { [weak self] fileUrl in
                     let screenshot: URL?
                     if let url = fileUrl {
                         screenshot = url
@@ -948,12 +1022,6 @@ extension MainFlutterWindow {
             name: GlobalShortcutManager.toggleFloatingButtonNotification,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAskAIShortcut),
-            name: GlobalShortcutManager.askAINotification,
-            object: nil
-        )
     }
 
     // MARK: - Menu Bar Action Handlers
@@ -971,13 +1039,28 @@ extension MainFlutterWindow {
     }
 
     @objc private func handleMenuBarOpenChatWindow() {
-        // Ensure floating control bar exists before using it
-        if floatingControlBar == nil {
+        // Activate the app first so it can receive keyboard input
+        NSApp.activate(ignoringOtherApps: true)
+
+        let fileUrl = ScreenCaptureManager.captureScreen()
+
+        // Ensure floating control bar exists and is visible
+        if floatingControlBar == nil || !(floatingControlBar?.isVisible ?? false) {
             showFloatingControlBar()
         }
 
-        let fileUrl = ScreenCaptureManager.captureScreen()
-        FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        // Small delay to ensure floating bar is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        }
+    }
+
+    @objc private func handleMenuBarOpenKeyboardShortcuts() {
+        // Open the main window and navigate to keyboard shortcuts
+        handleOpenWindow()
+        
+        // Tell Flutter to navigate to keyboard shortcuts page
+        shortcutChannel.invokeMethod("openKeyboardShortcutsPage", arguments: nil)
     }
 
     private func handlePlayPauseWithRetry() {
@@ -1006,22 +1089,6 @@ extension MainFlutterWindow {
             // Activate the app first so it can receive keyboard input
             NSApp.activate(ignoringOtherApps: true)
             showFloatingControlBar()
-        }
-    }
-
-    @objc private func handleAskAIShortcut() {
-        // Activate the app first so it can receive keyboard input
-        NSApp.activate(ignoringOtherApps: true)
-
-        let fileUrl = ScreenCaptureManager.captureScreen()
-
-        // Ensure floating control bar exists and is visible
-        if floatingControlBar == nil || !(floatingControlBar?.isVisible ?? false) {
-            showFloatingControlBar()
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
         }
     }
 }

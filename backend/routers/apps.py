@@ -8,6 +8,8 @@ import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 
+from utils.apps import fetch_app_chat_tools_from_manifest
+
 from database.apps import (
     change_app_approval_status,
     get_unapproved_public_apps_db,
@@ -429,10 +431,23 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Ensure chat_tools are included even if empty
+    # Build app dict
     app_dict = app.model_dump(exclude_unset=True)
-    if 'chat_tools' in data:
-        app_dict['chat_tools'] = data['chat_tools']
+
+    # Fetch chat tools from manifest URL (only way to add chat tools)
+    if external_integration := data.get('external_integration'):
+        manifest_url = external_integration.get('chat_tools_manifest_url')
+        if manifest_url:
+            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
+            if fetched_tools:
+                # Resolve relative endpoints to absolute URLs
+                base_url = external_integration.get('app_home_url', '').rstrip('/')
+                if base_url:
+                    for tool in fetched_tools:
+                        endpoint = tool.get('endpoint', '')
+                        if endpoint.startswith('/') and not endpoint.startswith('//'):
+                            tool['endpoint'] = f"{base_url}{endpoint}"
+                app_dict['chat_tools'] = fetched_tools
 
     add_app_to_db(app_dict)
 
@@ -651,10 +666,23 @@ def update_app(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Ensure chat_tools are included if provided
+    # Build update dict
     update_dict = update_app.model_dump(exclude_unset=True)
-    if 'chat_tools' in data:
-        update_dict['chat_tools'] = data['chat_tools']
+
+    # Fetch chat tools from manifest URL (only way to add/update chat tools)
+    if external_integration := data.get('external_integration'):
+        manifest_url = external_integration.get('chat_tools_manifest_url')
+        if manifest_url:
+            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
+            if fetched_tools:
+                # Resolve relative endpoints to absolute URLs
+                base_url = external_integration.get('app_home_url', '').rstrip('/')
+                if base_url:
+                    for tool in fetched_tools:
+                        endpoint = tool.get('endpoint', '')
+                        if endpoint.startswith('/') and not endpoint.startswith('//'):
+                            tool['endpoint'] = f"{base_url}{endpoint}"
+                update_dict['chat_tools'] = fetched_tools
 
     update_app_in_db(update_dict)
 
