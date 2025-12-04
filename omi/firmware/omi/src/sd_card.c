@@ -372,12 +372,15 @@ static uint32_t load_chunk_counter(void)
 
     int seek_res = fs_seek(&fil_info, 4, FS_SEEK_SET);  // Skip offset, read counter
     if (seek_res < 0) {
+        LOG_ERR("[SD_WORK] Failed to seek to counter position in info file: %d", seek_res);
+        // If seek fails, don't read - it would read the offset value instead of counter
         return 0;
     }
 
     uint32_t counter = 0;
     ssize_t rbytes = fs_read(&fil_info, &counter, sizeof(counter));
     if (rbytes != sizeof(counter)) {
+        LOG_ERR("[SD_WORK] Failed to read chunk counter from info file: %d", (int)rbytes);
         return 0;
     }
 
@@ -490,6 +493,12 @@ static void update_chunking_mode(void)
         // Switching to chunking mode - flush any pending data first
         LOG_INF("[SD_WORK] Device disconnected, enabling time-based chunking mode");
         flush_pending_batch();
+        
+        // Close the default file handle before creating a new chunk file
+        // This prevents resource leaks and undefined filesystem behavior
+        fs_close(&fil_data);
+        fs_file_t_init(&fil_data);
+        
         is_chunking_mode = true;
         // Create first chunk file immediately
         create_new_chunk_file();
