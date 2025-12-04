@@ -26,54 +26,23 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
     if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
     final data = jsonDecode(response.body) as Map<String, dynamic>;
 
-    // Check if response has groups (legacy) or flat data (new)
-    final groups = (data['groups'] as List?);
-    if (groups != null) {
-      // Legacy grouped response - parse as before
-      final List<Map<String, dynamic>> parsed = [];
-      for (final g in groups) {
-        final capability = g['capability'] as Map<String, dynamic>?;
-        final category = g['category'] as Map<String, dynamic>?;
-        final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
-        final items = (g['data'] as List?) ?? [];
-        final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-        parsed.add({
-          'capability': capability,
-          'category': category,
-          'data': apps,
-          'pagination': pagination,
-        });
-      }
-      return parsed;
+    // Parse grouped response from backend
+    final groups = (data['groups'] as List?) ?? [];
+    final List<Map<String, dynamic>> parsed = [];
+    for (final g in groups) {
+      final capability = g['capability'] as Map<String, dynamic>?;
+      final category = g['category'] as Map<String, dynamic>?;
+      final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
+      final items = (g['data'] as List?) ?? [];
+      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+      parsed.add({
+        'capability': capability,
+        'category': category,
+        'data': apps,
+        'pagination': pagination,
+      });
     }
-
-    // New flat response - return empty list, grouping will be done in app_provider
-    // The app_provider will call groupAppsByCapability() on the flat data
-    return [];
-  } catch (e, stackTrace) {
-    debugPrint(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
-    return [];
-  }
-}
-
-/// Retrieve all apps as flat list (for frontend grouping)
-Future<List<App>> retrieveAllApps({
-  bool includeReviews = false,
-}) async {
-  final url = '${Env.apiBaseUrl}v2/apps?include_reviews=$includeReviews';
-  final response = await makeApiCall(
-    url: url,
-    headers: {},
-    body: '',
-    method: 'GET',
-  );
-  try {
-    if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['data'] as List?) ?? [];
-    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-    return apps;
+    return parsed;
   } catch (e, stackTrace) {
     debugPrint(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);

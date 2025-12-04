@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_category_section.dart';
-import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
 class CapabilityAppsPage extends StatefulWidget {
@@ -29,30 +28,37 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   @override
   void initState() {
     super.initState();
-    _groupCapabilityApps();
+    _loadCapabilityApps();
   }
 
-  void _groupCapabilityApps() {
+  Future<void> _loadCapabilityApps() async {
     setState(() {
       _isLoading = true;
     });
 
-    // Use frontend filtering and grouping instead of backend call
-    final appProvider = Provider.of<AppProvider>(context, listen: false);
+    try {
+      // Fetch capability apps grouped by category from backend
+      final result = await retrieveCapabilityAppsGroupedByCategory(
+        capability: widget.capability.id,
+        includeReviews: true,
+      );
 
-    // Use all apps from provider, not just widget.apps (which might be pre-filtered)
-    // Filter apps by capability
-    final filteredApps = appProvider.filterAppsByCapability(appProvider.apps, widget.capability.id);
-
-    // Group filtered apps by category
-    final groups = appProvider.groupCapabilityAppsByCategory(filteredApps, widget.capability.id);
-
-    if (mounted) {
-      setState(() {
-        _categoryGroups = groups;
-        _totalCount = filteredApps.length;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _categoryGroups = result.groups;
+          _totalCount = result.totalApps;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading capability apps: $e');
+      if (mounted) {
+        setState(() {
+          _categoryGroups = [];
+          _totalCount = 0;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -224,7 +230,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
           : RefreshIndicator(
               onRefresh: () async {
                 HapticFeedback.mediumImpact();
-                _groupCapabilityApps();
+                await _loadCapabilityApps();
               },
               color: Colors.deepPurpleAccent,
               backgroundColor: Colors.white,
@@ -253,38 +259,23 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                         ],
                       ),
                     )
-                  : _categoryGroups.isEmpty
-                      ? ListView.builder(
-                          padding: const EdgeInsets.only(top: 8, bottom: 100),
-                          itemCount: 1,
-                          itemBuilder: (context, index) {
-                            // If no category groups but we have apps, show them all in one group
-                            final appProvider = Provider.of<AppProvider>(context, listen: false);
-                            final filteredApps =
-                                appProvider.filterAppsByCapability(appProvider.apps, widget.capability.id);
-                            return CapabilityCategorySection(
-                              categoryName: widget.capability.title,
-                              apps: filteredApps,
-                            );
-                          },
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.only(top: 8, bottom: 100),
-                          itemCount: _categoryGroups.length,
-                          itemBuilder: (context, index) {
-                            final group = _categoryGroups[index];
-                            final categoryMap = group['category'] as Map<String, dynamic>?;
-                            final categoryTitle = categoryMap?['title'] as String? ?? 'Other';
-                            final apps = group['data'] as List<App>? ?? [];
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(top: 8, bottom: 100),
+                      itemCount: _categoryGroups.length,
+                      itemBuilder: (context, index) {
+                        final group = _categoryGroups[index];
+                        final categoryMap = group['category'] as Map<String, dynamic>?;
+                        final categoryTitle = categoryMap?['title'] as String? ?? 'Other';
+                        final apps = group['data'] as List<App>? ?? [];
 
-                            if (apps.isEmpty) return const SizedBox.shrink();
+                        if (apps.isEmpty) return const SizedBox.shrink();
 
-                            return CapabilityCategorySection(
-                              categoryName: categoryTitle,
-                              apps: apps,
-                            );
-                          },
-                        ),
+                        return CapabilityCategorySection(
+                          categoryName: categoryTitle,
+                          apps: apps,
+                        );
+                      },
+                    ),
             ),
     );
   }

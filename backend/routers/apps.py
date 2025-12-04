@@ -73,6 +73,12 @@ from utils.apps import (
     build_pagination_metadata,
     get_capabilities_list,
     normalize_app_numeric_fields,
+    filter_apps_by_capability,
+    sort_apps_by_installs,
+    group_apps_by_capability,
+    build_capability_groups_response,
+    group_capability_apps_by_category,
+    build_capability_category_groups_response,
 )
 
 from database.memories import migrate_memories
@@ -126,18 +132,26 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
 
 @router.get('/v2/apps', tags=['v2'])
 def get_apps_v2(
+    capability: str | None = Query(default=None, description='Filter by capability id'),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=50),
     include_reviews: bool = Query(default=False),
 ):
-    """Public omi apps, returned as flat list for frontend filtering and grouping.
+    """Public omi apps, paginated by capability groups.
 
     Notes:
     - Uses approved public apps only (no private/tester apps).
-    - Returns all apps as flat list - frontend handles all filtering and grouping.
+    - Groups: Popular, Integrations, Chat Assistants, Summary Apps, Realtime Notifications.
+    - Popular section is shown first.
     - Always excludes persona type apps.
     """
 
     capabilities = get_capabilities_list()
-    cache_key = f"apps:v2:all:reviews={int(include_reviews)}"
+
+    if capability:
+        cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+    else:
+        cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
 
     cached = get_generic_cache(cache_key)
     if cached:
@@ -149,22 +163,91 @@ def get_apps_v2(
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
 
-    # Return flat list of all apps - frontend will handle all filtering, grouping, and sorting
+    # Capability-specific response
+    if capability:
+        filtered_apps = filter_apps_by_capability(approved_apps, capability)
+        sorted_apps = sort_apps_by_installs(filtered_apps)
+        page = paginate_apps(sorted_apps, offset, limit)
+
+        res = {
+            'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, capability),
+            'capability': {
+                'id': capability,
+                'title': next(
+                    (c['title'] for c in capabilities if c['id'] == capability), capability.title().replace('_', ' ')
+                ),
+            },
+        }
+        set_generic_cache(cache_key, res, ttl=60 * 10)
+        return res
+
+    # Grouped response by capability
+    grouped_apps = group_apps_by_capability(approved_apps, capabilities)
+    groups = build_capability_groups_response(grouped_apps, capabilities, offset, limit)
+
     res = {
-        'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in approved_apps],
+        'groups': groups,
         'meta': {
             'capabilities': capabilities,
-            'total': len(approved_apps),
+            'groupCount': len(groups),
+            'limit': limit,
+            'offset': offset,
         },
     }
     set_generic_cache(cache_key, res, ttl=60 * 10)
     return res
 
 
-# DEPRECATED: This endpoint is no longer used - frontend handles capability filtering and grouping
-# @router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
-# def get_capability_apps_grouped_by_category(...):
-#     ...
+@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
+def get_capability_apps_grouped_by_category(
+    capability_id: str,
+    include_reviews: bool = Query(default=True),
+):
+    """Get all apps for a specific capability, grouped by master category.
+
+    Returns apps grouped into master categories like:
+    - For chat: Personality Clones, Productivity & Lifestyle, Social & Entertainment
+    - For others: Productivity & Tools, Personal & Lifestyle, Social & Entertainment
+    """
+
+    cache_key = f"apps:capability:{capability_id}:grouped:reviews={int(include_reviews)}"
+
+    cached = get_generic_cache(cache_key)
+    if cached:
+        return cached
+
+    capabilities = get_capabilities_list()
+
+    # Fetch and filter approved public apps
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
+    # Always exclude persona type apps
+    approved_apps = [a for a in approved_apps if not a.is_a_persona()]
+
+    # Filter apps by capability
+    filtered_apps = filter_apps_by_capability(approved_apps, capability_id)
+
+    # Group filtered apps by master category
+    grouped_apps = group_capability_apps_by_category(filtered_apps, capability_id)
+    groups = build_capability_category_groups_response(grouped_apps, capability_id)
+
+    res = {
+        'groups': groups,
+        'capability': {
+            'id': capability_id,
+            'title': next(
+                (c['title'] for c in capabilities if c['id'] == capability_id),
+                capability_id.title().replace('_', ' '),
+            ),
+        },
+        'meta': {
+            'totalApps': len(filtered_apps),
+            'groupCount': len(groups),
+        },
+    }
+    set_generic_cache(cache_key, res, ttl=60 * 10)
+    return res
 
 
 @router.get('/v2/apps/search', tags=['v2'])

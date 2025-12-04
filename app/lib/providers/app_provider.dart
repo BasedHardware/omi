@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:collection/collection.dart';
 import 'package:flutter/widgets.dart';
 import 'package:omi/backend/http/api/apps.dart';
@@ -393,340 +392,6 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  /// Group apps by capability (frontend grouping logic)
-  List<Map<String, dynamic>> groupAppsByCapability(List<App> apps) {
-    final Map<String, List<App>> grouped = {};
-
-    // Define capability order
-    final capabilities = [
-      {'title': 'Featured', 'id': 'popular'},
-      {'title': 'Integrations', 'id': 'external_integration'},
-      {'title': 'Chat Assistants', 'id': 'chat'},
-      {'title': 'Summary Apps', 'id': 'memories'},
-      {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
-    ];
-
-    // First pass: collect popular apps
-    final popularApps = apps.where((app) => app.isPopular == true).toList();
-    final popularAppIds = popularApps.map((app) => app.id).toSet();
-    if (popularApps.isNotEmpty) {
-      // Sort popular apps by installs (descending)
-      popularApps.sort((a, b) => b.installs.compareTo(a.installs));
-      grouped['popular'] = popularApps;
-    }
-
-    // Second pass: collect notification apps (exclusive)
-    // Includes apps with proactive_notification AND simple integrations (external_integration without auth_steps, chat, or memories)
-    final notificationApps = <App>[];
-    final notificationAppIds = <String>{};
-    for (final app in apps) {
-      final appCapabilities = app.capabilities;
-      final hasExternalIntegration = appCapabilities.contains('external_integration');
-      final hasAuthSteps =
-          hasExternalIntegration && app.externalIntegration != null && (app.externalIntegration!.authSteps.isNotEmpty);
-
-      // Include proactive_notification apps
-      if (appCapabilities.contains('proactive_notification')) {
-        notificationApps.add(app);
-        notificationAppIds.add(app.id);
-      }
-      // Also include simple integrations (external_integration without auth_steps, chat, or memories)
-      else if (hasExternalIntegration &&
-          !hasAuthSteps &&
-          !appCapabilities.contains('chat') &&
-          !appCapabilities.contains('memories')) {
-        notificationApps.add(app);
-        notificationAppIds.add(app.id);
-      }
-    }
-    if (notificationApps.isNotEmpty) {
-      // Sort notification apps by score
-      notificationApps.sort((a, b) => _computeAppScore(b).compareTo(_computeAppScore(a)));
-      grouped['proactive_notification'] = notificationApps;
-    }
-
-    // Group remaining apps by capability
-    for (final app in apps) {
-      // Skip popular apps in other sections
-      if (popularAppIds.contains(app.id)) continue;
-
-      // Skip notification apps in other sections
-      if (notificationAppIds.contains(app.id)) continue;
-
-      final appCapabilities = app.capabilities;
-      final hasExternalIntegration = appCapabilities.contains('external_integration');
-      final hasAuthSteps =
-          hasExternalIntegration && app.externalIntegration != null && (app.externalIntegration!.authSteps.isNotEmpty);
-
-      // External integration section: only apps with external_integration AND auth_steps
-      if (hasExternalIntegration && hasAuthSteps) {
-        grouped.putIfAbsent('external_integration', () => []).add(app);
-        continue;
-      }
-
-      // Chat section logic:
-      // - Apps with chat but no external_integration
-      // - Apps with external_integration (without auth_steps) that have chat
-      if (appCapabilities.contains('chat')) {
-        if (!hasExternalIntegration) {
-          // Regular chat app without external_integration
-          grouped.putIfAbsent('chat', () => []).add(app);
-        } else if (!hasAuthSteps) {
-          // External integration app without auth_steps - show in chat
-          grouped.putIfAbsent('chat', () => []).add(app);
-        }
-        continue;
-      }
-
-      // Memories section logic:
-      // - Apps with memories but no external_integration or chat
-      // - Apps with external_integration (without auth_steps) that have memories but not chat
-      if (appCapabilities.contains('memories') && !appCapabilities.contains('chat')) {
-        if (!hasExternalIntegration) {
-          // Regular memories app without external_integration or chat
-          grouped.putIfAbsent('memories', () => []).add(app);
-        } else if (!hasAuthSteps) {
-          // External integration app without auth_steps and no chat - show in memories
-          grouped.putIfAbsent('memories', () => []).add(app);
-        }
-        continue;
-      }
-
-      // Simple Integrations apps are now included in notifications section above
-      // No separate section needed
-    }
-
-    // Sort each capability group by score (except popular which is already sorted by installs)
-    for (final capId in grouped.keys) {
-      if (capId != 'popular') {
-        grouped[capId]!.sort((a, b) => _computeAppScore(b).compareTo(_computeAppScore(a)));
-      }
-    }
-
-    // Build response in capability order
-    final List<Map<String, dynamic>> groups = [];
-    for (final cap in capabilities) {
-      final capId = cap['id']!;
-      final appsInGroup = grouped[capId];
-      if (appsInGroup != null && appsInGroup.isNotEmpty) {
-        groups.add({
-          'capability': {'id': capId, 'title': cap['title']},
-          'data': appsInGroup,
-          'pagination': {
-            'total': appsInGroup.length,
-            'count': appsInGroup.length,
-            'offset': 0,
-            'limit': appsInGroup.length,
-            'hasNext': false,
-            'hasPrevious': false,
-          },
-        });
-      }
-    }
-
-    return groups;
-  }
-
-  /// Filter apps by capability using the same logic as grouping
-  /// Note: Unlike groupAppsByCapability (used for main apps page), this does NOT exclude
-  /// popular apps - they should appear on individual capability pages if they match
-  List<App> filterAppsByCapability(List<App> apps, String capabilityId) {
-    if (capabilityId == 'popular') {
-      return apps.where((app) => app.isPopular == true).toList();
-    }
-
-    final filteredApps = <App>[];
-
-    for (final app in apps) {
-      // Note: We don't skip popular apps here - they should be included on capability pages
-      // We only skip notification/simple integration apps in other sections
-      final appCapabilities = app.capabilities;
-      final hasExternalIntegration = appCapabilities.contains('external_integration');
-      final hasAuthSteps =
-          hasExternalIntegration && app.externalIntegration != null && (app.externalIntegration!.authSteps.isNotEmpty);
-
-      // Skip notification apps (proactive_notification OR simple integrations) in other sections
-      if (capabilityId != 'proactive_notification') {
-        if (appCapabilities.contains('proactive_notification')) continue;
-        // Also skip simple integrations (they belong in notifications section)
-        if (hasExternalIntegration &&
-            !hasAuthSteps &&
-            !appCapabilities.contains('chat') &&
-            !appCapabilities.contains('memories')) continue;
-      }
-
-      if (capabilityId == 'external_integration') {
-        // Only apps with external_integration AND auth_steps
-        if (hasExternalIntegration && hasAuthSteps) {
-          filteredApps.add(app);
-        }
-      } else if (capabilityId == 'chat') {
-        // Apps with chat but no external_integration
-        // OR apps with external_integration (without auth_steps) that have chat
-        if (appCapabilities.contains('chat')) {
-          if (!hasExternalIntegration) {
-            filteredApps.add(app);
-          } else if (!hasAuthSteps) {
-            filteredApps.add(app);
-          }
-        }
-      } else if (capabilityId == 'memories') {
-        // Apps with memories but no external_integration or chat
-        // OR apps with external_integration (without auth_steps) that have memories but not chat
-        if (appCapabilities.contains('memories') && !appCapabilities.contains('chat')) {
-          if (!hasExternalIntegration) {
-            filteredApps.add(app);
-          } else if (!hasAuthSteps) {
-            filteredApps.add(app);
-          }
-        }
-      } else if (capabilityId == 'proactive_notification') {
-        // Apps with proactive_notification capability
-        // OR simple integrations (external_integration without auth_steps, chat, or memories)
-        if (appCapabilities.contains('proactive_notification')) {
-          filteredApps.add(app);
-        } else if (hasExternalIntegration &&
-            !hasAuthSteps &&
-            !appCapabilities.contains('chat') &&
-            !appCapabilities.contains('memories')) {
-          filteredApps.add(app);
-        }
-      }
-    }
-
-    return filteredApps;
-  }
-
-  /// Group apps within a capability by master category
-  List<Map<String, dynamic>> groupCapabilityAppsByCategory(
-    List<App> apps,
-    String capabilityId,
-  ) {
-    // Get master category mapping
-    final categoryMapping = _getMasterCategoryMapping(capabilityId);
-    final masterCategories = _getMasterCategoriesList(capabilityId);
-
-    // Group apps by master category
-    final Map<String, List<App>> grouped = {};
-    for (final app in apps) {
-      final originalCategoryId = app.category.isNotEmpty ? app.category : 'other';
-      final defaultCategory = capabilityId == 'chat' ? 'productivity-lifestyle' : 'personal-wellness';
-      final masterCategoryId = categoryMapping[originalCategoryId] ?? defaultCategory;
-      grouped.putIfAbsent(masterCategoryId, () => []).add(app);
-    }
-
-    // Sort each master category by score
-    for (final masterCategoryId in grouped.keys) {
-      grouped[masterCategoryId]!.sort((a, b) => _computeAppScore(b).compareTo(_computeAppScore(a)));
-    }
-
-    // Build response in master category order
-    final idToTitle = {for (var c in masterCategories) c['id']!: c['title']!};
-    final orderedKeys = [for (var c in masterCategories) c['id']!];
-    for (final key in grouped.keys) {
-      if (!orderedKeys.contains(key)) {
-        orderedKeys.add(key);
-      }
-    }
-
-    final List<Map<String, dynamic>> groups = [];
-    for (final categoryId in orderedKeys) {
-      final appsInCategory = grouped[categoryId];
-      if (appsInCategory != null && appsInCategory.isNotEmpty) {
-        groups.add({
-          'category': {
-            'id': categoryId,
-            'title': idToTitle[categoryId] ??
-                categoryId
-                    .replaceAll('-', ' ')
-                    .split(' ')
-                    .map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1))
-                    .join(' '),
-          },
-          'data': appsInCategory,
-          'count': appsInCategory.length,
-        });
-      }
-    }
-
-    return groups;
-  }
-
-  /// Get master category mapping for a capability
-  Map<String, String> _getMasterCategoryMapping(String capabilityId) {
-    if (capabilityId == 'chat') {
-      return {
-        'education-and-learning': 'productivity-lifestyle',
-        'productivity-and-organization': 'productivity-lifestyle',
-        'utilities-and-tools': 'productivity-lifestyle',
-        'financial': 'productivity-lifestyle',
-        'shopping-and-commerce': 'productivity-lifestyle',
-        'news-and-information': 'productivity-lifestyle',
-        'conversation-analysis': 'productivity-lifestyle',
-        'communication-improvement': 'productivity-lifestyle',
-        'emotional-and-mental-support': 'productivity-lifestyle',
-        'health-and-wellness': 'productivity-lifestyle',
-        'safety-and-security': 'productivity-lifestyle',
-        'other': 'productivity-lifestyle',
-        'personality-emulation': 'personality-clone',
-        'social-and-relationships': 'social-entertainment',
-        'entertainment-and-fun': 'social-entertainment',
-        'travel-and-exploration': 'social-entertainment',
-      };
-    }
-
-    // Default mapping for other capabilities
-    return {
-      'personality-emulation': 'productivity-tools',
-      'education-and-learning': 'productivity-tools',
-      'productivity-and-organization': 'productivity-tools',
-      'utilities-and-tools': 'productivity-tools',
-      'financial': 'productivity-tools',
-      'shopping-and-commerce': 'productivity-tools',
-      'news-and-information': 'productivity-tools',
-      'conversation-analysis': 'personal-wellness',
-      'communication-improvement': 'personal-wellness',
-      'emotional-and-mental-support': 'personal-wellness',
-      'health-and-wellness': 'personal-wellness',
-      'safety-and-security': 'personal-wellness',
-      'other': 'personal-wellness',
-      'social-and-relationships': 'social-entertainment',
-      'entertainment-and-fun': 'social-entertainment',
-      'travel-and-exploration': 'social-entertainment',
-    };
-  }
-
-  /// Get master categories list for a capability
-  List<Map<String, String>> _getMasterCategoriesList(String capabilityId) {
-    if (capabilityId == 'chat') {
-      return [
-        {'title': 'Personality Clones', 'id': 'personality-clone'},
-        {'title': 'Productivity & Lifestyle', 'id': 'productivity-lifestyle'},
-        {'title': 'Social & Entertainment', 'id': 'social-entertainment'},
-      ];
-    }
-
-    // Default categories for other capabilities
-    return [
-      {'title': 'Productivity & Tools', 'id': 'productivity-tools'},
-      {'title': 'Personal & Lifestyle', 'id': 'personal-wellness'},
-      {'title': 'Social & Entertainment', 'id': 'social-entertainment'},
-    ];
-  }
-
-  /// Compute app score using the same formula as backend
-  /// score = ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
-  double _computeAppScore(App app) {
-    final ratingAvg = app.ratingAvg ?? 0.0;
-    final ratingCount = app.ratingCount;
-    final installs = app.installs;
-
-    final ratingFactor = (ratingAvg / 5) * (ratingAvg / 5); // Power of 2
-    final score = ratingFactor * math.log(1 + ratingCount) * math.sqrt(math.log(1 + installs));
-
-    return score;
-  }
-
   Future getApps() async {
     if (isLoading) return;
     setIsLoading(true);
@@ -737,13 +402,18 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch all apps as flat list from server
-      final allApps = await retrieveAllApps(includeReviews: true);
-      apps = allApps;
-      appLoading = List.filled(apps.length, false, growable: true);
+      // Fetch grouped apps from server (backend handles all filtering and grouping)
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      groupedApps = groups;
 
-      // Group apps by capability on frontend
-      groupedApps = groupAppsByCapability(apps);
+      // Flatten for search/filter views
+      final List<App> flat = [];
+      for (final g in groups) {
+        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
+        flat.addAll(data);
+      }
+      apps = flat;
+      appLoading = List.filled(apps.length, false, growable: true);
 
       // Delay filtering to prevent UI freezing with large datasets
       await Future.delayed(const Duration(milliseconds: 50));
@@ -883,13 +553,18 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       debugPrint('Refreshing apps after installation/change...');
-      // Fetch all apps as flat list and group on frontend
-      final allApps = await retrieveAllApps(includeReviews: true);
-      apps = allApps;
-      appLoading = List.filled(apps.length, false, growable: true);
+      // Fetch grouped apps from server (backend handles all filtering and grouping)
+      final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
+      groupedApps = groups;
 
-      // Group apps by capability on frontend
-      groupedApps = groupAppsByCapability(apps);
+      // Flatten for search/filter views
+      final List<App> flat = [];
+      for (final g in groups) {
+        final List<App> data = (g['data'] as List<App>? ?? <App>[]);
+        flat.addAll(data);
+      }
+      apps = flat;
+      appLoading = List.filled(apps.length, false, growable: true);
 
       // Refresh popular apps too
       popularApps = await retrievePopularApps();
