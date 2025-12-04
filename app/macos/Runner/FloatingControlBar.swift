@@ -906,24 +906,6 @@ private struct FloatingControlBarView: View {
             title == "Ask omi"
                 ? "Ask omi • \(GlobalShortcutManager.shared.getAskAIShortcutString())" : ""
         )
-        .contextMenu {
-            if title == "Ask omi" {
-                Button("Customize Shortcut...") {
-                    showShortcutCustomizer()
-                }
-
-                Button("Reset to Default") {
-                    GlobalShortcutManager.shared.resetAskAIShortcut()
-                }
-            }
-        }
-    }
-
-    private func showShortcutCustomizer() {
-        // Trigger parent window to enter shortcut recording mode
-        if let parentWindow = window as? FloatingControlBar {
-            parentWindow.startShortcutRecording()
-        }
     }
 
     private var playPauseIcon: String {
@@ -1316,25 +1298,6 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
             } ?? FloatingControlBar.defaultSize
 
         resizeAnchored(to: targetSize, makeResizable: true, animated: animated)
-    }
-
-    // MARK: - Shortcut Recording
-
-    public func startShortcutRecording() {
-        DispatchQueue.main.async {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                self.state.isRecordingShortcut = true
-                self.state.recordedKeyCode = nil
-                self.state.recordedModifiers = nil
-                self.state.shortcutRecordingError = nil
-            }
-
-            // Resize to fixed height for recording view
-            self.resizeToFixedHeight(160, animated: true)
-
-            // Make window key to receive keyboard events
-            self.makeKeyAndOrderFront(nil)
-        }
     }
 
     private func saveShortcut(keyCode: Int, modifiers: UInt32) {

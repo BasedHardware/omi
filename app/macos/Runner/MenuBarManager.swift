@@ -9,6 +9,7 @@ class MenuBarManager: NSObject {
     static let toggleWindowNotification = Notification.Name("com.omi.menubar.toggleWindow")
     static let toggleFloatingChatNotification = Notification.Name("com.omi.menubar.toggleFloatingChat")
     static let openChatWindowNotification = Notification.Name("com.omi.menubar.openChatWindow")
+    static let openKeyboardShortcutsNotification = Notification.Name("com.omi.menubar.openKeyboardShortcuts")
     static let quitApplicationNotification = Notification.Name("com.omi.menubar.quitApplication")
     
     // MARK: - Singleton
@@ -93,6 +94,15 @@ class MenuBarManager: NSObject {
         openChatWindowItem.target = self
         openChatWindowItem.tag = 201
         menu.addItem(openChatWindowItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Keyboard Shortcuts
+        let keyboardShortcutsItem = NSMenuItem(title: "Keyboard Shortcuts...", action: #selector(openKeyboardShortcuts), keyEquivalent: ",")
+        keyboardShortcutsItem.target = self
+        keyboardShortcutsItem.keyEquivalentModifierMask = [.command]
+        keyboardShortcutsItem.tag = 202
+        menu.addItem(keyboardShortcutsItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -370,6 +380,10 @@ class MenuBarManager: NSObject {
 
     @objc private func openChatWindow() {
         NotificationCenter.default.post(name: MenuBarManager.openChatWindowNotification, object: nil)
+    }
+    
+    @objc private func openKeyboardShortcuts() {
+        NotificationCenter.default.post(name: MenuBarManager.openKeyboardShortcutsNotification, object: nil)
     }
     
     @objc private func openOmiWebsite() {
