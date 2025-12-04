@@ -152,6 +152,7 @@ class ExternalIntegration {
   List<AuthStep> authSteps = [];
   String? appHomeUrl;
   List<Action>? actions;
+  String? chatToolsManifestUrl;
 
   ExternalIntegration({
     this.triggersOn,
@@ -162,6 +163,7 @@ class ExternalIntegration {
     this.authSteps = const [],
     this.appHomeUrl,
     this.actions,
+    this.chatToolsManifestUrl,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -176,6 +178,7 @@ class ExternalIntegration {
           ? []
           : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
       actions: json['actions'] == null ? null : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
+      chatToolsManifestUrl: json['chat_tools_manifest_url'],
     );
   }
 
@@ -202,6 +205,7 @@ class ExternalIntegration {
       'setup_instructions_file_path': setupInstructionsFilePath,
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
       'actions': actions?.map((e) => e.toJson()).toList(),
+      'chat_tools_manifest_url': chatToolsManifestUrl,
     };
   }
 }

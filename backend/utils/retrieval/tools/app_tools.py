@@ -8,7 +8,8 @@ in the Omi chat when the app is installed by a user.
 import contextvars
 from typing import List, Optional, Callable, Any, Dict
 import httpx
-from langchain_core.tools import tool
+from pydantic import BaseModel, Field, create_model
+from langchain_core.tools import StructuredTool
 from langchain_core.runnables import RunnableConfig
 
 from models.app import ChatTool
@@ -24,47 +25,61 @@ except ImportError:
 _tool_status_messages: Dict[str, str] = {}
 
 
-def _infer_parameters_from_description(tool_name: str, description: str) -> Dict[str, Any]:
+def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type:
     """
-    Infer parameter types from tool name and description.
-    Returns a dict mapping parameter names to their types and defaults.
+    Create a Pydantic model from a JSON schema parameters definition.
+
+    Args:
+        tool_name: Name of the tool (used for model naming)
+        parameters: JSON schema with 'properties' and 'required' keys
+
+    Returns:
+        A Pydantic model class
     """
-    description_lower = description.lower()
-    tool_name_lower = tool_name.lower()
+    properties = parameters.get('properties', {})
+    required = set(parameters.get('required', []))
 
-    params = {}
+    field_definitions = {}
 
-    # Common patterns for Slack and similar tools
-    if 'send' in tool_name_lower and 'message' in tool_name_lower:
-        params['message'] = (str, ...)  # Required string
-        if 'channel' in description_lower:
-            params['channel'] = (Optional[str], None)  # Optional string
+    for param_name, param_schema in properties.items():
+        param_type = param_schema.get('type', 'string')
+        param_desc = param_schema.get('description', '')
+        is_required = param_name in required
 
-    # Search tools
-    if 'search' in tool_name_lower:
-        params['query'] = (str, ...)  # Required string
-        if 'channel' in description_lower:
-            params['channel'] = (Optional[str], None)
+        # Map JSON schema types to Python types
+        if param_type == 'string':
+            py_type = str
+        elif param_type == 'integer':
+            py_type = int
+        elif param_type == 'boolean':
+            py_type = bool
+        elif param_type == 'number':
+            py_type = float
+        elif param_type == 'array':
+            py_type = list
+        else:
+            py_type = str
 
-    # List tools
-    if 'list' in tool_name_lower:
-        # Usually no required parameters
-        pass
+        # Create field with or without default
+        if is_required:
+            field_definitions[param_name] = (py_type, Field(..., description=param_desc))
+        else:
+            # For optional fields, wrap in Optional and provide None default
+            field_definitions[param_name] = (Optional[py_type], Field(default=None, description=param_desc))
 
-    # Generic message parameter if description mentions "message"
-    if 'message' in description_lower and 'message' not in params:
-        params['message'] = (str, ...)
+    # Create a unique model name
+    model_name = f"{tool_name.replace('-', '_').replace('.', '_')}Input"
 
-    # Generic query parameter if description mentions "query" or "search"
-    if ('query' in description_lower or 'search' in description_lower) and 'query' not in params:
-        params['query'] = (str, ...)
-
-    return params
+    # Create and return the dynamic Pydantic model
+    return create_model(model_name, **field_definitions)
 
 
 def create_app_tool(app_tool: ChatTool, app_id: str, app_name: str) -> Callable:
     """
     Dynamically create a LangChain tool from an app tool definition.
+
+    Uses the stored parameters schema to create a properly typed tool
+    that the LLM can understand and call with correct arguments.
 
     Args:
         app_tool: ChatTool definition from the app
@@ -72,76 +87,36 @@ def create_app_tool(app_tool: ChatTool, app_id: str, app_name: str) -> Callable:
         app_name: Name of the app (for display purposes)
 
     Returns:
-        A LangChain tool function
+        A LangChain StructuredTool
     """
     tool_name = f"{app_id}_{app_tool.name}"
-
-    # Infer parameters from description if not provided in schema
-    if app_tool.parameters and isinstance(app_tool.parameters, dict):
-        # Use provided parameters schema
-        param_fields = {}
-        properties = app_tool.parameters.get('properties', {})
-        required = app_tool.parameters.get('required', [])
-
-        for param_name, param_schema in properties.items():
-            param_type = param_schema.get('type', 'string')
-            is_required = param_name in required
-
-            # Map JSON schema types to Python types
-            if param_type == 'string':
-                py_type = str if is_required else Optional[str]
-            elif param_type == 'integer':
-                py_type = int if is_required else Optional[int]
-            elif param_type == 'boolean':
-                py_type = bool if is_required else Optional[bool]
-            else:
-                py_type = str if is_required else Optional[str]
-
-            if is_required:
-                param_fields[param_name] = (py_type, ...)
-            else:
-                param_fields[param_name] = (py_type, None)
-    else:
-        # Infer from description
-        param_fields = _infer_parameters_from_description(app_tool.name, app_tool.description)
-
-    # Build function signature dynamically based on tool name
-    # For send_slack_message, we want: message: str, channel: Optional[str] = None, config: RunnableConfig = None
-    if 'send' in app_tool.name.lower() and 'message' in app_tool.name.lower():
-        # Special handling for send_slack_message
-        async def tool_function(message: str, channel: Optional[str] = None, config: RunnableConfig = None) -> str:
-            """Tool dynamically created from app definition."""
-            kwargs = {'message': message}
-            if channel:
-                kwargs['channel'] = channel
-            return await _call_tool_endpoint(kwargs, config, app_tool, app_id)
-
-    elif 'search' in app_tool.name.lower():
-        # Special handling for search tools
-        async def tool_function(query: str, channel: Optional[str] = None, config: RunnableConfig = None) -> str:
-            """Tool dynamically created from app definition."""
-            kwargs = {'query': query}
-            if channel:
-                kwargs['channel'] = channel
-            return await _call_tool_endpoint(kwargs, config, app_tool, app_id)
-
-    else:
-        # Generic fallback - use **kwargs but with better description
-        async def tool_function(**kwargs) -> str:
-            """Tool dynamically created from app definition."""
-            config_param = kwargs.pop('config', None)
-            return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
-
-    # Create the tool
-    dynamic_tool = tool(tool_function)
-    dynamic_tool.name = tool_name
-    dynamic_tool.description = f"{app_tool.description} (from {app_name} app)"
 
     # Store status message in global mapping for UI display (if provided)
     if app_tool.status_message:
         _tool_status_messages[tool_name] = app_tool.status_message
 
-    return dynamic_tool
+    # Create a Pydantic model from the schema (or empty model if no parameters)
+    if app_tool.parameters and isinstance(app_tool.parameters, dict) and app_tool.parameters.get('properties'):
+        args_schema = _create_pydantic_model_from_schema(app_tool.name, app_tool.parameters)
+    else:
+        # Create an empty schema for tools with no parameters
+        model_name = f"{app_tool.name.replace('-', '_').replace('.', '_')}Input"
+        args_schema = create_model(model_name)
+
+    # Create the async function that will be called
+    async def tool_function(**kwargs) -> str:
+        """Tool dynamically created from app definition."""
+        config_param = kwargs.pop('config', None)
+        return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
+
+    # Create StructuredTool with the schema
+    return StructuredTool(
+        name=tool_name,
+        description=f"{app_tool.description} (from {app_name} app)",
+        func=lambda **kwargs: None,  # Sync placeholder (won't be used)
+        coroutine=tool_function,
+        args_schema=args_schema,
+    )
 
 
 def get_tool_status_message(tool_name: str) -> Optional[str]:
