@@ -833,7 +833,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
                 self.menuBarManager?.observeFloatingControlBar(self.floatingControlBar!)
 
-                self.floatingControlBar?.onAskAI = { fileUrl in
+                self.floatingControlBar?.onAskAI = { [weak self] fileUrl in
                     let screenshot: URL?
                     if let url = fileUrl {
                         screenshot = url
@@ -948,12 +948,6 @@ extension MainFlutterWindow {
             name: GlobalShortcutManager.toggleFloatingButtonNotification,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAskAIShortcut),
-            name: GlobalShortcutManager.askAINotification,
-            object: nil
-        )
     }
 
     // MARK: - Menu Bar Action Handlers
@@ -971,13 +965,20 @@ extension MainFlutterWindow {
     }
 
     @objc private func handleMenuBarOpenChatWindow() {
-        // Ensure floating control bar exists before using it
-        if floatingControlBar == nil {
+        // Activate the app first so it can receive keyboard input
+        NSApp.activate(ignoringOtherApps: true)
+
+        let fileUrl = ScreenCaptureManager.captureScreen()
+
+        // Ensure floating control bar exists and is visible
+        if floatingControlBar == nil || !(floatingControlBar?.isVisible ?? false) {
             showFloatingControlBar()
         }
 
-        let fileUrl = ScreenCaptureManager.captureScreen()
-        FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        // Small delay to ensure floating bar is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        }
     }
 
     private func handlePlayPauseWithRetry() {
@@ -1006,22 +1007,6 @@ extension MainFlutterWindow {
             // Activate the app first so it can receive keyboard input
             NSApp.activate(ignoringOtherApps: true)
             showFloatingControlBar()
-        }
-    }
-
-    @objc private func handleAskAIShortcut() {
-        // Activate the app first so it can receive keyboard input
-        NSApp.activate(ignoringOtherApps: true)
-
-        let fileUrl = ScreenCaptureManager.captureScreen()
-
-        // Ensure floating control bar exists and is visible
-        if floatingControlBar == nil || !(floatingControlBar?.isVisible ?? false) {
-            showFloatingControlBar()
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
         }
     }
 }

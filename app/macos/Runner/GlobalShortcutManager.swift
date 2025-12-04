@@ -143,9 +143,7 @@ class GlobalShortcutManager {
     private var hotKeyRefs: [EventHotKeyRef?] = []
     
     private enum HotKeyID: UInt32 {
-        case askAI = 1
-        case askAIKeypad = 2
-        case toggleButton = 3
+        case toggleButton = 1
     }
     
     // UserDefaults keys
@@ -166,17 +164,11 @@ class GlobalShortcutManager {
         // Unregister any existing shortcuts before registering new ones.
         unregisterShortcuts()
         
-        // Register Ask AI shortcut (customizable)
-        let (keyCode, modifiers) = getAskAIShortcut()
-        registerHotKey(keyCode: keyCode, modifiers: Int(modifiers), id: .askAI)
-        
-        // Also register keypad enter as alternative if not customized
-        if keyCode == kVK_Return && modifiers == UInt32(cmdKey) {
-            registerHotKey(keyCode: kVK_ANSI_KeypadEnter, modifiers: cmdKey, id: .askAIKeypad)
-        }
-        
-        // Register toggle button shortcut (fixed)
+        // Register toggle button shortcut (global) - Cmd+\
         registerHotKey(keyCode: 42, modifiers: cmdKey, id: .toggleButton) // kVK_Backslash
+        
+        // Note: Ask AI shortcut is now handled by the menu bar item (app-scoped)
+        // This allows other apps to use the same shortcut when Omi is not active
     }
     
     private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) {
@@ -213,9 +205,6 @@ class GlobalShortcutManager {
         }
         
         switch id {
-        case .askAI, .askAIKeypad:
-            print("CMD+Enter shortcut detected. Triggering Ask omi...")
-            NotificationCenter.default.post(name: GlobalShortcutManager.askAINotification, object: nil)
         case .toggleButton:
             print("CMD+\\ shortcut detected. Toggling floating button...")
             NotificationCenter.default.post(name: GlobalShortcutManager.toggleFloatingButtonNotification, object: nil)
