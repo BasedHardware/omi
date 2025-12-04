@@ -162,7 +162,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               return CategorySection(
                 categoryName: groupTitle.isEmpty ? 'Apps' : groupTitle,
                 apps: groupApps,
-                showViewAll: groupApps.isNotEmpty,
+                showViewAll: groupApps.length > 9,
                 onViewAll: () {
                   if (capabilityMap != null) {
                     // Capability-based navigation - use title from grouped response to match section title
