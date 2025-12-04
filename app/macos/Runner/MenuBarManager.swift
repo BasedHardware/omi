@@ -9,6 +9,7 @@ class MenuBarManager: NSObject {
     static let toggleWindowNotification = Notification.Name("com.omi.menubar.toggleWindow")
     static let toggleFloatingChatNotification = Notification.Name("com.omi.menubar.toggleFloatingChat")
     static let openChatWindowNotification = Notification.Name("com.omi.menubar.openChatWindow")
+    static let openKeyboardShortcutsNotification = Notification.Name("com.omi.menubar.openKeyboardShortcuts")
     static let quitApplicationNotification = Notification.Name("com.omi.menubar.quitApplication")
     
     // MARK: - Singleton
@@ -52,6 +53,9 @@ class MenuBarManager: NSObject {
             object: nil
         )
         
+        // Setup main application menu for keyboard shortcuts to actually work
+        setupMainAppMenu()
+        
         // Set up the button with custom icon
         if let button = statusBarItem.button {
             // Load custom icon from assets
@@ -85,14 +89,20 @@ class MenuBarManager: NSObject {
         toggleControlBarItem.tag = 200
         menu.addItem(toggleControlBarItem)
         
-        // Chat Window - use custom shortcut
-        let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
-        let keyEquivalent = keyEquivalentString(for: keyCode)
-        let openChatWindowItem = NSMenuItem(title: "Ask omi", action: #selector(openChatWindow), keyEquivalent: keyEquivalent)
+        // Chat Window - no shortcut label here since it's app-scoped (shown in main app menu)
+        let openChatWindowItem = NSMenuItem(title: "Ask omi", action: #selector(openChatWindow), keyEquivalent: "")
         openChatWindowItem.target = self
-        openChatWindowItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
         openChatWindowItem.tag = 201
         menu.addItem(openChatWindowItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Keyboard Shortcuts
+        let keyboardShortcutsItem = NSMenuItem(title: "Keyboard Shortcuts...", action: #selector(openKeyboardShortcuts), keyEquivalent: ",")
+        keyboardShortcutsItem.target = self
+        keyboardShortcutsItem.keyEquivalentModifierMask = [.command]
+        keyboardShortcutsItem.tag = 202
+        menu.addItem(keyboardShortcutsItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -117,6 +127,65 @@ class MenuBarManager: NSObject {
         menu.addItem(quitItem)
         
         statusBarItem.menu = menu
+    }
+    
+    // MARK: - Main Application Menu (for keyboard shortcuts)
+    
+    private func setupMainAppMenu() {
+        // Get or create the main menu
+        if NSApp.mainMenu == nil {
+            NSApp.mainMenu = NSMenu()
+        }
+        
+        guard let mainMenu = NSApp.mainMenu else { return }
+        
+        // Find or create the app menu item
+        var appMenuItem: NSMenuItem
+        if let existingItem = mainMenu.item(at: 0) {
+            appMenuItem = existingItem
+        } else {
+            appMenuItem = NSMenuItem()
+            mainMenu.addItem(appMenuItem)
+        }
+        
+        // Create submenu if needed
+        if appMenuItem.submenu == nil {
+            appMenuItem.submenu = NSMenu(title: "Omi")
+        }
+        
+        guard let appMenu = appMenuItem.submenu else { return }
+        
+        // Remove existing Ask omi item if present
+        if let existingItem = appMenu.item(withTag: 301) {
+            appMenu.removeItem(existingItem)
+        }
+        
+        // Add Ask omi shortcut to the main app menu
+        let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
+        let keyEquivalent = keyEquivalentString(for: keyCode)
+        
+        let askOmiItem = NSMenuItem(title: "Ask omi", action: #selector(openChatWindow), keyEquivalent: keyEquivalent)
+        askOmiItem.target = self
+        askOmiItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
+        askOmiItem.tag = 301
+        
+        // Insert at beginning of app menu
+        appMenu.insertItem(askOmiItem, at: 0)
+    }
+    
+    private func updateMainAppMenuShortcut() {
+        guard let mainMenu = NSApp.mainMenu,
+              let appMenuItem = mainMenu.item(at: 0),
+              let appMenu = appMenuItem.submenu,
+              let askOmiItem = appMenu.item(withTag: 301) else {
+            return
+        }
+        
+        let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
+        let keyEquivalent = keyEquivalentString(for: keyCode)
+        
+        askOmiItem.keyEquivalent = keyEquivalent
+        askOmiItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
     }
     
     // MARK: - Meeting Display
@@ -313,6 +382,10 @@ class MenuBarManager: NSObject {
         NotificationCenter.default.post(name: MenuBarManager.openChatWindowNotification, object: nil)
     }
     
+    @objc private func openKeyboardShortcuts() {
+        NotificationCenter.default.post(name: MenuBarManager.openKeyboardShortcutsNotification, object: nil)
+    }
+    
     @objc private func openOmiWebsite() {
         if let url = URL(string: "https://omi.me") {
             NSWorkspace.shared.open(url)
@@ -325,20 +398,12 @@ class MenuBarManager: NSObject {
     
     @objc private func handleShortcutDidChange() {
         updateAskOmiMenuItem()
+        updateMainAppMenuShortcut()
     }
     
     private func updateAskOmiMenuItem() {
-        guard let menu = statusBarItem?.menu,
-              let menuItem = menu.item(withTag: 201) else {
-            print("WARNING: Cannot find Ask omi menu item with tag 201")
-            return
-        }
-        
-        let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
-        let keyEquivalent = keyEquivalentString(for: keyCode)
-        
-        menuItem.keyEquivalent = keyEquivalent
-        menuItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
+        // Status bar menu item no longer shows shortcut (it's app-scoped, shown in main app menu)
+        // This method kept for potential future use
     }
     
     // MARK: - Helper Methods
