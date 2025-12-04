@@ -803,14 +803,6 @@ def normalize_app_numeric_fields(app_dict: dict) -> dict:
     return app_dict
 
 
-def filter_apps_by_category(apps: List[App], category: str) -> List[App]:
-    """Filter apps by category, handling special 'popular' category."""
-    if category == 'popular':
-        return [app for app in apps if getattr(app, 'is_popular', False)]
-    else:
-        return [app for app in apps if (app.category or 'other') == category]
-
-
 def sort_apps_by_installs_only(apps: List[App]) -> List[App]:
     """Sort apps by install count only (no score calculation)."""
     return sorted(apps, key=lambda a: a.installs, reverse=True)
@@ -859,62 +851,6 @@ def build_pagination_metadata(total: int, offset: int, limit: int, category: str
     return metadata
 
 
-def group_apps_by_category(apps: List[App], categories: List[dict]) -> Dict[str, List[App]]:
-    """Group apps by category, including special 'popular' category."""
-    grouped = defaultdict(list)
-
-    # Add popular group first if there are popular apps (sorted by installs only)
-    popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
-    if popular_apps:
-        grouped['popular'] = sort_apps_by_installs_only(popular_apps)
-
-    # Group remaining apps by their actual category
-    for app in apps:
-        category_id = app.category or 'other'
-        grouped[category_id].append(app)
-
-    # Sort each category by score (except popular which is already sorted by installs)
-    for category_id in grouped:
-        if category_id != 'popular':
-            grouped[category_id] = sort_apps_by_installs(grouped[category_id])
-
-    return grouped
-
-
-def build_category_groups_response(
-    grouped_apps: Dict[str, List[App]], categories: List[dict], offset: int, limit: int
-) -> List[dict]:
-    """Build the groups response for v2/apps endpoint."""
-    id_to_title = {c['id']: c['title'] for c in categories}
-
-    ordered_keys = [c['id'] for c in categories]
-    for key in grouped_apps.keys():
-        if key not in ordered_keys:
-            ordered_keys.append(key)
-
-    groups = []
-    for category_id in ordered_keys:
-        apps = grouped_apps.get(category_id, [])
-        if not apps:
-            continue
-
-        total = len(apps)
-        page = paginate_apps(apps, offset, limit)
-
-        groups.append(
-            {
-                'category': {
-                    'id': category_id,
-                    'title': id_to_title.get(category_id, category_id.title().replace('-', ' ')),
-                },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
-                'pagination': build_pagination_metadata(total, offset, limit, category_id),
-            }
-        )
-
-    return groups
-
-
 def get_capabilities_list() -> List[dict]:
     """Get the list of app capabilities for grouping."""
     return [
@@ -922,115 +858,35 @@ def get_capabilities_list() -> List[dict]:
         {'title': 'Integrations', 'id': 'external_integration'},
         {'title': 'Chat Assistants', 'id': 'chat'},
         {'title': 'Summary Apps', 'id': 'memories'},
+        {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
     ]
 
 
-def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[str, List[App]]:
-    """Group apps by capability, including special 'popular' group first.
-
-    Filtering rules:
-    - Chat section: excludes apps with external_integration capability
-    - Conversations section: excludes apps with external_integration or chat capability
-    - Notification section: removed entirely
-    - Other sections exclude apps that are in the Popular section
-    """
-    grouped = defaultdict(list)
-
-    # Add popular group first if there are popular apps (sorted by installs only)
-    popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
-    popular_app_ids = {app.id for app in popular_apps}
-    if popular_apps:
-        grouped['popular'] = sort_apps_by_installs_only(popular_apps)
-
-    # Group apps by their capabilities with filtering rules
-    # Exclude popular apps from other sections
-    for app in apps:
-        # Skip popular apps in other sections
-        if app.id in popular_app_ids:
-            continue
-
-        app_capabilities = app.capabilities or set()
-
-        # Chat section: exclude apps with external_integration
-        if 'chat' in app_capabilities and 'external_integration' not in app_capabilities:
-            grouped['chat'].append(app)
-
-        # Conversations/memories section: exclude apps with external_integration or chat
-        if (
-            'memories' in app_capabilities
-            and 'external_integration' not in app_capabilities
-            and 'chat' not in app_capabilities
-        ):
-            grouped['memories'].append(app)
-
-        # External integration section: include all apps with external_integration
-        if 'external_integration' in app_capabilities:
-            grouped['external_integration'].append(app)
-
-    # Sort each capability group by score (except popular which is already sorted by installs)
-    for cap_id in grouped:
-        if cap_id != 'popular':
-            grouped[cap_id] = sort_apps_by_installs(grouped[cap_id])
-
-    return grouped
+def get_categories_list() -> List[dict]:
+    """Get the list of app categories for grouping."""
+    return [
+        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
+        {'title': 'Personality Clone', 'id': 'personality-emulation'},
+        {'title': 'Health', 'id': 'health-and-wellness'},
+        {'title': 'Education', 'id': 'education-and-learning'},
+        {'title': 'Communication', 'id': 'communication-improvement'},
+        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
+        {'title': 'Financial', 'id': 'financial'},
+        {'title': 'Travel', 'id': 'travel-and-exploration'},
+        {'title': 'Safety', 'id': 'safety-and-security'},
+        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
+        {'title': 'Social', 'id': 'social-and-relationships'},
+        {'title': 'News', 'id': 'news-and-information'},
+        {'title': 'Utilities', 'id': 'utilities-and-tools'},
+        {'title': 'Other', 'id': 'other'},
+    ]
 
 
-def filter_apps_by_capability(apps: List[App], capability: str) -> List[App]:
-    """Filter apps by capability, handling special 'popular' capability.
-
-    Filtering rules:
-    - Chat: excludes apps with external_integration capability
-    - Conversations (memories): excludes apps with external_integration or chat capability
-    """
-    if capability == 'popular':
-        return [app for app in apps if getattr(app, 'is_popular', False)]
-    elif capability == 'chat':
-        return [
-            app
-            for app in apps
-            if 'chat' in (app.capabilities or set()) and 'external_integration' not in (app.capabilities or set())
-        ]
-    elif capability == 'memories':
-        return [
-            app
-            for app in apps
-            if 'memories' in (app.capabilities or set())
-            and 'external_integration' not in (app.capabilities or set())
-            and 'chat' not in (app.capabilities or set())
-        ]
-    else:
-        return [app for app in apps if capability in (app.capabilities or set())]
-
-
-def build_capability_groups_response(
-    grouped_apps: Dict[str, List[App]], capabilities: List[dict], offset: int, limit: int
-) -> List[dict]:
-    """Build the groups response for v2/apps endpoint grouped by capability."""
-    id_to_title = {c['id']: c['title'] for c in capabilities}
-
-    ordered_keys = [c['id'] for c in capabilities]
-    for key in grouped_apps.keys():
-        if key not in ordered_keys:
-            ordered_keys.append(key)
-
-    groups = []
-    for capability_id in ordered_keys:
-        apps = grouped_apps.get(capability_id, [])
-        if not apps:
-            continue
-
-        total = len(apps)
-        page = paginate_apps(apps, offset, limit)
-
-        groups.append(
-            {
-                'capability': {
-                    'id': capability_id,
-                    'title': id_to_title.get(capability_id, capability_id.title().replace('_', ' ')),
-                },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
-                'pagination': build_pagination_metadata(total, offset, limit, capability_id),
-            }
-        )
-
-    return groups
+# DEPRECATED: Master category functions moved to frontend
+# Frontend now handles all category mapping and grouping logic
+# def get_master_category_mapping(...)
+# def get_master_categories_list(...)
+# def group_capability_apps_by_category(...)
+# def build_capability_category_groups_response(...)
