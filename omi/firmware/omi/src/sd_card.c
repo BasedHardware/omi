@@ -1,7 +1,9 @@
 #include "lib/core/sd_card.h"
+#include "lib/core/transport.h"
 #include <ff.h>
 #include <zephyr/fs/fs.h>
 #include <string.h>
+#include <stdio.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/fs/fs.h>
@@ -20,6 +22,8 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 #define SD_FSYNC_THRESHOLD 20000    // Threshold in bytes to trigger fsync
 #define WRITE_BATCH_COUNT 10        // Number of writes to batch before writing to SD card
 #define ERROR_THRESHOLD 5           // Maximum allowed write errors before taking action
+#define CHUNK_DURATION_SECONDS 300  // 5 minutes per chunk file
+#define MAX_FILENAME_LEN 64         // Maximum filename length
 
 // batch write buffer
 static uint8_t write_batch_buffer[WRITE_BATCH_COUNT * MAX_WRITE_SIZE];
@@ -48,6 +52,12 @@ static bool is_mounted = false;
 static bool sd_enabled = false;
 static uint32_t current_file_size = 0;
 static size_t bytes_since_sync = 0;
+
+// Time-based chunking state
+static bool is_chunking_mode = false;
+static int64_t current_chunk_start_time = 0;  // Uptime in milliseconds when current chunk started
+static char current_chunk_file_path[MAX_FILENAME_LEN] = {0};
+static uint32_t current_chunk_file_size = 0;
 
 // Get the device pointer for the SDHC SPI slot from the device tree
 static const struct device *const sd_dev = DEVICE_DT_GET(DT_NODELABEL(sdhc0));
@@ -321,6 +331,157 @@ bool is_sd_on(void)
     return sd_enabled;
 }
 
+/**
+ * @brief Generate a timestamp-based filename for chunked audio files
+ * Format: audio_<timestamp>.bin where timestamp is Unix timestamp in seconds
+ */
+static void generate_chunk_filename(char *filename, size_t filename_size, int64_t timestamp_sec)
+{
+    snprintf(filename, filename_size, "/SD:/audio/audio_%lld.bin", (long long)timestamp_sec);
+}
+
+/**
+ * @brief Check if we need to create a new chunk file (every 5 minutes)
+ * Returns true if a new chunk should be created
+ */
+static bool should_create_new_chunk(void)
+{
+    if (!is_chunking_mode) {
+        return false;
+    }
+
+    int64_t current_uptime_ms = k_uptime_get();
+    int64_t elapsed_ms = current_uptime_ms - current_chunk_start_time;
+    int64_t elapsed_sec = elapsed_ms / 1000;
+
+    return (elapsed_sec >= CHUNK_DURATION_SECONDS);
+}
+
+/**
+ * @brief Create a new chunk file with timestamp in filename
+ */
+static int create_new_chunk_file(void)
+{
+    // Close current file if open
+    if (strlen(current_chunk_file_path) > 0) {
+        fs_close(&fil_data);
+        fs_file_t_init(&fil_data);
+    }
+
+    // Get current uptime and convert to approximate Unix timestamp
+    // We use uptime since boot + a base timestamp (can be set when connected)
+    // For now, use uptime seconds as a relative timestamp
+    int64_t current_uptime_ms = k_uptime_get();
+    int64_t current_uptime_sec = current_uptime_ms / 1000;
+    
+    // Generate filename with timestamp
+    generate_chunk_filename(current_chunk_file_path, sizeof(current_chunk_file_path), current_uptime_sec);
+
+    // Open new file
+    int res = fs_open(&fil_data, current_chunk_file_path, FS_O_CREATE | FS_O_RDWR | FS_O_TRUNC);
+    if (res < 0) {
+        LOG_ERR("[SD_WORK] Failed to create new chunk file %s: %d\n", current_chunk_file_path, res);
+        current_chunk_file_path[0] = '\0';
+        return res;
+    }
+
+    current_chunk_start_time = current_uptime_ms;
+    current_chunk_file_size = 0;
+    current_file_size = 0;
+    bytes_since_sync = 0;
+
+    LOG_INF("[SD_WORK] Created new chunk file: %s\n", current_chunk_file_path);
+    return 0;
+}
+
+/**
+ * @brief Flush any pending batch data to current file
+ */
+static void flush_pending_batch(void)
+{
+    if (write_batch_offset > 0 && write_batch_counter > 0) {
+        LOG_INF("[SD_WORK] Flushing pending batch data (%u bytes) before mode switch", 
+                (unsigned)write_batch_offset);
+        int res = fs_seek(&fil_data, 0, FS_SEEK_END);
+        if (res < 0) {
+            LOG_ERR("[SD_WORK] seek end before flush failed: %d\n", res);
+        } else {
+            ssize_t bw = fs_write(&fil_data, write_batch_buffer, write_batch_offset);
+            if (bw > 0) {
+                bytes_since_sync += bw;
+                current_file_size += bw;
+                if (is_chunking_mode) {
+                    current_chunk_file_size += bw;
+                }
+                // Sync immediately when switching modes
+                res = fs_sync(&fil_data);
+                if (res < 0) {
+                    LOG_ERR("[SD_WORK] fs_sync after flush failed: %d\n", res);
+                }
+            }
+            write_batch_offset = 0;
+            write_batch_counter = 0;
+            bytes_since_sync = 0;
+        }
+    }
+}
+
+/**
+ * @brief Enable or disable chunking mode based on connection status
+ * Flushes pending data immediately when switching modes
+ */
+static void update_chunking_mode(void)
+{
+    struct bt_conn *conn = get_current_connection();
+    bool should_chunk = (conn == NULL);
+
+    if (should_chunk && !is_chunking_mode) {
+        // Switching to chunking mode - flush any pending data first
+        LOG_INF("[SD_WORK] Device disconnected, enabling time-based chunking mode");
+        flush_pending_batch();
+        is_chunking_mode = true;
+        // Create first chunk file immediately
+        create_new_chunk_file();
+    } else if (!should_chunk && is_chunking_mode) {
+        // Switching back to single file mode - flush any pending data first
+        LOG_INF("[SD_WORK] Device connected, switching back to single file mode");
+        flush_pending_batch();
+        is_chunking_mode = false;
+        // Close current chunk file and switch back to default file
+        if (strlen(current_chunk_file_path) > 0) {
+            fs_close(&fil_data);
+            fs_file_t_init(&fil_data);
+            current_chunk_file_path[0] = '\0';
+        }
+        // Reopen default file
+        int res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
+        if (res < 0) {
+            LOG_ERR("[SD_WORK] Failed to reopen default file: %d\n", res);
+        } else {
+            fs_seek(&fil_data, 0, FS_SEEK_END);
+            struct fs_dirent data_stat;
+            if (fs_stat(FILE_DATA_PATH, &data_stat) == 0) {
+                current_file_size = data_stat.size;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Public function to force immediate chunking mode check
+ * Can be called from transport layer on disconnection
+ */
+void sd_check_chunking_mode(void)
+{
+    sd_req_t req = {0};
+    req.type = REQ_CHECK_CHUNKING_MODE;
+    
+    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
+    if (ret) {
+        LOG_ERR("Failed to queue chunking mode check request: %d", ret);
+    }
+}
+
 /* SD worker thread */
 void sd_worker_thread(void)
 {
@@ -343,6 +504,12 @@ void sd_worker_thread(void)
             LOG_ERR("[SD_WORK] mkdir %s failed: %d\n", FILE_DATA_DIR, mk_res);
         }
     }
+
+    /* Initialize chunking state */
+    is_chunking_mode = false;
+    current_chunk_start_time = 0;
+    current_chunk_file_path[0] = '\0';
+    current_chunk_file_size = 0;
 
     /* Open data file (append) */
     fs_file_t_init(&fil_data);
@@ -392,10 +559,19 @@ void sd_worker_thread(void)
     }
 
     while (1) {
-        /* Wait for a request */
-        if (k_msgq_get(&sd_msgq, &req, K_FOREVER) == 0) {
+        /* Wait for a request with timeout to allow periodic checks */
+        if (k_msgq_get(&sd_msgq, &req, K_MSEC(500)) == 0) {
             switch (req.type) {
             case REQ_WRITE_DATA:
+                // Update chunking mode based on connection status
+                update_chunking_mode();
+
+                // Check if we need to create a new chunk file
+                if (should_create_new_chunk()) {
+                    LOG_INF("[SD_WORK] Chunk duration reached, creating new chunk file");
+                    create_new_chunk_file();
+                }
+
                 LOG_DBG("[SD_WORK] Buffering %u bytes to batch write\n", (unsigned)req.u.write.len);
 
                 memcpy(write_batch_buffer + write_batch_offset, req.u.write.buf, req.u.write.len);
@@ -430,7 +606,11 @@ void sd_worker_thread(void)
                             fs_close(&fil_data);
                             fs_file_t_init(&fil_data);
                             LOG_INF("[SD_WORK] Re-opening data file after too many errors.\n");
-                            int reopen_res = fs_open(&fil_data, FILE_DATA_PATH, FS_O_CREATE | FS_O_RDWR);
+                            // Use appropriate file based on chunking mode
+                            const char *file_to_reopen = is_chunking_mode && strlen(current_chunk_file_path) > 0 
+                                ? current_chunk_file_path 
+                                : FILE_DATA_PATH;
+                            int reopen_res = fs_open(&fil_data, file_to_reopen, FS_O_CREATE | FS_O_RDWR);
                             if (reopen_res == 0) {
                                 writing_error_counter = 0;
                                 fs_seek(&fil_data, 0, FS_SEEK_END);
@@ -446,6 +626,9 @@ void sd_worker_thread(void)
 
                     bytes_since_sync += bw > 0 ? bw : 0;
                     current_file_size += bw > 0 ? bw : 0;
+                    if (is_chunking_mode) {
+                        current_chunk_file_size += bw > 0 ? bw : 0;
+                    }
                     write_batch_offset = 0;
                     write_batch_counter = 0;
                 }
@@ -576,8 +759,24 @@ void sd_worker_thread(void)
                     k_sem_give(&req.u.offset.resp->sem);
                 }
                 break;
+            case REQ_CHECK_CHUNKING_MODE:
+                // Immediate check and mode switch
+                LOG_DBG("[SD_WORK] Forced chunking mode check");
+                update_chunking_mode();
+                break;
+
             default:
                 LOG_ERR("[SD_WORK] unknown req type\n");
+            }
+        } else {
+            // Timeout - no request pending, check connection status periodically
+            // This ensures immediate mode switch even when no writes are happening
+            static int64_t last_check_time = 0;
+            int64_t current_time = k_uptime_get();
+            // Check every 500ms when idle
+            if (current_time - last_check_time > 500) {
+                update_chunking_mode();
+                last_check_time = current_time;
             }
         }
     }

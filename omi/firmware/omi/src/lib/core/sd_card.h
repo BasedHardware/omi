@@ -15,7 +15,8 @@ typedef enum {
     REQ_WRITE_DATA,
     REQ_READ_DATA,
     REQ_SAVE_OFFSET,
-    REQ_READ_OFFSET
+    REQ_READ_OFFSET,
+    REQ_CHECK_CHUNKING_MODE  // Force immediate check and mode switch
 } sd_req_type_t;
 
 /* Read request response object */
@@ -157,6 +158,12 @@ void sd_on(void);
  * @brief Turn off SD card power
  */
 void sd_off(void);
+
+/**
+ * @brief Force immediate check and update of chunking mode
+ * Call this when connection state changes to ensure immediate mode switch
+ */
+void sd_check_chunking_mode(void);
 
 /**
  * @brief Check if SD card is powered on
