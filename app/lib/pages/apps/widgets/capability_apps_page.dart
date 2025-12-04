@@ -174,9 +174,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
       physics: const NeverScrollableScrollPhysics(),
       child: Column(
         children: [
-          _buildShimmerCategorySection(),
-          _buildShimmerCategorySection(),
-          _buildShimmerCategorySection(),
+          ...List.generate(3, (_) => _buildShimmerCategorySection()),
           const SizedBox(height: 100),
         ],
       ),
@@ -190,7 +188,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: Text(
-          widget.capability.id == 'chat' ? 'Chat Apps' : widget.capability.title,
+          widget.capability.title,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -201,29 +199,6 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
           icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        actions: [
-          if (!_isLoading)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade700,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    '$_totalCount apps',
-                    style: TextStyle(
-                      color: Colors.grey.shade300,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
       body: _isLoading
           ? _buildShimmerView()

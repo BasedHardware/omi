@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -8,7 +10,6 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
-import 'dart:math';
 
 /// A category section widget with unlimited horizontal scrolling for capability pages.
 /// Unlike CategorySection which shows max 9 items, this shows all apps in the category.
@@ -16,11 +17,29 @@ class CapabilityCategorySection extends StatelessWidget {
   final String categoryName;
   final List<App> apps;
 
+  // Layout constants
+  static const double _targetItemHeight = 85.0;
+  static const double _crossAxisSpacing = 0.0;
+  static const double _mainAxisSpacing = 14.0;
+  static const int _maxRows = 3;
+  static const double _titleSectionHeight = 60.0;
+  static const double _childAspectRatio = 0.28;
+
   const CapabilityCategorySection({
     super.key,
     required this.categoryName,
     required this.apps,
   });
+
+  /// Look up category title from backend-provided categories.
+  String _getCategoryTitle(BuildContext context, App app) {
+    final categories = context.read<AddAppProvider>().categories;
+    final category = categories.firstWhere(
+      (c) => c.id == app.category,
+      orElse: () => Category(id: app.category, title: app.getCategoryName()),
+    );
+    return category.title;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,21 +47,14 @@ class CapabilityCategorySection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // --- Configuration Constants ---
-    const double targetItemHeight = 85.0;
-    const double crossAxisSpacing = 0.0;
-    const double mainAxisSpacing = 14.0;
-    const int maxRows = 3;
-    const double titleSectionHeight = 60.0;
-
-    // --- Dynamic Calculation ---
-    final int numRows = min(maxRows, apps.length);
+    final int numRows = min(_maxRows, apps.length);
     if (numRows == 0) return const SizedBox.shrink();
 
-    final double gridContentHeight = numRows * targetItemHeight + max(0, numRows - 1) * crossAxisSpacing;
-    final double totalSectionHeight = titleSectionHeight + gridContentHeight;
+    final double gridContentHeight = numRows * _targetItemHeight + max(0, numRows - 1) * _crossAxisSpacing;
+    final double totalSectionHeight = _titleSectionHeight + gridContentHeight;
 
-    const double childAspectRatio = 0.28;
+    // Pre-compute category titles for all apps to avoid lookups during scroll
+    final categoryTitles = {for (final app in apps) app.id: _getCategoryTitle(context, app)};
 
     return Container(
       height: totalSectionHeight,
@@ -91,15 +103,18 @@ class CapabilityCategorySection extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: numRows,
-                  childAspectRatio: childAspectRatio,
-                  crossAxisSpacing: crossAxisSpacing,
-                  mainAxisSpacing: mainAxisSpacing,
+                  childAspectRatio: _childAspectRatio,
+                  crossAxisSpacing: _crossAxisSpacing,
+                  mainAxisSpacing: _mainAxisSpacing,
                 ),
-                itemCount: apps.length, // Show ALL apps, not just 9
-                itemBuilder: (context, index) => CapabilitySectionAppItemCard(
-                  app: apps[index],
-                  index: index,
-                ),
+                itemCount: apps.length,
+                itemBuilder: (context, index) {
+                  final app = apps[index];
+                  return CapabilitySectionAppItemCard(
+                    app: app,
+                    categoryTitle: categoryTitles[app.id] ?? app.getCategoryName(),
+                  );
+                },
               ),
             ),
           ),
@@ -111,9 +126,13 @@ class CapabilityCategorySection extends StatelessWidget {
 
 class CapabilitySectionAppItemCard extends StatelessWidget {
   final App app;
-  final int index;
+  final String categoryTitle;
 
-  const CapabilitySectionAppItemCard({super.key, required this.app, required this.index});
+  const CapabilitySectionAppItemCard({
+    super.key,
+    required this.app,
+    required this.categoryTitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -190,21 +209,11 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
                       ),
                       Padding(
                         padding: const EdgeInsets.only(top: 2.0),
-                        child: Builder(
-                          builder: (context) {
-                            // Look up category title from backend-provided categories
-                            final categories = context.read<AddAppProvider>().categories;
-                            final category = categories.firstWhere(
-                              (c) => c.id == app.category,
-                              orElse: () => Category(id: app.category, title: app.getCategoryName()),
-                            );
-                            return Text(
-                              category.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.grey, fontSize: 13),
-                            );
-                          },
+                        child: Text(
+                          categoryTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.grey, fontSize: 13),
                         ),
                       ),
                       if (app.ratingAvg != null) ...[

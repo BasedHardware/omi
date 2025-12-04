@@ -896,13 +896,63 @@ def _app_has_auth_steps(app: App) -> bool:
     return len(auth_steps) > 0
 
 
+def _is_notification_app(app: App) -> bool:
+    """Check if app is a notification/simple integration app.
+
+    Returns True for:
+    - Apps with proactive_notification capability
+    - Simple integrations (external_integration without auth_steps, chat, or memories)
+    """
+    app_capabilities = app.capabilities or set()
+    if 'proactive_notification' in app_capabilities:
+        return True
+    has_external_integration = 'external_integration' in app_capabilities
+    has_auth_steps = _app_has_auth_steps(app)
+    return (
+        has_external_integration
+        and not has_auth_steps
+        and 'chat' not in app_capabilities
+        and 'memories' not in app_capabilities
+    )
+
+
+def _get_app_capability(app: App) -> str | None:
+    """Determine which capability section an app belongs to.
+
+    Returns the capability id or None if the app doesn't match any section.
+    Priority order: external_integration (with auth) > chat > memories > proactive_notification
+    """
+    app_capabilities = app.capabilities or set()
+    has_external_integration = 'external_integration' in app_capabilities
+    has_auth_steps = _app_has_auth_steps(app)
+
+    # Notification apps (including simple integrations) go to proactive_notification
+    if _is_notification_app(app):
+        return 'proactive_notification'
+
+    # External integration with auth_steps
+    if has_external_integration and has_auth_steps:
+        return 'external_integration'
+
+    # Chat apps (excluding those with external_integration+auth_steps)
+    if 'chat' in app_capabilities:
+        if not has_external_integration or not has_auth_steps:
+            return 'chat'
+
+    # Memories apps (excluding those with chat or external_integration+auth_steps)
+    if 'memories' in app_capabilities and 'chat' not in app_capabilities:
+        if not has_external_integration or not has_auth_steps:
+            return 'memories'
+
+    return None
+
+
 def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[str, List[App]]:
     """Group apps by capability with enhanced filtering rules.
 
     Groups:
     - popular: Apps marked as is_popular (sorted by installs)
     - proactive_notification: Apps with proactive_notification OR simple integrations
-      (external_integration without auth_steps, chat, or memories)
     - external_integration: Apps with external_integration AND auth_steps
     - chat: Apps with chat (excluding those with external_integration+auth_steps)
     - memories: Apps with memories but no chat (excluding those with external_integration+auth_steps)
@@ -919,30 +969,15 @@ def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[
         grouped['popular'] = sort_apps_by_installs_only(popular_apps)
 
     # Second pass: collect notification apps (exclusive)
-    # Includes apps with proactive_notification AND simple integrations
-    notification_apps = []
     notification_app_ids = set()
     for app in apps:
-        app_capabilities = app.capabilities or set()
-        has_external_integration = 'external_integration' in app_capabilities
-        has_auth_steps = _app_has_auth_steps(app)
-
-        # Include proactive_notification apps
-        if 'proactive_notification' in app_capabilities:
-            notification_apps.append(app)
-            notification_app_ids.add(app.id)
-        # Also include simple integrations (external_integration without auth_steps, chat, or memories)
-        elif (
-            has_external_integration
-            and not has_auth_steps
-            and 'chat' not in app_capabilities
-            and 'memories' not in app_capabilities
-        ):
-            notification_apps.append(app)
+        if _is_notification_app(app):
+            grouped['proactive_notification'].append(app)
             notification_app_ids.add(app.id)
 
-    if notification_apps:
-        grouped['proactive_notification'] = sort_apps_by_installs(notification_apps)
+    # Sort notification apps
+    if grouped['proactive_notification']:
+        grouped['proactive_notification'] = sort_apps_by_installs(grouped['proactive_notification'])
 
     # Group remaining apps by capability
     for app in apps:
@@ -950,42 +985,17 @@ def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[
         if app.id in popular_app_ids:
             continue
 
-        # Skip notification apps in other sections
+        # Skip notification apps (already processed)
         if app.id in notification_app_ids:
             continue
 
-        app_capabilities = app.capabilities or set()
-        has_external_integration = 'external_integration' in app_capabilities
-        has_auth_steps = _app_has_auth_steps(app)
-
-        # External integration section: only apps with external_integration AND auth_steps
-        if has_external_integration and has_auth_steps:
-            grouped['external_integration'].append(app)
-            continue
-
-        # Chat section logic:
-        # - Apps with chat but no external_integration
-        # - Apps with external_integration (without auth_steps) that have chat
-        if 'chat' in app_capabilities:
-            if not has_external_integration:
-                grouped['chat'].append(app)
-            elif not has_auth_steps:
-                grouped['chat'].append(app)
-            continue
-
-        # Memories section logic:
-        # - Apps with memories but no external_integration or chat
-        # - Apps with external_integration (without auth_steps) that have memories but not chat
-        if 'memories' in app_capabilities and 'chat' not in app_capabilities:
-            if not has_external_integration:
-                grouped['memories'].append(app)
-            elif not has_auth_steps:
-                grouped['memories'].append(app)
-            continue
+        capability = _get_app_capability(app)
+        if capability and capability != 'proactive_notification':
+            grouped[capability].append(app)
 
     # Sort each capability group by score (except popular which is already sorted by installs)
     for cap_id in grouped:
-        if cap_id != 'popular':
+        if cap_id not in ('popular', 'proactive_notification'):
             grouped[cap_id] = sort_apps_by_installs(grouped[cap_id])
 
     return grouped
@@ -1001,57 +1011,14 @@ def filter_apps_by_capability(apps: List[App], capability: str) -> List[App]:
         return [app for app in apps if getattr(app, 'is_popular', False)]
 
     filtered_apps = []
-
     for app in apps:
-        app_capabilities = app.capabilities or set()
-        has_external_integration = 'external_integration' in app_capabilities
-        has_auth_steps = _app_has_auth_steps(app)
+        # Skip notification apps in non-notification sections
+        if capability != 'proactive_notification' and _is_notification_app(app):
+            continue
 
-        # Skip notification apps (proactive_notification OR simple integrations) in other sections
-        if capability != 'proactive_notification':
-            if 'proactive_notification' in app_capabilities:
-                continue
-            # Also skip simple integrations (they belong in notifications section)
-            if (
-                has_external_integration
-                and not has_auth_steps
-                and 'chat' not in app_capabilities
-                and 'memories' not in app_capabilities
-            ):
-                continue
-
-        if capability == 'external_integration':
-            # Only apps with external_integration AND auth_steps
-            if has_external_integration and has_auth_steps:
-                filtered_apps.append(app)
-        elif capability == 'chat':
-            # Apps with chat but no external_integration
-            # OR apps with external_integration (without auth_steps) that have chat
-            if 'chat' in app_capabilities:
-                if not has_external_integration:
-                    filtered_apps.append(app)
-                elif not has_auth_steps:
-                    filtered_apps.append(app)
-        elif capability == 'memories':
-            # Apps with memories but no external_integration or chat
-            # OR apps with external_integration (without auth_steps) that have memories but not chat
-            if 'memories' in app_capabilities and 'chat' not in app_capabilities:
-                if not has_external_integration:
-                    filtered_apps.append(app)
-                elif not has_auth_steps:
-                    filtered_apps.append(app)
-        elif capability == 'proactive_notification':
-            # Apps with proactive_notification capability
-            # OR simple integrations (external_integration without auth_steps, chat, or memories)
-            if 'proactive_notification' in app_capabilities:
-                filtered_apps.append(app)
-            elif (
-                has_external_integration
-                and not has_auth_steps
-                and 'chat' not in app_capabilities
-                and 'memories' not in app_capabilities
-            ):
-                filtered_apps.append(app)
+        app_capability = _get_app_capability(app)
+        if app_capability == capability:
+            filtered_apps.append(app)
 
     return filtered_apps
 
@@ -1090,47 +1057,54 @@ def build_capability_groups_response(
     return groups
 
 
+# Base category mapping (used for non-chat capabilities)
+_BASE_CATEGORY_MAPPING = {
+    # Productivity & Tools
+    'personality-emulation': 'productivity-tools',
+    'education-and-learning': 'productivity-tools',
+    'productivity-and-organization': 'productivity-tools',
+    'utilities-and-tools': 'productivity-tools',
+    'financial': 'productivity-tools',
+    'shopping-and-commerce': 'productivity-tools',
+    'news-and-information': 'productivity-tools',
+    # Personal & Wellness
+    'conversation-analysis': 'personal-wellness',
+    'communication-improvement': 'personal-wellness',
+    'emotional-and-mental-support': 'personal-wellness',
+    'health-and-wellness': 'personal-wellness',
+    'safety-and-security': 'personal-wellness',
+    'other': 'personal-wellness',
+    # Social & Entertainment
+    'social-and-relationships': 'social-entertainment',
+    'entertainment-and-fun': 'social-entertainment',
+    'travel-and-exploration': 'social-entertainment',
+}
+
+# Chat-specific overrides (remaps categories to chat-specific master categories)
+_CHAT_CATEGORY_OVERRIDES = {
+    # Personality Clone (unique to chat)
+    'personality-emulation': 'personality-clone',
+    # Productivity & Lifestyle (replaces productivity-tools and personal-wellness)
+    'education-and-learning': 'productivity-lifestyle',
+    'productivity-and-organization': 'productivity-lifestyle',
+    'utilities-and-tools': 'productivity-lifestyle',
+    'financial': 'productivity-lifestyle',
+    'shopping-and-commerce': 'productivity-lifestyle',
+    'news-and-information': 'productivity-lifestyle',
+    'conversation-analysis': 'productivity-lifestyle',
+    'communication-improvement': 'productivity-lifestyle',
+    'emotional-and-mental-support': 'productivity-lifestyle',
+    'health-and-wellness': 'productivity-lifestyle',
+    'safety-and-security': 'productivity-lifestyle',
+    'other': 'productivity-lifestyle',
+}
+
+
 def get_master_category_mapping(capability_id: str) -> Dict[str, str]:
     """Get master category mapping for a capability."""
     if capability_id == 'chat':
-        return {
-            'education-and-learning': 'productivity-lifestyle',
-            'productivity-and-organization': 'productivity-lifestyle',
-            'utilities-and-tools': 'productivity-lifestyle',
-            'financial': 'productivity-lifestyle',
-            'shopping-and-commerce': 'productivity-lifestyle',
-            'news-and-information': 'productivity-lifestyle',
-            'conversation-analysis': 'productivity-lifestyle',
-            'communication-improvement': 'productivity-lifestyle',
-            'emotional-and-mental-support': 'productivity-lifestyle',
-            'health-and-wellness': 'productivity-lifestyle',
-            'safety-and-security': 'productivity-lifestyle',
-            'other': 'productivity-lifestyle',
-            'personality-emulation': 'personality-clone',
-            'social-and-relationships': 'social-entertainment',
-            'entertainment-and-fun': 'social-entertainment',
-            'travel-and-exploration': 'social-entertainment',
-        }
-
-    # Default mapping for other capabilities
-    return {
-        'personality-emulation': 'productivity-tools',
-        'education-and-learning': 'productivity-tools',
-        'productivity-and-organization': 'productivity-tools',
-        'utilities-and-tools': 'productivity-tools',
-        'financial': 'productivity-tools',
-        'shopping-and-commerce': 'productivity-tools',
-        'news-and-information': 'productivity-tools',
-        'conversation-analysis': 'personal-wellness',
-        'communication-improvement': 'personal-wellness',
-        'emotional-and-mental-support': 'personal-wellness',
-        'health-and-wellness': 'personal-wellness',
-        'safety-and-security': 'personal-wellness',
-        'other': 'personal-wellness',
-        'social-and-relationships': 'social-entertainment',
-        'entertainment-and-fun': 'social-entertainment',
-        'travel-and-exploration': 'social-entertainment',
-    }
+        return {**_BASE_CATEGORY_MAPPING, **_CHAT_CATEGORY_OVERRIDES}
+    return _BASE_CATEGORY_MAPPING
 
 
 def get_master_categories_list(capability_id: str) -> List[dict]:
