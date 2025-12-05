@@ -329,7 +329,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
         return Response(
             content=xml_content,
             media_type="application/xml",
-            headers={"Cache-Control": "max-age=1800"},  # Cache for 30 minutes
+            headers={"Cache-Control": "max-age=300"},  # Cache for 5 minutes
         )
     except HTTPException:
         raise
