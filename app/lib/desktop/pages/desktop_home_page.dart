@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -9,7 +10,7 @@ import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/settings/calendar_settings_page.dart';
+import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_shortcuts_page.dart';
 import 'package:omi/services/shortcut_service.dart';
@@ -1082,9 +1083,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         // Settings options
         _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
         _buildPopupMenuItem('usage', FontAwesomeIcons.chartBar, 'Plan & Usage', profileCardWidth),
-        _buildPopupMenuItem('calendar', FontAwesomeIcons.calendar, 'Calendar Integration', profileCardWidth),
         if (ShortcutService.isSupported)
           _buildPopupMenuItem('shortcuts', Icons.keyboard, 'Keyboard Shortcuts', profileCardWidth),
+        _buildPopupMenuItem('device', Icons.bluetooth_connected, 'Device Settings', profileCardWidth),
         _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
         _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
 
@@ -1196,10 +1197,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           ),
         );
         break;
-      case 'calendar':
+      case 'device':
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => const CalendarSettingsPage(),
+            builder: (context) => const DeviceSettings(),
           ),
         );
         break;
