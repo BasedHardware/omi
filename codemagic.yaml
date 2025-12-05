@@ -1035,7 +1035,7 @@ workflows:
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
-          DMG_NAME="Omi-${VERSION}.dmg"
+          DMG_NAME="Omi.dmg"
           DMG_PATH="build/macos/dmg/${DMG_NAME}"
 
           # Create professional DMG with Applications folder shortcut
@@ -1063,7 +1063,7 @@ workflows:
         script: |
           set -e
 
-          DMG_PATH=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
+          DMG_PATH=$(find build/macos/dmg -name "Omi.dmg" | head -1)
 
           # Check if private key is a file or content
           if [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == /* ]] || [[ "$APP_STORE_CONNECT_PRIVATE_KEY" == @file:* ]]; then
@@ -1099,7 +1099,7 @@ workflows:
         script: |
           APP_PATH="$(pwd)/build/macos/Build/Products/Release-prod/Omi.app"
 
-          ZIP_NAME="${VERSION}-macos.zip"
+          ZIP_NAME="Omi.zip"
           DIST_DIR="dist/${VERSION}-macos"
           APP_DIR=$(pwd)
 
@@ -1151,25 +1151,20 @@ workflows:
 
           **Full Changelog**: https://github.com/BasedHardware/omi/compare/${PREVIOUS_TAG}...${TAG_NAME}
 
-          ---
-
-          _This release was automatically created by the Codemagic CI/CD workflow._
-          _To make this release live to users, edit this release and set \`isLive: true\` in the metadata below._
-
           <!-- KEY_VALUE_START
           changelog: macOS desktop app update | Bug fixes and improvements | Performance enhancements
           mandatory: false
           minimum_app_version: 1.0.70
-          isLive: false
+          isLive: true
           edSignature: $SIGNATURE
           KEY_VALUE_END -->
           EOF
 
           # Find the DMG file
-          DMG_FILE=$(find build/macos/dmg -name "Omi-*.dmg" | head -1)
+          DMG_FILE=$(find build/macos/dmg -name "Omi.dmg" | head -1)
 
           # Find the Sparkle ZIP and signature files
-          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/${VERSION}-${PLATFORM}.zip"
+          SPARKLE_ZIP="dist/${VERSION}-${PLATFORM}/Omi.zip"
           SIGNATURE_FILE="dist/${VERSION}-${PLATFORM}/signature.txt"
 
           # Create GitHub release with DMG, Sparkle ZIP, and signature attachments
