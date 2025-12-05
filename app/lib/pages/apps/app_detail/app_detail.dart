@@ -1,11 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shimmer/shimmer.dart';
-import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+import 'package:omi/pages/apps/widgets/web_view_bottom_sheet.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
@@ -153,11 +153,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AppHomeWebPage(app: app),
-              ),
+            showWebViewBottomSheet(
+              context: context,
+              url: '${app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}',
+              title: "${app.name}'s Settings",
             );
           }
         });
@@ -258,11 +257,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Automatically open app home page if conditions are met
       if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => AppHomeWebPage(app: app),
-          ),
+        showWebViewBottomSheet(
+          context: context,
+          url: '${app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}',
+          title: "${app.name}'s Settings",
         );
       }
       // Load details
@@ -717,11 +715,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => AppHomeWebPage(app: app),
-                      ),
+                    showWebViewBottomSheet(
+                      context: context,
+                      url: '${app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}',
+                      title: "${app.name}'s Settings",
                     );
                   },
                 ),
@@ -1320,7 +1317,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16.0),
                               onTap: () async {
-                                await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                                await showWebViewBottomSheet(
+                                  context: context,
+                                  url: "${step.url}?uid=${SharedPreferencesUtil().uid}",
+                                  title: step.name,
+                                );
                                 checkSetupCompleted();
                               },
                               child: Padding(
@@ -1402,7 +1403,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               );
                             } else {
                               if (app.externalIntegration!.isInstructionsUrl == true) {
-                                await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+                                await showWebViewBottomSheet(
+                                  context: context,
+                                  url: app.externalIntegration!.setupInstructionsFilePath ?? '',
+                                  title: 'Setup Instructions',
+                                );
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
@@ -1666,7 +1671,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
       final firstStep = app.externalIntegration!.authSteps.first;
-      await launchUrl(Uri.parse("${firstStep.url}?uid=${SharedPreferencesUtil().uid}"));
+      await showWebViewBottomSheet(
+        context: context,
+        url: "${firstStep.url}?uid=${SharedPreferencesUtil().uid}",
+        title: firstStep.name,
+      );
     } else if (hasSetupInstructions) {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
@@ -1675,7 +1684,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
         );
       } else {
         if (app.externalIntegration!.isInstructionsUrl == true) {
-          await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+          await showWebViewBottomSheet(
+            context: context,
+            url: app.externalIntegration!.setupInstructionsFilePath ?? '',
+            title: 'Setup Instructions',
+          );
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
@@ -1753,11 +1766,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AppHomeWebPage(app: app),
-              ),
+            showWebViewBottomSheet(
+              context: context,
+              url: '${app.externalIntegration?.appHomeUrl ?? ''}?uid=${SharedPreferencesUtil().uid}',
+              title: "${app.name}'s Settings",
             );
           }
         });
