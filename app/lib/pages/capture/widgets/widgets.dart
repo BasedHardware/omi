@@ -41,11 +41,12 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         MixpanelManager().pageOpened('Speech Profile Memories');
                         bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                         await routeToPage(context, const SpeechProfilePage());
-                        if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                            context.read<HomeProvider>().setSpeakerProfile(SharedPreferencesUtil().hasSpeakerProfile);
-                          }
+                        final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                        if (hasSpeakerProfile != newHasSpeakerProfile) {
+                          if (!context.mounted) return;
+                          await context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          if (!context.mounted) return;
+                          context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
                         }
                       },
                       child: Container(
