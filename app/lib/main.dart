@@ -49,6 +49,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -92,6 +93,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await ActionItemNotificationHandler.handleUpdateMessage(data, channelKey);
   } else if (messageType == 'action_item_delete') {
     await ActionItemNotificationHandler.handleDeletionMessage(data);
+  } else if (messageType == 'merge_completed') {
+    await MergeNotificationHandler.handleMergeCompleted(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
   }
 }
 
