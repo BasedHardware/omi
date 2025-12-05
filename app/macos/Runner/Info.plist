@@ -97,8 +97,6 @@
 	<false/>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>
@@ -110,5 +108,7 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>SUPublicEDKey</key>
+	<string>EYZ94JfSI+WJzZMRUizMwCaQXuB2/EjTSZ382u9XukQ=</string>
 </dict>
 </plist>
