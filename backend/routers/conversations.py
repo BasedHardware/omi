@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
@@ -7,8 +7,24 @@ import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector
-from models.conversation import *
-from models.conversation import SearchRequest
+from models.conversation import (
+    BaseModel,
+    Conversation,
+    ConversationPhoto,
+    ConversationStatus,
+    ConversationVisibility,
+    CreateConversationResponse,
+    MergeConversationsRequest,
+    MergeConversationsResponse,
+    SetConversationEventsStateRequest,
+    SetConversationActionItemsStateRequest,
+    UpdateActionItemDescriptionRequest,
+    DeleteActionItemRequest,
+    BulkAssignSegmentsRequest,
+    SearchRequest,
+    TestPromptRequest,
+)
+from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
@@ -126,7 +142,7 @@ def get_conversation_photos(conversation_id: str, uid: str = Depends(auth.get_cu
 
 @router.get(
     "/v1/conversations/{conversation_id}/transcripts",
-    response_model=Dict[str, List[TranscriptSegment]],
+    response_model=dict[str, List[TranscriptSegment]],
     tags=['conversations'],
 )
 def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
@@ -138,7 +154,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     print('delete_conversation', conversation_id, uid)
     conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(conversation_id)
+    delete_vector(uid, conversation_id)
     return {"status": "Ok"}
 
 
@@ -613,3 +629,67 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     summary = generate_summary_with_prompt(full_transcript, request.prompt)
 
     return {"summary": summary}
+
+
+# *********************************************
+# *********** MERGING conversations ***********
+# *********************************************
+
+
+@router.post('/v1/conversations/merge', response_model=MergeConversationsResponse, tags=['conversations'])
+async def merge_conversations(
+    request: MergeConversationsRequest,
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Initiate merge of multiple conversations (async).
+
+    Flow:
+    1. Validates conversations and sets status to 'merging'
+    2. Returns immediately with 200 OK
+    3. Background task performs actual merge
+    4. FCM data message sent on completion
+
+    """
+    from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
+
+    # Validate minimum number of conversations
+    if len(request.conversation_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
+
+    # Fetch all conversations
+    conversations = []
+    for conv_id in request.conversation_ids:
+        conv = conversations_db.get_conversation(uid, conv_id)
+        if conv is None:
+            raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
+        conversations.append(conv)
+
+    # Validate merge compatibility
+    is_valid, error_message = validate_merge_compatibility(conversations)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+
+    # Determine primary (earliest by started_at)
+    sorted_convs = sorted(conversations, key=lambda c: c['started_at'])
+    primary_id = sorted_convs[0]['id']
+
+    # Immediately set all conversations to 'merging' status
+    for conv_id in request.conversation_ids:
+        conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.merging)
+
+    # Start background merge task
+    background_tasks.add_task(
+        perform_merge_async,
+        uid=uid,
+        conversation_ids=request.conversation_ids,
+        primary_id=primary_id,
+        reprocess=request.reprocess,
+    )
+
+    return MergeConversationsResponse(
+        status="merging",
+        primary_conversation_id=primary_id,
+        conversation_ids=request.conversation_ids,
+    )

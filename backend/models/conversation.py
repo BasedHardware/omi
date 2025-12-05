@@ -247,6 +247,7 @@ class PostProcessingStatus(str, Enum):
 class ConversationStatus(str, Enum):
     in_progress = 'in_progress'
     processing = 'processing'
+    merging = 'merging'
     completed = 'completed'
     failed = 'failed'
 
@@ -507,3 +508,18 @@ class SearchRequest(BaseModel):
 
 class TestPromptRequest(BaseModel):
     prompt: str
+
+
+class MergeConversationsRequest(BaseModel):
+    """Request model for merging multiple conversations."""
+
+    conversation_ids: List[str] = Field(description="IDs of conversations to merge (minimum 2)", min_length=2)
+    reprocess: bool = Field(default=True, description="Whether to regenerate summary from merged transcript")
+
+
+class MergeConversationsResponse(BaseModel):
+    """Response model for merge initiation."""
+
+    status: str = Field(default="merging", description="Current merge status")
+    primary_conversation_id: str = Field(description="ID of the primary (merged) conversation")
+    conversation_ids: List[str] = Field(description="All conversation IDs being merged")
