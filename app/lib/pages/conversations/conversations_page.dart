@@ -217,8 +217,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   },
                 ),
               ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 80),
+            SliverToBoxAdapter(
+              child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100),
             ),
           ],
         ),

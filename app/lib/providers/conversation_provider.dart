@@ -5,8 +5,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/services/services.dart';
-import 'package:omi/services/wals.dart';
+import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 
@@ -32,16 +31,24 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> processingConversations = [];
 
+  // Merge functionality state
+  Set<String> mergingConversationIds = {};
+  bool isSelectionModeActive = false;
+  Set<String> selectedConversationIds = {};
+  StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
+
   final AppReviewService _appReviewService = AppReviewService();
 
   bool isFetchingConversations = false;
 
   ConversationProvider() {
-    _preload();
+    _setupMergeListener();
   }
 
-  _preload() async {
-    // Initialization logic if needed
+  void _setupMergeListener() {
+    _mergeCompletedSubscription = MergeNotificationHandler.onMergeCompleted.listen((event) {
+      onMergeCompleted(event.mergedConversationId, event.removedConversationIds);
+    });
   }
 
   void resetGroupedConvos() {
@@ -542,6 +549,7 @@ class ConversationProvider extends ChangeNotifier {
   void dispose() {
     _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
+    _mergeCompletedSubscription?.cancel();
     super.dispose();
   }
 
@@ -663,6 +671,214 @@ class ConversationProvider extends ChangeNotifier {
 
   void updateSyncedConversation(ServerConversation conversation) {
     updateConversationInSortedList(conversation);
+    notifyListeners();
+  }
+
+  // ***************************************
+  // ******** MERGE FUNCTIONALITY **********
+  // ***************************************
+
+  /// Check if a conversation is currently being merged
+  bool isConversationMerging(String conversationId) {
+    return mergingConversationIds.contains(conversationId);
+  }
+
+  /// Enter selection mode for merge
+  void enterSelectionMode() {
+    isSelectionModeActive = true;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  /// Exit selection mode and clear selections
+  void exitSelectionMode() {
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    notifyListeners();
+  }
+
+  /// Toggle selection of a conversation
+  void toggleConversationSelection(String conversationId) {
+    if (isConversationMerging(conversationId)) {
+      // Don't allow selection of conversations being merged
+      return;
+    }
+    if (selectedConversationIds.contains(conversationId)) {
+      selectedConversationIds.remove(conversationId);
+      // Auto-exit selection mode if no items remain selected
+      if (selectedConversationIds.isEmpty) {
+        isSelectionModeActive = false;
+      }
+    } else {
+      selectedConversationIds.add(conversationId);
+      // Auto-select any conversations that fall between the selected range
+      _autoSelectIntermediateConversations();
+    }
+    notifyListeners();
+  }
+
+  /// Auto-select conversations that fall between the earliest and latest selected conversations
+  void _autoSelectIntermediateConversations() {
+    if (selectedConversationIds.length < 2) return;
+
+    // Get selected conversations with their times
+    final selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+
+    if (selectedConvos.length < 2) return;
+
+    // Find the time range of selected conversations
+    DateTime earliest = selectedConvos.first.createdAt;
+    DateTime latest = selectedConvos.first.createdAt;
+
+    for (final convo in selectedConvos) {
+      if (convo.createdAt.isBefore(earliest)) earliest = convo.createdAt;
+      if (convo.createdAt.isAfter(latest)) latest = convo.createdAt;
+    }
+
+    // Find and auto-select any conversations between earliest and latest
+    for (final convo in conversations) {
+      if (selectedConversationIds.contains(convo.id)) continue;
+      if (isConversationMerging(convo.id)) continue;
+
+      // Check if this conversation falls within the selected range
+      if (convo.createdAt.isAfter(earliest) && convo.createdAt.isBefore(latest)) {
+        selectedConversationIds.add(convo.id);
+      }
+    }
+  }
+
+  /// Check if a conversation is selected
+  bool isConversationSelected(String conversationId) {
+    return selectedConversationIds.contains(conversationId);
+  }
+
+  /// Get selected conversations sorted by creation date (earliest first)
+  List<ServerConversation> get selectedConversations {
+    final selected = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+    selected.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return selected;
+  }
+
+  /// Maximum time gap allowed between consecutive conversations for merging (15 minutes)
+  static const Duration maxMergeTimeGap = Duration(minutes: 15);
+
+  /// Check if a conversation is eligible for merge selection
+  ///
+  /// A conversation is eligible if:
+  /// 1. Nothing is selected yet (any completed conversation can start)
+  /// 2. OR it's already selected
+  /// 3. OR it's within 15 minutes of the time range of selected conversations
+  bool isConversationEligibleForMerge(String conversationId) {
+    // Always eligible if nothing selected
+    if (selectedConversationIds.isEmpty) {
+      return true;
+    }
+
+    // Already selected means eligible
+    if (selectedConversationIds.contains(conversationId)) {
+      return true;
+    }
+
+    // Find the conversation
+    final convo = conversations.firstWhere(
+      (c) => c.id == conversationId,
+      orElse: () => conversations.first,
+    );
+    if (convo.id != conversationId) return false;
+
+    // Check if within 15 minutes of any selected conversation's time range
+    final selected = selectedConversations;
+    if (selected.isEmpty) return true;
+
+    // Get the earliest start and latest end of selected conversations
+    DateTime earliestStart = selected.first.startedAt ?? selected.first.createdAt;
+    DateTime latestEnd = selected.first.finishedAt ?? selected.first.createdAt;
+
+    for (final sel in selected) {
+      final start = sel.startedAt ?? sel.createdAt;
+      final end = sel.finishedAt ?? sel.createdAt;
+      if (start.isBefore(earliestStart)) earliestStart = start;
+      if (end.isAfter(latestEnd)) latestEnd = end;
+    }
+
+    // Check if candidate is within 15 minutes of the selected range
+    final candidateStart = convo.startedAt ?? convo.createdAt;
+    final candidateEnd = convo.finishedAt ?? convo.createdAt;
+
+    // Candidate ends within 15 mins before earliest selected starts
+    final endsBeforeRange = candidateEnd.isBefore(earliestStart);
+    final withinGapBefore = earliestStart.difference(candidateEnd) <= maxMergeTimeGap;
+
+    // Candidate starts within 15 mins after latest selected ends
+    final startsAfterRange = candidateStart.isAfter(latestEnd);
+    final withinGapAfter = candidateStart.difference(latestEnd) <= maxMergeTimeGap;
+
+    // Candidate overlaps with selected range
+    final overlaps = !(candidateEnd.isBefore(earliestStart) || candidateStart.isAfter(latestEnd));
+
+    return overlaps || (endsBeforeRange && withinGapBefore) || (startsAfterRange && withinGapAfter);
+  }
+
+  /// Check if merge is allowed (at least 2 conversations selected)
+  bool get canMerge => selectedConversationIds.length >= 2;
+
+  /// Initiate merge of selected conversations
+  Future<MergeConversationsResponse?> initiateConversationMerge() async {
+    if (!canMerge) return null;
+
+    final conversationIds = selectedConversationIds.toList();
+
+    // Call merge API
+    final response = await mergeConversations(conversationIds);
+
+    if (response != null) {
+      // Mark all as merging
+      mergingConversationIds.addAll(conversationIds);
+      // Exit selection mode
+      exitSelectionMode();
+      notifyListeners();
+    }
+
+    return response;
+  }
+
+  /// Handle merge completion from FCM notification
+  Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
+    // Remove merging status for ALL involved conversations
+    mergingConversationIds.remove(mergedConversationId);
+    for (final id in removedConversationIds) {
+      mergingConversationIds.remove(id);
+    }
+
+    // Remove deleted conversations from local state
+    for (final id in removedConversationIds) {
+      conversations.removeWhere((c) => c.id == id);
+    }
+
+    // Also remove from groupedConversations
+    for (final id in removedConversationIds) {
+      for (final date in groupedConversations.keys.toList()) {
+        final removed = groupedConversations[date]?.removeWhere((c) => c.id == id);
+        // Remove empty date groups
+        if (groupedConversations[date]?.isEmpty ?? false) {
+          groupedConversations.remove(date);
+        }
+      }
+    }
+
+    // Fetch updated merged conversation
+    final mergedConvo = await getConversationById(mergedConversationId);
+    if (mergedConvo != null) {
+      final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
+      if (idx != -1) {
+        conversations[idx] = mergedConvo;
+      } else {
+        conversations.insert(0, mergedConvo);
+      }
+      conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+
+    _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
 }

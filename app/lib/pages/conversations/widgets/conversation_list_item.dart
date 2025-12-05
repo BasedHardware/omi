@@ -66,8 +66,31 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
     Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
+      final isSelectionMode = provider.isSelectionModeActive;
+      final isSelected = provider.isConversationSelected(widget.conversation.id);
+      final isMerging = provider.isConversationMerging(widget.conversation.id);
+      final isEligible = provider.isConversationEligibleForMerge(widget.conversation.id);
+
       return GestureDetector(
         onTap: () async {
+          // If in selection mode, toggle selection only if eligible
+          if (isSelectionMode) {
+            if (!isEligible) {
+              // Show feedback that this conversation is too far apart
+              HapticFeedback.lightImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('This conversation is more than 15 minutes apart from selected ones'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+            HapticFeedback.selectionClick();
+            provider.toggleConversationSelection(widget.conversation.id);
+            return;
+          }
+
           if (widget.conversation.isLocked) {
             MixpanelManager().paywallOpened('Conversation List Item');
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
@@ -111,72 +134,160 @@ class _ConversationListItemState extends State<ConversationListItem> {
             }
           }
         },
+        onLongPress: () {
+          // Enter selection mode on long press
+          if (!isSelectionMode && !isMerging) {
+            HapticFeedback.mediumImpact();
+            provider.enterSelectionMode();
+            provider.toggleConversationSelection(widget.conversation.id);
+          }
+        },
         child: Padding(
           padding:
               EdgeInsets.only(top: 12, left: widget.isFromOnboarding ? 0 : 16, right: widget.isFromOnboarding ? 0 : 16),
-          child: Container(
-            width: double.maxFinite,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(16.0),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16.0),
-              child: Dismissible(
-                key: UniqueKey(),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20.0),
-                  color: Colors.red,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
-                confirmDismiss: (direction) async {
-                  HapticFeedback.mediumImpact();
-                  bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
-                  if (!showDeleteConfirmation) return Future.value(true);
-                  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-                  if (connectivityProvider.isConnected) {
-                    return await showDialog(
-                      context: context,
-                      builder: (ctx) => getDialog(
-                        context,
-                        () => Navigator.of(context).pop(false),
-                        () => Navigator.of(context).pop(true),
-                        'Delete Conversation?',
-                        'Are you sure you want to delete this conversation? This action cannot be undone.',
-                        okButtonText: 'Confirm',
+          child: Stack(
+            children: [
+              AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: (isSelectionMode && !isEligible) ? 0.4 : 1.0,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: double.maxFinite,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? Colors.deepPurple.withValues(alpha: 0.3)
+                        : (isSelectionMode && !isEligible)
+                            ? Colors.grey.shade800
+                            : const Color(0xFF1F1F25),
+                    borderRadius: BorderRadius.circular(16.0),
+                    border: isSelected
+                        ? Border.all(color: Colors.deepPurple, width: 2)
+                        : (isSelectionMode && !isEligible)
+                            ? Border.all(color: Colors.grey.shade600, width: 1)
+                            : null,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16.0),
+                    child: Dismissible(
+                      key: UniqueKey(),
+                      direction: isSelectionMode ? DismissDirection.none : DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20.0),
+                        color: Colors.red,
+                        child: const Icon(Icons.delete, color: Colors.white),
                       ),
-                    );
-                  } else {
-                    return showDialog(
-                      builder: (c) => getDialog(context, () => Navigator.pop(context), () => Navigator.pop(context),
-                          'Unable to Delete Conversation', 'Please check your internet connection and try again.',
-                          singleButton: true, okButtonText: 'OK'),
-                      context: context,
-                    );
-                  }
-                },
-                onDismissed: (direction) async {
-                  var conversation = widget.conversation;
-                  var conversationIdx = widget.conversationIdx;
-                  MixpanelManager().conversationSwipedToDelete(conversation);
-                  provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
-                },
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      _buildConversationBody(context),
-                    ],
+                      confirmDismiss: (direction) async {
+                        HapticFeedback.mediumImpact();
+                        bool showDeleteConfirmation = SharedPreferencesUtil().showConversationDeleteConfirmation;
+                        if (!showDeleteConfirmation) return Future.value(true);
+                        final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                        if (connectivityProvider.isConnected) {
+                          return await showDialog(
+                            context: context,
+                            builder: (ctx) => getDialog(
+                              context,
+                              () => Navigator.of(context).pop(false),
+                              () => Navigator.of(context).pop(true),
+                              'Delete Conversation?',
+                              'Are you sure you want to delete this conversation? This action cannot be undone.',
+                              okButtonText: 'Confirm',
+                            ),
+                          );
+                        } else {
+                          return showDialog(
+                            builder: (c) => getDialog(
+                                context,
+                                () => Navigator.pop(context),
+                                () => Navigator.pop(context),
+                                'Unable to Delete Conversation',
+                                'Please check your internet connection and try again.',
+                                singleButton: true,
+                                okButtonText: 'OK'),
+                            context: context,
+                          );
+                        }
+                      },
+                      onDismissed: (direction) async {
+                        var conversation = widget.conversation;
+                        var conversationIdx = widget.conversationIdx;
+                        MixpanelManager().conversationSwipedToDelete(conversation);
+                        provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.all(16),
+                        child: Row(
+                          children: [
+                            // Selection checkbox
+                            if (isSelectionMode) ...[
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isSelected ? Colors.deepPurple : Colors.transparent,
+                                  border: Border.all(
+                                    color: isSelected ? Colors.deepPurple : Colors.grey,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                              ),
+                              const SizedBox(width: 12),
+                            ],
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.max,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _getConversationHeader(),
+                                  const SizedBox(height: 16),
+                                  _buildConversationBody(context),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              // Merging overlay
+              if (isMerging)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(16.0),
+                    ),
+                    child: const Center(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Merging...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       );
