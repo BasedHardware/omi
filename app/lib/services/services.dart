@@ -396,6 +396,7 @@ abstract class ISystemAudioRecorderService {
   void stop();
   void stopAndClearCallbacks();
   void setOnRecordingStartedFromNub(Function() callback);
+  void setIsRecordingPausedCallback(bool Function() callback);
   // TODO: Add status property
 }
 
@@ -422,6 +423,9 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   // Callback for when recording is stopped automatically (e.g., meeting ended)
   Function()? _onStoppedAutomatically;
 
+  // Callback to query if recording is paused
+  bool Function()? _isRecordingPausedCallback;
+
   // To keep track of recording state from Dart's perspective
   bool _isRecording = false;
 
@@ -429,7 +433,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     _channel.setMethodCallHandler(_handleMethodCall);
   }
 
-  Future<void> _handleMethodCall(MethodCall call) async {
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'audioFrame':
         if (_onByteReceived != null && call.arguments is Uint8List) {
@@ -516,6 +520,12 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
           debugPrint('Speaker status changed: $isSpeakerActive');
         }
         break;
+      case 'isRecordingPaused':
+        // Return the pause state to native code
+        if (_isRecordingPausedCallback != null) {
+          return _isRecordingPausedCallback!();
+        }
+        return false;
       default:
         debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: ${call.method}');
     }
@@ -664,6 +674,11 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
   @override
   void setOnRecordingStartedFromNub(Function() callback) {
     _onRecordingStartedFromNub = callback;
+  }
+
+  @override
+  void setIsRecordingPausedCallback(bool Function() callback) {
+    _isRecordingPausedCallback = callback;
   }
 
   @override

@@ -928,6 +928,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 self.floatingControlBar?.onHide = {}
             }
             self.floatingControlBar?.makeKeyAndOrderFront(nil)
+            
+            self.floatingControlBarChannel.invokeMethod("requestCurrentState", arguments: nil)
         }
     }
 

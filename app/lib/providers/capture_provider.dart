@@ -109,7 +109,8 @@ class CaptureProvider extends ChangeNotifier
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
-        _screenCaptureChannel.setMethodCallHandler(_handleScreenCaptureMethodCall);
+        ServiceManager.instance().systemAudio.setOnRecordingStartedFromNub(_handleRecordingStartedFromNub);
+        ServiceManager.instance().systemAudio.setIsRecordingPausedCallback(() => _isPaused);
       });
     }
   }
@@ -910,7 +911,7 @@ class CaptureProvider extends ChangeNotifier
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           onMicrophoneStatus: _onMicrophoneStatus,
-          onStoppedAutomatically: null,
+          onStoppedAutomatically: _handleRecordingStoppedAutomatically,
         );
   }
 
@@ -1026,6 +1027,8 @@ class CaptureProvider extends ChangeNotifier
 
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true;
+    // Don't reset duration - just pause the timer
+    _pauseRecordingTimer();
     notifyListeners();
     _broadcastRecordingState();
   }
@@ -1036,7 +1039,12 @@ class CaptureProvider extends ChangeNotifier
     // User wants to resume - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
     _isPaused = false;
+
+    // Preserve the current duration before starting
+    final preservedDuration = _recordingDuration;
     await streamSystemAudioRecording();
+    // Restore duration after streamSystemAudioRecording may have reset it
+    _recordingDuration = preservedDuration;
     _broadcastRecordingState();
   }
 
@@ -1053,26 +1061,12 @@ class CaptureProvider extends ChangeNotifier
           await streamSystemAudioRecording();
         }
         break;
+      case 'requestCurrentState':
+        // Control bar is requesting current state (e.g., when it becomes visible)
+        _broadcastRecordingState();
+        break;
       default:
         Logger.debug('FloatingControlBarChannel: Unhandled method ${call.method}');
-    }
-  }
-
-  Future<dynamic> _handleScreenCaptureMethodCall(MethodCall call) async {
-    if (!PlatformService.isDesktop) return null;
-
-    switch (call.method) {
-      case 'isRecordingPaused':
-        return isPaused;
-      case 'recordingStartedFromNub':
-        await _handleRecordingStartedFromNub();
-        return null;
-      case 'recordingStoppedAutomatically':
-        await _handleRecordingStoppedAutomatically();
-        return null;
-      default:
-        Logger.debug('ScreenCaptureChannel: Unhandled method ${call.method}');
-        return null;
     }
   }
 
@@ -1469,6 +1463,13 @@ class CaptureProvider extends ChangeNotifier
         _broadcastRecordingState();
       }
     });
+  }
+
+  void _pauseRecordingTimer() {
+    // Stop the timer but preserve the current duration
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    // Don't reset _recordingDuration here
   }
 
   void _stopRecordingTimer() {
