@@ -210,12 +210,12 @@ workflows:
       cache_paths:
         - $HOME/.pub-cache
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: "v*-desktop-cm"
-          include: true
+    #triggering:
+    #  events:
+    #    - tag
+    #  tag_patterns:
+    #    - pattern: "v*-desktop-cm"
+    #      include: true
     working_directory: app
     scripts:
       - name: Set up Firebase
