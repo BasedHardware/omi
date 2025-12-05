@@ -410,25 +410,6 @@ def get_in_progress_conversation_id(uid: str) -> str:
     return conversation_id.decode()
 
 
-def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int = 86400):
-    """Store the meeting_id for a conversation. TTL defaults to 24 hours."""
-    r.set(f'conversation:{conversation_id}:meeting_id', meeting_id)
-    r.expire(f'conversation:{conversation_id}:meeting_id', ttl)
-
-
-def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:
-    """Retrieve the meeting_id associated with a conversation."""
-    meeting_id = r.get(f'conversation:{conversation_id}:meeting_id')
-    if not meeting_id:
-        return None
-    return meeting_id.decode()
-
-
-def remove_conversation_meeting_id(conversation_id: str):
-    """Remove the meeting_id association for a conversation."""
-    r.delete(f'conversation:{conversation_id}:meeting_id')
-
-
 def set_user_webhook_db(uid: str, wtype: str, url: str):
     r.set(f'users:{uid}:developer:webhook:{wtype}', url)
 
