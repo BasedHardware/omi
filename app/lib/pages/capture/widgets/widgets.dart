@@ -44,6 +44,7 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
                           if (context.mounted) {
                             context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                            context.read<HomeProvider>().setSpeakerProfile(SharedPreferencesUtil().hasSpeakerProfile);
                           }
                         }
                       },
