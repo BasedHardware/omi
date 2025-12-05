@@ -855,17 +855,6 @@ class ConversationProvider extends ChangeNotifier {
       conversations.removeWhere((c) => c.id == id);
     }
 
-    // Also remove from groupedConversations
-    for (final id in removedConversationIds) {
-      for (final date in groupedConversations.keys.toList()) {
-        final removed = groupedConversations[date]?.removeWhere((c) => c.id == id);
-        // Remove empty date groups
-        if (groupedConversations[date]?.isEmpty ?? false) {
-          groupedConversations.remove(date);
-        }
-      }
-    }
-
     // Fetch updated merged conversation
     final mergedConvo = await getConversationById(mergedConversationId);
     if (mergedConvo != null) {
