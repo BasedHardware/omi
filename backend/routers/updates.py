@@ -123,8 +123,8 @@ def _get_sparkle_zip_download_url(release: Dict, version: str, platform: str) ->
     """
     assets = release.get("assets", [])
 
-    # Look for the Sparkle ZIP file: {version}-{platform}.zip
-    expected_filename = f"{version}-{platform}.zip"
+    # Look for the Sparkle ZIP file: Omi.zip
+    expected_filename = f"Omi.zip"
 
     for asset in assets:
         asset_name = asset.get("name", "")
@@ -134,7 +134,7 @@ def _get_sparkle_zip_download_url(release: Dict, version: str, platform: str) ->
     # Fallback: look for any zip file that matches the pattern
     for asset in assets:
         asset_name = asset.get("name", "")
-        if asset_name.endswith(f"-{platform}.zip"):
+        if asset_name.endswith(f"Omi.zip"):
             return asset.get("browser_download_url")
 
     return None
