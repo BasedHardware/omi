@@ -55,7 +55,7 @@ class _BasicNotificationService implements NotificationInterface {
   }
 
   @override
-  void showNotification({
+  Future<void> showNotification({
     required int id,
     required String title,
     required String body,

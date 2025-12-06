@@ -72,7 +72,7 @@ class _FCMNotificationService implements NotificationInterface {
   }
 
   @override
-  void showNotification({
+  Future<void> showNotification({
     required int id,
     required String title,
     required String body,
