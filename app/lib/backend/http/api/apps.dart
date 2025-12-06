@@ -540,6 +540,81 @@ Future<String> getGenratedDescription(String name, String description) async {
   }
 }
 
+// AI App Generator APIs
+
+/// Fetches AI-generated sample prompts for the app generator
+Future<List<String>> getGeneratedAppPrompts() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-prompts',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      return [];
+    }
+    log('getGeneratedAppPrompts: ${response.body}');
+    var data = jsonDecode(response.body);
+    return (data['prompts'] as List<dynamic>).cast<String>();
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return [];
+  }
+}
+
+/// Generates app configuration from a natural language prompt using AI
+Future<Map<String, dynamic>?> generateAppFromPrompt(String prompt) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'prompt': prompt}),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      debugPrint('generateAppFromPrompt failed: ${response?.body}');
+      return null;
+    }
+    log('generateAppFromPrompt: ${response.body}');
+    var data = jsonDecode(response.body);
+    return data['app'] as Map<String, dynamic>;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return null;
+  }
+}
+
+/// Generates an app icon using AI (DALL-E)
+/// Returns base64 encoded PNG image string
+Future<String?> generateAppIcon(String name, String description, String category) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-icon',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({
+      'name': name,
+      'description': description,
+      'category': category,
+    }),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      debugPrint('generateAppIcon failed: ${response?.body}');
+      return null;
+    }
+    log('generateAppIcon: success');
+    var data = jsonDecode(response.body);
+    return data['icon_base64'] as String;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return null;
+  }
+}
+
 // API Keys
 Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   var response = await makeApiCall(
