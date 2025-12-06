@@ -41,13 +41,13 @@ export function Dashboard() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Welcome back, Nate</h1>
-        <p className="text-slate-400 mt-2">Here's what's happening with Zeke today.</p>
+        <h1 className="text-2xl md:text-3xl font-bold text-white">Welcome back, Nate</h1>
+        <p className="text-slate-400 mt-1 text-sm md:text-base">Here's what's happening today.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         <StatCard
           icon={Brain}
           label="Memories"
@@ -56,7 +56,7 @@ export function Dashboard() {
         />
         <StatCard
           icon={CheckSquare}
-          label="Pending Tasks"
+          label="Tasks"
           value={tasks.length}
           color="green"
         />
@@ -74,16 +74,42 @@ export function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
+      {overdueTasks.length > 0 && (
+        <div className="bg-red-900/30 border border-red-700 rounded-xl p-4">
+          <h2 className="text-base font-semibold text-red-300 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" />
+            Overdue Tasks
+          </h2>
+          <ul className="mt-3 space-y-2">
+            {overdueTasks.slice(0, 3).map((task) => (
+              <li key={task.id} className="p-3 bg-red-900/50 rounded-lg">
+                <p className="text-red-200 text-sm">{task.title}</p>
+                {task.due_at && (
+                  <p className="text-red-400 text-xs mt-1">
+                    Was due: {new Date(task.due_at).toLocaleDateString()}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          {overdueTasks.length > 3 && (
+            <Link to="/tasks" className="text-red-400 text-sm mt-3 inline-block hover:underline">
+              +{overdueTasks.length - 3} more
+            </Link>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-6 md:grid md:grid-cols-2 md:gap-6 md:space-y-0">
+        <div className="bg-slate-900 rounded-xl p-4 md:p-6 border border-slate-700">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">Recent Memories</h2>
+            <h2 className="text-lg font-semibold text-white">Recent Memories</h2>
             <Link to="/memories" className="text-blue-400 text-sm hover:underline">
               View all
             </Link>
           </div>
           {memories.length === 0 ? (
-            <p className="text-slate-400">No memories yet.</p>
+            <p className="text-slate-400 text-sm">No memories yet.</p>
           ) : (
             <ul className="space-y-3">
               {memories.map((memory) => (
@@ -98,55 +124,36 @@ export function Dashboard() {
           )}
         </div>
 
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
+        <div className="bg-slate-900 rounded-xl p-4 md:p-6 border border-slate-700">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-white">Pending Tasks</h2>
+            <h2 className="text-lg font-semibold text-white">Pending Tasks</h2>
             <Link to="/tasks" className="text-blue-400 text-sm hover:underline">
               View all
             </Link>
           </div>
           {tasks.length === 0 ? (
-            <p className="text-slate-400">No pending tasks.</p>
+            <p className="text-slate-400 text-sm">No pending tasks.</p>
           ) : (
             <ul className="space-y-3">
               {tasks.map((task) => (
-                <li key={task.id} className="p-3 bg-slate-800 rounded-lg flex items-start justify-between">
-                  <div>
-                    <p className="text-slate-200 font-medium">{task.title}</p>
-                    {task.due_at && (
-                      <p className="text-slate-500 text-xs mt-1">
-                        Due: {new Date(task.due_at).toLocaleDateString()}
-                      </p>
-                    )}
+                <li key={task.id} className="p-3 bg-slate-800 rounded-lg">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-slate-200 font-medium text-sm truncate">{task.title}</p>
+                      {task.due_at && (
+                        <p className="text-slate-500 text-xs mt-1">
+                          Due: {new Date(task.due_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <PriorityBadge priority={task.priority} />
                   </div>
-                  <PriorityBadge priority={task.priority} />
                 </li>
               ))}
             </ul>
           )}
         </div>
       </div>
-
-      {overdueTasks.length > 0 && (
-        <div className="bg-red-900/30 border border-red-700 rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-red-300 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" />
-            Overdue Tasks
-          </h2>
-          <ul className="mt-4 space-y-2">
-            {overdueTasks.map((task) => (
-              <li key={task.id} className="p-3 bg-red-900/50 rounded-lg">
-                <p className="text-red-200">{task.title}</p>
-                {task.due_at && (
-                  <p className="text-red-400 text-sm">
-                    Was due: {new Date(task.due_at).toLocaleDateString()}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
@@ -166,12 +173,12 @@ function StatCard({ icon: Icon, label, value, color }: {
   };
 
   return (
-    <div className={`rounded-xl p-4 border ${colorClasses[color]}`}>
+    <div className={`rounded-xl p-3 md:p-4 border ${colorClasses[color]}`}>
       <div className="flex items-center justify-between">
-        <Icon className="w-6 h-6" />
-        <span className="text-2xl font-bold">{value}</span>
+        <Icon className="w-5 h-5 md:w-6 md:h-6" />
+        <span className="text-xl md:text-2xl font-bold">{value}</span>
       </div>
-      <p className="text-sm mt-2 opacity-80">{label}</p>
+      <p className="text-xs md:text-sm mt-2 opacity-80">{label}</p>
     </div>
   );
 }
@@ -185,7 +192,7 @@ function PriorityBadge({ priority }: { priority: string }) {
   };
 
   return (
-    <span className={`px-2 py-1 text-xs rounded ${colors[priority] || colors.medium}`}>
+    <span className={`px-2 py-0.5 text-xs rounded flex-shrink-0 ${colors[priority] || colors.medium}`}>
       {priority}
     </span>
   );

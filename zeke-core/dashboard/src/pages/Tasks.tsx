@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Check, Trash2, CheckSquare, AlertTriangle, Clock } from 'lucide-react';
+import { Plus, Check, Trash2, CheckSquare, AlertTriangle, Clock, X } from 'lucide-react';
 import { api, type Task } from '../lib/api';
 
 export function Tasks() {
@@ -95,85 +95,51 @@ export function Tasks() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Tasks</h1>
-          <p className="text-slate-400 mt-2">Manage your to-do list and action items.</p>
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl md:text-3xl font-bold text-white">Tasks</h1>
+          <p className="text-slate-400 mt-1 text-sm md:text-base">Manage your to-do list.</p>
         </div>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 md:px-4 rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors flex-shrink-0"
         >
           <Plus className="w-5 h-5" />
-          Add Task
+          <span className="hidden md:inline">Add Task</span>
         </button>
       </div>
 
-      {overdueTasks.length > 0 && (
-        <div className="bg-red-900/30 rounded-xl border border-red-700">
-          <div className="p-4 border-b border-red-700/50">
-            <h2 className="text-lg font-semibold text-red-300 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              Overdue Tasks ({overdueTasks.length})
-            </h2>
-          </div>
-          <ul className="divide-y divide-red-700/50">
-            {overdueTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                onComplete={() => handleComplete(task.id)}
-                onDelete={() => handleDelete(task.id)}
-                isOverdue
-              />
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {dueSoonTasks.length > 0 && (
-        <div className="bg-yellow-900/30 rounded-xl border border-yellow-700">
-          <div className="p-4 border-b border-yellow-700/50">
-            <h2 className="text-lg font-semibold text-yellow-300 flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Due Soon ({dueSoonTasks.length})
-            </h2>
-          </div>
-          <ul className="divide-y divide-yellow-700/50">
-            {dueSoonTasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                onComplete={() => handleComplete(task.id)}
-                onDelete={() => handleDelete(task.id)}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
-
       {showAddForm && (
-        <div className="bg-slate-900 rounded-xl p-6 border border-slate-700">
-          <h2 className="text-lg font-semibold text-white mb-4">New Task</h2>
+        <div className="bg-slate-900 rounded-xl p-4 md:p-6 border border-slate-700">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">New Task</h2>
+            <button
+              onClick={() => setShowAddForm(false)}
+              className="p-1 text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
           <form onSubmit={handleCreate} className="space-y-4">
             <input
               type="text"
               value={newTask.title}
               onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
               placeholder="Task title"
-              className="w-full bg-slate-800 text-white rounded-lg px-4 py-3 border border-slate-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-slate-800 text-white rounded-lg px-4 py-3 border border-slate-600 focus:outline-none focus:border-blue-500 text-base"
+              autoFocus
             />
             <textarea
               value={newTask.description}
               onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
               placeholder="Description (optional)"
-              className="w-full bg-slate-800 text-white rounded-lg px-4 py-3 border border-slate-600 focus:outline-none focus:border-blue-500 min-h-[80px]"
+              className="w-full bg-slate-800 text-white rounded-lg px-4 py-3 border border-slate-600 focus:outline-none focus:border-blue-500 min-h-[80px] text-base"
             />
             <select
               value={newTask.priority}
               onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-              className="bg-slate-800 text-white rounded-lg px-4 py-3 border border-slate-600 focus:outline-none focus:border-blue-500"
+              className="w-full md:w-auto bg-slate-800 text-white rounded-lg px-4 py-3 border border-slate-600 focus:outline-none focus:border-blue-500 text-base"
             >
               <option value="low">Low Priority</option>
               <option value="medium">Medium Priority</option>
@@ -193,24 +159,67 @@ export function Tasks() {
                 disabled={creating || !newTask.title.trim()}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {creating ? 'Creating...' : 'Create Task'}
+                {creating ? 'Creating...' : 'Create'}
               </button>
             </div>
           </form>
         </div>
       )}
 
+      {overdueTasks.length > 0 && (
+        <div className="bg-red-900/30 rounded-xl border border-red-700">
+          <div className="p-3 md:p-4 border-b border-red-700/50">
+            <h2 className="text-base font-semibold text-red-300 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              Overdue ({overdueTasks.length})
+            </h2>
+          </div>
+          <ul className="divide-y divide-red-700/50">
+            {overdueTasks.map((task) => (
+              <TaskItem
+                key={task.id}
+                task={task}
+                onComplete={() => handleComplete(task.id)}
+                onDelete={() => handleDelete(task.id)}
+                isOverdue
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {dueSoonTasks.length > 0 && (
+        <div className="bg-yellow-900/30 rounded-xl border border-yellow-700">
+          <div className="p-3 md:p-4 border-b border-yellow-700/50">
+            <h2 className="text-base font-semibold text-yellow-300 flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Due Soon ({dueSoonTasks.length})
+            </h2>
+          </div>
+          <ul className="divide-y divide-yellow-700/50">
+            {dueSoonTasks.map((task) => (
+              <TaskItem
+                key={task.id}
+                task={task}
+                onComplete={() => handleComplete(task.id)}
+                onDelete={() => handleDelete(task.id)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="bg-slate-900 rounded-xl border border-slate-700">
-        <div className="p-4 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Clock className="w-5 h-5 text-blue-400" />
-            Pending Tasks ({tasks.length})
+        <div className="p-3 md:p-4 border-b border-slate-700">
+          <h2 className="text-base font-semibold text-white flex items-center gap-2">
+            <Clock className="w-4 h-4 text-blue-400" />
+            Pending ({tasks.length})
           </h2>
         </div>
         
         {tasks.length === 0 ? (
-          <div className="p-12 text-center">
-            <CheckSquare className="w-12 h-12 text-slate-600 mx-auto mb-4" />
+          <div className="p-8 md:p-12 text-center">
+            <CheckSquare className="w-10 h-10 md:w-12 md:h-12 text-slate-600 mx-auto mb-4" />
             <p className="text-slate-400">No pending tasks.</p>
             <p className="text-slate-500 text-sm mt-2">Add a task to get started.</p>
           </div>
@@ -231,13 +240,13 @@ export function Tasks() {
       <div className="bg-slate-900 rounded-xl border border-slate-700">
         <button
           onClick={() => setShowCompleted(!showCompleted)}
-          className="w-full p-4 flex items-center justify-between text-left"
+          className="w-full p-3 md:p-4 flex items-center justify-between text-left active:bg-slate-800 transition-colors"
         >
-          <h2 className="text-lg font-semibold text-slate-400 flex items-center gap-2">
-            <Check className="w-5 h-5 text-green-400" />
-            Completed Tasks ({completedTasks.length})
+          <h2 className="text-base font-semibold text-slate-400 flex items-center gap-2">
+            <Check className="w-4 h-4 text-green-400" />
+            Completed ({completedTasks.length})
           </h2>
-          <span className="text-slate-500">{showCompleted ? 'Hide' : 'Show'}</span>
+          <span className="text-slate-500 text-sm">{showCompleted ? 'Hide' : 'Show'}</span>
         </button>
         
         {showCompleted && completedTasks.length > 0 && (
@@ -280,27 +289,29 @@ function TaskItem({
   const taskIsOverdue = isOverdue || (task.due_at && new Date(task.due_at) < new Date() && !completed);
 
   return (
-    <li className="p-4 flex items-start gap-4">
+    <li className="p-3 md:p-4 flex items-start gap-3">
       {!completed && onComplete && (
         <button
           onClick={onComplete}
-          className="mt-1 w-5 h-5 rounded border-2 border-slate-500 hover:border-green-400 hover:bg-green-400/20 transition-colors flex-shrink-0"
-        />
+          className="mt-0.5 w-6 h-6 rounded-full border-2 border-slate-500 hover:border-green-400 active:bg-green-400/30 transition-colors flex-shrink-0 flex items-center justify-center"
+        >
+          <span className="sr-only">Complete</span>
+        </button>
       )}
       {completed && (
-        <div className="mt-1 w-5 h-5 rounded bg-green-600 flex items-center justify-center flex-shrink-0">
-          <Check className="w-3 h-3 text-white" />
+        <div className="mt-0.5 w-6 h-6 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0">
+          <Check className="w-4 h-4 text-white" />
         </div>
       )}
       
       <div className="flex-1 min-w-0">
-        <p className={`font-medium ${completed ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+        <p className={`font-medium text-sm md:text-base ${completed ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
           {task.title}
         </p>
         {task.description && (
-          <p className="text-slate-500 text-sm mt-1">{task.description}</p>
+          <p className="text-slate-500 text-sm mt-1 line-clamp-2">{task.description}</p>
         )}
-        <div className="flex items-center gap-3 mt-2">
+        <div className="flex flex-wrap items-center gap-2 mt-2">
           <span className={`text-xs px-2 py-0.5 rounded ${priorityColors[task.priority]}`}>
             {task.priority}
           </span>
@@ -315,7 +326,7 @@ function TaskItem({
       
       <button
         onClick={onDelete}
-        className="text-slate-500 hover:text-red-400 transition-colors"
+        className="text-slate-500 hover:text-red-400 active:text-red-500 transition-colors p-1 flex-shrink-0"
       >
         <Trash2 className="w-5 h-5" />
       </button>
