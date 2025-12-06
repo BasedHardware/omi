@@ -80,7 +80,11 @@ class _FCMNotificationService implements NotificationInterface {
     bool wakeUpScreen = false,
     NotificationSchedule? schedule,
     NotificationLayout layout = NotificationLayout.Default,
-  }) {
+  }) async {
+    final allowed = await _awesomeNotifications.isNotificationAllowed();
+    if (!allowed) {
+      return;
+    }
     _awesomeNotifications.createNotification(
       content: NotificationContent(
         id: id,
