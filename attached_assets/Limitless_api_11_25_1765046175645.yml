@@ -1,0 +1,633 @@
+swagger: '2.0'
+info:
+  title: Limitless Developer API
+  description: |
+    API for accessing lifelogs, providing transparency and portability to user data.
+
+    ## Rate Limiting
+    The API implements rate limiting to ensure fair usage and protect against abuse.
+    - **Default Rate Limit:** 180 requests per minute per API key
+    - **Rate Limit Response:** When exceeded, returns 429 Too Many Requests with retry information
+  version: 1.0.0
+host: api.limitless.ai
+basePath: /
+schemes:
+  - https
+definitions:
+  ContentNode:
+    type: object
+    properties:
+      type:
+        type: string
+        description: Type of content node (e.g., heading1, heading2, heading3, blockquote). More types might be added.
+      content:
+        type: string
+        description: Content of the node.
+      startTime:
+        type: string
+        format: date-time
+        description: ISO format in given timezone.
+      endTime:
+        type: string
+        format: date-time
+        description: ISO format in given timezone.
+      startOffsetMs:
+        type: integer
+        description: Milliseconds after start of this entry.
+      endOffsetMs:
+        type: integer
+        description: Milliseconds after start of this entry.
+      children:
+        type: array
+        items:
+          $ref: '#/definitions/ContentNode'
+        description: Child content nodes.
+      speakerName:
+        type: string
+        description: Speaker identifier, present for certain node types (e.g., blockquote).
+        x-nullable: true
+      speakerIdentifier:
+        type: string
+        description: Speaker identifier, when applicable. Set to "user" when the speaker has been identified as the user.
+        enum: ['user']
+        x-nullable: true
+  Lifelog:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Unique identifier for the entry.
+      title:
+        type: string
+        description: Title of the entry. Equal to the first heading1 node.
+      markdown:
+        type: string
+        description: Raw markdown content of the entry.
+        x-nullable: true
+      contents:
+        type: array
+        items:
+          $ref: '#/definitions/ContentNode'
+        description: List of ContentNodes.
+      startTime:
+        type: string
+        format: date-time
+        description: ISO format in given timezone.
+      endTime:
+        type: string
+        format: date-time
+        description: ISO format in given timezone.
+      isStarred:
+        type: boolean
+        description: Whether the entry is starred. Defaults to false if not explicitly starred.
+      updatedAt:
+        type: string
+        format: date-time
+        description: Last update time of the entry in ISO format in given timezone.
+  MetaLifelogs:
+    type: object
+    properties:
+      nextCursor:
+        type: string
+        description: Cursor for pagination to retrieve the next set of lifelogs, bound to the query parameters from the original request. When using a cursor, other query parameters are ignored.
+        x-nullable: true
+      count:
+        type: integer
+        description: Number of lifelogs in the current response.
+  Meta:
+    type: object
+    properties:
+      lifelogs:
+        $ref: '#/definitions/MetaLifelogs'
+  LifelogsResponseData:
+    type: object
+    properties:
+      lifelogs:
+        type: array
+        items:
+          $ref: '#/definitions/Lifelog'
+  LifelogsResponse:
+    type: object
+    properties:
+      data:
+        $ref: '#/definitions/LifelogsResponseData'
+      meta:
+        $ref: '#/definitions/Meta'
+  LifelogResponseData:
+    type: object
+    properties:
+      lifelog:
+        $ref: '#/definitions/Lifelog'
+        x-nullable: true
+  LifelogResponse:
+    type: object
+    properties:
+      data:
+        $ref: '#/definitions/LifelogResponseData'
+  ToolCall:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Unique identifier for the tool call.
+      toolName:
+        type: string
+        description: Name of the tool that was called.
+      args:
+        type: object
+        description: Arguments passed to the tool.
+        x-nullable: true
+  ToolResult:
+    type: object
+    properties:
+      result:
+        type: object
+        description: Result returned by the tool.
+      isError:
+        type: boolean
+        description: Whether the tool call resulted in an error.
+      toolCallId:
+        type: string
+        description: ID of the tool call this result corresponds to.
+      toolName:
+        type: string
+        description: Name of the tool that was called.
+      entriesReturned:
+        type: array
+        items:
+          type: object
+          properties:
+            title:
+              type: string
+              description: Title of the entry returned by the tool.
+            id:
+              type: string
+              description: ID of the entry returned by the tool.
+        description: Limited information about entries returned by the tool.
+        x-nullable: true
+  ChatMessage:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Unique identifier for the message.
+      text:
+        type: string
+        description: Text content of the message.
+        x-nullable: true
+      toolCalls:
+        type: array
+        items:
+          $ref: '#/definitions/ToolCall'
+        description: Tool calls made in this message.
+        x-nullable: true
+      toolResults:
+        type: array
+        items:
+          $ref: '#/definitions/ToolResult'
+        description: Results from tool calls in this message.
+        x-nullable: true
+      createdAt:
+        type: string
+        format: date-time
+        description: Timestamp when the message was created (ISO 8601 string).
+      user:
+        type: object
+        properties:
+          role:
+            type: string
+            enum: ['user', 'assistant', 'system', 'tool']
+            description: Role of the sender for this message.
+          name:
+            type: string
+            description: Name of the user.
+            x-nullable: true
+  Chat:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Unique identifier for the chat.
+      summary:
+        type: string
+        description: Brief summary of the chat conversation.
+        x-nullable: true
+      createdAt:
+        type: string
+        format: date-time
+        description: Timestamp when the chat was created (ISO 8601 string).
+      startedAt:
+        type: string
+        format: date-time
+        description: Timestamp of the first message in the chat (ISO 8601 string).
+      messages:
+        type: array
+        items:
+          $ref: '#/definitions/ChatMessage'
+        description: List of messages in the chat.
+      visibility:
+        type: string
+        enum: ['private', 'public', 'internal']
+        description: Visibility setting for the chat.
+  MetaChats:
+    type: object
+    properties:
+      nextCursor:
+        type: string
+        description: Cursor for pagination to retrieve the next set of chats, bound to the query parameters from the original request.
+        x-nullable: true
+      count:
+        type: integer
+        description: Number of chats in the current response.
+  ChatsResponseData:
+    type: object
+    properties:
+      chats:
+        type: array
+        items:
+          $ref: '#/definitions/Chat'
+  ChatsResponse:
+    type: object
+    properties:
+      data:
+        $ref: '#/definitions/ChatsResponseData'
+      meta:
+        type: object
+        properties:
+          chats:
+            $ref: '#/definitions/MetaChats'
+  ChatResponseData:
+    type: object
+    properties:
+      chat:
+        $ref: '#/definitions/Chat'
+        x-nullable: true
+  ChatResponse:
+    type: object
+    properties:
+      data:
+        $ref: '#/definitions/ChatResponseData'
+  DeleteChatResponse:
+    type: object
+    properties:
+      data:
+        type: object
+        properties:
+          success:
+            type: boolean
+            description: Indicates whether the deletion was successful.
+paths:
+  /:
+    get:
+      operationId: getRoot
+      summary: Redirect to the developer docs.
+      description: Redirects to the developer docs.
+      responses:
+        '302':
+          description: Redirect to the developer docs.
+  /v1/lifelogs:
+    get:
+      operationId: getLifelogs
+      summary: Returns a list of lifelogs.
+      description: Returns a list of lifelogs based on specified time range or date. If a search parameter is provided, performs hybrid search across the lifelogs. Pagination is not supported when using the search parameter.
+      parameters:
+        - in: query
+          name: timezone
+          type: string
+          description: IANA timezone specifier. If missing, UTC is used.
+        - in: query
+          name: date
+          type: string
+          format: date
+          description: Will return all entries beginning on a date in the given timezone (YYYY-MM-DD).
+        - in: query
+          name: start
+          type: string
+          format: date-time
+          description: Start datetime in modified ISO-8601 format (YYYY-MM-DD or YYYY-MM-DD HH:mm:SS). Timezones/offsets will be ignored.
+        - in: query
+          name: end
+          type: string
+          format: date-time
+          description: End datetime in modified ISO-8601 format (YYYY-MM-DD or YYYY-MM-DD HH:mm:SS). Timezones/offsets will be ignored.
+        - in: query
+          name: cursor
+          type: string
+          description: Cursor for pagination to retrieve the next set of entries. Will not work when `search` parameter is provided.
+        - in: query
+          name: direction
+          type: string
+          enum: ['asc', 'desc']
+          default: 'desc'
+          description: Sort direction for entries.
+        - in: query
+          name: includeMarkdown
+          type: boolean
+          default: true
+          description: Whether to include markdown content in the response.
+        - in: query
+          name: includeHeadings
+          type: boolean
+          default: true
+          description: Whether to include headings in the response.
+        - in: query
+          name: isStarred
+          type: boolean
+          description: Filter entries by their starred status.
+        - in: query
+          name: limit
+          type: integer
+          description: Maximum number of entries to return. Upper limit is 100.
+        - in: query
+          name: includeContents
+          type: boolean
+          default: true
+          description: Whether to include structured contents in the response. When false, the contents array will be empty. Note that contents are automatically excluded when more than 25 results are returned, regardless of this parameter.
+        - in: query
+          name: search
+          type: string
+          description: |
+            Search query to perform hybrid search across lifelogs. When provided, other filtering parameters are applied as additional constraints. You cannot paginate requests when using this parameter. Upper limit of 100 results. Hybrid search is a combination of keyword search and semantic search; you can therefore send:
+            - semantic queries, like "place bob recommended at dinner"
+            - boolean keyword search, like "blue OR red"
+            (While "AND" queries are supported, sending "red AND blue" is the same as sending "red blue").
+      responses:
+        '200':
+          description: Successful response with entries.
+          schema:
+            $ref: '#/definitions/LifelogsResponse'
+        '429':
+          description: Too Many Requests - Rate limit exceeded.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating rate limit exceeded.
+              retryAfter:
+                type: string
+                description: Number of seconds to wait before retrying.
+  /v1/lifelogs/{id}:
+    get:
+      operationId: getLifelog
+      summary: Returns a single lifelog by ID.
+      description: Returns a specific lifelog entry by its unique identifier.
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+          description: Unique identifier of the lifelog to retrieve.
+        - in: query
+          name: timezone
+          type: string
+          description: IANA timezone specifier. If missing, UTC is used.
+        - in: query
+          name: includeMarkdown
+          type: boolean
+          default: true
+          description: Whether to include markdown content in the response.
+        - in: query
+          name: includeHeadings
+          type: boolean
+          default: true
+          description: Whether to include headings in the response.
+        - in: query
+          name: includeContents
+          type: boolean
+          default: true
+          description: Whether to include structured contents in the response. When false, the contents array will be empty.
+      responses:
+        '200':
+          description: Successful response with a single lifelog entry.
+          schema:
+            $ref: '#/definitions/LifelogResponse'
+        '404':
+          description: Lifelog entry not found.
+        '401':
+          description: Unauthorized - Invalid or missing API key.
+        '429':
+          description: Too Many Requests - Rate limit exceeded.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating rate limit exceeded.
+              retryAfter:
+                type: string
+                description: Number of seconds to wait before retrying.
+    delete:
+      operationId: deleteLifelog
+      summary: Deletes a single lifelog by ID.
+      description: Permanently deletes a specific lifelog entry by its unique identifier.
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+          description: Unique identifier of the lifelog to delete.
+      responses:
+        '200':
+          description: Lifelog successfully deleted.
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                description: Indicates whether the deletion was successful.
+        '404':
+          description: Lifelog entry not found.
+        '401':
+          description: Unauthorized - Invalid or missing API key.
+        '429':
+          description: Too Many Requests - Rate limit exceeded.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating rate limit exceeded.
+              retryAfter:
+                type: string
+                description: Number of seconds to wait before retrying.
+
+  /v1/chats:
+    get:
+      operationId: getChats
+      summary: Returns a list of chats.
+      description: Returns a list of chats (ask-ai conversations) for the authenticated user. Pagination is supported.
+      parameters:
+        - in: query
+          name: cursor
+          type: string
+          description: Cursor for pagination to retrieve the next set of chats.
+        - in: query
+          name: direction
+          type: string
+          enum: ['asc', 'desc']
+          default: 'desc'
+          description: Sort direction for chats.
+        - in: query
+          name: limit
+          type: integer
+          description: Maximum number of chats to return. Upper limit is 100.
+        - in: query
+          name: timezone
+          type: string
+          description: IANA timezone specifier. If missing, UTC is used.
+        - in: query
+          name: isScheduled
+          type: boolean
+          description: When true, only return chats generated by scheduled prompts; when false, only non-scheduled chats.
+        - in: query
+          name: globalPromptId
+          type: string
+          description: Filter to chats generated by scheduled prompts that match the given globalPromptId (see curated prompts).
+      responses:
+        '200':
+          description: Successful response with chats.
+          schema:
+            $ref: '#/definitions/ChatsResponse'
+        '401':
+          description: Unauthorized - Invalid or missing API key.
+        '429':
+          description: Too Many Requests - Rate limit exceeded.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating rate limit exceeded.
+              retryAfter:
+                type: string
+                description: Number of seconds to wait before retrying.
+
+  /v1/chats/{id}:
+    get:
+      operationId: getChat
+      summary: Returns a single chat by ID.
+      description: Returns a specific chat (ask-ai conversation) by its unique identifier. Users can only access their own chats or public chats.
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+          description: Unique identifier of the chat to retrieve.
+        - in: query
+          name: timezone
+          type: string
+          description: IANA timezone specifier. If missing, UTC is used.
+      responses:
+        '200':
+          description: Successful response with a single chat.
+          schema:
+            $ref: '#/definitions/ChatResponse'
+        '404':
+          description: Chat not found.
+        '401':
+          description: Unauthorized - Invalid or missing API key.
+        '429':
+          description: Too Many Requests - Rate limit exceeded.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating rate limit exceeded.
+              retryAfter:
+                type: string
+                description: Number of seconds to wait before retrying.
+    delete:
+      operationId: deleteChat
+      summary: Deletes a single chat by ID.
+      description: Permanently deletes a specific chat (ask-ai conversation) by its unique identifier. Users can only delete their own chats.
+      parameters:
+        - in: path
+          name: id
+          type: string
+          required: true
+          description: Unique identifier of the chat to delete.
+      responses:
+        '200':
+          description: Chat successfully deleted.
+          schema:
+            $ref: '#/definitions/DeleteChatResponse'
+        '404':
+          description: Chat not found.
+        '401':
+          description: Unauthorized - Invalid or missing API key.
+  /v1/download-audio:
+    get:
+      operationId: downloadAudio
+      summary: Downloads audio for a specified time range.
+      description: Downloads audio in Ogg Opus format for a given time range from the specified audio source. The requested time range must be 2 hours (7,200,000 ms) or less.
+      parameters:
+        - in: query
+          name: audioSource
+          type: string
+          enum: ['pendant']
+          default: 'pendant'
+          description: Audio source to download from.
+        - in: query
+          name: startMs
+          type: integer
+          minimum: 0
+          required: true
+          description: Start time in milliseconds. Must be non-negative and less than endMs.
+        - in: query
+          name: endMs
+          type: integer
+          minimum: 0
+          required: true
+          description: End time in milliseconds. Must be non-negative and greater than startMs. The duration between startMs and endMs cannot exceed 2 hours (7,200,000 ms).
+      produces:
+        - audio/ogg
+      responses:
+        '200':
+          description: Audio file successfully retrieved.
+          headers:
+            Content-Type:
+              type: string
+              default: audio/ogg
+            Cache-Control:
+              type: string
+              default: public, max-age=3600
+            Content-Disposition:
+              type: string
+              default: inline; filename="audio.ogg"
+        '400':
+          description: Bad Request - Invalid parameters (e.g., endMs <= startMs) or time range exceeds 2 hours (7,200,000 ms).
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message describing the invalid input or limit exceeded.
+        '401':
+          description: Unauthorized - Invalid or missing API key.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating unauthorized access.
+        '404':
+          description: No audio available for the requested time range.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating no audio found for the specified time range.
+        '429':
+          description: Too Many Requests - Rate limit exceeded.
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                description: Error message indicating rate limit exceeded.
+              retryAfter:
+                type: string
+                description: Number of seconds to wait before retrying.
