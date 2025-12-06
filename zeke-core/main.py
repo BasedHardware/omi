@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import logging
 import uvicorn
 
-from app.api import chat, memories, tasks, omi, sms
+from app.api import chat, memories, tasks, omi, sms, overland
 from app.core.config import get_settings
 from app.core.database import init_db
 from app.core.events import event_bus, Event, EventTypes
@@ -119,6 +119,7 @@ app.include_router(memories.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(omi.router, prefix="/api")
 app.include_router(sms.router, prefix="/api")
+app.include_router(overland.router, prefix="/api")
 
 
 @app.get("/")

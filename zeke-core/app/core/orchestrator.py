@@ -10,6 +10,8 @@ from ..integrations.calendar import GoogleCalendarClient
 from ..services.memory_service import MemoryService
 from ..services.conversation_service import ConversationService
 from ..services.task_service import TaskService
+from ..services.location_service import LocationService
+from ..models.location import LocationContext
 from .config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ class Intent(str, Enum):
     RESEARCH = "research"
     CALENDAR = "calendar"
     WEATHER = "weather"
+    LOCATION = "location"
     AUTOMATION = "automation"
     CONVERSATION = "conversation"
     UNKNOWN = "unknown"
@@ -37,6 +40,7 @@ class OrchestratorContext:
     conversation_history: Optional[List[Dict[str, str]]] = None
     relevant_memories: Optional[List[str]] = None
     recent_conversations: Optional[List[str]] = None
+    location_context: Optional[LocationContext] = None
     
     def __post_init__(self):
         if self.conversation_history is None:
@@ -69,7 +73,8 @@ class SkillOrchestrator:
         conversation_service: ConversationService,
         task_service: TaskService,
         weather_client: Optional[WeatherClient] = None,
-        calendar_client: Optional[GoogleCalendarClient] = None
+        calendar_client: Optional[GoogleCalendarClient] = None,
+        location_service: Optional[LocationService] = None
     ):
         self.openai = openai_client
         self.memory_service = memory_service
@@ -77,6 +82,7 @@ class SkillOrchestrator:
         self.task_service = task_service
         self.weather_client = weather_client or WeatherClient()
         self.calendar_client = calendar_client or GoogleCalendarClient()
+        self.location_service = location_service or LocationService()
         
         self.tools = self._define_tools()
     
@@ -268,6 +274,54 @@ class SkillOrchestrator:
                         "properties": {}
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_location",
+                    "description": "Get the user's current location from their GPS tracker",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_location_history",
+                    "description": "Get the user's recent location history",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "hours": {
+                                "type": "integer",
+                                "description": "How many hours of history to retrieve (default 24)"
+                            },
+                            "motion_filter": {
+                                "type": "string",
+                                "enum": ["stationary", "walking", "running", "cycling", "driving"],
+                                "description": "Filter by motion type"
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_motion_summary",
+                    "description": "Get a summary of the user's movement patterns over time",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "hours": {
+                                "type": "integer",
+                                "description": "How many hours to analyze (default 24)"
+                            }
+                        }
+                    }
+                }
             }
         ]
     
@@ -278,6 +332,26 @@ class SkillOrchestrator:
                 f"- {m}" for m in context.relevant_memories[:10]
             )
         
+        location_context = ""
+        if context.location_context:
+            loc = context.location_context
+            motion_display = loc.current_motion.replace("_", " ").title()
+            speed_info = f", Speed: {loc.current_speed:.1f} m/s" if loc.current_speed else ""
+            battery_info = f", Battery: {int(loc.battery_level * 100)}%" if loc.battery_level else ""
+            status_parts = []
+            if loc.is_at_home:
+                status_parts.append("At home")
+            if loc.is_traveling:
+                status_parts.append("Traveling")
+            status_info = f" ({', '.join(status_parts)})" if status_parts else ""
+            
+            location_context = f"""Current Location Context:
+- Position: {loc.current_latitude:.4f}, {loc.current_longitude:.4f}
+- Motion: {motion_display}{speed_info}
+- Status: {loc.location_description or 'Unknown'}{status_info}{battery_info}
+- Last updated: {loc.last_updated.strftime('%I:%M %p') if loc.last_updated else 'Unknown'}
+"""
+        
         return f"""You are ZEKE, {settings.user_name}'s personal AI assistant. You are direct, action-oriented, and never fluffy.
 
 Key traits:
@@ -285,22 +359,26 @@ Key traits:
 - You use tools to get information rather than saying "I don't know"
 - You speak in a professional but conversational tone
 - You remember and reference past conversations and memories
+- You are aware of the user's current location and activity when available
 
 User: {settings.user_name}
 Timezone: {settings.user_timezone}
 Current channel: {context.channel}
 
+{location_context}
 {memories_context}
 
 When the user asks for something:
 1. Use the appropriate tool to take action or get information
 2. Provide a clear, direct response
 3. Never tell the user to "check it themselves" - do it for them
+4. Consider the user's current location and activity when relevant
 
 If you need to store something the user tells you, use store_memory.
 If you need to find past information, use search_memories or search_conversations.
 For weather questions, use get_weather or get_weather_forecast.
 For calendar/schedule questions, use get_calendar_events or get_today_schedule.
+For location questions, use get_current_location, get_location_history, or get_motion_summary.
 """
     
     async def process(self, context: OrchestratorContext) -> OrchestratorResponse:
@@ -309,6 +387,12 @@ For calendar/schedule questions, use get_calendar_events or get_today_schedule.
             context.user_message, 
             limit=5
         )
+        
+        try:
+            context.location_context = await self.location_service.get_location_context(context.user_id)
+        except Exception as e:
+            logger.debug(f"Could not fetch location context: {e}")
+            context.location_context = None
         
         messages = [
             {"role": "system", "content": self._get_system_prompt(context)}
@@ -461,6 +545,48 @@ For calendar/schedule questions, use get_calendar_events or get_today_schedule.
                     "summary": "; ".join([e.summary() for e in events]) if events else "No events today"
                 }
             
+            elif function_name == "get_current_location":
+                location = await self.location_service.get_current(user_id)
+                if location:
+                    motion_display = location.motion.replace("_", " ").title()
+                    speed_info = f" at {location.speed:.1f} m/s" if location.speed else ""
+                    return {
+                        "latitude": location.latitude,
+                        "longitude": location.longitude,
+                        "motion": location.motion,
+                        "speed": location.speed,
+                        "battery_level": location.battery_level,
+                        "timestamp": str(location.timestamp),
+                        "summary": f"Currently {motion_display}{speed_info} at ({location.latitude:.4f}, {location.longitude:.4f})"
+                    }
+                return {"error": "No location data available"}
+            
+            elif function_name == "get_location_history":
+                hours = arguments.get("hours", 24)
+                motion_filter = arguments.get("motion_filter")
+                locations = await self.location_service.get_recent(user_id, hours=hours)
+                if motion_filter:
+                    locations = [l for l in locations if l.motion == motion_filter]
+                return {
+                    "locations": [
+                        {
+                            "latitude": l.latitude,
+                            "longitude": l.longitude,
+                            "motion": l.motion,
+                            "timestamp": str(l.timestamp)
+                        }
+                        for l in locations[:50]
+                    ],
+                    "count": len(locations),
+                    "hours": hours,
+                    "summary": f"Found {len(locations)} location points in the last {hours} hours"
+                }
+            
+            elif function_name == "get_motion_summary":
+                hours = arguments.get("hours", 24)
+                summary = await self.location_service.get_motion_summary(user_id, hours=hours)
+                return summary
+            
             else:
                 return {"error": f"Unknown function: {function_name}"}
                 
@@ -484,5 +610,8 @@ For calendar/schedule questions, use get_calendar_events or get_today_schedule.
             "get_weather_forecast": Intent.WEATHER,
             "get_calendar_events": Intent.CALENDAR,
             "get_today_schedule": Intent.CALENDAR,
+            "get_current_location": Intent.LOCATION,
+            "get_location_history": Intent.LOCATION,
+            "get_motion_summary": Intent.LOCATION,
         }
         return intent_map.get(first_action, Intent.UNKNOWN)

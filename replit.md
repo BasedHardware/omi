@@ -111,9 +111,24 @@ Preferred communication style: Simple, everyday language.
 ### Zeke Core
 - **Purpose**: Personal AI assistant with proactive task management
 - **Architecture**: Event-driven skill orchestrator (not multi-agent)
-- **Skills**: Memory curation, task planning, research, communications
+- **Skills**: Memory curation, task planning, research, communications, location awareness
 - **Integration**: Bridges Limitless API to Omi (temporary, removable)
 - **Stack**: FastAPI, PostgreSQL + pgvector, Redis + arq workers
+- **Location Tracking**: Overland iOS app integration for GPS context
+
+#### Overland GPS Integration
+- **App**: Overland iOS (https://overland.p3k.app/) sends GPS data via HTTP POST
+- **Endpoint**: POST `/api/overland/` receives location batches in GeoJSON format
+- **Data Captured**: Latitude, longitude, altitude, speed, motion state (walking/driving/stationary), battery level
+- **Storage**: PostgreSQL `locations` table with automatic retention (90 days default)
+- **Context Injection**: Location context automatically added to AI prompts for location-aware responses
+- **Dashboard**: Location widget displays current motion, status, speed, and battery
+- **Security**: Bearer token authentication via `OVERLAND_API_KEY` environment variable (required in production)
+- **API Endpoints**:
+  - `GET /api/overland/context` - Current location context summary
+  - `GET /api/overland/current` - Most recent location point
+  - `GET /api/overland/recent` - Recent location history
+  - `GET /api/overland/summary` - Motion summary (time spent walking, driving, etc.)
 
 ### MCP Server
 - **Protocol**: Model Context Protocol for AI tool integration

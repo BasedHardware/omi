@@ -1,28 +1,31 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, CheckSquare, Clock, AlertTriangle } from 'lucide-react';
-import { api, type Memory, type Task } from '../lib/api';
+import { Brain, CheckSquare, Clock, AlertTriangle, MapPin, Battery, Navigation } from 'lucide-react';
+import { api, type Memory, type Task, type LocationContext } from '../lib/api';
 
 export function Dashboard() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<Task[]>([]);
   const [dueSoonTasks, setDueSoonTasks] = useState<Task[]>([]);
+  const [locationContext, setLocationContext] = useState<LocationContext | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [memoriesData, tasksData, overdueData, dueSoonData] = await Promise.all([
+        const [memoriesData, tasksData, overdueData, dueSoonData, locationData] = await Promise.all([
           api.getMemories(5),
           api.getTasks('pending', 5),
           api.getOverdueTasks(),
           api.getTasksDueSoon(24),
+          api.getLocationContext(),
         ]);
         setMemories(memoriesData);
         setTasks(tasksData);
         setOverdueTasks(overdueData);
         setDueSoonTasks(dueSoonData);
+        setLocationContext(locationData);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
       } finally {
@@ -73,6 +76,62 @@ export function Dashboard() {
           color={dueSoonTasks.length > 0 ? 'yellow' : 'slate'}
         />
       </div>
+
+      {locationContext && (
+        <div className="bg-slate-900 rounded-xl p-4 md:p-6 border border-slate-700">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-purple-400" />
+              Location
+            </h2>
+            <span className="text-xs text-slate-500">
+              {new Date(locationContext.last_updated).toLocaleTimeString()}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-slate-800 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-purple-400 mb-1">
+                <Navigation className="w-4 h-4" />
+                <span className="text-xs">Motion</span>
+              </div>
+              <p className="text-slate-200 font-medium capitalize">{locationContext.current_motion}</p>
+            </div>
+            <div className="bg-slate-800 rounded-lg p-3">
+              <div className="flex items-center gap-2 text-blue-400 mb-1">
+                <MapPin className="w-4 h-4" />
+                <span className="text-xs">Status</span>
+              </div>
+              <p className="text-slate-200 font-medium">
+                {locationContext.is_at_home ? 'At Home' : locationContext.is_traveling ? 'Traveling' : 'Away'}
+              </p>
+            </div>
+            {locationContext.current_speed !== null && locationContext.current_speed > 0 && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-green-400 mb-1">
+                  <Navigation className="w-4 h-4" />
+                  <span className="text-xs">Speed</span>
+                </div>
+                <p className="text-slate-200 font-medium">{Math.round(locationContext.current_speed * 2.237)} mph</p>
+              </div>
+            )}
+            {locationContext.battery_level !== null && (
+              <div className="bg-slate-800 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-yellow-400 mb-1">
+                  <Battery className="w-4 h-4" />
+                  <span className="text-xs">Battery</span>
+                </div>
+                <p className="text-slate-200 font-medium">
+                  {Math.round(locationContext.battery_level * 100)}%
+                  {locationContext.battery_state === 'charging' && ' (charging)'}
+                </p>
+              </div>
+            )}
+          </div>
+          {locationContext.location_description && (
+            <p className="text-slate-400 text-sm mt-3">{locationContext.location_description}</p>
+          )}
+        </div>
+      )}
 
       {overdueTasks.length > 0 && (
         <div className="bg-red-900/30 border border-red-700 rounded-xl p-4">

@@ -24,12 +24,14 @@ def get_orchestrator() -> SkillOrchestrator:
     from ..services.memory_service import MemoryService
     from ..services.conversation_service import ConversationService
     from ..services.task_service import TaskService
+    from ..services.location_service import LocationService
     
     return SkillOrchestrator(
         openai_client=OpenAIClient(),
         memory_service=MemoryService(),
         conversation_service=ConversationService(),
-        task_service=TaskService()
+        task_service=TaskService(),
+        location_service=LocationService()
     )
 
 

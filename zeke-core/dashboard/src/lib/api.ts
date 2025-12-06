@@ -33,6 +33,41 @@ export interface ChatResponse {
   data: Record<string, unknown>;
 }
 
+export interface Location {
+  id: string;
+  latitude: number;
+  longitude: number;
+  altitude: number | null;
+  speed: number | null;
+  motion: string;
+  activity: string | null;
+  battery_level: number | null;
+  battery_state: string | null;
+  timestamp: string;
+  created_at: string;
+}
+
+export interface LocationContext {
+  current_latitude: number;
+  current_longitude: number;
+  current_motion: string;
+  current_speed: number | null;
+  battery_level: number | null;
+  battery_state: string | null;
+  last_updated: string;
+  location_description: string | null;
+  is_at_home: boolean;
+  is_traveling: boolean;
+  recent_locations_count: number;
+}
+
+export interface MotionSummary {
+  summary: Record<string, number>;
+  total_points: number;
+  hours_analyzed: number;
+  dominant_motion: string;
+}
+
 export const api = {
   async chat(message: string, history: ChatMessage[] = []): Promise<ChatResponse> {
     const res = await fetch(`${API_BASE}/chat/`, {
@@ -116,5 +151,44 @@ export const api = {
   async deleteTask(id: string): Promise<void> {
     const res = await fetch(`${API_BASE}/tasks/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete task');
+  },
+
+  async getLocationContext(): Promise<LocationContext | null> {
+    try {
+      const res = await fetch(`${API_BASE}/overland/context`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('Failed to fetch location context');
+      return res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getCurrentLocation(): Promise<Location | null> {
+    try {
+      const res = await fetch(`${API_BASE}/overland/current`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('Failed to fetch current location');
+      return res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getRecentLocations(hours = 24, limit = 100): Promise<Location[]> {
+    const params = new URLSearchParams({ hours: String(hours), limit: String(limit) });
+    const res = await fetch(`${API_BASE}/overland/recent?${params}`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async getMotionSummary(hours = 24): Promise<MotionSummary | null> {
+    try {
+      const res = await fetch(`${API_BASE}/overland/summary?hours=${hours}`);
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
   },
 };

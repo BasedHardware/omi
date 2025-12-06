@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     openweathermap_api_key: Optional[str] = None
     perplexity_api_key: Optional[str] = None
     
+    overland_api_key: Optional[str] = None
+    home_location: Optional[str] = None
+    location_retention_days: int = 90
+    
     user_name: str = "Nate"
     user_timezone: str = "America/New_York"
     user_location: str = "Abington, MA, US"
