@@ -23,6 +23,7 @@ import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -323,6 +324,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             create: (context) => AddAppProvider(),
             update: (BuildContext context, value, AddAppProvider? previous) =>
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
+          ),
+          ChangeNotifierProxyProvider<AppProvider, AiAppGeneratorProvider>(
+            create: (context) => AiAppGeneratorProvider(),
+            update: (BuildContext context, value, AiAppGeneratorProvider? previous) =>
+                (previous?..setAppProvider(value)) ?? AiAppGeneratorProvider(),
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),

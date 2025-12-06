@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/pages/apps/widgets/category_apps_page.dart';
@@ -629,6 +630,16 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                 ],
                               ),
                             ),
+                          ),
+                  ),
+
+                  // AI App Generator Banner
+                  SliverToBoxAdapter(
+                    child: state.isLoading
+                        ? const SizedBox.shrink()
+                        : const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: AiAppGeneratorBanner(),
                           ),
                   ),
 
