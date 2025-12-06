@@ -5,7 +5,6 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   staticPageGenerationTimeout: 60 * 20,
-  allowedHosts: true,
   // Bypass 2MB fetch cache limit by using file system cache directly
   cacheHandler: fileURLToPath(import.meta.resolve('./cache-handler.cjs')),
   eslint: {
