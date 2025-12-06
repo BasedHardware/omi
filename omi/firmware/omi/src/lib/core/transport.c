@@ -473,6 +473,8 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     is_connected = false;
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     storage_is_on = false;
+    // Immediately notify SD card to switch to chunking mode
+    sd_check_chunking_mode();
 #endif
 
     LOG_INF("Transport disconnected");
