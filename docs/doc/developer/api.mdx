@@ -5,7 +5,7 @@ description: "Access your Omi data programmatically with the Developer API. Buil
 
 ## Overview
 
-The Omi Developer API provides read-only access to your personal Omi data, allowing you to build custom applications and integrations. Use it to create analytics dashboards, export data to other services, or build custom tools on top of your Omi data.
+The Omi Developer API provides programmatic access to your personal Omi data, allowing you to build custom applications and integrations. Use it to create analytics dashboards, export data to other services, build automation workflows, or contribute data back to your Omi account.
 
 ## Getting Started
 
@@ -33,6 +33,23 @@ https://api.omi.me/v1/dev
 ```
 
 For self-hosted instances, replace with your backend URL.
+
+## Quick Reference
+
+| Resource | Method | Endpoint | Description |
+|----------|--------|----------|-------------|
+| **API Keys** | GET | `/v1/dev/keys` | List all API keys |
+| | POST | `/v1/dev/keys` | Create new API key |
+| | DELETE | `/v1/dev/keys/{key_id}` | Revoke API key |
+| **Memories** | GET | `/v1/dev/user/memories` | Get memories |
+| | POST | `/v1/dev/user/memories` | Create memory |
+| | POST | `/v1/dev/user/memories/batch` | Create multiple memories |
+| **Action Items** | GET | `/v1/dev/user/action-items` | Get action items |
+| | POST | `/v1/dev/user/action-items` | Create action item |
+| | POST | `/v1/dev/user/action-items/batch` | Create multiple action items |
+| **Conversations** | GET | `/v1/dev/user/conversations` | Get conversations |
+| | POST | `/v1/dev/user/conversations` | Create from text |
+| | POST | `/v1/dev/user/conversations/from-segments` | Create from transcript |
 
 ## Endpoints
 
@@ -105,11 +122,13 @@ Revoke a specific API key. This action cannot be undone.
 
 ---
 
-### User Data (Read-Only)
+### User Data
 
 All user data endpoints require authentication via your Developer API key.
 
-#### Get Memories
+#### Memories
+
+##### Get Memories
 
 ```http
 GET /v1/dev/user/memories
@@ -147,7 +166,87 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 ]
 ```
 
-#### Get Action Items
+##### Create Memory
+
+```http
+POST /v1/dev/user/memories
+```
+
+Create a new memory. If no category is provided, memories default to `manual` category and are automatically categorized between `interesting` and `system`.
+
+**Request Body:**
+
+```json
+{
+  "content": "User prefers dark mode in all applications",
+  "category": "system",
+  "visibility": "private",
+  "tags": ["preferences", "ui"]
+}
+```
+
+**Parameters:**
+- `content` (string, required): The memory content (1-500 characters)
+- `category` (string, optional): Memory category - `interesting`, `system`, or `manual` (defaults to `manual` and auto-categorizes to `interesting` or `system` if not provided)
+- `visibility` (string, optional): `public` or `private` (default: `private`)
+- `tags` (array, optional): List of tags
+
+**Response:**
+
+```json
+{
+  "id": "mem_xyz789",
+  "content": "User prefers dark mode in all applications",
+  "category": "system",
+  "visibility": "private",
+  "tags": ["preferences", "ui"],
+  "created_at": "2025-12-06T10:35:00Z",
+  "updated_at": "2025-12-06T10:35:00Z",
+  "manually_added": true,
+  "scoring": "01_999_1733482500"
+}
+```
+
+##### Create Memories (Batch)
+
+```http
+POST /v1/dev/user/memories/batch
+```
+
+Create multiple memories in a single request (max 25).
+
+**Request Body:**
+
+```json
+{
+  "memories": [
+    {
+      "content": "Meeting scheduled with team next Monday",
+      "category": "system"
+    },
+    {
+      "content": "Discovered new productivity technique",
+      "visibility": "public"
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "memories": [
+    { "id": "mem_001", "content": "...", ... },
+    { "id": "mem_002", "content": "...", ... }
+  ],
+  "created_count": 2
+}
+```
+
+#### Action Items
+
+##### Get Action Items
 
 ```http
 GET /v1/dev/user/action-items
@@ -198,7 +297,88 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 ]
 ```
 
-#### Get Conversations
+##### Create Action Item
+
+```http
+POST /v1/dev/user/action-items
+```
+
+Create a new action item (task/to-do).
+
+**Request Body:**
+
+```json
+{
+  "description": "Review pull request #123",
+  "completed": false,
+  "due_at": "2025-12-08T15:00:00+00:00"
+}
+```
+
+**Parameters:**
+- `description` (string, required): The action item description (1-500 characters)
+- `completed` (boolean, optional): Whether completed (default: `false`)
+- `due_at` (datetime, optional): Due date in ISO 8601 format with timezone
+
+**Response:**
+
+```json
+{
+  "id": "action_abc123",
+  "description": "Review pull request #123",
+  "completed": false,
+  "created_at": "2025-12-06T10:30:00Z",
+  "updated_at": "2025-12-06T10:30:00Z",
+  "due_at": "2025-12-08T15:00:00+00:00",
+  "completed_at": null,
+  "conversation_id": null
+}
+```
+
+<Note>
+FCM notifications are automatically sent if a `due_at` date is provided.
+</Note>
+
+##### Create Action Items (Batch)
+
+```http
+POST /v1/dev/user/action-items/batch
+```
+
+Create multiple action items in a single request (max 50).
+
+**Request Body:**
+
+```json
+{
+  "action_items": [
+    {
+      "description": "Task 1",
+      "due_at": "2025-12-08T15:00:00+00:00"
+    },
+    {
+      "description": "Task 2",
+      "completed": false
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "action_items": [
+    { "id": "action_001", "description": "Task 1", ... },
+    { "id": "action_002", "description": "Task 2", ... }
+  ],
+  "created_count": 2
+}
+```
+
+#### Conversations
+
+##### Get Conversations
 
 ```http
 GET /v1/dev/user/conversations
@@ -302,6 +482,123 @@ curl -H "Authorization: Bearer omi_dev_your_api_key" \
 ]
 ```
 
+##### Create Conversation from Text
+
+```http
+POST /v1/dev/user/conversations
+```
+
+Create a new conversation from text. The text is processed through the full conversation pipeline to extract structured data, action items, and memories.
+
+**Request Body:**
+
+```json
+{
+  "text": "We discussed the upcoming product launch. Sarah mentioned we need to finalize the marketing materials by next Wednesday. I committed to reviewing the design mockups by Monday.",
+  "text_source": "other_text",
+  "text_source_spec": "slack_discussion",
+  "started_at": "2025-12-06T14:00:00+00:00",
+  "finished_at": "2025-12-06T14:30:00+00:00",
+  "language": "en"
+}
+```
+
+**Parameters:**
+- `text` (string, required): The conversation text/transcript (1-100,000 characters)
+- `text_source` (string, optional): Source type - `audio_transcript`, `message`, or `other_text` (default: `other_text`)
+- `text_source_spec` (string, optional): Additional source info (e.g., 'email', 'slack', 'whatsapp')
+- `started_at` (datetime, optional): When conversation started (defaults to now)
+- `finished_at` (datetime, optional): When conversation finished (defaults to `started_at` + 5 minutes)
+- `language` (string, optional): Language code (default: 'en')
+- `geolocation` (object, optional): Geolocation data
+
+**Response:**
+
+```json
+{
+  "id": "conv_456",
+  "status": "completed",
+  "discarded": false
+}
+```
+
+**Processing Pipeline:**
+
+When you create a conversation, the following happens automatically:
+- **Discard Detection**: Determines if content is meaningful enough to save
+- **Structured Generation**: Creates title, overview, category, and emoji
+- **Action Item Extraction**: Identifies and creates action items (with deduplication against past 2 days)
+- **Memory Extraction**: Extracts interesting facts and insights (up to 4 per conversation)
+- **App Integration**: Triggers enabled summarization apps
+- **Webhooks**: Notifies external systems
+
+<Note>
+Memories and action items are extracted asynchronously. Use the GET endpoints to retrieve them after creation.
+</Note>
+
+##### Create Conversation from Transcript Segments
+
+```http
+POST /v1/dev/user/conversations/from-segments
+```
+
+Create a conversation from structured transcript segments with speaker diarization and timing information.
+
+**Request Body:**
+
+```json
+{
+  "transcript_segments": [
+    {
+      "text": "Hey, how are you doing?",
+      "speaker": "SPEAKER_00",
+      "is_user": true,
+      "start": 0.0,
+      "end": 2.5
+    },
+    {
+      "text": "I'm doing great, thanks for asking!",
+      "speaker": "SPEAKER_01",
+      "is_user": false,
+      "start": 2.8,
+      "end": 5.2
+    }
+  ],
+  "source": "phone",
+  "language": "en"
+}
+```
+
+**Parameters:**
+- `transcript_segments` (array, required): List of transcript segments (1-500 segments)
+  - `text` (string, required): The spoken text
+  - `speaker` (string, optional): Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')
+  - `speaker_id` (integer, optional): Numeric speaker ID (auto-calculated if not provided)
+  - `is_user` (boolean, optional): Whether this segment is from the user (default: `false`)
+  - `person_id` (string, optional): ID of known person speaking
+  - `start` (float, required): Start time in seconds (e.g., 0.0, 1.5, 60.2)
+  - `end` (float, required): End time in seconds (e.g., 1.5, 3.0, 65.8)
+- `source` (string, optional): Source of conversation (default: `external_integration`)
+  - Available: `omi`, `friend`, `openglass`, `phone`, `desktop`, `apple_watch`, `bee`, `plaud`, `frame`, `screenpipe`, `workflow`, `sdcard`, `external_integration`
+- `started_at` (datetime, optional): When conversation started (defaults to now)
+- `finished_at` (datetime, optional): When conversation finished (calculated from last segment if not provided)
+- `language` (string, optional): Language code (default: 'en')
+- `geolocation` (object, optional): Geolocation data
+
+**Response:**
+
+```json
+{
+  "id": "conv_789",
+  "status": "completed",
+  "discarded": false
+}
+```
+
+<Note>
+Unlike text-based conversations, transcript segments ARE stored in the `transcript_segments` field and can be retrieved with `include_transcript=true`.
+</Note>
+
 ## Authentication
 
 All API requests (except key creation) require authentication using your Developer API key:
@@ -360,6 +657,101 @@ Never commit API keys to version control or share them publicly!
 5. **Revoke immediately**: If a key is compromised, revoke it right away
 
 ## Example Use Cases
+
+### Import Data from Other Services
+
+Import your tasks from another task management system:
+
+```python
+import requests
+
+api_key = "omi_dev_your_api_key"
+headers = {"Authorization": f"Bearer {api_key}"}
+
+# Import tasks from your external system
+tasks = get_tasks_from_external_system()
+
+action_items = [
+    {
+        "description": task["title"],
+        "due_at": task["due_date"],
+        "completed": task["completed"]
+    }
+    for task in tasks
+]
+
+response = requests.post(
+    "https://api.omi.me/v1/dev/user/action-items/batch",
+    headers=headers,
+    json={"action_items": action_items}
+)
+
+print(f"Imported {response.json()['created_count']} action items")
+```
+
+### Create Memories from Notes
+
+Automatically create memories from your note-taking app:
+
+```javascript
+const API_KEY = process.env.OMI_API_KEY;
+
+async function syncNotes(notes) {
+  const memories = notes.map(note => ({
+    content: note.content,
+    category: "system",
+    tags: note.tags
+  }));
+
+  const response = await fetch(
+    'https://api.omi.me/v1/dev/user/memories/batch',
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ memories })
+    }
+  );
+
+  const result = await response.json();
+  console.log(`Created ${result.created_count} memories`);
+}
+```
+
+### Process Meeting Transcripts
+
+Upload meeting transcripts with speaker information:
+
+```bash
+#!/bin/bash
+API_KEY="omi_dev_your_api_key"
+
+curl -X POST "https://api.omi.me/v1/dev/user/conversations/from-segments" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "transcript_segments": [
+      {
+        "text": "Let'\''s review the quarterly results",
+        "speaker": "SPEAKER_00",
+        "is_user": true,
+        "start": 0.0,
+        "end": 3.5
+      },
+      {
+        "text": "Revenue is up 25% from last quarter",
+        "speaker": "SPEAKER_01",
+        "is_user": false,
+        "start": 4.0,
+        "end": 7.2
+      }
+    ],
+    "source": "phone",
+    "language": "en"
+  }'
+```
 
 ### Analytics Dashboard
 
@@ -423,14 +815,21 @@ curl -H "Authorization: Bearer $API_KEY" \
 | Feature | Developer API | MCP |
 |---------|--------------|-----|
 | **Purpose** | Direct HTTP API access | AI assistant integration |
-| **Access** | Read-only user data | Read/write with AI context |
-| **Use Case** | Custom apps, dashboards | Claude Desktop, AI agents |
+| **Access** | Read & write user data | Read/write with AI context |
+| **Use Case** | Custom apps, dashboards, automation | Claude Desktop, AI agents |
 | **Authentication** | Bearer token | Environment variable |
-| **Best For** | Web apps, analytics | AI-powered workflows |
+| **Best For** | Web apps, integrations, batch operations | AI-powered workflows |
 
-Use the **Developer API** when you need programmatic access to your data for custom applications.
+Use the **Developer API** when you need:
+- Programmatic access to your data for custom applications
+- Batch operations (creating multiple memories/action items at once)
+- Integration with external services (task managers, note apps, etc.)
+- Custom automation workflows
 
-Use **MCP** when you want AI assistants like Claude to interact with your Omi data.
+Use **MCP** when you want:
+- AI assistants like Claude to interact with your Omi data
+- Natural language queries and AI-powered insights
+- Context-aware AI assistance
 
 ## Support
 
