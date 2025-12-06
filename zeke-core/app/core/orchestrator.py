@@ -5,6 +5,8 @@ import logging
 import json
 
 from ..integrations.openai import OpenAIClient
+from ..integrations.weather import WeatherClient
+from ..integrations.calendar import GoogleCalendarClient
 from ..services.memory_service import MemoryService
 from ..services.conversation_service import ConversationService
 from ..services.task_service import TaskService
@@ -65,12 +67,16 @@ class SkillOrchestrator:
         openai_client: OpenAIClient,
         memory_service: MemoryService,
         conversation_service: ConversationService,
-        task_service: TaskService
+        task_service: TaskService,
+        weather_client: Optional[WeatherClient] = None,
+        calendar_client: Optional[GoogleCalendarClient] = None
     ):
         self.openai = openai_client
         self.memory_service = memory_service
         self.conversation_service = conversation_service
         self.task_service = task_service
+        self.weather_client = weather_client or WeatherClient()
+        self.calendar_client = calendar_client or GoogleCalendarClient()
         
         self.tools = self._define_tools()
     
@@ -199,6 +205,69 @@ class SkillOrchestrator:
                         "required": ["content"]
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get current weather conditions for a location",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The location to get weather for (city, state). Defaults to user's location if not specified."
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather_forecast",
+                    "description": "Get weather forecast for upcoming days",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The location to get forecast for"
+                            },
+                            "days": {
+                                "type": "integer",
+                                "description": "Number of days to forecast (1-5)"
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_calendar_events",
+                    "description": "Get upcoming calendar events",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "days": {
+                                "type": "integer",
+                                "description": "How many days ahead to look (default 7)"
+                            }
+                        }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_today_schedule",
+                    "description": "Get today's calendar events and schedule",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
             }
         ]
     
@@ -230,6 +299,8 @@ When the user asks for something:
 
 If you need to store something the user tells you, use store_memory.
 If you need to find past information, use search_memories or search_conversations.
+For weather questions, use get_weather or get_weather_forecast.
+For calendar/schedule questions, use get_calendar_events or get_today_schedule.
 """
     
     async def process(self, context: OrchestratorContext) -> OrchestratorResponse:
@@ -346,6 +417,50 @@ If you need to find past information, use search_memories or search_conversation
                 )
                 return {"memory_id": memory.id, "stored": True}
             
+            elif function_name == "get_weather":
+                weather = await self.weather_client.get_current(
+                    location=arguments.get("location")
+                )
+                if weather:
+                    return {
+                        "weather": weather.to_dict(),
+                        "summary": weather.summary()
+                    }
+                return {"error": "Could not fetch weather data"}
+            
+            elif function_name == "get_weather_forecast":
+                forecast = await self.weather_client.get_forecast(
+                    location=arguments.get("location"),
+                    days=arguments.get("days", 5)
+                )
+                if forecast:
+                    return {
+                        "forecast": [f.to_dict() for f in forecast],
+                        "summary": "; ".join([
+                            f"{f.date.strftime('%A')}: {f.description}, {f.temp_high:.0f}/{f.temp_low:.0f}°F"
+                            for f in forecast
+                        ])
+                    }
+                return {"error": "Could not fetch weather forecast"}
+            
+            elif function_name == "get_calendar_events":
+                events = await self.calendar_client.get_upcoming_events(
+                    days=arguments.get("days", 7)
+                )
+                return {
+                    "events": [e.to_dict() for e in events],
+                    "count": len(events),
+                    "summary": "; ".join([e.summary() for e in events[:5]]) if events else "No upcoming events"
+                }
+            
+            elif function_name == "get_today_schedule":
+                events = await self.calendar_client.get_today_events()
+                return {
+                    "events": [e.to_dict() for e in events],
+                    "count": len(events),
+                    "summary": "; ".join([e.summary() for e in events]) if events else "No events today"
+                }
+            
             else:
                 return {"error": f"Unknown function: {function_name}"}
                 
@@ -365,5 +480,9 @@ If you need to find past information, use search_memories or search_conversation
             "list_tasks": Intent.LIST_TASKS,
             "search_conversations": Intent.CONVERSATION,
             "store_memory": Intent.QUERY_MEMORY,
+            "get_weather": Intent.WEATHER,
+            "get_weather_forecast": Intent.WEATHER,
+            "get_calendar_events": Intent.CALENDAR,
+            "get_today_schedule": Intent.CALENDAR,
         }
         return intent_map.get(first_action, Intent.UNKNOWN)

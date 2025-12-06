@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     
     user_name: str = "Nate"
     user_timezone: str = "America/New_York"
+    user_location: str = "Abington, MA, US"
     
     quiet_hours_start: int = 22
     quiet_hours_end: int = 7

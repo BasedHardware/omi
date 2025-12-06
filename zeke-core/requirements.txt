@@ -9,3 +9,5 @@ openai>=1.0.0
 httpx>=0.25.0
 twilio>=8.0.0
 python-multipart>=0.0.6
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
