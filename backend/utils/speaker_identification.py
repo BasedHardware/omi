@@ -1,9 +1,50 @@
+"""
+Speaker Identification Module for Omi Backend
+
+This module provides two distinct speaker identification functions:
+
+1. detect_speaker_from_text() - REGEX-based self-identification detection
+   Detects when someone states their own name (e.g., "I am Alice", "My name is Bob")
+   Uses multi-language regex patterns. Fast, no model required.
+
+2. identify_speaker_from_transcript() - LLM-based addressee detection
+   Detects who the user is TALKING TO (e.g., "Hey Alice, can you help?")
+   Uses Qwen2.5-1.5B-Instruct GGUF model. Requires model file.
+
+Fix for: https://github.com/BasedHardware/omi/issues/3039
+"""
+
+import contextlib
+import io
+import json
+import logging
+import os
 import re
+import threading
 from typing import Optional
 
-# Language-specific patterns for speaker identification from text
-# Each pattern should have a capture group for the name.
+# ============================================================================
+# Configuration
+# ============================================================================
+MODEL_PATH = os.environ.get(
+    "SPEAKER_MODEL_PATH",
+    os.path.join(os.path.dirname(__file__), "qwen_1.5b_speaker.gguf")
+)
+CONTEXT_WINDOW = 1024
+GPU_LAYERS = -1  # Full GPU offload (Metal/CUDA)
+
+logger = logging.getLogger(__name__)
+
+# Thread-safe singleton for LLM
+_model_instance = None
+_model_lock = threading.Lock()
+
+# ============================================================================
+# PART 1: REGEX-BASED SELF-IDENTIFICATION (Original Functionality)
+# ============================================================================
+# Multi-language patterns for detecting self-introductions like "I am Alice"
 # The name is expected to be the last capture group.
+
 SPEAKER_IDENTIFICATION_PATTERNS = {
     'bg': [  # Bulgarian
         r"\b(Аз съм|аз съм|Казвам се|казвам се|Името ми е|името ми е)\s+([А-Я][а-я]*)\b",
@@ -109,17 +150,197 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
     ],
 }
 
-# Check all (multi lang)
-patterns_to_check = []
+# Pre-compile all patterns for performance
+_compiled_patterns = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
-    patterns_to_check.extend(lang_patterns)
+    _compiled_patterns.extend(lang_patterns)
 
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
-    for pattern in patterns_to_check:
+    """
+    Detect the speaker's OWN NAME from self-identification phrases.
+    
+    This is the ORIGINAL function that uses regex patterns to detect
+    when someone states their own name (e.g., "I am Alice", "My name is Bob").
+    
+    Args:
+        text: The transcript text to analyze.
+    
+    Returns:
+        The speaker's name if self-identification is detected, else None.
+        
+    Examples:
+        >>> detect_speaker_from_text("Hi, I am Alice")
+        'Alice'
+        >>> detect_speaker_from_text("My name is Bob")
+        'Bob'
+        >>> detect_speaker_from_text("Hey Alice, help me")
+        None  # This is addressing, not self-identification
+    """
+    for pattern in _compiled_patterns:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
             if name and len(name) >= 2:
                 return name.capitalize()
     return None
+
+
+# ============================================================================
+# PART 2: LLM-BASED ADDRESSEE DETECTION (New Functionality - Fix #3039)
+# ============================================================================
+
+SYSTEM_PROMPT = """Identify WHO is being directly SPOKEN TO (the addressee) in the transcript.
+
+ADDRESSED - Return their name(s):
+- "Hey Alice, can you help?" → ["Alice"] (vocative with comma)
+- "Alice, come here!" → ["Alice"] (imperative to person)
+- "What do you think, Bob?" → ["Bob"] (question directed at person)
+- "John and Mary, listen up" → ["John", "Mary"] (multiple addressees)
+
+NOT ADDRESSED - Return null:
+- "I told Alice to stop" → null (verb + name = talking ABOUT them)
+- "I saw Bob yesterday" → null (verb + name = talking ABOUT them)
+- "Alice said she would come" → null (name is subject doing action)
+- "Did you hear about Sarah?" → null (talking ABOUT Sarah)
+- "Bob's idea was great" → null (possessive = talking ABOUT them)
+- "Can you pass the salt?" → null (no name mentioned)
+
+STRICT EXCLUSION RULE:
+If a name follows verbs like "told", "said", "saw", "asked", "met", "called", "heard", "know", "like", "love", "miss", "helped", "thanked" - that person is being MENTIONED, not addressed. Return null.
+
+ONLY return a name if the person is being DIRECTLY spoken to with a vocative (comma-separated name) or imperative directed at them.
+
+Respond ONLY with: {"speakers": ["Name"]} or {"speakers": null}"""
+
+
+def get_model():
+    """
+    Get the LLM model singleton, loading if necessary.
+    Thread-safe with suppressed initialization noise.
+    """
+    global _model_instance
+    
+    if _model_instance is not None:
+        return _model_instance
+    
+    with _model_lock:
+        if _model_instance is not None:
+            return _model_instance
+        
+        _model_instance = _load_model_silent()
+        _warmup()
+        
+        return _model_instance
+
+
+def _load_model_silent():
+    """Load model with suppressed stderr noise."""
+    if not os.path.exists(MODEL_PATH):
+        logger.error(f"Speaker ID model not found: {MODEL_PATH}")
+        raise FileNotFoundError(
+            f"Speaker ID model not found at {MODEL_PATH}. "
+            "Download: curl -L -o qwen_1.5b_speaker.gguf "
+            "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+        )
+    
+    try:
+        from llama_cpp import Llama
+    except ImportError as e:
+        raise ImportError("pip install llama-cpp-python") from e
+    
+    logger.info(f"Loading speaker ID model: {MODEL_PATH}")
+    
+    # Suppress Metal/CUDA initialization spam
+    stderr_capture = io.StringIO()
+    with contextlib.redirect_stderr(stderr_capture):
+        model = Llama(
+            model_path=MODEL_PATH,
+            n_ctx=CONTEXT_WINDOW,
+            n_gpu_layers=GPU_LAYERS,
+            verbose=False,
+            chat_format="chatml",
+        )
+    
+    logger.info("Speaker ID model loaded successfully")
+    return model
+
+
+def _warmup():
+    """Warmup inference to eliminate cold-start penalty."""
+    try:
+        identify_speaker_from_transcript("warmup", _warmup=True)
+    except Exception as e:
+        logger.warning(f"Speaker ID model warmup failed: {e}")
+
+
+def identify_speaker_from_transcript(
+    transcript: str,
+    _warmup: bool = False
+) -> Optional[list[str]]:
+    """
+    Identify who the user is TALKING TO in the given transcript.
+    
+    Uses a self-hosted LLM to distinguish between:
+    - ADDRESSED: "Hey Alice, can you help?" → ["Alice"]
+    - MENTIONED: "I told Alice about it" → None
+    
+    Args:
+        transcript: The text to analyze.
+        _warmup: Internal flag for warmup calls (do not use).
+    
+    Returns:
+        List of addressed speaker names (e.g., ["Alice", "Bob"]),
+        or None if no one is being directly addressed.
+        
+    Examples:
+        >>> identify_speaker_from_transcript("Hey Alice, can you help?")
+        ['Alice']
+        >>> identify_speaker_from_transcript("Alice and Bob, come here!")
+        ['Alice', 'Bob']
+        >>> identify_speaker_from_transcript("I told Alice about it")
+        None
+    """
+    model = get_model()
+    
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f'Transcript: "{transcript}"'}
+    ]
+    
+    try:
+        # Suppress inference noise
+        stderr_capture = io.StringIO()
+        with contextlib.redirect_stderr(stderr_capture):
+            response = model.create_chat_completion(
+                messages=messages,
+                response_format={"type": "json_object"},
+                max_tokens=100,
+                temperature=0.0,
+            )
+        
+        content = response["choices"][0]["message"]["content"]
+        result = json.loads(content)
+        speakers = result.get("speakers")
+        
+        # Normalize
+        if speakers is None or speakers == [] or speakers == "null":
+            return None
+        
+        if isinstance(speakers, list):
+            cleaned = [str(s).strip() for s in speakers if s]
+            return cleaned if cleaned else None
+        
+        if isinstance(speakers, str) and speakers.lower() != "null":
+            return [speakers.strip()]
+        
+        return None
+        
+    except json.JSONDecodeError as e:
+        if not _warmup:
+            logger.warning(f"JSON parse error in speaker ID: {e}")
+        return None
+    except Exception as e:
+        if not _warmup:
+            logger.error(f"Speaker ID inference error: {e}")
+        return None

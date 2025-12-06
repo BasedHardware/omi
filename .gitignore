@@ -197,3 +197,6 @@ omiGlass/.expo
 /backend/logs/
 app/.fvm/
 app/android/.kotlin/
+
+# Speaker ID Model
+*.gguf
