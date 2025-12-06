@@ -17,6 +17,7 @@ from routers import (
     users,
     trends,
     sync,
+    pocket,
     apps,
     custom_auth,
     payment,
@@ -67,6 +68,7 @@ app.include_router(other.router)
 app.include_router(firmware.router)
 app.include_router(updates.router)
 app.include_router(sync.router)
+app.include_router(pocket.router)
 
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
