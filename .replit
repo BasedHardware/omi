@@ -1,0 +1,6 @@
+modules = ["c-clang14", "cpp-clang14", "nodejs-20", "python-3.11"]
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
