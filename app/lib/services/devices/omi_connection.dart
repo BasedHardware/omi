@@ -426,7 +426,7 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       final stream = transport.getCharacteristicStream(accelDataStreamServiceUuid, accelDataStreamCharacteristicUuid);
 
-      final subscription = stream.listen((value) {
+      final subscription = stream.listen((value) async {
         if (value.length > 4) {
           //for some reason, the very first reading is four bytes
 
@@ -463,16 +463,19 @@ class OmiDeviceConnection extends DeviceConnection {
             var fall_number =
                 sqrt(pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2));
             if (fall_number > 30.0) {
-              AwesomeNotifications().createNotification(
-                content: NotificationContent(
-                  id: 6,
-                  channelKey: 'channel',
-                  actionType: ActionType.Default,
-                  title: 'ouch',
-                  body: 'did you fall?',
-                  wakeUpScreen: true,
-                ),
-              );
+              final allowed = await AwesomeNotifications().isNotificationAllowed();
+              if (allowed) {
+                AwesomeNotifications().createNotification(
+                  content: NotificationContent(
+                    id: 6,
+                    channelKey: 'channel',
+                    actionType: ActionType.Default,
+                    title: 'ouch',
+                    body: 'did you fall?',
+                    wakeUpScreen: true,
+                  ),
+                );
+              }
             }
           }
         }
