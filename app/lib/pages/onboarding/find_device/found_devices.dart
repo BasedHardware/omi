@@ -66,11 +66,14 @@ class _FoundDevicesState extends State<FoundDevices> {
 
       if (!recordingStarted) {
         await _showMicrophonePermissionPage(connection);
+        if (!mounted) return;
       } else {
         await _completeAppleWatchOnboarding(device, provider);
+        if (!mounted) return;
       }
     } catch (e) {
       debugPrint('Error handling Apple Watch onboarding: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error connecting to Apple Watch: $e'),
@@ -82,6 +85,13 @@ class _FoundDevicesState extends State<FoundDevices> {
 
   /// Show bottom sheet when Apple Watch is not reachable
   Future<void> _showWatchNotReachableBottomSheet(String deviceId) async {
+    final provider = Provider.of<OnboardingProvider>(context, listen: false);
+    final device = provider.deviceList.firstWhereOrNull((d) => d.id == deviceId);
+    if (device == null) {
+      debugPrint('Device with id $deviceId not found in provider list.');
+      return;
+    }
+
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -89,10 +99,6 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (context) => AppleWatchSetupBottomSheet(
         deviceId: deviceId,
         onConnected: () async {
-          // Retry the connection flow when user says they've connected
-          final device =
-              Provider.of<OnboardingProvider>(context, listen: false).deviceList.firstWhere((d) => d.id == deviceId);
-          final provider = Provider.of<OnboardingProvider>(context, listen: false);
           await _handleAppleWatchOnboarding(device, provider);
         },
       ),
@@ -100,18 +106,24 @@ class _FoundDevicesState extends State<FoundDevices> {
   }
 
   Future<void> _showMicrophonePermissionPage(AppleWatchDeviceConnection connection) async {
+    final provider = Provider.of<OnboardingProvider>(context, listen: false);
+    final device = provider.deviceList.firstWhereOrNull((d) => d.id == connection.device.id);
+    if (device == null) {
+      debugPrint('Device with id ${connection.device.id} not found in provider list.');
+      return;
+    }
+
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => AppleWatchPermissionPage(
           connection: connection,
           onPermissionGranted: () async {
-            final provider = Provider.of<OnboardingProvider>(context, listen: false);
-            final device = provider.deviceList.firstWhere((d) => d.id == connection.device.id);
             await _completeAppleWatchOnboarding(device, provider);
           },
         ),
       ),
     );
+    if (!mounted) return;
   }
 
   Future<void> _completeAppleWatchOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -124,13 +136,17 @@ class _FoundDevicesState extends State<FoundDevices> {
 
       await provider.deviceProvider?.scanAndConnectToDevice();
 
+      if (!mounted) return;
+
       // Show firmware warning if needed
       await _showFirmwareWarningIfNeeded(device);
+
+      if (!mounted) return;
 
       if (widget.isFromOnboarding) {
         widget.goNext();
       } else {
-        Navigator.pop(context);
+        if (mounted) Navigator.pop(context);
       }
     } catch (e) {
       debugPrint('Error completing Apple Watch onboarding: $e');
@@ -196,7 +212,7 @@ class _FoundDevicesState extends State<FoundDevices> {
             //   ),
             //   (route) => false,
             // );
-            Navigator.pop(context);
+            if (mounted) Navigator.pop(context);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(info),
@@ -283,6 +299,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                       isFromOnboarding: widget.isFromOnboarding,
                       goNext: widget.goNext,
                     );
+
+                    if (!mounted) return;
 
                     // Show firmware warning after successful connection
                     if (provider.isConnected) {
