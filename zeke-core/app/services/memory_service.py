@@ -13,7 +13,25 @@ logger = logging.getLogger(__name__)
 
 class MemoryService:
     def __init__(self, openai_client: Optional[OpenAIClient] = None):
-        self.openai = openai_client or OpenAIClient()
+        self._openai = openai_client
+        self._openai_initialized = openai_client is not None
+    
+    @property
+    def openai(self) -> Optional[OpenAIClient]:
+        if not self._openai_initialized:
+            try:
+                self._openai = OpenAIClient()
+                self._openai_initialized = True
+            except Exception as e:
+                logger.warning(f"OpenAI client not available: {e}")
+                self._openai = None
+        return self._openai
+    
+    def _require_openai(self) -> OpenAIClient:
+        client = self.openai
+        if client is None:
+            raise RuntimeError("OpenAI client is required for this operation but is not available. Please set OPENAI_API_KEY.")
+        return client
     
     async def create(
         self,
@@ -23,7 +41,8 @@ class MemoryService:
         conversation_id: Optional[str] = None,
         manually_added: bool = False
     ) -> MemoryResponse:
-        embedding = await self.openai.create_embedding(content)
+        openai_client = self._require_openai()
+        embedding = await openai_client.create_embedding(content)
         
         with get_db_context() as db:
             memory = MemoryDB(
@@ -47,7 +66,8 @@ class MemoryService:
         limit: int = 10,
         category: Optional[str] = None
     ) -> List[str]:
-        query_embedding = await self.openai.create_embedding(query)
+        openai_client = self._require_openai()
+        query_embedding = await openai_client.create_embedding(query)
         
         with get_db_context() as db:
             filters = [MemoryDB.uid == user_id]
@@ -102,8 +122,9 @@ class MemoryService:
                 return None
             
             if content:
+                openai_client = self._require_openai()
                 memory.content = content
-                memory.embedding = await self.openai.create_embedding(content)
+                memory.embedding = await openai_client.create_embedding(content)
                 memory.edited = True
             
             if category:
@@ -141,7 +162,8 @@ Categories: interesting, system, manual
 
 Only return the JSON array, no other text."""
 
-        response = await self.openai.chat_completion([
+        openai_client = self._require_openai()
+        response = await openai_client.chat_completion([
             {"role": "user", "content": prompt}
         ], temperature=0.3)
         

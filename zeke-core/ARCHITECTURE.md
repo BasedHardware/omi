@@ -122,6 +122,24 @@ zeke-core/
 │       ├── embeddings.py
 │       └── context.py
 │
+├── dashboard/            # React web dashboard (Vite + TypeScript)
+│   ├── src/
+│   │   ├── components/   # Reusable UI components
+│   │   │   ├── Layout.tsx
+│   │   │   └── Sidebar.tsx
+│   │   ├── pages/        # Page components
+│   │   │   ├── Dashboard.tsx  # Overview with stats
+│   │   │   ├── Chat.tsx       # AI chat interface
+│   │   │   ├── Memories.tsx   # Memory management
+│   │   │   └── Tasks.tsx      # Task management
+│   │   ├── lib/
+│   │   │   └── api.ts    # API client
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── index.css
+│   ├── package.json
+│   └── vite.config.ts
+│
 ├── tests/                # Test suite
 ├── main.py               # FastAPI app entry
 ├── requirements.txt      # Dependencies

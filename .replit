@@ -15,23 +15,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Frontend Dev Server"
+args = "Zeke Core API"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Zeke Core API"
-
-[[workflows.workflow]]
-name = "Frontend Dev Server"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd web/frontend && npm run dev"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
+args = "Zeke Dashboard"
 
 [[workflows.workflow]]
 name = "Zeke Core API"
@@ -45,6 +33,18 @@ task = "shell.exec"
 args = "cd zeke-core && python main.py"
 waitForPort = 8000
 
+[[workflows.workflow]]
+name = "Zeke Dashboard"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd zeke-core/dashboard && npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[ports]]
 localPort = 5000
 externalPort = 80
@@ -52,6 +52,14 @@ externalPort = 80
 [[ports]]
 localPort = 8000
 externalPort = 8000
+
+[[ports]]
+localPort = 38581
+externalPort = 3001
+
+[[ports]]
+localPort = 40863
+externalPort = 3000
 
 [deployment]
 deploymentTarget = "autoscale"
