@@ -218,8 +218,7 @@ class MemoryItem extends StatelessWidget {
       _ensureConversationInGroup(conversationProvider, conversation);
 
       final conversationDate = _getConversationDate(conversation.createdAt);
-      detailProvider.conversationIdx = 0;
-      detailProvider.selectedDate = conversationDate;
+      detailProvider.updateConversation(conversation.id, conversationDate);
 
       Navigator.of(context).push(
         MaterialPageRoute(
