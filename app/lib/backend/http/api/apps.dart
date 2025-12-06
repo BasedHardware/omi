@@ -25,10 +25,11 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   try {
     if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    // Parse grouped response from backend
     final groups = (data['groups'] as List?) ?? [];
     final List<Map<String, dynamic>> parsed = [];
     for (final g in groups) {
-      // Support capability-based grouping (new) and category-based (legacy)
       final capability = g['capability'] as Map<String, dynamic>?;
       final category = g['category'] as Map<String, dynamic>?;
       final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
@@ -107,6 +108,47 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     debugPrint(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, capability: null);
+  }
+}
+
+Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
+    retrieveCapabilityAppsGroupedByCategory({
+  required String capability,
+  bool includeReviews = true,
+}) async {
+  final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
+  final response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+      return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final groups = (data['groups'] as List?) ?? [];
+    final List<Map<String, dynamic>> parsed = [];
+    for (final g in groups) {
+      final category = g['category'] as Map<String, dynamic>?;
+      final items = (g['data'] as List?) ?? [];
+      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+      final count = g['count'] as int? ?? apps.length;
+      parsed.add({
+        'category': category,
+        'data': apps,
+        'count': count,
+      });
+    }
+    final cap = (data['capability'] as Map<String, dynamic>?);
+    final meta = (data['meta'] as Map<String, dynamic>?) ?? {};
+    final totalApps = meta['totalApps'] as int? ?? 0;
+    return (groups: parsed, capability: cap, totalApps: totalApps);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
   }
 }
 

@@ -166,14 +166,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 showViewAll: groupApps.length > 9,
                 onViewAll: () {
                   if (capabilityMap != null) {
-                    // Capability-based navigation
-                    final capability = context.read<AddAppProvider>().capabilities.firstWhere(
-                          (cap) => cap.id == groupId || cap.title == groupTitle,
-                          orElse: () => AppCapability(
-                            title: groupTitle.isEmpty ? 'Apps' : groupTitle,
-                            id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '_') : groupId,
-                          ),
-                        );
+                    // Capability-based navigation - use title from grouped response to match section title
+                    final capability = AppCapability(
+                      title: groupTitle.isEmpty ? 'Apps' : groupTitle,
+                      id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '_') : groupId,
+                    );
                     routeToPage(
                       context,
                       CapabilityAppsPage(

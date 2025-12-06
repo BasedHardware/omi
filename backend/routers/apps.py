@@ -71,17 +71,16 @@ from utils.apps import (
     increment_username,
     generate_api_key,
     get_popular_apps,
-    filter_apps_by_category,
-    filter_apps_by_capability,
-    sort_apps_by_installs,
     paginate_apps,
     build_pagination_metadata,
-    group_apps_by_category,
-    build_category_groups_response,
-    group_apps_by_capability,
-    build_capability_groups_response,
     get_capabilities_list,
     normalize_app_numeric_fields,
+    filter_apps_by_capability,
+    sort_apps_by_installs,
+    group_apps_by_capability,
+    build_capability_groups_response,
+    group_capability_apps_by_category,
+    build_capability_category_groups_response,
 )
 
 from database.memories import migrate_memories
@@ -144,10 +143,9 @@ def get_apps_v2(
 
     Notes:
     - Uses approved public apps only (no private/tester apps).
-    - Groups: Popular, Chat, Conversations, External Integration.
-    - Chat excludes apps with external_integration capability.
-    - Conversations excludes apps with external_integration or chat capability.
+    - Groups: Popular, Integrations, Chat Assistants, Summary Apps, Realtime Notifications.
     - Popular section is shown first.
+    - Always excludes persona type apps.
     """
 
     capabilities = get_capabilities_list()
@@ -197,6 +195,57 @@ def get_apps_v2(
             'groupCount': len(groups),
             'limit': limit,
             'offset': offset,
+        },
+    }
+    set_generic_cache(cache_key, res, ttl=60 * 10)
+    return res
+
+
+@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
+def get_capability_apps_grouped_by_category(
+    capability_id: str,
+    include_reviews: bool = Query(default=True),
+):
+    """Get all apps for a specific capability, grouped by master category.
+
+    Returns apps grouped into master categories like:
+    - For chat: Personality Clones, Productivity & Lifestyle, Social & Entertainment
+    - For others: Productivity & Tools, Personal & Lifestyle, Social & Entertainment
+    """
+
+    cache_key = f"apps:capability:{capability_id}:grouped:reviews={int(include_reviews)}"
+
+    cached = get_generic_cache(cache_key)
+    if cached:
+        return cached
+
+    capabilities = get_capabilities_list()
+
+    # Fetch and filter approved public apps
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
+    # Always exclude persona type apps
+    approved_apps = [a for a in approved_apps if not a.is_a_persona()]
+
+    # Filter apps by capability
+    filtered_apps = filter_apps_by_capability(approved_apps, capability_id)
+
+    # Group filtered apps by master category
+    grouped_apps = group_capability_apps_by_category(filtered_apps, capability_id)
+    groups = build_capability_category_groups_response(grouped_apps, capability_id)
+
+    res = {
+        'groups': groups,
+        'capability': {
+            'id': capability_id,
+            'title': next(
+                (c['title'] for c in capabilities if c['id'] == capability_id),
+                capability_id.title().replace('_', ' '),
+            ),
+        },
+        'meta': {
+            'totalApps': len(filtered_apps),
+            'groupCount': len(groups),
         },
     }
     set_generic_cache(cache_key, res, ttl=60 * 10)

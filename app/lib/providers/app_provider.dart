@@ -402,9 +402,10 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch fresh grouped data from server (first page per category)
+      // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
+
       // Flatten for search/filter views
       final List<App> flat = [];
       for (final g in groups) {
@@ -552,8 +553,11 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       debugPrint('Refreshing apps after installation/change...');
+      // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
+
+      // Flatten for search/filter views
       final List<App> flat = [];
       for (final g in groups) {
         final List<App> data = (g['data'] as List<App>? ?? <App>[]);
