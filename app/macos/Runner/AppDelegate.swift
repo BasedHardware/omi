@@ -23,7 +23,8 @@ class AppDelegate: FlutterAppDelegate {
     }
 
     override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        return true
+      // Keep app running in menu bar when main window closes
+      return false
     }
 
     override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
