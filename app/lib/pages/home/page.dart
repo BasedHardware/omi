@@ -38,6 +38,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/enums.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
 
@@ -684,6 +685,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           }
                         },
                       ),
+                      // Merge action bar - floats above bottom nav when in selection mode
+                      if (homeProvider.selectedIndex == 0)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: MergeActionBar(),
+                        ),
                     ],
                   ),
                 ),
