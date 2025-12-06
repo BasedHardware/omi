@@ -544,16 +544,29 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 
 
-def cache_dev_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
-    """Caches the user_id for a given hashed Developer API key."""
-    r.set(f'dev_api_key:{hashed_key}', user_id, ex=ttl)
+def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
+    """Caches the user_id and scopes for a given hashed Developer API key."""
+    cache_data = {"user_id": user_id, "scopes": scopes}
+    r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 
 @try_catch_decorator
 def get_cached_dev_api_key_user_id(hashed_key: str) -> Optional[str]:
     """Retrieves the user_id for a given hashed Developer API key from cache."""
-    user_id = r.get(f'dev_api_key:{hashed_key}')
-    return user_id.decode() if user_id else None
+    cached = r.get(f'dev_api_key:{hashed_key}')
+    if not cached:
+        return None
+    data = json.loads(cached.decode())
+    return data.get("user_id")
+
+
+@try_catch_decorator
+def get_cached_dev_api_key_data(hashed_key: str) -> Optional[dict]:
+    """Retrieves the user_id and scopes for a given hashed Developer API key from cache."""
+    cached = r.get(f'dev_api_key:{hashed_key}')
+    if not cached:
+        return None
+    return json.loads(cached.decode())
 
 
 @try_catch_decorator
