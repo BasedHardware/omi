@@ -12,7 +12,12 @@ class DevApiKeyProvider with ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  Future<void> fetchKeys() async {
+  Future<void> fetchKeys({bool force = false}) async {
+    // Don't refetch if we already have keys and force is false
+    if (!force && _keys.isNotEmpty && !_isLoading) {
+      return;
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
