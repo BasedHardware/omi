@@ -71,5 +71,5 @@ externalPort = 3002
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd web/frontend && PORT=5000 npm start"]
-build = ["bash", "-c", "cd web/frontend && npm install && npm run build"]
+run = ["bash", "-c", "cd /home/runner/workspace/web/frontend && PORT=5000 npm start"]
+build = ["bash", "-c", "cd /home/runner/workspace/web/frontend && npm install && npm run build"]
