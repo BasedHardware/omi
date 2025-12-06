@@ -47,6 +47,7 @@ static struct fs_file_t fil_info;
 static bool is_mounted = false;
 static bool sd_enabled = false;
 static uint32_t current_file_size = 0;
+static uint32_t current_file_offset = 0;
 static size_t bytes_since_sync = 0;
 
 // Get the device pointer for the SDHC SPI slot from the device tree
@@ -277,32 +278,7 @@ int save_offset(uint32_t offset)
 
 uint32_t get_offset(void)
 {
-    struct read_resp resp;
-    k_sem_init(&resp.sem, 0, 1);
-
-    uint32_t offset;
-    sd_req_t req = {0};
-    req.type = REQ_READ_OFFSET;
-    req.u.offset.resp = &resp;
-    req.u.offset.out_offset = &offset;
-
-    int ret = k_msgq_put(&sd_msgq, &req, K_MSEC(100));
-    if (ret != 0) {
-        LOG_ERR("Failed to queue get_offset request: %d", ret);
-        return 0;
-    }
-
-    // wait for sd_worker_thread to finish processing
-    if (k_sem_take(&resp.sem, K_MSEC(5000)) != 0) {
-        LOG_ERR("Timeout waiting for get_offset response");
-        return 0;
-    }
-
-    if (resp.res) {
-        LOG_ERR("Failed to read offset from info file: %d", resp.res);
-        return 0;
-    }
-    return offset;
+    return current_file_offset;
 }
 
 int app_sd_off(void)
@@ -379,12 +355,23 @@ void sd_worker_thread(void)
             need_init_offset = true;
         }
         if (need_init_offset) {
+            current_file_offset = 0;
             uint32_t zero_offset = 0;
             ssize_t bw = fs_write(&fil_info, &zero_offset, sizeof(zero_offset));
             if (bw != sizeof(zero_offset)) {
                 LOG_ERR("[SD_WORK] init info.txt failed to write offset 0: %d\n", (int)bw);
             } else {
                 fs_sync(&fil_info);
+            }
+        } else {
+            /* Read existing offset from info.txt */
+            fs_seek(&fil_info, 0, FS_SEEK_SET);
+            ssize_t rbytes = fs_read(&fil_info, &current_file_offset, sizeof(current_file_offset));
+            if (rbytes != sizeof(current_file_offset)) {
+                LOG_ERR("[SD_WORK] Failed to read offset at boot: %d\n", (int)rbytes);
+                current_file_offset = 0;
+            } else {
+                LOG_INF("[SD_WORK] Loaded offset from info.txt: %u\n", current_file_offset);
             }
         }
 
@@ -508,6 +495,8 @@ void sd_worker_thread(void)
                         res = fs_sync(&fil_info);
                         if (res < 0) {
                             LOG_ERR("[SD_WORK] fs_sync of info file failed: %d", res);
+                        } else {
+                            current_file_offset = req.u.info.offset_value;
                         }
                     }
                 }
@@ -530,6 +519,7 @@ void sd_worker_thread(void)
                     return;
                 }
                 current_file_size = 0;
+                current_file_offset = 0;
                 // Return result to resp if available
                 if (req.u.clear_dir.resp) {
                     req.u.clear_dir.resp->res = 0;
@@ -537,45 +527,6 @@ void sd_worker_thread(void)
                 }
                 break;
 
-            case REQ_READ_OFFSET:
-                LOG_DBG("[SD_WORK] Reading offset from info file\n");
-                /* read offset from file info.txt (first 4 bytes) */
-                if (&fil_info == NULL) {
-                    LOG_ERR("[SD_WORK] info file not open (read offset)\n");
-                    if (req.u.offset.resp) {
-                        req.u.offset.resp->res = -1;
-                        k_sem_give(&req.u.offset.resp->sem);
-                    }
-                    break;
-                }
-
-                int seek_res = fs_seek(&fil_info, 0, FS_SEEK_SET);
-                if (seek_res < 0) {
-                    LOG_ERR("[SD_WORK] seek info failed: %d\n", seek_res);
-                    if (req.u.offset.resp) {
-                        req.u.offset.resp->res = seek_res;
-                        k_sem_give(&req.u.offset.resp->sem);
-                    }
-                    break;
-                }
-                uint32_t offset_val = 0;
-                ssize_t rbytes = fs_read(&fil_info, &offset_val, sizeof(offset_val));
-                if (rbytes != sizeof(offset_val)) {
-                    LOG_ERR("[SD_WORK] read offset failed: %d\n", (int)rbytes);
-                    if (req.u.offset.resp) {
-                        req.u.offset.resp->res = (int)rbytes;
-                        k_sem_give(&req.u.offset.resp->sem);
-                    }
-                    break;
-                }
-                if (req.u.offset.out_offset) {
-                    *req.u.offset.out_offset = offset_val;
-                }
-                if (req.u.offset.resp) {
-                    req.u.offset.resp->res = 0;
-                    k_sem_give(&req.u.offset.resp->sem);
-                }
-                break;
             default:
                 LOG_ERR("[SD_WORK] unknown req type\n");
             }
