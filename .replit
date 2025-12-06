@@ -32,3 +32,8 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd web/frontend && npm start -- -H 0.0.0.0 -p 5000"]
+build = ["bash", "-c", "cd web/frontend && npm run build"]
