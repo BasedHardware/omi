@@ -36,6 +36,7 @@ class DevApiKeyCreated extends DevApiKey {
     required super.keyPrefix,
     required super.createdAt,
     super.lastUsedAt,
+    super.scopes,
     required this.key,
   });
 
@@ -46,6 +47,7 @@ class DevApiKeyCreated extends DevApiKey {
       keyPrefix: json['key_prefix'],
       createdAt: DateTime.parse(json['created_at']),
       lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
+      scopes: json['scopes'] != null ? List<String>.from(json['scopes']) : null,
       key: json['key'],
     );
   }
