@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     debug: bool = False
     
     database_url: str = "postgresql://localhost/zeke"
+    redis_url: str = "redis://localhost:6379"
     
     omi_api_url: str = "https://api.omi.me"
     omi_api_key: Optional[str] = None
