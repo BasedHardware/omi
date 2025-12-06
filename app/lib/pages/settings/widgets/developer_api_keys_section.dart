@@ -56,39 +56,103 @@ class DeveloperApiKeysSection extends StatelessWidget {
                   'API Keys',
                   style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                 ),
-                TextButton.icon(
-                  onPressed: () {
+                GestureDetector(
+                  onTap: () {
                     final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
-                    showDialog(
-                      context: context,
-                      builder: (dialogContext) => ChangeNotifierProvider.value(
-                        value: provider,
-                        child: const CreateDevApiKeyDialog(),
-                      ),
-                    );
+                    CreateDevApiKeySheet.show(context, provider);
                   },
-                  icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                  label: const Text('Create Key', style: TextStyle(color: Colors.white)),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add, color: Colors.white, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          'Create',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                )
+                ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 16),
             Consumer<DevApiKeyProvider>(
               builder: (context, provider, child) {
                 if (provider.isLoading && provider.keys.isEmpty) {
-                  return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                  return const Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8B5CF6)),
+                      ),
+                    ),
+                  );
                 }
                 if (provider.error != null) {
-                  return Center(child: Text('Error: ${provider.error}'));
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'Error: ${provider.error}',
+                        style: const TextStyle(color: Color(0xFFEF4444)),
+                      ),
+                    ),
+                  );
                 }
                 if (provider.keys.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text('No API keys found. Create one to get started.'),
+                  return Container(
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A1A),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF2C2C2E)),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF252525),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.key_off,
+                            color: Color(0xFF6C6C70),
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No API keys yet',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Create your first key to get started',
+                          style: TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }

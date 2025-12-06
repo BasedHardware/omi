@@ -4,6 +4,7 @@ class DevApiKey {
   final String keyPrefix;
   final DateTime createdAt;
   final DateTime? lastUsedAt;
+  final List<String>? scopes;
 
   DevApiKey({
     required this.id,
@@ -11,6 +12,7 @@ class DevApiKey {
     required this.keyPrefix,
     required this.createdAt,
     this.lastUsedAt,
+    this.scopes,
   });
 
   factory DevApiKey.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class DevApiKey {
       keyPrefix: json['key_prefix'],
       createdAt: DateTime.parse(json['created_at']),
       lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
+      scopes: json['scopes'] != null ? List<String>.from(json['scopes']) : null,
     );
   }
 }

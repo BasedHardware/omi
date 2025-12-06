@@ -9,28 +9,121 @@ class DevApiKeyListItem extends StatelessWidget {
 
   const DevApiKeyListItem({super.key, required this.apiKey});
 
+  List<Widget> _buildScopeChips(List<String>? scopes) {
+    if (scopes == null || scopes.isEmpty) {
+      return [
+        _buildChip('Read Only', const Color(0xFF3B82F6)),
+      ];
+    }
+
+    final hasRead = scopes.any((s) => s.endsWith(':read'));
+    final hasWrite = scopes.any((s) => s.endsWith(':write'));
+
+    if (hasRead && hasWrite && scopes.length == 6) {
+      return [_buildChip('Full Access', const Color(0xFF10B981))];
+    }
+
+    final chips = <Widget>[];
+    if (hasRead) chips.add(_buildChip('Read', const Color(0xFF3B82F6)));
+    if (hasWrite) chips.add(_buildChip('Write', const Color(0xFF8B5CF6)));
+
+    return chips;
+  }
+
+  Widget _buildChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      color: Theme.of(context).colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 8.0),
-        title: Text(
-          apiKey.name,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text(
-          '${apiKey.keyPrefix}  •  ${DateFormat.yMMMd().format(apiKey.createdAt)}',
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        ),
-        trailing: TextButton(
-          onPressed: () => _showDeleteConfirmation(context, apiKey),
-          child: const Text('Revoke', style: TextStyle(color: Colors.redAccent)),
-        ),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2C2C2E), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.key, color: Color(0xFF8B5CF6), size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      apiKey.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${apiKey.keyPrefix}***  •  ${DateFormat.yMMMd().format(apiKey.createdAt)}',
+                      style: const TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _showDeleteConfirmation(context, apiKey),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    'Revoke',
+                    style: TextStyle(
+                      color: Color(0xFFEF4444),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _buildScopeChips(apiKey.scopes),
+          ),
+        ],
       ),
     );
   }
@@ -40,19 +133,48 @@ class DevApiKeyListItem extends StatelessWidget {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Revoke Key?'),
-          content: Text('Are you sure you want to revoke the key "${apiKey.name}"? This action cannot be undone.'),
-          actions: <Widget>[
+          backgroundColor: const Color(0xFF1A1A1A),
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Revoke Key?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to revoke "${apiKey.name}"? Any applications using this key will stop working. This action cannot be undone.',
+            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+          ),
+          actions: [
             TextButton(
-              child: const Text('Cancel'),
               onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
             ),
             TextButton(
-              child: const Text('Revoke', style: TextStyle(color: Colors.red)),
               onPressed: () {
                 Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();
               },
+              child: const Text(
+                'Revoke',
+                style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         );
