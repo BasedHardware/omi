@@ -190,31 +190,28 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
 # PART 2: LLM-BASED ADDRESSEE DETECTION (New Functionality - Fix #3039)
 # ============================================================================
 
-SYSTEM_PROMPT = """You identify WHO is being directly SPOKEN TO (addressees) in a transcript.
+SYSTEM_PROMPT = """Identify WHO is being directly SPOKEN TO (the addressee) in the transcript.
 
-ADDRESSED (return their names):
-- "Hey Alice, can you help?" → ["Alice"]
-- "Alice can you help me" → ["Alice"] (no comma, still addressed)
-- "John, Bob, come here!" → ["John", "Bob"]
-- "Hey Alice and Bob, listen up" → ["Alice", "Bob"]
-- "What do you think, Jennifer?" → ["Jennifer"]
-- "Listen Marcus, this matters" → ["Marcus"]
+ADDRESSED - Return their name(s):
+- "Hey Alice, can you help?" → ["Alice"] (vocative with comma)
+- "Alice, come here!" → ["Alice"] (imperative to person)
+- "What do you think, Bob?" → ["Bob"] (question directed at person)
+- "John and Mary, listen up" → ["John", "Mary"] (multiple addressees)
 
-NOT ADDRESSED (return null):
-- "I told Alice to stop" → null (talked ABOUT Alice)
-- "Bob said he would come" → null (Bob is subject)
-- "Did you hear what Sarah did?" → null (talking ABOUT Sarah)
-- "Can you pass the salt?" → null (no name)
+NOT ADDRESSED - Return null:
+- "I told Alice to stop" → null (verb + name = talking ABOUT them)
+- "I saw Bob yesterday" → null (verb + name = talking ABOUT them)
+- "Alice said she would come" → null (name is subject doing action)
+- "Did you hear about Sarah?" → null (talking ABOUT Sarah)
+- "Bob's idea was great" → null (possessive = talking ABOUT them)
+- "Can you pass the salt?" → null (no name mentioned)
 
-RULES:
-1. Return names ONLY if someone is directly spoken TO
-2. Names with comma separation = addressed
-3. Names followed by imperative/question = addressed (even without comma)
-4. Names as subject/object = NOT addressed
-5. Multiple addressees → return all names
-6. No addressee → return null
+STRICT EXCLUSION RULE:
+If a name follows verbs like "told", "said", "saw", "asked", "met", "called", "heard", "know", "like", "love", "miss", "helped", "thanked" - that person is being MENTIONED, not addressed. Return null.
 
-Respond with JSON: {"speakers": ["Name1", "Name2"]} or {"speakers": null}"""
+ONLY return a name if the person is being DIRECTLY spoken to with a vocative (comma-separated name) or imperative directed at them.
+
+Respond ONLY with: {"speakers": ["Name"]} or {"speakers": null}"""
 
 
 def get_model():
