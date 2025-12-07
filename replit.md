@@ -70,6 +70,7 @@ Preferred communication style: Simple, everyday language.
 - **Emotional Memory Context**: Analyzes memories for sentiment (score -1 to +1), emotional weight (0.0-1.0), milestone detection (family moments, personal achievements, creative breakthroughs), and personal significance classification. Emotionally significant memories receive a 30% boost in RAG retrieval.
 - **Personal Life Context Engine**: Time-based context modes (Morning Planning, Family Time, Writing Mode, Work Mode) with automatic switching, proactive briefings (morning/evening), focus support features (drift detection, refocus prompts), and parking lot for capturing tangent ideas during focused work.
 - **Time-Sensitive Reminders**: Dedicated reminder system for urgent items (school pickups, appointments) with lead time notifications and priority levels.
+- **Omi iOS App Integration**: Direct webhook endpoint at `/api/omi/conversation` that receives raw conversation data from the Omi iOS app, processes transcripts, extracts memories, and enables personalized ZEKE interactions.
 
 ### MCP Server
 - **Protocol**: Model Context Protocol for AI tool integration.
