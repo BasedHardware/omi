@@ -13,4 +13,10 @@ logging.basicConfig(
 from app.core.celery_app import celery_app
 
 if __name__ == "__main__":
-    celery_app.start(argv=["worker", "-B", "--loglevel=info", "--concurrency=2"])
+    celery_app.start(argv=[
+        "worker",
+        "-B",
+        "--loglevel=info",
+        "--concurrency=2",
+        "-Q", "zeke_default,zeke_processing,zeke_curation,zeke_notifications"
+    ])

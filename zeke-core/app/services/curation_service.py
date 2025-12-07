@@ -265,6 +265,151 @@ Return only valid JSON, no other text."""
         
         return action, updates
     
+    def _memory_to_dict(self, memory: MemoryDB) -> Dict[str, Any]:
+        return {
+            "id": memory.id,
+            "content": memory.content,
+            "category": memory.category,
+            "tags": memory.tags,
+            "enriched_context": memory.enriched_context,
+            "curation_status": memory.curation_status,
+        }
+    
+    async def _classify_memory_dict(self, memory_dict: Dict[str, Any]) -> Dict[str, Any]:
+        keyword_topic = self._detect_topic_by_keywords(memory_dict["content"])
+        
+        if keyword_topic:
+            return {
+                "primary_topic": keyword_topic,
+                "confidence": 0.7,
+                "method": "keywords",
+                "tags": [keyword_topic]
+            }
+        
+        openai_client = self._require_openai()
+        
+        prompt = f"""Analyze this memory and classify it. Return a JSON object with:
+- primary_topic: One of: personal_profile, relationships, commitments, health, travel, finance, hobbies, work, preferences, facts, other
+- tags: List of 1-3 relevant tags (lowercase, single words)
+- sentiment: positive, negative, or neutral
+- importance: high, medium, or low
+- is_actionable: true if this requires follow-up action
+- confidence: 0.0-1.0 indicating classification confidence
+
+Memory: "{memory_dict['content']}"
+
+Return only valid JSON, no other text."""
+
+        try:
+            response = await openai_client.chat_completion([
+                {"role": "user", "content": prompt}
+            ], temperature=0.2)
+            
+            result = json.loads(response.choices[0].message.content)
+            result["method"] = "llm"
+            return result
+            
+        except Exception as e:
+            logger.error(f"LLM classification failed: {e}")
+            return {
+                "primary_topic": "other",
+                "confidence": 0.3,
+                "method": "fallback",
+                "tags": []
+            }
+    
+    async def _assess_quality_dict(
+        self,
+        memory_dict: Dict[str, Any],
+        all_memories_dicts: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        content = memory_dict["content"]
+        issues = []
+        quality_score = 1.0
+        
+        if len(content) < 10:
+            issues.append("Content too short")
+            quality_score -= 0.4
+        
+        vague_phrases = ["something about", "i think maybe", "not sure but", "might be"]
+        if any(phrase in content.lower() for phrase in vague_phrases):
+            issues.append("Contains vague language")
+            quality_score -= 0.2
+        
+        for other_mem in all_memories_dicts:
+            if other_mem["id"] == memory_dict["id"]:
+                continue
+            if self._is_contradiction(content, other_mem["content"]):
+                issues.append(f"May contradict existing memory: {other_mem['content'][:50]}...")
+                quality_score -= 0.2
+                break
+        
+        return {
+            "quality_score": max(0, quality_score),
+            "issues": issues,
+            "should_flag": quality_score < 0.5,
+            "should_delete": quality_score < 0.2
+        }
+    
+    async def _curate_memory_dict(
+        self,
+        memory_dict: Dict[str, Any],
+        all_memories_dicts: List[Dict[str, Any]],
+        auto_delete: bool = False
+    ) -> Tuple[str, Dict[str, Any]]:
+        try:
+            classification = await self._classify_memory_dict(memory_dict)
+        except Exception as e:
+            logger.warning(f"Classification failed for memory {memory_dict['id']}: {e}")
+            classification = {
+                "primary_topic": self._detect_topic_by_keywords(memory_dict["content"]) or "other",
+                "confidence": 0.3,
+                "method": "fallback_error",
+                "tags": []
+            }
+        
+        quality = await self._assess_quality_dict(memory_dict, all_memories_dicts)
+        
+        enriched_context = None
+        
+        if quality["should_delete"] and auto_delete:
+            action = "delete"
+            curation_status = CurationStatus.deleted.value
+            notes = f"Auto-deleted: {', '.join(quality['issues'])}"
+        elif quality["should_flag"]:
+            action = "flag"
+            curation_status = CurationStatus.flagged.value
+            notes = f"Flagged for review: {', '.join(quality['issues'])}"
+        elif classification.get("confidence", 0) < MEDIUM_CONFIDENCE_THRESHOLD:
+            action = "review"
+            curation_status = CurationStatus.needs_review.value
+            notes = "Low classification confidence"
+        else:
+            action = "clean"
+            curation_status = CurationStatus.clean.value
+            notes = None
+        
+        updates = {
+            "primary_topic": classification.get("primary_topic", "other"),
+            "curation_status": curation_status,
+            "curation_notes": notes,
+            "curation_confidence": classification.get("confidence", 0.5),
+            "last_curated": datetime.utcnow(),
+        }
+        
+        if enriched_context:
+            existing_context = memory_dict.get("enriched_context") or {}
+            existing_context.update(enriched_context)
+            existing_context["classification"] = classification
+            updates["enriched_context"] = existing_context
+        
+        if classification.get("tags"):
+            current_tags = memory_dict.get("tags") or []
+            new_tags = list(set(current_tags + classification["tags"]))
+            updates["tags"] = new_tags
+        
+        return action, updates
+
     async def run_curation(
         self,
         user_id: str,
@@ -303,11 +448,13 @@ Return only valid JSON, no other text."""
                     )
                 
                 memories = query.order_by(MemoryDB.created_at.desc()).limit(batch_size).all()
+                memory_dicts = [self._memory_to_dict(m) for m in memories]
                 
                 all_user_memories = db.query(MemoryDB).filter(
                     MemoryDB.uid == user_id,
                     MemoryDB.curation_status != CurationStatus.deleted.value
                 ).all()
+                all_memory_dicts = [self._memory_to_dict(m) for m in all_user_memories]
             
             stats = {
                 "processed": 0,
@@ -316,16 +463,16 @@ Return only valid JSON, no other text."""
                 "deleted": 0
             }
             
-            for memory in memories:
+            for memory_dict in memory_dicts:
                 try:
-                    action, updates = await self.curate_memory(
-                        memory,
-                        all_user_memories,
+                    action, updates = await self._curate_memory_dict(
+                        memory_dict,
+                        all_memory_dicts,
                         auto_delete=auto_delete
                     )
                     
                     with get_db_context() as db:
-                        db_memory = db.query(MemoryDB).filter(MemoryDB.id == memory.id).first()
+                        db_memory = db.query(MemoryDB).filter(MemoryDB.id == memory_dict["id"]).first()
                         if db_memory:
                             if action == "delete" and auto_delete:
                                 db.delete(db_memory)
@@ -341,7 +488,7 @@ Return only valid JSON, no other text."""
                     stats["processed"] += 1
                     
                 except Exception as e:
-                    logger.error(f"Error curating memory {memory.id}: {e}")
+                    logger.error(f"Error curating memory {memory_dict['id']}: {e}")
                     continue
             
             with get_db_context() as db:

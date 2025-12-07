@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict
-from celery import shared_task
+
+from app.core.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def run_async_task(coro):
         return asyncio.run(coro)
 
 
-@shared_task(name="app.core.tasks.process_conversation", bind=True, max_retries=3)
+@celery_app.task(name="app.core.tasks.process_conversation", bind=True, max_retries=3)
 def process_conversation(self, conversation_id: str, user_id: str) -> Dict[str, Any]:
     from app.services.memory_service import MemoryService
     from app.services.conversation_service import ConversationService
@@ -55,7 +56,7 @@ def process_conversation(self, conversation_id: str, user_id: str) -> Dict[str, 
     return run_async_task(_process())
 
 
-@shared_task(name="app.core.tasks.send_scheduled_reminder", bind=True, max_retries=2)
+@celery_app.task(name="app.core.tasks.send_scheduled_reminder", bind=True, max_retries=2)
 def send_scheduled_reminder(self, task_id: str, user_id: str, message: str) -> Dict[str, Any]:
     from app.integrations.twilio import TwilioClient
     from app.core.config import get_settings
@@ -82,7 +83,7 @@ def send_scheduled_reminder(self, task_id: str, user_id: str, message: str) -> D
     return run_async_task(_send())
 
 
-@shared_task(name="app.core.tasks.check_due_tasks", bind=True)
+@celery_app.task(name="app.core.tasks.check_due_tasks", bind=True)
 def check_due_tasks(self, user_id: str = "default_user") -> Dict[str, Any]:
     from app.services.task_service import TaskService
     from app.services.notification_service import NotificationService
@@ -120,7 +121,7 @@ def check_due_tasks(self, user_id: str = "default_user") -> Dict[str, Any]:
     return run_async_task(_check())
 
 
-@shared_task(name="app.core.tasks.flush_notification_queue", bind=True)
+@celery_app.task(name="app.core.tasks.flush_notification_queue", bind=True)
 def flush_notification_queue(self) -> Dict[str, Any]:
     from app.services.notification_service import NotificationService
     
@@ -139,7 +140,7 @@ def flush_notification_queue(self) -> Dict[str, Any]:
     return run_async_task(_flush())
 
 
-@shared_task(name="app.core.tasks.run_memory_curation", bind=True, max_retries=2)
+@celery_app.task(name="app.core.tasks.run_memory_curation", bind=True, max_retries=2)
 def run_memory_curation(self, user_id: str = "default_user") -> Dict[str, Any]:
     from app.services.curation_service import MemoryCurationService
     
@@ -176,7 +177,7 @@ def run_memory_curation(self, user_id: str = "default_user") -> Dict[str, Any]:
     return run_async_task(_curate())
 
 
-@shared_task(name="app.core.tasks.update_knowledge_graph", bind=True, max_retries=2)
+@celery_app.task(name="app.core.tasks.update_knowledge_graph", bind=True, max_retries=2)
 def update_knowledge_graph(self, user_id: str, conversation_id: str, transcript: str) -> Dict[str, Any]:
     logger.info(f"Updating knowledge graph for conversation {conversation_id}")
     return {"status": "pending", "message": "GraphRAG will be implemented in Phase 3"}

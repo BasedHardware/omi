@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 from ..services.curation_service import MemoryCurationService
 from ..models.memory import MemoryResponse, CurationRunResponse
-from ..core.tasks import run_memory_curation
 
 router = APIRouter(prefix="/curation", tags=["curation"])
 
@@ -51,7 +50,8 @@ class CurationQueuedResponse(BaseModel):
 async def trigger_curation_run(request: CurationRunRequest, async_mode: bool = True):
     try:
         if async_mode:
-            run_memory_curation.delay(user_id=request.user_id)
+            from ..core.tasks import run_memory_curation
+            run_memory_curation.delay(request.user_id)
             return CurationQueuedResponse()
         
         result = await curation_service.run_curation(
