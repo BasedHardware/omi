@@ -226,8 +226,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Field 2: 0x00 (mode flag)
   List<int> _encodeEnableDataStream({bool enable = true}) {
     final msg = <int>[];
-    msg.addAll(_encodeField(1, 0, [enable ? 0x01 : 0x00]));
-    msg.addAll(_encodeField(2, 0, [0x00]));
+    msg.addAll(_encodeField(1, 0, [0x00]));
+    msg.addAll(_encodeField(2, 0, [enable ? 0x01 : 0x00]));
     final cmd = [..._encodeMessage(8, msg), ..._encodeRequestData()];
     return _encodeBleWrapper(cmd);
   }
