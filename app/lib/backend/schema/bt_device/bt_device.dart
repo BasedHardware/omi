@@ -624,6 +624,7 @@ class BtDevice {
         isPlaudDevice(result) ||
         isFieldyDevice(result) ||
         isFriendPendantDevice(result) ||
+        isLimitlessDevice(result) ||
         isOmiDevice(result) ||
         isFrameDevice(result);
   }
@@ -699,6 +700,21 @@ class BtDevice {
         device.servicesList.any((s) => s.uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase());
   }
 
+  static bool isLimitlessDevice(ScanResult result) {
+    final name = result.device.platformName.toLowerCase();
+    return name.contains('limitless') ||
+        name.contains('pendant') ||
+        result.advertisementData.serviceUuids
+            .any((uuid) => uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase());
+  }
+
+  static bool isLimitlessDeviceFromDevice(BluetoothDevice device) {
+    final name = device.platformName.toLowerCase();
+    return name.contains('limitless') ||
+        name.contains('pendant') ||
+        device.servicesList.any((s) => s.uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase());
+  }
+
   static bool isOmiDevice(ScanResult result) {
     return result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid));
   }
@@ -727,6 +743,8 @@ class BtDevice {
       deviceType = DeviceType.fieldy;
     } else if (isFriendPendantDevice(result)) {
       deviceType = DeviceType.friendPendant;
+    } else if (isLimitlessDevice(result)) {
+      deviceType = DeviceType.limitless;
     } else if (isOmiDevice(result)) {
       deviceType = DeviceType.omi;
     } else if (isFrameDevice(result)) {
