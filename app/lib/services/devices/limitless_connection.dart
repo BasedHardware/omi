@@ -240,7 +240,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    return BleAudioCodec.opus;
+    return BleAudioCodec.opusFS320;
   }
 
   @override
