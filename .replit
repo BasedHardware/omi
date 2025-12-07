@@ -77,3 +77,8 @@ externalPort = 3002
 deploymentTarget = "autoscale"
 run = ["bash", "start.sh"]
 build = ["bash", "build.sh"]
+
+[userenv]
+
+[userenv.shared]
+HOME_LOCATION = "42.1264,-70.9425"
