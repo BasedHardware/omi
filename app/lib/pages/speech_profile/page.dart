@@ -33,17 +33,22 @@ class SpeechProfilePage extends StatefulWidget {
 class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProviderStateMixin {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-      context.read<SpeechProfileProvider>().close();
-      await context.read<SpeechProfileProvider>().updateDevice();
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
 
-      // Check if user has set primary language
-      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+      final speechProvider = context.read<SpeechProfileProvider>();
+      final homeProvider = context.read<HomeProvider>();
+
+      speechProvider.close();
+      await speechProvider.updateDevice();
+
+      if (!mounted) return;
+
+      if (!homeProvider.hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
       }
     });
-
-    super.initState();
   }
 
   // TODO: use connection directly
@@ -100,9 +105,15 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) {
           if (context.read<SpeechProfileProvider>().isInitialised) {
-            WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
-              await context.read<SpeechProfileProvider>().close();
-              restartDeviceRecording();
+            final speechProvider = context.read<SpeechProfileProvider>();
+            final captureProvider = context.read<CaptureProvider>();
+            final device = speechProvider.deviceProvider?.connectedDevice;
+
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              await speechProvider.close();
+
+              captureProvider.clearTranscripts();
+              captureProvider.streamDeviceRecording(device: device);
             });
           }
         }
