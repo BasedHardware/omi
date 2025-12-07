@@ -1,7 +1,10 @@
 {
   "dependencies": {
+    "@types/leaflet": "^1.9.21",
     "expo-file-system": "^18.0.12",
-    "ioredis": "^5.6.1"
+    "ioredis": "^5.6.1",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
     "dotenv-cli": "^8.0.0"

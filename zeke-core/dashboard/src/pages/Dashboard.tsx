@@ -1,7 +1,53 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Brain, CheckSquare, Clock, AlertTriangle, MapPin, Battery, Navigation } from 'lucide-react';
 import { api, type Memory, type Task, type LocationContext } from '../lib/api';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+function LocationMap({ lat, lng }: { lat: number; lng: number }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      mapInstanceRef.current = L.map(mapRef.current, {
+        zoomControl: false,
+        attributionControl: true,
+      }).setView([lat, lng], 15);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+      }).addTo(mapInstanceRef.current);
+
+      const icon = L.icon({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+      });
+
+      markerRef.current = L.marker([lat, lng], { icon }).addTo(mapInstanceRef.current);
+    } else {
+      mapInstanceRef.current.setView([lat, lng], 15);
+      markerRef.current?.setLatLng([lat, lng]);
+    }
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        markerRef.current = null;
+      }
+    };
+  }, [lat, lng]);
+
+  return <div ref={mapRef} className="h-full w-full" />;
+}
 
 export function Dashboard() {
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -88,6 +134,14 @@ export function Dashboard() {
               {new Date(locationContext.last_updated).toLocaleTimeString()}
             </span>
           </div>
+          
+          <div className="h-48 md:h-64 rounded-lg overflow-hidden mb-4">
+            <LocationMap 
+              lat={locationContext.current_latitude} 
+              lng={locationContext.current_longitude} 
+            />
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-slate-800 rounded-lg p-3">
               <div className="flex items-center gap-2 text-purple-400 mb-1">
