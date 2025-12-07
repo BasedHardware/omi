@@ -537,7 +537,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (dateTimeStr.isNotEmpty)
+                    if (dateTimeStr.isNotEmpty && job.status == ImportJobStatus.completed)
                       Text(
                         dateTimeStr,
                         style: TextStyle(
