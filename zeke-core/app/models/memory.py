@@ -37,6 +37,27 @@ class PrimaryTopic(str, Enum):
     other = "other"
 
 
+class PersonalSignificance(str, Enum):
+    family_moment = "family_moment"
+    personal_achievement = "personal_achievement"
+    relationship_milestone = "relationship_milestone"
+    creative_breakthrough = "creative_breakthrough"
+    important_decision = "important_decision"
+    emotional_experience = "emotional_experience"
+    learning_moment = "learning_moment"
+    routine = "routine"
+    none = "none"
+
+
+class SentimentType(str, Enum):
+    very_positive = "very_positive"
+    positive = "positive"
+    neutral = "neutral"
+    negative = "negative"
+    very_negative = "very_negative"
+    mixed = "mixed"
+
+
 class MemoryDB(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "memories"
     
@@ -66,6 +87,15 @@ class MemoryDB(Base, UUIDMixin, TimestampMixin):
     enriched_context: Optional[Dict[str, Any]] = Column(JSON, nullable=True)
     curation_confidence: Optional[float] = Column(Float, nullable=True)
     last_curated: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
+    
+    sentiment_score: Optional[float] = Column(Float, nullable=True)
+    sentiment_type: Optional[str] = Column(String(20), nullable=True)
+    emotional_weight: float = Column(Float, default=0.5)
+    is_milestone: bool = Column(Boolean, default=False)
+    personal_significance: Optional[str] = Column(String(32), default="none")
+    milestone_type: Optional[str] = Column(String(64), nullable=True)
+    people_mentioned: List[str] = Column(JSON, default=list)
+    emotional_context: Optional[Dict[str, Any]] = Column(JSON, nullable=True)
 
 
 class Memory(BaseModel):
@@ -96,6 +126,14 @@ class MemoryResponse(Memory):
     enriched_context: Optional[Dict[str, Any]] = None
     curation_confidence: Optional[float] = None
     last_curated: Optional[datetime] = None
+    sentiment_score: Optional[float] = None
+    sentiment_type: Optional[str] = None
+    emotional_weight: float = 0.5
+    is_milestone: bool = False
+    personal_significance: Optional[str] = "none"
+    milestone_type: Optional[str] = None
+    people_mentioned: List[str] = Field(default_factory=list)
+    emotional_context: Optional[Dict[str, Any]] = None
     
     class Config:
         from_attributes = True

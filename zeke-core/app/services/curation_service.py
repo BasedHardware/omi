@@ -8,7 +8,7 @@ import uuid
 
 from ..models.memory import (
     MemoryDB, MemoryResponse, CurationRunDB, CurationRunResponse,
-    CurationStatus, PrimaryTopic
+    CurationStatus, PrimaryTopic, PersonalSignificance, SentimentType
 )
 from ..integrations.openai import OpenAIClient
 from ..core.database import get_db_context
@@ -141,6 +141,87 @@ Return only valid JSON, no other text."""
                 "summary": memory.content[:100]
             }
     
+    async def analyze_emotional_context(self, memory: MemoryDB) -> Dict[str, Any]:
+        openai_client = self._require_openai()
+        
+        prompt = f"""Analyze the emotional significance of this memory for a personal AI assistant. Return a JSON object with:
+- sentiment_score: Float from -1.0 (very negative) to 1.0 (very positive), 0 is neutral
+- sentiment_type: One of: very_positive, positive, neutral, negative, very_negative, mixed
+- emotional_weight: Float from 0.0 (routine/mundane) to 1.0 (deeply significant), consider:
+  - Family moments and milestones (high weight)
+  - Personal achievements and breakthroughs (high weight)
+  - Important decisions (medium-high weight)
+  - Work/routine matters (lower weight)
+- is_milestone: true if this represents a significant life event (birthdays, achievements, major decisions)
+- personal_significance: One of: family_moment, personal_achievement, relationship_milestone, creative_breakthrough, important_decision, emotional_experience, learning_moment, routine, none
+- milestone_type: If is_milestone is true, describe it (e.g., "child's first steps", "career promotion", null if not a milestone)
+- people_mentioned: List of people/names mentioned (e.g., ["Aurora", "Carolina", "Sarah"])
+- emotional_keywords: List of emotional words detected
+
+Memory: "{memory.content}"
+
+Return only valid JSON, no other text."""
+
+        try:
+            response = await openai_client.chat_completion([
+                {"role": "user", "content": prompt}
+            ], temperature=0.2)
+            
+            result = json.loads(response.choices[0].message.content)
+            return result
+            
+        except Exception as e:
+            logger.error(f"Emotional analysis failed: {e}")
+            return self._fallback_emotional_analysis(memory.content)
+    
+    def _fallback_emotional_analysis(self, content: str) -> Dict[str, Any]:
+        content_lower = content.lower()
+        
+        positive_words = ["happy", "love", "excited", "great", "wonderful", "amazing", "joy", "proud", "success", "achievement"]
+        negative_words = ["sad", "angry", "frustrated", "worried", "stressed", "failed", "problem", "difficult", "upset"]
+        family_words = ["daughter", "son", "wife", "husband", "family", "mom", "dad", "sister", "brother", "child", "kids"]
+        milestone_words = ["first", "birthday", "anniversary", "graduated", "married", "promoted", "born", "milestone", "finally"]
+        
+        positive_count = sum(1 for w in positive_words if w in content_lower)
+        negative_count = sum(1 for w in negative_words if w in content_lower)
+        has_family = any(w in content_lower for w in family_words)
+        has_milestone = any(w in content_lower for w in milestone_words)
+        
+        if positive_count > negative_count:
+            sentiment_score = min(0.5 + (positive_count * 0.1), 1.0)
+            sentiment_type = "positive" if sentiment_score < 0.7 else "very_positive"
+        elif negative_count > positive_count:
+            sentiment_score = max(-0.5 - (negative_count * 0.1), -1.0)
+            sentiment_type = "negative" if sentiment_score > -0.7 else "very_negative"
+        else:
+            sentiment_score = 0.0
+            sentiment_type = "neutral"
+        
+        emotional_weight = 0.5
+        if has_family:
+            emotional_weight = 0.8
+        if has_milestone:
+            emotional_weight = 0.9
+        
+        personal_significance = "none"
+        if has_family and has_milestone:
+            personal_significance = "family_moment"
+        elif has_milestone:
+            personal_significance = "personal_achievement"
+        elif has_family:
+            personal_significance = "family_moment"
+        
+        return {
+            "sentiment_score": sentiment_score,
+            "sentiment_type": sentiment_type,
+            "emotional_weight": emotional_weight,
+            "is_milestone": has_milestone,
+            "personal_significance": personal_significance,
+            "milestone_type": None,
+            "people_mentioned": [],
+            "emotional_keywords": []
+        }
+    
     async def assess_quality(
         self,
         memory: MemoryDB,
@@ -220,12 +301,21 @@ Return only valid JSON, no other text."""
         quality = await self.assess_quality(memory, all_user_memories)
         
         enriched_context = None
+        emotional_context = None
         if quality["quality_score"] >= 0.5 and self.openai:
             try:
                 enriched_context = await self.enrich_memory(memory)
             except Exception as e:
                 logger.warning(f"Enrichment failed for memory {memory.id}: {e}")
                 enriched_context = None
+            
+            try:
+                emotional_context = await self.analyze_emotional_context(memory)
+            except Exception as e:
+                logger.warning(f"Emotional analysis failed for memory {memory.id}: {e}")
+                emotional_context = self._fallback_emotional_analysis(memory.content)
+        else:
+            emotional_context = self._fallback_emotional_analysis(memory.content)
         
         if quality["should_delete"] and auto_delete:
             action = "delete"
@@ -251,6 +341,19 @@ Return only valid JSON, no other text."""
             "curation_confidence": classification.get("confidence", 0.5),
             "last_curated": datetime.utcnow(),
         }
+        
+        if emotional_context:
+            updates["sentiment_score"] = emotional_context.get("sentiment_score", 0.0)
+            updates["sentiment_type"] = emotional_context.get("sentiment_type", "neutral")
+            updates["emotional_weight"] = emotional_context.get("emotional_weight", 0.5)
+            updates["is_milestone"] = emotional_context.get("is_milestone", False)
+            updates["personal_significance"] = emotional_context.get("personal_significance", "none")
+            updates["milestone_type"] = emotional_context.get("milestone_type")
+            updates["people_mentioned"] = emotional_context.get("people_mentioned", [])
+            updates["emotional_context"] = {
+                "emotional_keywords": emotional_context.get("emotional_keywords", []),
+                "analysis_method": "llm" if self.openai else "keyword"
+            }
         
         if enriched_context:
             existing_context = memory.enriched_context or {}

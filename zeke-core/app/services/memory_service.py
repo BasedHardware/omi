@@ -127,7 +127,9 @@ class MemoryService:
         similarity: float,
         created_at: datetime,
         access_count: int,
-        last_accessed: Optional[datetime]
+        last_accessed: Optional[datetime],
+        emotional_weight: float = 0.5,
+        is_milestone: bool = False
     ) -> float:
         now = datetime.utcnow()
         age_hours = (now - created_at.replace(tzinfo=None)).total_seconds() / 3600
@@ -141,15 +143,21 @@ class MemoryService:
         else:
             access_recency_boost = 0
         
+        emotional_boost = (emotional_weight - 0.5) * 0.3
+        
+        milestone_boost = 0.15 if is_milestone else 0
+        
         base_similarity = 1 - similarity
         
         score = (
-            base_similarity * 0.6 +
-            recency_boost * 0.25 +
-            frequency_boost * 0.1 +
-            access_recency_boost * 0.05
+            base_similarity * 0.5 +
+            recency_boost * 0.2 +
+            frequency_boost * 0.05 +
+            access_recency_boost * 0.05 +
+            emotional_boost +
+            milestone_boost
         )
-        return score
+        return min(max(score, 0), 1.0)
     
     async def search(
         self,
@@ -179,7 +187,9 @@ class MemoryService:
                     similarity=float(distance) if distance else 0.5,
                     created_at=mem.created_at,
                     access_count=mem.access_count or 0,
-                    last_accessed=mem.last_accessed
+                    last_accessed=mem.last_accessed,
+                    emotional_weight=mem.emotional_weight or 0.5,
+                    is_milestone=mem.is_milestone or False
                 )
                 scored_memories.append((mem, score))
             

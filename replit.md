@@ -1,15 +1,6 @@
 # Overview
 
-Omi is an open-source AI wearable platform that captures and transcribes conversations, providing automatic summaries, action items, and intelligent assistance. The system consists of a Flutter mobile app, Python FastAPI backend, hardware firmware, documentation site, and several companion projects including omiGlass (smart glasses), Zeke Core (personal AI assistant), and an MCP (Model Context Protocol) server.
-
-The platform enables users to:
-- Connect wearable devices (Omi hardware or omiGlass) to capture audio
-- Automatically transcribe conversations using Deepgram
-- Generate structured memories and insights using OpenAI
-- Manage action items and tasks
-- Interact via chat interface with RAG-powered context retrieval
-- Extend functionality through a plugin/app system
-- Sync data across devices with optional private cloud storage
+Omi is an open-source AI wearable platform designed to capture, transcribe, and intelligently process conversations. It provides automatic summaries, action items, and intelligent assistance. The platform includes a Flutter mobile app, a Python FastAPI backend, hardware firmware, and companion projects like omiGlass (smart glasses) and Zeke Core (personal AI assistant). Omi aims to offer a comprehensive solution for managing and leveraging conversational data, with features like RAG-powered chat, a plugin system, and optional private cloud storage.
 
 # User Preferences
 
@@ -18,262 +9,87 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## Mobile Application (Flutter)
-- **Framework**: Flutter with multi-flavor support (dev/prod)
-- **State Management**: SharedPreferences for local data, Firebase Firestore for cloud sync
-- **Bluetooth**: BLE communication with wearable devices for audio streaming
-- **Audio Processing**: Real-time transcription via Deepgram WebSocket connection
-- **Local AI**: Vector similarity search for memory retrieval using embeddings
-- **Authentication**: Firebase Auth with custom token support
-- **Platforms**: iOS, Android, macOS, Web, Windows
+- **Framework**: Flutter with multi-flavor support (dev/prod).
+- **State Management**: SharedPreferences for local data, Firebase Firestore for cloud sync.
+- **Connectivity**: BLE for wearable communication, Deepgram WebSocket for real-time transcription.
+- **AI**: Local vector similarity search for memory retrieval.
+- **Authentication**: Firebase Auth.
+- **Platforms**: iOS, Android, macOS, Web, Windows.
 
 ## Backend (FastAPI + Modal)
-- **API Framework**: FastAPI with modular router architecture
-- **Deployment**: Modal.com for serverless functions, supports traditional hosting
-- **Authentication**: Firebase Admin SDK for token verification, custom API keys for MCP/developer access
-- **Database**: Google Firestore for primary data storage
-- **Caching**: Redis (Upstash recommended) for performance optimization
-- **Storage**: Google Cloud Storage for audio recordings and media files
-- **Real-time Processing**: Webhook-based event system for conversation processing
-- **Background Jobs**: Modal scheduled functions for notifications and batch processing
+- **API Framework**: FastAPI with modular architecture.
+- **Deployment**: Modal.com for serverless functions.
+- **Authentication**: Firebase Admin SDK, custom API keys.
+- **Database**: Google Firestore.
+- **Caching**: Redis (Upstash).
+- **Storage**: Google Cloud Storage for media.
+- **Processing**: Webhook-based event system for conversations, Modal scheduled functions for background tasks.
 
 ## Data Architecture
-
-### Firestore Collections
-- **users**: User profiles, settings, subscriptions, data protection preferences
-- **conversations**: Audio transcripts with speaker diarization, timestamps, geolocation
-- **memories**: Structured insights extracted from conversations (encrypted when enhanced protection enabled)
-- **messages**: Chat history between user and AI assistant
-- **action_items**: Tasks and to-dos derived from conversations
-- **plugins_data**: Community apps/plugins metadata and reviews
-- **mcp_api_keys**: API keys for Model Context Protocol access
-- **dev_api_keys**: Developer API keys for external integrations
-
-### Subcollections Pattern
-- **users/{uid}/fcm_tokens**: Push notification tokens per device
-- **users/{uid}/hourly_usage**: Time-series usage statistics
-- **plugins_data/{app_id}/reviews**: User reviews for apps
-
-### Data Protection Levels
-- **Standard**: Plain text storage in Firestore
-- **Enhanced**: AES encryption for sensitive fields (conversations, memories, chat) using user-specific keys
+- **Firestore Collections**: Users, conversations, memories, messages, action items, plugin data, API keys.
+- **Data Protection**: Standard (plaintext) and Enhanced (AES encryption for sensitive fields).
 
 ## AI/ML Pipeline
-
-### Speech-to-Text
-- **Primary**: Deepgram WebSocket API with speaker diarization
-- **Features**: Multi-language support, real-time streaming, speaker identification
-- **Speaker Profiles**: SpeechBrain ECAPA-VOXCELEB embeddings for speaker recognition
-
-### Memory Generation
-- **Model**: OpenAI GPT (configurable model selection)
-- **Process**: 
-  1. Transcription → structured overview (title, emoji, category, action items)
-  2. Context-aware extraction distinguishing interesting facts from routine events
-  3. Trend detection across multiple memories
-- **Optimization**: DSPy ReAct framework for prompt tuning (memories-tuner tool)
-
-### Vector Search
-- **Database**: Pinecone for semantic memory search
-- **Embeddings**: OpenAI text-embedding-ada-002
-- **Use Cases**: RAG-based chat responses, similar memory retrieval
-
-### Voice Activity Detection
-- **Model**: Pyannote.audio VAD pipeline
-- **Purpose**: Audio chunking optimization, silence removal
+- **Speech-to-Text**: Deepgram WebSocket API with speaker diarization and multi-language support.
+- **Memory Generation**: OpenAI GPT models for structured summaries, insights, and trend detection, optimized with DSPy ReAct.
+- **Vector Search**: Pinecone for semantic memory search using OpenAI embeddings for RAG and memory retrieval.
+- **Voice Activity Detection**: Pyannote.audio VAD for audio chunking.
 
 ## Plugin/App System
-- **Capabilities**: Memories processing, chat integration, external triggers
-- **Triggers**: `audio_bytes`, `memory_created`, `conversation_finished`
-- **Integration**: Webhook-based with OAuth support for authenticated apps
-- **Discovery**: JSON-based app registry with community ratings
+- **Capabilities**: Memories processing, chat integration, external triggers (`audio_bytes`, `memory_created`, `conversation_finished`).
+- **Integration**: Webhook-based with OAuth support, JSON-based app registry.
 
 ## Authentication & Authorization
-- **Primary Auth**: Firebase Authentication (email, phone, OAuth providers)
-- **API Keys**: 
-  - MCP keys for Model Context Protocol servers
-  - Dev keys for external integrations
-  - Bearer token validation with Redis caching
-- **Encryption**: Per-user AES keys derived from Firebase UID for enhanced protection
+- **Primary Auth**: Firebase Authentication.
+- **API Keys**: MCP and Dev keys with bearer token validation and Redis caching.
+- **Encryption**: Per-user AES keys from Firebase UID.
 
 ## Notification System
-- **Push**: Firebase Cloud Messaging (FCM) with multi-device support
-- **Scheduling**: Cron-based daily summaries and proactive notifications
-- **Channels**: In-app, push notifications, SMS (via Twilio)
+- **Push**: Firebase Cloud Messaging (FCM).
+- **Scheduling**: Cron-based for summaries and proactive notifications.
+- **Channels**: In-app, push, SMS (Twilio).
 
 ## Hardware Integration
-- **Omi Device**: ESP32-based BLE wearable with continuous audio capture
-- **omiGlass**: Smart glasses with Seeed XIAO ESP32 S3, Ollama integration
-- **OTA Updates**: Nordic DFU protocol for firmware updates
-- **Communication**: Custom BLE protocol for audio streaming
+- **Omi Device**: ESP32-based BLE wearable for audio capture.
+- **omiGlass**: Smart glasses with Seeed XIAO ESP32 S3 and Ollama integration.
+- **Firmware Updates**: Nordic DFU protocol.
+- **Communication**: Custom BLE audio streaming protocol.
 
 ## Companion Projects
 
-### Zeke Core
-- **Purpose**: Personal AI assistant with proactive task management
-- **Architecture**: Event-driven skill orchestrator (not multi-agent)
-- **Skills**: Memory curation, task planning, research, communications, location awareness
-- **Integration**: Bridges Limitless API to Omi (temporary, removable)
-- **Stack**: FastAPI, PostgreSQL + pgvector, Celery + Redis workers
-- **Location Tracking**: Overland iOS app integration for GPS context
-
-#### Distributed Task Queue (Celery + Redis)
-- **Architecture**: Decoupled API gateway with background workers for heavy processing
-- **Process Recycling**: Workers restart after 50 tasks (`worker_max_tasks_per_child`) to eliminate memory leaks
-- **Task Queues**: zeke_default, zeke_processing, zeke_curation, zeke_notifications
-- **Scheduled Tasks**: Due task checks (15m), notification flush (15m), curation (4x daily)
-- **Tasks**: process_conversation, send_scheduled_reminder, check_due_tasks, run_memory_curation
-
-#### Semantic Cache (Performance Optimization)
-- **Purpose**: Cache LLM responses for semantically similar queries
-- **Similarity Threshold**: 0.90 cosine similarity using OpenAI embeddings
-- **Performance**: ~40x faster cache hits (~80ms vs ~3500ms), ~99% cost reduction
-- **TTL**: Responses expire after 1 hour by default
-- **Cache Warming**: Pre-populate cache with common queries via `warm_cache()` method
-- **Smart Invalidation**: 
-  - `invalidate_for_user()` - Clear cache for specific user context
-  - `invalidate_by_pattern()` - Clear entries matching query patterns
-  - `invalidate_stale()` - Clear entries older than specified age
-- **Health Monitoring**: `get_cache_health()` returns utilization, hit rate, entry ages
-- **Endpoints**: 
-  - GET /chat/cache/metrics - Cache hit/miss statistics
-  - GET /chat/cache/health - Cache health and utilization
-  - DELETE /chat/cache - Clear all cache entries
-  - POST /chat/cache/invalidate/stale - Clear stale entries
-  - POST /chat/cache/invalidate/pattern - Clear entries by query pattern
-
-#### GraphRAG Knowledge Graph
-- **Purpose**: Enhanced retrieval using entity relationships for multi-hop reasoning
-- **Entities**: People, places, organizations, concepts extracted from memories/conversations
-- **Relationships**: Typed connections between entities (e.g., works_at, assigned_to, mentioned_in)
-- **Use Cases**: Complex queries like "What tasks did I assign to Sarah about budgets?"
-- **Storage**: PostgreSQL with Entity and Relationship models
-- **Service**: `KnowledgeGraphService` with entity extraction and graph traversal
-- **API Endpoints**:
-  - POST /api/knowledge-graph/extract/{user_id} - Extract entities from memory
-  - GET /api/knowledge-graph/entities/{user_id} - List user's entities
-  - GET /api/knowledge-graph/entity/{entity_id} - Get entity with relationships
-  - POST /api/knowledge-graph/query - Multi-hop graph query
-  - POST /api/knowledge-graph/relationships - Create entity relationships
-  - DELETE /api/knowledge-graph/entity/{entity_id} - Remove entity
-
-#### OAuth2-Style API Scopes
-- **Purpose**: Granular permission control for third-party integrations and plugins
-- **Scopes Available**:
-  - `memories:read`, `memories:write` - Memory access
-  - `tasks:read`, `tasks:write` - Task management
-  - `conversations:read`, `conversations:write` - Conversation access
-  - `notifications:send` - Permission to send notifications
-  - `location:read` - GPS/location data access
-  - `profile:read`, `profile:write` - User profile access
-  - `admin` - Full administrative access
-- **AuthContext**: Tracks key name, granted scopes, internal flag
-- **Validation**: `require_scope()` raises ScopeError if permission denied
-- **API Endpoints**:
-  - POST /api/auth/keys - Create new API key with specific scopes
-  - GET /api/auth/keys - List API keys (scopes shown, not secret)
-  - DELETE /api/auth/keys/{key_id} - Revoke API key
-  - POST /api/auth/verify - Verify key and return granted scopes
-
-#### Resource Lifecycle Management
-- **Purpose**: Prevent memory leaks with proper try/finally cleanup patterns
-- **ResourceTracker**: Monitors active resources with warning thresholds
-- **ManagedResource**: Generic wrapper with automatic cleanup on release
-- **ConnectionPool**: Pooled connections with idle timeout and cleanup
-- **Context Managers**: `managed_async_resource()` and `managed_sync_resource()`
-- **Global Cleanup**: `cleanup_all_resources()` for graceful shutdown
-- **Metrics**: `get_all_tracker_stats()` for resource leak detection
-
-#### Notification Permission System
-- **Purpose**: Prevent unauthorized notification spam from plugins
-- **Permission Check**: `NotificationService.check_permission()` validates scope
-- **Required Scope**: `notifications:send` or `admin` scope needed
-- **Error Handling**: `NotificationPermissionError` raised on denied access
-- **Internal Bypass**: Core services (is_internal=True) bypass permission checks
-
-#### Overland GPS Integration
-- **App**: Overland iOS (https://overland.p3k.app/) sends GPS data via HTTP POST
-- **Endpoint**: POST `/api/overland/` receives location batches in GeoJSON format
-- **Data Captured**: Latitude, longitude, altitude, speed, motion state (walking/driving/stationary), battery level
-- **Storage**: PostgreSQL `locations` table with automatic retention (90 days default)
-- **Context Injection**: Location context automatically added to AI prompts for location-aware responses
-- **Dashboard**: Location widget displays current motion, status, speed, and battery
-- **Security**: Bearer token authentication via `OVERLAND_API_KEY` environment variable (required in production)
-- **API Endpoints**:
-  - `GET /api/overland/context` - Current location context summary
-  - `GET /api/overland/current` - Most recent location point
-  - `GET /api/overland/recent` - Recent location history
-  - `GET /api/overland/summary` - Motion summary (time spent walking, driving, etc.)
-
-#### Memory Curation System
-- **Purpose**: Automatically classify, tag, enrich, and clean memories to keep ZEKE's knowledge base accurate
-- **Service**: `MemoryCurationService` in `zeke-core/app/services/curation_service.py`
-- **Classification**: Uses keyword-based detection (fast) with LLM fallback (OpenAI) for accuracy
-- **Topics**: personal_profile, relationships, commitments, health, travel, finance, hobbies, work, preferences, facts, other
-- **Quality Control**: Detects too-short content, vague language, contradictions, invalid data
-- **Curation Status**: pending, clean, needs_review, flagged, deleted
-- **Confidence Gating**: High confidence (>0.85) auto-updates; low confidence flags for human review
-- **Storage**: Memories table with curation fields (primary_topic, curation_status, curation_notes, enriched_context, curation_confidence, last_curated)
-- **Run Tracking**: `memory_curation_runs` table logs each curation job (processed, updated, flagged, deleted counts)
-- **Background Jobs**: Celery cron runs curation 4x daily (0:30, 6:30, 12:30, 18:30) when Redis available
-- **Dashboard**: Curation page shows stats, progress bar, topic breakdown, review queue with approve/reject actions
-- **API Endpoints**:
-  - `GET /api/curation/stats/{user_id}` - Curation statistics and topic breakdown
-  - `GET /api/curation/flagged/{user_id}` - Memories needing review
-  - `POST /api/curation/run` - Trigger manual curation run
-  - `POST /api/curation/approve/{memory_id}` - Mark memory as clean
-  - `POST /api/curation/reject/{memory_id}` - Reject/delete memory
-  - `POST /api/curation/batch-action` - Bulk approve/reject operations
+### Zeke Core (Personal AI Assistant)
+- **Purpose**: Proactive task management and skill orchestration.
+- **Stack**: FastAPI, PostgreSQL + pgvector, Celery + Redis workers.
+- **Features**: Memory curation, task planning, research, location awareness (Overland iOS integration).
+- **Semantic Cache**: Optimizes LLM responses via cosine similarity caching.
+- **GraphRAG Knowledge Graph**: Uses entity relationships for multi-hop reasoning on memories.
+- **OAuth2-Style API Scopes**: Granular permission control for integrations.
+- **Resource Lifecycle Management**: Ensures proper cleanup and prevents memory leaks.
+- **Notification Permission System**: Controls plugin notification access.
+- **Memory Curation System**: Automates classification, tagging, and enrichment of memories.
 
 ### MCP Server
-- **Protocol**: Model Context Protocol for AI tool integration
-- **Package**: Published to PyPI as `mcp-server-omi`
-- **Tools**: get_memories, create_memory, edit_memory, delete_memory, get_conversations
-- **Deployment**: Docker container, uv/uvx for local development
-- **Authentication**: User-specific API keys with token-based auth
-
-## Development Tools
-- **Documentation**: Mintlify for docs site
-- **Memory Tuning**: Streamlit app with DSPy optimization
-- **Testing**: Flutter flavors for dev/staging environments
-- **Code Style**: Black formatter (120 char line length) for Python
+- **Protocol**: Model Context Protocol for AI tool integration.
+- **Tools**: `get_memories`, `create_memory`, `edit_memory`, `delete_memory`, `get_conversations`.
+- **Deployment**: Docker container.
 
 # External Dependencies
 
 ## Core Services
-- **Firebase**: Authentication, Firestore database, Cloud Messaging, Admin SDK
-- **Google Cloud Platform**: Cloud Storage (audio files), Service Account authentication
-- **Modal.com**: Serverless deployment platform for backend functions
-- **Upstash Redis**: Managed Redis for caching and rate limiting
+- **Firebase**: Authentication, Firestore, Cloud Messaging, Admin SDK.
+- **Google Cloud Platform**: Cloud Storage, Service Account authentication.
+- **Modal.com**: Serverless deployment.
+- **Upstash Redis**: Caching and rate limiting.
 
 ## AI/ML APIs
-- **OpenAI**: GPT-4/GPT-3.5 for text generation, text-embedding-ada-002 for embeddings
-- **Deepgram**: Real-time speech-to-text with speaker diarization
-- **Pinecone**: Vector database for semantic search
-- **Hume AI**: Emotional analysis (optional integration)
+- **OpenAI**: GPT models (GPT-4/GPT-3.5) for text generation, `text-embedding-ada-002` for embeddings.
+- **Deepgram**: Real-time speech-to-text.
+- **Pinecone**: Vector database.
+- **Hume AI**: Emotional analysis (optional).
 
 ## Third-Party Integrations
-- **Twilio**: SMS notifications and webhooks
-- **Langfuse**: LLM observability and prompt optimization
-- **Google APIs**: OAuth, Calendar, Gmail (for task integrations)
-- **Ollama**: Local LLM hosting for omiGlass offline features
-
-## Development & Deployment
-- **PyPI**: Package distribution for MCP server
-- **npm**: Documentation and build tools
-- **GitHub Actions**: CI/CD workflows (implied by .github structure)
-- **Expo**: React Native tooling for omiGlass app
-
-## Python Libraries
-- **FastAPI**: Web framework with async support
-- **Pydantic**: Data validation and settings management
-- **SQLAlchemy**: ORM for Zeke Core PostgreSQL
-- **arq**: Async job queue with Redis backend
-- **SpeechBrain**: Speaker recognition models
-- **Pyannote**: Audio processing and VAD
-- **DSPy**: LLM prompt optimization framework
-
-## Flutter Dependencies
-- **Firebase packages**: Authentication, Firestore, messaging
-- **BLE**: Bluetooth communication with wearables
-- **Audio**: Recording, playback, file system access
-- **Platform-specific**: iOS/Android native integrations
+- **Twilio**: SMS notifications.
+- **Langfuse**: LLM observability.
+- **Google APIs**: OAuth, Calendar, Gmail.
+- **Ollama**: Local LLM hosting for omiGlass.
+- **Overland iOS**: GPS data integration for Zeke Core.
