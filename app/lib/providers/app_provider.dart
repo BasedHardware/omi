@@ -207,10 +207,17 @@ class AppProvider extends BaseProvider {
         filters.containsKey('Apps');
   }
 
+  String _pendingSearchQuery = '';
+
   Future<void> performServerSearch() async {
+    // Always update pending query to the latest
+    _pendingSearchQuery = searchQuery;
+
     if (isSearching) {
       return;
     }
+
+    final queryBeingSearched = searchQuery;
 
     try {
       isSearching = true;
@@ -247,7 +254,7 @@ class AppProvider extends BaseProvider {
       }
 
       final result = await retrieveAppsSearch(
-        query: searchQuery.isEmpty ? null : searchQuery,
+        query: queryBeingSearched.isEmpty ? null : queryBeingSearched,
         category: categoryFilter,
         minRating: minRating,
         capability: capabilityFilter,
@@ -257,21 +264,27 @@ class AppProvider extends BaseProvider {
         limit: 100,
       );
 
-      searchResults = result.apps;
-      filteredApps = result.apps;
+      if (queryBeingSearched == _pendingSearchQuery) {
+        searchResults = result.apps;
+        filteredApps = result.apps;
 
-      // Track search if there was a query
-      if (searchQuery.isNotEmpty) {
-        MixpanelManager().appsSearched(
-          searchTerm: searchQuery,
-          resultCount: result.apps.length,
-        );
+        // Track search if there was a query
+        if (queryBeingSearched.isNotEmpty) {
+          MixpanelManager().appsSearched(
+            searchTerm: queryBeingSearched,
+            resultCount: result.apps.length,
+          );
+        }
       }
     } catch (e) {
       filterApps();
     } finally {
       isSearching = false;
       notifyListeners();
+
+      if (_pendingSearchQuery != queryBeingSearched) {
+        performServerSearch();
+      }
     }
   }
 
@@ -682,6 +695,8 @@ class AppProvider extends BaseProvider {
           return (a, b) => (b.ratingAvg ?? -1.0).compareTo(a.ratingAvg ?? -1.0);
         case 'Lowest Rating':
           return (a, b) => (a.ratingAvg ?? -1.0).compareTo(b.ratingAvg ?? -1.0);
+        case 'Most Installs':
+          return (a, b) => b.installs.compareTo(a.installs);
         default:
           return null;
       }
