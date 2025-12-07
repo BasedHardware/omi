@@ -298,6 +298,172 @@ class SemanticCache:
         except Exception as e:
             logger.error(f"Failed to invalidate cache: {e}")
             return 0
+    
+    async def warm_cache(
+        self,
+        queries: list[str],
+        generate_func,
+        user_context: Optional[str] = None,
+        ttl: Optional[int] = None
+    ) -> Dict[str, Any]:
+        warmed = 0
+        skipped = 0
+        failed = 0
+        
+        for query in queries:
+            try:
+                existing = await self.get(query, user_context)
+                if existing:
+                    skipped += 1
+                    continue
+                
+                response = await generate_func(query)
+                
+                if response:
+                    success = await self.set(query, response, user_context, ttl)
+                    if success:
+                        warmed += 1
+                    else:
+                        failed += 1
+                else:
+                    failed += 1
+                    
+            except Exception as e:
+                logger.error(f"Cache warming failed for query '{query[:50]}...': {e}")
+                failed += 1
+        
+        logger.info(f"Cache warming complete: warmed={warmed}, skipped={skipped}, failed={failed}")
+        
+        return {
+            "warmed": warmed,
+            "skipped": skipped,
+            "failed": failed,
+            "total": len(queries)
+        }
+    
+    def invalidate_by_pattern(self, pattern: str) -> int:
+        try:
+            keys_to_delete = []
+            
+            index_data = self.client.get(self.INDEX_KEY)
+            if index_data:
+                if isinstance(index_data, bytes):
+                    index_data = index_data.decode('utf-8')
+                cache_keys = json.loads(index_data)
+                
+                for cache_key in cache_keys:
+                    try:
+                        cached_data = self.client.get(cache_key)
+                        if cached_data:
+                            if isinstance(cached_data, bytes):
+                                cached_data = cached_data.decode('utf-8')
+                            entry = json.loads(cached_data)
+                            query = entry.get("query", "").lower()
+                            if pattern.lower() in query:
+                                keys_to_delete.append(cache_key)
+                    except Exception:
+                        continue
+            
+            if keys_to_delete:
+                deleted = self.client.delete(*keys_to_delete)
+                
+                remaining = [k for k in cache_keys if k not in keys_to_delete]
+                self.client.set(self.INDEX_KEY, json.dumps(remaining))
+                
+                logger.info(f"Invalidated {deleted} cache entries matching pattern '{pattern}'")
+                return int(deleted) if deleted else 0
+            return 0
+            
+        except Exception as e:
+            logger.error(f"Failed to invalidate by pattern: {e}")
+            return 0
+    
+    def invalidate_stale(self, max_age_seconds: int = 3600) -> int:
+        try:
+            keys_to_delete = []
+            now = time.time()
+            
+            index_data = self.client.get(self.INDEX_KEY)
+            if index_data:
+                if isinstance(index_data, bytes):
+                    index_data = index_data.decode('utf-8')
+                cache_keys = json.loads(index_data)
+                
+                for cache_key in cache_keys:
+                    try:
+                        cached_data = self.client.get(cache_key)
+                        if cached_data:
+                            if isinstance(cached_data, bytes):
+                                cached_data = cached_data.decode('utf-8')
+                            entry = json.loads(cached_data)
+                            timestamp = entry.get("timestamp", 0)
+                            if (now - timestamp) > max_age_seconds:
+                                keys_to_delete.append(cache_key)
+                    except Exception:
+                        continue
+            
+            if keys_to_delete:
+                deleted = self.client.delete(*keys_to_delete)
+                
+                remaining = [k for k in cache_keys if k not in keys_to_delete]
+                self.client.set(self.INDEX_KEY, json.dumps(remaining))
+                
+                logger.info(f"Invalidated {deleted} stale cache entries (older than {max_age_seconds}s)")
+                return int(deleted) if deleted else 0
+            return 0
+            
+        except Exception as e:
+            logger.error(f"Failed to invalidate stale entries: {e}")
+            return 0
+    
+    def get_cache_health(self) -> Dict[str, Any]:
+        try:
+            metrics = self.get_metrics()
+            
+            index_data = self.client.get(self.INDEX_KEY)
+            cache_size = 0
+            oldest_entry = None
+            newest_entry = None
+            
+            if index_data:
+                if isinstance(index_data, bytes):
+                    index_data = index_data.decode('utf-8')
+                cache_keys = json.loads(index_data)
+                cache_size = len(cache_keys)
+                
+                timestamps = []
+                for cache_key in cache_keys[:20]:
+                    try:
+                        cached_data = self.client.get(cache_key)
+                        if cached_data:
+                            if isinstance(cached_data, bytes):
+                                cached_data = cached_data.decode('utf-8')
+                            entry = json.loads(cached_data)
+                            ts = entry.get("timestamp")
+                            if ts:
+                                timestamps.append(ts)
+                    except Exception:
+                        continue
+                
+                if timestamps:
+                    oldest_entry = min(timestamps)
+                    newest_entry = max(timestamps)
+            
+            return {
+                "status": "healthy" if cache_size > 0 else "empty",
+                "cache_size": cache_size,
+                "max_cache_entries": self.max_cache_entries,
+                "utilization": cache_size / self.max_cache_entries if self.max_cache_entries > 0 else 0,
+                "hit_rate": metrics.get("hit_rate", 0),
+                "oldest_entry_age_seconds": time.time() - oldest_entry if oldest_entry else None,
+                "newest_entry_age_seconds": time.time() - newest_entry if newest_entry else None,
+                "similarity_threshold": self.similarity_threshold,
+                "default_ttl": self.default_ttl
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get cache health: {e}")
+            return {"status": "error", "error": str(e)}
 
 
 _semantic_cache: Optional[SemanticCache] = None

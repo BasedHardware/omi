@@ -106,10 +106,10 @@ def check_due_tasks(self, user_id: str = "default_user") -> Dict[str, Any]:
             
             notifications_sent = 0
             for task in tasks:
-                await notification_service.queue(f"Task due soon: {task.title}")
+                await notification_service._queue_internal(f"Task due soon: {task.title}")
                 notifications_sent += 1
             
-            await notification_service.flush_queue()
+            await notification_service.flush_queue_internal()
             
             logger.info(f"Sent {notifications_sent} task notifications")
             return {"status": "success", "notifications_sent": notifications_sent}
@@ -130,7 +130,7 @@ def flush_notification_queue(self) -> Dict[str, Any]:
     async def _flush():
         try:
             notification_service = NotificationService()
-            await notification_service.flush_queue()
+            await notification_service.flush_queue_internal()
             return {"status": "success"}
             
         except Exception as e:

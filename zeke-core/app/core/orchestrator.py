@@ -28,6 +28,7 @@ class Intent(str, Enum):
     CALENDAR = "calendar"
     WEATHER = "weather"
     LOCATION = "location"
+    KNOWLEDGE_GRAPH = "knowledge_graph"
     AUTOMATION = "automation"
     CONVERSATION = "conversation"
     UNKNOWN = "unknown"
@@ -325,6 +326,49 @@ class SkillOrchestrator:
                         }
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_knowledge_graph",
+                    "description": "Search the knowledge graph for entities (people, organizations, projects, topics) and their relationships. Use this for questions about who knows whom, project associations, or relationship queries.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "The search query for finding relevant entities and relationships"
+                            },
+                            "entity_types": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Filter by entity types: person, organization, location, project, topic, event, task"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "explore_entity_connections",
+                    "description": "Explore how an entity (person, project, etc.) is connected to other entities. Use for understanding relationship networks.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "entity_name": {
+                                "type": "string",
+                                "description": "The name of the entity to explore connections for"
+                            },
+                            "max_depth": {
+                                "type": "integer",
+                                "description": "How many relationship hops to explore (default 2, max 4)"
+                            }
+                        },
+                        "required": ["entity_name"]
+                    }
+                }
             }
         ]
     
@@ -614,6 +658,66 @@ For location questions, use get_current_location, get_location_history, or get_m
                 summary = await self.location_service.get_motion_summary(user_id, hours=hours)
                 return summary
             
+            elif function_name == "search_knowledge_graph":
+                graph_service = self.memory_service.graph_service
+                if not graph_service:
+                    return {"error": "Knowledge graph service not available"}
+                
+                result = await graph_service.graph_rag_search(
+                    user_id=user_id,
+                    query=arguments["query"],
+                    limit=10
+                )
+                
+                entities_summary = [
+                    f"{e.name} ({e.entity_type})" 
+                    for e in result.entities[:10]
+                ]
+                
+                return {
+                    "entities": entities_summary,
+                    "relationships_count": len(result.relationships),
+                    "context": result.context,
+                    "summary": f"Found {len(result.entities)} entities and {len(result.relationships)} relationships"
+                }
+            
+            elif function_name == "explore_entity_connections":
+                graph_service = self.memory_service.graph_service
+                if not graph_service:
+                    return {"error": "Knowledge graph service not available"}
+                
+                entity = await graph_service.get_entity_by_name(
+                    user_id=user_id,
+                    name=arguments["entity_name"]
+                )
+                
+                if not entity:
+                    return {"error": f"Entity '{arguments['entity_name']}' not found in knowledge graph"}
+                
+                max_depth = min(arguments.get("max_depth", 2), 4)
+                result = await graph_service.traverse_graph(
+                    user_id=user_id,
+                    start_entity_id=entity.id,
+                    max_depth=max_depth,
+                    max_nodes=20
+                )
+                
+                connections = []
+                for rel in result.relationships[:15]:
+                    source = next((e for e in result.entities if e.id == rel.source_entity_id), None)
+                    target = next((e for e in result.entities if e.id == rel.target_entity_id), None)
+                    if source and target:
+                        connections.append(f"{source.name} --[{rel.relation_type}]--> {target.name}")
+                
+                return {
+                    "entity": entity.name,
+                    "entity_type": entity.entity_type,
+                    "description": entity.description,
+                    "connected_entities": [e.name for e in result.entities if e.id != entity.id],
+                    "connections": connections,
+                    "context": result.context
+                }
+            
             else:
                 return {"error": f"Unknown function: {function_name}"}
                 
@@ -640,5 +744,7 @@ For location questions, use get_current_location, get_location_history, or get_m
             "get_current_location": Intent.LOCATION,
             "get_location_history": Intent.LOCATION,
             "get_motion_summary": Intent.LOCATION,
+            "search_knowledge_graph": Intent.KNOWLEDGE_GRAPH,
+            "explore_entity_connections": Intent.KNOWLEDGE_GRAPH,
         }
         return intent_map.get(first_action, Intent.UNKNOWN)

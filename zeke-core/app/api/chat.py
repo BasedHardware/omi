@@ -102,3 +102,24 @@ async def clear_cache():
     cache = get_semantic_cache()
     deleted = await asyncio.to_thread(cache.clear)
     return {"status": "cleared", "entries_deleted": deleted}
+
+
+@router.get("/cache/health")
+async def get_cache_health():
+    cache = get_semantic_cache()
+    health = await asyncio.to_thread(cache.get_cache_health)
+    return health
+
+
+@router.post("/cache/invalidate/stale")
+async def invalidate_stale_cache(max_age_seconds: int = 3600):
+    cache = get_semantic_cache()
+    deleted = await asyncio.to_thread(cache.invalidate_stale, max_age_seconds)
+    return {"status": "success", "entries_deleted": deleted}
+
+
+@router.post("/cache/invalidate/pattern")
+async def invalidate_cache_by_pattern(pattern: str):
+    cache = get_semantic_cache()
+    deleted = await asyncio.to_thread(cache.invalidate_by_pattern, pattern)
+    return {"status": "success", "pattern": pattern, "entries_deleted": deleted}

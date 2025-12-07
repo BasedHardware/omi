@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_, func, text
@@ -10,15 +10,33 @@ from ..models.memory import MemoryDB, MemoryCreate, MemoryResponse, MemoryCatego
 from ..integrations.openai import OpenAIClient
 from ..core.database import get_db_context
 
+if TYPE_CHECKING:
+    from .knowledge_graph_service import KnowledgeGraphService
+
 logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.15
 
 
 class MemoryService:
-    def __init__(self, openai_client: Optional[OpenAIClient] = None):
+    def __init__(self, openai_client: Optional[OpenAIClient] = None, enable_graph_extraction: bool = True):
         self._openai = openai_client
         self._openai_initialized = openai_client is not None
+        self._graph_service = None
+        self._graph_service_initialized = False
+        self._enable_graph_extraction = enable_graph_extraction
+    
+    @property
+    def graph_service(self) -> Optional["KnowledgeGraphService"]:
+        if not self._graph_service_initialized and self._enable_graph_extraction:
+            try:
+                from .knowledge_graph_service import KnowledgeGraphService
+                self._graph_service = KnowledgeGraphService(self._openai)
+                self._graph_service_initialized = True
+            except Exception as e:
+                logger.warning(f"Knowledge graph service not available: {e}")
+                self._graph_service = None
+        return self._graph_service
     
     @property
     def openai(self) -> Optional[OpenAIClient]:
@@ -65,7 +83,8 @@ class MemoryService:
         category: str = "interesting",
         conversation_id: Optional[str] = None,
         manually_added: bool = False,
-        deduplicate: bool = True
+        deduplicate: bool = True,
+        extract_graph: bool = True
     ) -> MemoryResponse:
         openai_client = self._require_openai()
         embedding = await openai_client.create_embedding(content)
@@ -89,7 +108,19 @@ class MemoryService:
             db.flush()
             db.refresh(memory)
             
-            return MemoryResponse.model_validate(memory)
+            memory_response = MemoryResponse.model_validate(memory)
+        
+        if extract_graph and self.graph_service:
+            try:
+                await self.graph_service.extract_entities_and_relations(
+                    text=content,
+                    user_id=user_id,
+                    memory_id=memory_response.id
+                )
+            except Exception as e:
+                logger.warning(f"Graph extraction failed for memory {memory_response.id}: {e}")
+        
+        return memory_response
     
     def _compute_relevance_score(
         self,
@@ -259,12 +290,80 @@ Only return the JSON array, no other text."""
                     user_id=user_id,
                     content=mem_data["content"],
                     category=mem_data.get("category", "interesting"),
-                    conversation_id=conversation_id
+                    conversation_id=conversation_id,
+                    extract_graph=True
                 )
                 created_memories.append(memory)
+            
+            if self.graph_service:
+                try:
+                    await self.graph_service.extract_entities_and_relations(
+                        text=f"{overview}\n\n{transcript[:2000]}",
+                        user_id=user_id,
+                        memory_id=None
+                    )
+                except Exception as e:
+                    logger.warning(f"Conversation graph extraction failed: {e}")
             
             return created_memories
             
         except Exception as e:
             logger.error(f"Failed to extract memories: {e}")
             return []
+    
+    async def search_with_graph(
+        self,
+        user_id: str,
+        query: str,
+        limit: int = 10,
+        category: Optional[str] = None,
+        include_graph_context: bool = True
+    ) -> Tuple[List[str], str]:
+        memories = await self.search(
+            user_id=user_id,
+            query=query,
+            limit=limit,
+            category=category
+        )
+        
+        graph_context = ""
+        if include_graph_context and self.graph_service:
+            try:
+                graph_result = await self.graph_service.graph_rag_search(
+                    user_id=user_id,
+                    query=query,
+                    limit=5
+                )
+                graph_context = graph_result.context
+            except Exception as e:
+                logger.warning(f"Graph search failed: {e}")
+                graph_context = ""
+        
+        return memories, graph_context
+    
+    async def get_context_for_query(
+        self,
+        user_id: str,
+        query: str,
+        memory_limit: int = 5,
+        include_graph: bool = True
+    ) -> str:
+        memories, graph_context = await self.search_with_graph(
+            user_id=user_id,
+            query=query,
+            limit=memory_limit,
+            include_graph_context=include_graph
+        )
+        
+        context_parts = []
+        
+        if memories:
+            context_parts.append("Relevant memories:")
+            for mem in memories:
+                context_parts.append(f"- {mem}")
+        
+        if graph_context:
+            context_parts.append("\nKnowledge Graph context:")
+            context_parts.append(graph_context)
+        
+        return "\n".join(context_parts) if context_parts else ""

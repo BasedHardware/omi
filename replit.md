@@ -128,7 +128,67 @@ Preferred communication style: Simple, everyday language.
 - **Similarity Threshold**: 0.90 cosine similarity using OpenAI embeddings
 - **Performance**: ~40x faster cache hits (~80ms vs ~3500ms), ~99% cost reduction
 - **TTL**: Responses expire after 1 hour by default
-- **Endpoints**: GET /chat/cache/metrics, DELETE /chat/cache
+- **Cache Warming**: Pre-populate cache with common queries via `warm_cache()` method
+- **Smart Invalidation**: 
+  - `invalidate_for_user()` - Clear cache for specific user context
+  - `invalidate_by_pattern()` - Clear entries matching query patterns
+  - `invalidate_stale()` - Clear entries older than specified age
+- **Health Monitoring**: `get_cache_health()` returns utilization, hit rate, entry ages
+- **Endpoints**: 
+  - GET /chat/cache/metrics - Cache hit/miss statistics
+  - GET /chat/cache/health - Cache health and utilization
+  - DELETE /chat/cache - Clear all cache entries
+  - POST /chat/cache/invalidate/stale - Clear stale entries
+  - POST /chat/cache/invalidate/pattern - Clear entries by query pattern
+
+#### GraphRAG Knowledge Graph
+- **Purpose**: Enhanced retrieval using entity relationships for multi-hop reasoning
+- **Entities**: People, places, organizations, concepts extracted from memories/conversations
+- **Relationships**: Typed connections between entities (e.g., works_at, assigned_to, mentioned_in)
+- **Use Cases**: Complex queries like "What tasks did I assign to Sarah about budgets?"
+- **Storage**: PostgreSQL with Entity and Relationship models
+- **Service**: `KnowledgeGraphService` with entity extraction and graph traversal
+- **API Endpoints**:
+  - POST /api/knowledge-graph/extract/{user_id} - Extract entities from memory
+  - GET /api/knowledge-graph/entities/{user_id} - List user's entities
+  - GET /api/knowledge-graph/entity/{entity_id} - Get entity with relationships
+  - POST /api/knowledge-graph/query - Multi-hop graph query
+  - POST /api/knowledge-graph/relationships - Create entity relationships
+  - DELETE /api/knowledge-graph/entity/{entity_id} - Remove entity
+
+#### OAuth2-Style API Scopes
+- **Purpose**: Granular permission control for third-party integrations and plugins
+- **Scopes Available**:
+  - `memories:read`, `memories:write` - Memory access
+  - `tasks:read`, `tasks:write` - Task management
+  - `conversations:read`, `conversations:write` - Conversation access
+  - `notifications:send` - Permission to send notifications
+  - `location:read` - GPS/location data access
+  - `profile:read`, `profile:write` - User profile access
+  - `admin` - Full administrative access
+- **AuthContext**: Tracks key name, granted scopes, internal flag
+- **Validation**: `require_scope()` raises ScopeError if permission denied
+- **API Endpoints**:
+  - POST /api/auth/keys - Create new API key with specific scopes
+  - GET /api/auth/keys - List API keys (scopes shown, not secret)
+  - DELETE /api/auth/keys/{key_id} - Revoke API key
+  - POST /api/auth/verify - Verify key and return granted scopes
+
+#### Resource Lifecycle Management
+- **Purpose**: Prevent memory leaks with proper try/finally cleanup patterns
+- **ResourceTracker**: Monitors active resources with warning thresholds
+- **ManagedResource**: Generic wrapper with automatic cleanup on release
+- **ConnectionPool**: Pooled connections with idle timeout and cleanup
+- **Context Managers**: `managed_async_resource()` and `managed_sync_resource()`
+- **Global Cleanup**: `cleanup_all_resources()` for graceful shutdown
+- **Metrics**: `get_all_tracker_stats()` for resource leak detection
+
+#### Notification Permission System
+- **Purpose**: Prevent unauthorized notification spam from plugins
+- **Permission Check**: `NotificationService.check_permission()` validates scope
+- **Required Scope**: `notifications:send` or `admin` scope needed
+- **Error Handling**: `NotificationPermissionError` raised on denied access
+- **Internal Bypass**: Core services (is_internal=True) bypass permission checks
 
 #### Overland GPS Integration
 - **App**: Overland iOS (https://overland.p3k.app/) sends GPS data via HTTP POST
