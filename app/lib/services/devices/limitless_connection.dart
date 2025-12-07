@@ -16,6 +16,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
   StreamSubscription? _rxSubscription;
   bool _isInitialized = false;
 
+  int _highestReceivedIndex = -1;
+  int _lastAcknowledgedIndex = -1;
+
   LimitlessDeviceConnection(super.device, super.transport);
 
   @override
@@ -57,6 +60,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _handleNotification(List<int> data) {
     if (data.isEmpty) return;
+
+    if (data.length > 2 && data[0] == 0x08) {
+      final indexResult = _decodeVarint(data, 1);
+      final packetIndex = indexResult[0] as int;
+      if (packetIndex > _highestReceivedIndex) {
+        _highestReceivedIndex = packetIndex;
+      }
+    }
 
     // Accumulate all received data
     _rawDataBuffer.addAll(data);
@@ -130,24 +141,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   /// Check if byte is a valid Opus TOC byte for pendant audio
-  ///
-  /// The pendant consistently uses specific TOC patterns:
-  /// - 0xb8: CELT WB 20ms mono (most common, ~92% of frames)
-  /// - 0x78: CELT WB 20ms mono variant
-  /// - 0xf8: CELT WB 20ms mono variant
-  ///
-  /// We restrict to these known patterns to filter out log messages
-  /// that happen to have valid-looking frame lengths but aren't audio.
   bool _isValidOpusToc(int byte) {
-    // Only accept known pendant audio TOC bytes
-    // This is stricter than RFC 6716 allows, but necessary to
-    // filter out interleaved log data that mimics valid frames
-    return byte == 0xb8 ||
-        byte == 0x78 ||
-        byte == 0xf8 ||
-        byte == 0xb0 ||
-        byte == 0x70 ||
-        byte == 0xf0; // 10ms variants
+    return byte == 0xb8 || byte == 0x78 || byte == 0xf8 || byte == 0xb0 || byte == 0x70 || byte == 0xf0;
   }
 
   /// Encode variable-length integer
@@ -235,6 +230,24 @@ class LimitlessDeviceConnection extends DeviceConnection {
     msg.addAll(_encodeField(2, 0, [0x00]));
     final cmd = [..._encodeMessage(8, msg), ..._encodeRequestData()];
     return _encodeBleWrapper(cmd);
+  }
+
+  List<int> _encodeAcknowledgeProcessedData(int upToIndex) {
+    final ackMsg = _encodeInt32Field(1, upToIndex);
+    final cmd = [..._encodeMessage(7, ackMsg), ..._encodeRequestData()];
+    return _encodeBleWrapper(cmd);
+  }
+
+  Future<void> acknowledgeProcessedData(int upToIndex) async {
+    if (!_isInitialized) return;
+
+    try {
+      final ackCmd = _encodeAcknowledgeProcessedData(upToIndex);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, ackCmd);
+      debugPrint('Limitless: Acknowledged processed data up to index $upToIndex');
+    } catch (e) {
+      debugPrint('Limitless: Error sending acknowledgment: $e');
+    }
   }
 
   @override
@@ -329,6 +342,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
       if (_rawDataBuffer.length > 65536) {
         debugPrint('Limitless: Buffer overflow, clearing buffer');
         _rawDataBuffer.clear();
+      }
+
+      if (_highestReceivedIndex > _lastAcknowledgedIndex && frames.isNotEmpty) {
+        _lastAcknowledgedIndex = _highestReceivedIndex;
+        acknowledgeProcessedData(_highestReceivedIndex);
       }
     });
 
