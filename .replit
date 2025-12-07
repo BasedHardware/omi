@@ -4,6 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
+packages = ["redis"]
 
 [workflows]
 runButton = "Project"
@@ -20,6 +21,14 @@ args = "Zeke Core API"
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "Zeke Dashboard"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Redis Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Zeke Celery Worker"
 
 [[workflows.workflow]]
 name = "Zeke Core API"
@@ -45,6 +54,28 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "Redis Server"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "redis-server --port 6379"
+
+[[workflows.workflow]]
+name = "Zeke Celery Worker"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd zeke-core && python worker.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[ports]]
 localPort = 5000
 externalPort = 80
@@ -52,6 +83,10 @@ externalPort = 80
 [[ports]]
 localPort = 5001
 externalPort = 3003
+
+[[ports]]
+localPort = 6379
+externalPort = 6800
 
 [[ports]]
 localPort = 8000
@@ -84,6 +119,10 @@ externalPort = 3002
 [[ports]]
 localPort = 43317
 externalPort = 5173
+
+[[ports]]
+localPort = 44899
+externalPort = 8008
 
 [deployment]
 deploymentTarget = "autoscale"

@@ -207,6 +207,50 @@ Scheduled job runs → Check for triggers →
 - Lower token usage, faster responses
 - Easier to debug and maintain
 
+## Distributed Task Queue (Celery + Redis)
+
+### Architecture
+Zeke uses Celery with Redis for distributed task processing, providing:
+- **Process recycling** - Workers restart after 50 tasks to eliminate memory leaks
+- **Fault tolerance** - Tasks retry automatically on failure
+- **Scalability** - Spawn additional workers as load increases
+- **Self-healing** - Process isolation prevents crashes from affecting the API
+
+### Task Queues
+- `zeke_default` - General tasks
+- `zeke_processing` - Conversation processing
+- `zeke_curation` - Memory curation
+- `zeke_notifications` - Reminders and alerts
+
+### Scheduled Tasks (Celery Beat)
+- Check due tasks: every 15 minutes
+- Flush notifications: every 15 minutes (offset by 5 min)
+- Memory curation: 4x daily (0:30, 6:30, 12:30, 18:30)
+
+### Worker Configuration
+```python
+worker_max_tasks_per_child=50  # Restart worker after 50 tasks
+task_acks_late=True            # Acknowledge after completion
+worker_prefetch_multiplier=1   # Fair task distribution
+```
+
+## Semantic Cache (Performance Optimization)
+
+### How It Works
+1. Query comes in → Generate embedding via OpenAI
+2. Compare against cached embeddings using cosine similarity
+3. If similarity > 0.90, return cached response (~40x faster)
+4. If miss, generate new response and cache it
+
+### Benefits
+- **Latency**: ~80ms cache hit vs ~3500ms full LLM call
+- **Cost**: ~99% reduction for repeated queries
+- **TTL**: Responses expire after 1 hour by default
+
+### Endpoints
+- `GET /chat/cache/metrics` - View hit/miss rates
+- `DELETE /chat/cache` - Clear all cached responses
+
 ## Limitless Bridge (Temporary)
 
 The bridge runs as a background job that:

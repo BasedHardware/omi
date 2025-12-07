@@ -10,8 +10,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+from app.core.celery_app import celery_app
+
 if __name__ == "__main__":
-    from arq import run_worker
-    from app.core.jobs import WorkerSettings
-    
-    run_worker(WorkerSettings)
+    celery_app.start(argv=["worker", "-B", "--loglevel=info", "--concurrency=2"])

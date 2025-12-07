@@ -9,6 +9,7 @@ from ..integrations.omi import OmiWebhookHandler
 from ..services.conversation_service import ConversationService
 from ..services.memory_service import MemoryService
 from ..core.config import get_settings
+from ..core.tasks import process_conversation
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/omi", tags=["omi"])
@@ -51,18 +52,16 @@ async def handle_omi_webhook(
             )
             
             if conversation.overview:
-                conversation_service = ConversationService()
-                transcript = conversation_service.get_transcript_text(conversation)
-                await memory_service.extract_from_conversation(
-                    user_id=user_id,
+                process_conversation.delay(
                     conversation_id=conversation.id,
-                    transcript=transcript,
-                    overview=conversation.overview
+                    user_id=user_id
                 )
+                logger.info(f"Dispatched conversation processing task for {conversation.id}")
             
             return {
-                "status": "processed",
-                "conversation_id": conversation.id
+                "status": "queued",
+                "conversation_id": conversation.id,
+                "message": "Processing dispatched to background worker"
             }
         
         elif event_type == "conversation.updated":

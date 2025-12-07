@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from ..services.curation_service import MemoryCurationService
 from ..models.memory import MemoryResponse, CurationRunResponse
+from ..core.tasks import run_memory_curation
 
 router = APIRouter(prefix="/curation", tags=["curation"])
 
@@ -41,9 +42,18 @@ async def get_flagged_memories(user_id: str, limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/run", response_model=CurationRunResponse)
-async def trigger_curation_run(request: CurationRunRequest):
+class CurationQueuedResponse(BaseModel):
+    status: str = "queued"
+    message: str = "Curation job dispatched to background worker"
+
+
+@router.post("/run")
+async def trigger_curation_run(request: CurationRunRequest, async_mode: bool = True):
     try:
+        if async_mode:
+            run_memory_curation.delay(user_id=request.user_id)
+            return CurationQueuedResponse()
+        
         result = await curation_service.run_curation(
             user_id=request.user_id,
             batch_size=request.batch_size,

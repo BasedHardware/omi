@@ -113,8 +113,22 @@ Preferred communication style: Simple, everyday language.
 - **Architecture**: Event-driven skill orchestrator (not multi-agent)
 - **Skills**: Memory curation, task planning, research, communications, location awareness
 - **Integration**: Bridges Limitless API to Omi (temporary, removable)
-- **Stack**: FastAPI, PostgreSQL + pgvector, Redis + arq workers
+- **Stack**: FastAPI, PostgreSQL + pgvector, Celery + Redis workers
 - **Location Tracking**: Overland iOS app integration for GPS context
+
+#### Distributed Task Queue (Celery + Redis)
+- **Architecture**: Decoupled API gateway with background workers for heavy processing
+- **Process Recycling**: Workers restart after 50 tasks (`worker_max_tasks_per_child`) to eliminate memory leaks
+- **Task Queues**: zeke_default, zeke_processing, zeke_curation, zeke_notifications
+- **Scheduled Tasks**: Due task checks (15m), notification flush (15m), curation (4x daily)
+- **Tasks**: process_conversation, send_scheduled_reminder, check_due_tasks, run_memory_curation
+
+#### Semantic Cache (Performance Optimization)
+- **Purpose**: Cache LLM responses for semantically similar queries
+- **Similarity Threshold**: 0.90 cosine similarity using OpenAI embeddings
+- **Performance**: ~40x faster cache hits (~80ms vs ~3500ms), ~99% cost reduction
+- **TTL**: Responses expire after 1 hour by default
+- **Endpoints**: GET /chat/cache/metrics, DELETE /chat/cache
 
 #### Overland GPS Integration
 - **App**: Overland iOS (https://overland.p3k.app/) sends GPS data via HTTP POST
@@ -140,7 +154,7 @@ Preferred communication style: Simple, everyday language.
 - **Confidence Gating**: High confidence (>0.85) auto-updates; low confidence flags for human review
 - **Storage**: Memories table with curation fields (primary_topic, curation_status, curation_notes, enriched_context, curation_confidence, last_curated)
 - **Run Tracking**: `memory_curation_runs` table logs each curation job (processed, updated, flagged, deleted counts)
-- **Background Jobs**: arq cron runs curation 4x daily (0:30, 6:30, 12:30, 18:30) when Redis available
+- **Background Jobs**: Celery cron runs curation 4x daily (0:30, 6:30, 12:30, 18:30) when Redis available
 - **Dashboard**: Curation page shows stats, progress bar, topic breakdown, review queue with approve/reject actions
 - **API Endpoints**:
   - `GET /api/curation/stats/{user_id}` - Curation statistics and topic breakdown

@@ -7,6 +7,20 @@ from ..core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+_openai_client: Optional["OpenAIClient"] = None
+
+
+def get_openai_client() -> "OpenAIClient":
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAIClient()
+    return _openai_client
+
+
+async def get_embedding(text: str) -> List[float]:
+    client = get_openai_client()
+    return await client.create_embedding(text)
+
 
 class OpenAIClient:
     def __init__(self, api_key: Optional[str] = None):
