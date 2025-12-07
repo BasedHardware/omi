@@ -66,7 +66,7 @@ class AiAppGeneratorBanner extends StatelessWidget {
             // Message
             const Expanded(
               child: Text(
-                'Make your own apps in 1 click!',
+                'Build apps using AI in 1 click!',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 15,

@@ -125,7 +125,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   void _populateUIFromConfig(CustomSttConfig? config) {
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
-    
+
     _apiKeyController.text = config?.apiKey ?? '';
     _hostController.text = config?.host ?? '127.0.0.1';
     _portController.text = (config?.port ?? 8080).toString();
@@ -133,9 +133,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     // Restore JSON configs if customized
     if (config != null) {
-      final hasCustomRequest = config.requestType != null || 
-          config.headers != null || 
-          config.params != null || 
+      final hasCustomRequest = config.requestType != null ||
+          config.headers != null ||
+          config.params != null ||
           config.audioFieldName != null;
 
       if (hasCustomRequest) {
@@ -177,7 +177,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void _regenerateRequestJson(SttProvider provider) {
     final providerDefaults = SttProviderConfig.get(provider);
     final savedConfig = _configsPerProvider[provider];
-    
+
     final apiKey = savedConfig?.apiKey ?? _apiKeyController.text;
     final language = savedConfig?.language ?? providerDefaults.defaultLanguage;
     final model = savedConfig?.model ?? providerDefaults.defaultModel;
@@ -197,7 +197,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void _onLanguageOrModelChanged(String? newLanguage, String? newModel) {
     // Update the stored config with new language/model
     _updateCurrentProviderConfig(language: newLanguage, model: newModel);
-    
+
     // Only regenerate JSON if user hasn't customized it
     if (_requestJsonCustomized[_selectedProvider] != true) {
       _regenerateRequestJson(_selectedProvider);
@@ -214,7 +214,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }) {
     final current = _configsPerProvider[_selectedProvider];
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
-    
+
     _configsPerProvider[_selectedProvider] = CustomSttConfig(
       provider: _selectedProvider,
       apiKey: apiKey ?? current?.apiKey ?? _apiKeyController.text,
@@ -367,9 +367,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Build the active config (with correct provider based on _useCustomStt)
       final currentConfig = _buildCurrentConfig();
-      final activeConfig = _useCustomStt 
-          ? currentConfig 
-          : CustomSttConfig(provider: SttProvider.omi);
+      final activeConfig = _useCustomStt ? currentConfig : CustomSttConfig(provider: SttProvider.omi);
 
       final previousConfig = SharedPreferencesUtil().customSttConfig;
       final configChanged = previousConfig.sttConfigId != activeConfig.sttConfigId;
@@ -632,15 +630,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
                   setState(() {
                     _selectedProvider = provider;
-                    
+
                     // Load saved config for new provider
                     _populateUIFromConfig(_configsPerProvider[provider]);
-                    
+
                     // Regenerate JSON if not customized
                     if (_requestJsonCustomized[provider] != true) {
                       _regenerateRequestJson(provider);
                     }
-                    
+
                     if (provider == SttProvider.custom) {
                       _showAdvanced = true;
                     }
