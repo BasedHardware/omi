@@ -1,6 +1,6 @@
 from typing import Optional, Dict, Any, List
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import json
 
@@ -11,6 +11,7 @@ from ..services.memory_service import MemoryService
 from ..services.conversation_service import ConversationService
 from ..services.task_service import TaskService
 from ..services.location_service import LocationService
+from ..services.session_context import SessionContext, get_session_manager
 from ..models.location import LocationContext
 from .config import get_settings
 
@@ -37,10 +38,12 @@ class OrchestratorContext:
     user_message: str
     user_id: str
     channel: str = "web"
+    session_id: Optional[str] = None
     conversation_history: Optional[List[Dict[str, str]]] = None
     relevant_memories: Optional[List[str]] = None
     recent_conversations: Optional[List[str]] = None
     location_context: Optional[LocationContext] = None
+    session_context: Optional[SessionContext] = None
     
     def __post_init__(self):
         if self.conversation_history is None:
@@ -328,9 +331,17 @@ class SkillOrchestrator:
     def _get_system_prompt(self, context: OrchestratorContext) -> str:
         memories_context = ""
         if context.relevant_memories:
-            memories_context = "Relevant memories about the user:\n" + "\n".join(
+            memories_context = "Long-term memories about the user:\n" + "\n".join(
                 f"- {m}" for m in context.relevant_memories[:10]
             )
+        
+        session_context_str = ""
+        if context.session_context:
+            summary = context.session_context.get_context_summary()
+            if summary:
+                session_context_str = f"""Working Memory (this conversation):
+{summary}
+"""
         
         location_context = ""
         if context.location_context:
@@ -360,12 +371,14 @@ Key traits:
 - You speak in a professional but conversational tone
 - You remember and reference past conversations and memories
 - You are aware of the user's current location and activity when available
+- You track context within this conversation (people mentioned, topics discussed)
 
 User: {settings.user_name}
 Timezone: {settings.user_timezone}
 Current channel: {context.channel}
 
 {location_context}
+{session_context_str}
 {memories_context}
 
 When the user asks for something:
@@ -373,6 +386,7 @@ When the user asks for something:
 2. Provide a clear, direct response
 3. Never tell the user to "check it themselves" - do it for them
 4. Consider the user's current location and activity when relevant
+5. Reference entities and topics from earlier in this conversation when relevant
 
 If you need to store something the user tells you, use store_memory.
 If you need to find past information, use search_memories or search_conversations.
@@ -382,6 +396,14 @@ For location questions, use get_current_location, get_location_history, or get_m
 """
     
     async def process(self, context: OrchestratorContext) -> OrchestratorResponse:
+        session_manager = get_session_manager()
+        context.session_context = session_manager.get_or_create(
+            context.user_id, 
+            context.session_id
+        )
+        
+        context.session_context.add_message("user", context.user_message)
+        
         context.relevant_memories = await self.memory_service.search(
             context.user_id, 
             context.user_message, 
@@ -442,8 +464,13 @@ For location questions, use get_current_location, get_location_history, or get_m
             )
             message = response.choices[0].message
         
+        response_content = message.content or "I've completed the action."
+        
+        if context.session_context:
+            context.session_context.add_message("assistant", response_content)
+        
         return OrchestratorResponse(
-            message=message.content or "I've completed the action.",
+            message=response_content,
             intent=self._determine_intent(actions_taken),
             actions_taken=actions_taken,
             data=tool_results

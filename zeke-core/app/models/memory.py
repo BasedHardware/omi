@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import Column, String, Text, Boolean, DateTime, Float, JSON
+from sqlalchemy import Column, String, Text, Boolean, DateTime, Float, JSON, Integer
 from sqlalchemy.dialects.postgresql import ARRAY
 from pgvector.sqlalchemy import Vector
 from pydantic import BaseModel, Field
@@ -34,6 +34,9 @@ class MemoryDB(Base, UUIDMixin, TimestampMixin):
     embedding = Column(Vector(1536), nullable=True)
     
     confidence_score: float = Column(Float, default=1.0)
+    
+    access_count: int = Column(Integer, default=0)
+    last_accessed: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
 
 
 class Memory(BaseModel):
@@ -56,6 +59,8 @@ class MemoryResponse(Memory):
     conversation_id: Optional[str] = None
     reviewed: bool = False
     confidence_score: float = 1.0
+    access_count: int = 0
+    last_accessed: Optional[datetime] = None
     
     class Config:
         from_attributes = True
