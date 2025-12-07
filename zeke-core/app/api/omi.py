@@ -1,15 +1,16 @@
-from fastapi import APIRouter, Request, HTTPException, Header
+from fastapi import APIRouter, Request, HTTPException, Header, Query
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 import logging
 import hmac
 import hashlib
 
-from ..integrations.omi import OmiWebhookHandler
+from ..integrations.omi import OmiWebhookHandler, OmiClient
 from ..services.conversation_service import ConversationService
 from ..services.memory_service import MemoryService
 from ..core.config import get_settings
 from ..core.tasks import process_conversation
+from ..core.events import event_bus, Event, EventTypes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/omi", tags=["omi"])
@@ -157,4 +158,116 @@ async def process_existing_conversations(limit: int = 50):
     return {
         "status": "processed",
         "memories_extracted": memories_extracted
+    }
+
+
+class OmiTranscriptSegment(BaseModel):
+    text: str
+    speaker: Optional[str] = None
+    speaker_id: Optional[Union[int, str]] = None
+    is_user: bool = False
+    start: Optional[float] = None
+    end: Optional[float] = None
+
+
+class OmiStructured(BaseModel):
+    title: Optional[str] = None
+    overview: Optional[str] = None
+    category: str = "other"
+    action_items: Optional[List[Dict[str, Any]]] = None
+
+
+class OmiGeolocation(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class OmiConversationPayload(BaseModel):
+    """Raw conversation format sent by Omi iOS app."""
+    id: str
+    created_at: str
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    structured: OmiStructured
+    transcript_segments: Optional[List[OmiTranscriptSegment]] = None
+    geolocation: Optional[OmiGeolocation] = None
+    source: Optional[str] = None
+    language: Optional[str] = None
+    discarded: bool = False
+    deleted: bool = False
+
+
+@router.post("/conversation")
+async def receive_omi_conversation(
+    payload: OmiConversationPayload,
+    uid: str = Query(default="default_user", description="User ID from Omi app")
+):
+    """
+    Direct endpoint for Omi iOS app webhook.
+    Accepts raw conversation JSON format from the app.
+    Configure in Omi app Settings > Developer > Webhook on Conversation Created.
+    """
+    handler = get_webhook_handler()
+    
+    logger.info(f"Received Omi conversation from user {uid}: {payload.id}")
+    
+    try:
+        omi_data = {
+            "id": payload.id,
+            "created_at": payload.created_at,
+            "started_at": payload.started_at,
+            "finished_at": payload.finished_at,
+            "structured": {
+                "title": payload.structured.title,
+                "overview": payload.structured.overview,
+                "category": payload.structured.category,
+                "action_items": payload.structured.action_items or []
+            },
+            "transcript_segments": [
+                {
+                    "text": seg.text,
+                    "speaker_name": seg.speaker,
+                    "speaker_id": str(seg.speaker_id) if seg.speaker_id is not None else None,
+                    "is_user": seg.is_user,
+                    "start": seg.start,
+                    "end": seg.end
+                }
+                for seg in (payload.transcript_segments or [])
+            ],
+            "geolocation": {
+                "latitude": payload.geolocation.latitude,
+                "longitude": payload.geolocation.longitude
+            } if payload.geolocation else None
+        }
+        
+        conversation = await handler.handle_conversation_created(uid, omi_data)
+        
+        if conversation.overview:
+            await event_bus.publish_async(Event(
+                type=EventTypes.CONVERSATION_CREATED,
+                data={
+                    "conversation_id": conversation.id,
+                    "user_id": uid
+                }
+            ))
+            logger.info(f"Published conversation.created event for {conversation.id}")
+        
+        return {
+            "status": "success",
+            "conversation_id": conversation.id,
+            "message": "Conversation received and queued for processing"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing Omi conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/health")
+async def omi_health_check():
+    """Health check endpoint for Omi app connectivity testing."""
+    return {
+        "status": "healthy",
+        "service": "zeke-core",
+        "omi_integration": "active"
     }
