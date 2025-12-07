@@ -49,6 +49,20 @@ function LocationMap({ lat, lng }: { lat: number; lng: number }) {
   return <div ref={mapRef} className="h-full w-full" />;
 }
 
+function formatDateTime(date: Date): string {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }) + ' • ' + date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+
 export function Dashboard() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -56,6 +70,14 @@ export function Dashboard() {
   const [dueSoonTasks, setDueSoonTasks] = useState<Task[]>([]);
   const [locationContext, setLocationContext] = useState<LocationContext | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -93,7 +115,7 @@ export function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-white">Welcome back, Nate</h1>
-        <p className="text-slate-400 mt-1 text-sm md:text-base">Here's what's happening today.</p>
+        <p className="text-slate-400 mt-1 text-sm md:text-base">{formatDateTime(currentTime)}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
