@@ -66,39 +66,67 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// - 0x22 (marker)
   /// - Length byte(s) (varint)
   /// - Opus frame starting with TOC byte
-  List<List<int>> _extractOpusFrames(List<int> data) {
+  ///
+  /// Returns: (extracted_frames, remaining_buffer_start_position)
+  /// The remaining buffer contains any partial frame that spans packet boundaries
+  List<dynamic> _extractOpusFrames(List<int> data) {
     final frames = <List<int>>[];
     int pos = 0;
+    int lastCompleteFrameEnd = 0;
 
     while (pos < data.length - 3) {
       // Look for 0x22 marker
       if (data[pos] == 0x22) {
+        final markerPos = pos;
         pos++;
 
-        if (pos >= data.length) break;
+        if (pos >= data.length) {
+          // Incomplete frame - marker found but no length byte yet
+          break;
+        }
 
         // Decode length
         final lengthResult = _decodeVarint(data, pos);
         final length = lengthResult[0] as int;
-        pos = lengthResult[1] as int;
+        final lengthEndPos = lengthResult[1] as int;
 
-        // Validate length (Opus frames are typically 20-100 bytes)
-        if (length >= 10 && length <= 200 && pos + length <= data.length) {
-          final frame = data.sublist(pos, pos + length);
+        // Check if we have enough data for the complete frame
+        if (length >= 10 && length <= 200) {
+          final frameStartPos = lengthEndPos;
+          final frameEndPos = frameStartPos + length;
 
-          // Check if first byte is valid Opus TOC
-          if (frame.isNotEmpty && _isValidOpusToc(frame[0])) {
-            frames.add(frame);
-            pos += length;
-            continue;
+          if (frameEndPos <= data.length) {
+            // Complete frame available
+            final frame = data.sublist(frameStartPos, frameEndPos);
+
+            // Check if first byte is valid Opus TOC
+            if (frame.isNotEmpty && _isValidOpusToc(frame[0])) {
+              frames.add(frame);
+              lastCompleteFrameEnd = frameEndPos;
+              pos = frameEndPos;
+              continue;
+            } else {
+              // Invalid TOC, skip this marker and continue searching
+              pos = markerPos + 1;
+              continue;
+            }
+          } else {
+            // Incomplete frame - we have marker and length but not the full frame data
+            // Keep everything from marker position onwards for next extraction
+            break;
           }
+        } else {
+          // Invalid length, skip this marker
+          pos = markerPos + 1;
+          continue;
         }
       }
 
       pos++;
     }
 
-    return frames;
+    // Return frames and the position where remaining buffer should start
+    return [frames, lastCompleteFrameEnd];
   }
 
   /// Check if byte looks like a valid Opus TOC byte
@@ -263,11 +291,31 @@ class LimitlessDeviceConnection extends DeviceConnection {
     extractionTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (_rawDataBuffer.isEmpty) return;
 
-      final frames = _extractOpusFrames(_rawDataBuffer);
+      final result = _extractOpusFrames(_rawDataBuffer);
+      final frames = result[0] as List<List<int>>;
+      final remainingStartPos = result[1] as int;
+
       if (frames.isNotEmpty) {
         for (final frame in frames) {
           _audioController.add(frame);
         }
+      }
+
+      // Remove only the processed bytes, keep any partial frame for next extraction
+      if (remainingStartPos > 0) {
+        final remaining = _rawDataBuffer.sublist(remainingStartPos);
+        _rawDataBuffer.clear();
+        _rawDataBuffer.addAll(remaining);
+      } else if (frames.isNotEmpty) {
+        // If we extracted frames but didn't track position, clear buffer
+        // This shouldn't happen with the new logic, but keep as fallback
+        _rawDataBuffer.clear();
+      }
+      // If no frames extracted, keep buffer intact (might be waiting for more data)
+
+      // Safety: prevent buffer from growing unbounded (max 64KB)
+      if (_rawDataBuffer.length > 65536) {
+        debugPrint('Limitless: Buffer overflow, clearing buffer');
         _rawDataBuffer.clear();
       }
     });
