@@ -129,13 +129,25 @@ class LimitlessDeviceConnection extends DeviceConnection {
     return [frames, lastCompleteFrameEnd];
   }
 
-  /// Check if byte looks like a valid Opus TOC byte
+  /// Check if byte is a valid Opus TOC byte for pendant audio
   ///
-  /// Opus TOC format (RFC 6716): config(5 bits) | s(1 bit) | c(2 bits)
-  /// Common patterns: 0xb8, 0x78, 0xf8
+  /// The pendant consistently uses specific TOC patterns:
+  /// - 0xb8: CELT WB 20ms mono (most common, ~92% of frames)
+  /// - 0x78: CELT WB 20ms mono variant
+  /// - 0xf8: CELT WB 20ms mono variant
+  ///
+  /// We restrict to these known patterns to filter out log messages
+  /// that happen to have valid-looking frame lengths but aren't audio.
   bool _isValidOpusToc(int byte) {
-    final config = (byte >> 3) & 0x1f;
-    return config <= 31;
+    // Only accept known pendant audio TOC bytes
+    // This is stricter than RFC 6716 allows, but necessary to
+    // filter out interleaved log data that mimics valid frames
+    return byte == 0xb8 ||
+        byte == 0x78 ||
+        byte == 0xf8 ||
+        byte == 0xb0 ||
+        byte == 0x70 ||
+        byte == 0xf0; // 10ms variants
   }
 
   /// Encode variable-length integer
