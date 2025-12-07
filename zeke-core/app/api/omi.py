@@ -139,3 +139,23 @@ async def trigger_omi_sync():
         "count": len(synced_ids),
         "conversation_ids": synced_ids
     }
+
+
+@router.post("/process-existing")
+async def process_existing_conversations(limit: int = 50):
+    """Process existing Limitless conversations that haven't had memories extracted."""
+    from ..integrations.limitless_bridge import LimitlessBridge
+    
+    bridge = LimitlessBridge(
+        conversation_service=ConversationService()
+    )
+    
+    memories_extracted = await bridge.process_unprocessed_conversations(
+        user_id="default_user",
+        limit=limit
+    )
+    
+    return {
+        "status": "processed",
+        "memories_extracted": memories_extracted
+    }

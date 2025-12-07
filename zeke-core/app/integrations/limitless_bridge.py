@@ -7,13 +7,16 @@ It should be removed when native Limitless-to-Omi hardware support is available.
 To disable: Set LIMITLESS_SYNC_ENABLED=false in environment variables
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from datetime import datetime, timedelta
 import httpx
 import logging
 
 from ..core.config import get_settings
 from ..models.conversation import ConversationCreate, TranscriptSegment
+
+if TYPE_CHECKING:
+    from ..services.memory_service import MemoryService
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -135,15 +138,55 @@ class LimitlessToOmiConverter:
 
 
 class LimitlessBridge:
-    def __init__(self, conversation_service, limitless_client: Optional[LimitlessClient] = None):
+    def __init__(
+        self, 
+        conversation_service, 
+        limitless_client: Optional[LimitlessClient] = None,
+        memory_service: Optional["MemoryService"] = None
+    ):
         self.conversation_service = conversation_service
         self.limitless = limitless_client or LimitlessClient()
         self.converter = LimitlessToOmiConverter()
         self._last_sync_cursor: Optional[str] = None
+        self._memory_service = memory_service
+    
+    @property
+    def memory_service(self) -> Optional["MemoryService"]:
+        if self._memory_service is None:
+            try:
+                from ..services.memory_service import MemoryService
+                self._memory_service = MemoryService()
+            except Exception as e:
+                logger.warning(f"Could not initialize memory service: {e}")
+        return self._memory_service
     
     @property
     def is_enabled(self) -> bool:
         return settings.limitless_sync_enabled and bool(settings.limitless_api_key)
+    
+    async def _extract_memories(self, user_id: str, conversation) -> int:
+        """Extract memories from a conversation in-process (no Redis needed)."""
+        if not self.memory_service:
+            logger.warning("Memory service not available, skipping extraction")
+            return 0
+        
+        if not conversation.overview:
+            logger.debug(f"Conversation {conversation.id} has no overview, skipping extraction")
+            return 0
+        
+        try:
+            transcript = self.conversation_service.get_transcript_text(conversation)
+            memories = await self.memory_service.extract_from_conversation(
+                user_id=user_id,
+                conversation_id=conversation.id,
+                transcript=transcript,
+                overview=conversation.overview
+            )
+            logger.info(f"Extracted {len(memories)} memories from conversation {conversation.id}")
+            return len(memories)
+        except Exception as e:
+            logger.error(f"Failed to extract memories from conversation {conversation.id}: {e}")
+            return 0
     
     async def sync_recent(self, user_id: str, hours: int = 24) -> List[str]:
         if not self.is_enabled:
@@ -157,6 +200,7 @@ class LimitlessBridge:
             lifelogs = result.get("data", {}).get("lifelogs", [])
             
             synced_ids = []
+            total_memories = 0
             for lifelog in lifelogs:
                 existing = await self.conversation_service.get_by_source_id(
                     user_id, 
@@ -175,6 +219,12 @@ class LimitlessBridge:
                 )
                 synced_ids.append(conversation.id)
                 logger.info(f"Synced Limitless lifelog {lifelog['id']} -> {conversation.id}")
+                
+                memories_count = await self._extract_memories(user_id, conversation)
+                total_memories += memories_count
+            
+            if synced_ids:
+                logger.info(f"Sync complete: {len(synced_ids)} conversations, {total_memories} memories extracted")
             
             return synced_ids
             
@@ -187,6 +237,7 @@ class LimitlessBridge:
             return 0
         
         total_synced = 0
+        total_memories = 0
         cursor = None
         
         while True:
@@ -206,8 +257,11 @@ class LimitlessBridge:
                     
                     if not existing:
                         conversation_data = self.converter.convert_lifelog(lifelog)
-                        await self.conversation_service.create(user_id, conversation_data)
+                        conversation = await self.conversation_service.create(user_id, conversation_data)
                         total_synced += 1
+                        
+                        memories_count = await self._extract_memories(user_id, conversation)
+                        total_memories += memories_count
                 
                 cursor = result.get("meta", {}).get("lifelogs", {}).get("nextCursor")
                 if not cursor:
@@ -217,5 +271,51 @@ class LimitlessBridge:
                 logger.error(f"Error in sync_all: {e}")
                 break
         
-        logger.info(f"Synced {total_synced} Limitless lifelogs total")
+        logger.info(f"Synced {total_synced} Limitless lifelogs total, {total_memories} memories extracted")
         return total_synced
+    
+    async def process_unprocessed_conversations(self, user_id: str, limit: int = 50) -> int:
+        """Process existing conversations that haven't had memories extracted yet."""
+        from ..core.database import get_db_context
+        from ..models.conversation import ConversationDB
+        from ..models.memory import MemoryDB
+        from sqlalchemy import and_, not_, exists
+        from sqlalchemy.orm import Session
+        
+        logger.info(f"Looking for unprocessed Limitless conversations for user {user_id}")
+        
+        total_memories = 0
+        
+        with get_db_context() as db:
+            subq = db.query(MemoryDB.conversation_id).filter(
+                MemoryDB.conversation_id.isnot(None)
+            ).subquery()
+            
+            unprocessed = db.query(ConversationDB).filter(
+                and_(
+                    ConversationDB.uid == user_id,
+                    ConversationDB.source == "limitless",
+                    ConversationDB.overview.isnot(None),
+                    ~ConversationDB.id.in_(db.query(subq))
+                )
+            ).limit(limit).all()
+            
+            conversation_data = [
+                {
+                    "id": str(c.id),
+                    "overview": c.overview,
+                    "transcript_segments": c.transcript_segments
+                }
+                for c in unprocessed
+            ]
+        
+        logger.info(f"Found {len(conversation_data)} unprocessed conversations")
+        
+        for conv_data in conversation_data:
+            conversation = await self.conversation_service.get_by_id(conv_data["id"])
+            if conversation:
+                memories_count = await self._extract_memories(user_id, conversation)
+                total_memories += memories_count
+        
+        logger.info(f"Processed {len(conversation_data)} conversations, extracted {total_memories} memories")
+        return total_memories
