@@ -55,10 +55,10 @@ async def import_limitless_data(
     zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
 
     try:
-        # Read and save the file
-        contents = await file.read()
+        # Stream the file to disk to avoid loading it all into memory
         with open(zip_path, 'wb') as f:
-            f.write(contents)
+            while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
+                f.write(contents)
     except Exception as e:
         # Clean up on error
         import_jobs_db.update_import_job(
