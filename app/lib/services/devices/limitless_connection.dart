@@ -24,12 +24,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }) async {
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 1));
 
     _rxSubscription =
         transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
 
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 1));
 
     await _initialize();
   }
