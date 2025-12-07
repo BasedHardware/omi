@@ -290,7 +290,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(12),
-          border: isAvailable ? Border.all(color: Colors.deepPurple.withOpacity(0.3), width: 1) : null,
+          border: isAvailable ? Border.all(color: Colors.deepPurple.withValues(alpha: 0.3), width: 1) : null,
         ),
         child: Row(
           children: [
