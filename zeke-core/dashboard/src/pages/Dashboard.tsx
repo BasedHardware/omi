@@ -50,17 +50,21 @@ function LocationMap({ lat, lng }: { lat: number; lng: number }) {
 }
 
 function formatDateTime(date: Date): string {
-  return date.toLocaleDateString('en-US', {
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/New_York',
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  }) + ' • ' + date.toLocaleTimeString('en-US', {
+  };
+  const timeOptions: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/New_York',
     hour: 'numeric',
     minute: '2-digit',
     second: '2-digit',
     hour12: true,
-  });
+  };
+  return date.toLocaleDateString('en-US', options) + ' • ' + date.toLocaleTimeString('en-US', timeOptions);
 }
 
 export function Dashboard() {
