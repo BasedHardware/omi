@@ -130,6 +130,26 @@ Preferred communication style: Simple, everyday language.
   - `GET /api/overland/recent` - Recent location history
   - `GET /api/overland/summary` - Motion summary (time spent walking, driving, etc.)
 
+#### Memory Curation System
+- **Purpose**: Automatically classify, tag, enrich, and clean memories to keep ZEKE's knowledge base accurate
+- **Service**: `MemoryCurationService` in `zeke-core/app/services/curation_service.py`
+- **Classification**: Uses keyword-based detection (fast) with LLM fallback (OpenAI) for accuracy
+- **Topics**: personal_profile, relationships, commitments, health, travel, finance, hobbies, work, preferences, facts, other
+- **Quality Control**: Detects too-short content, vague language, contradictions, invalid data
+- **Curation Status**: pending, clean, needs_review, flagged, deleted
+- **Confidence Gating**: High confidence (>0.85) auto-updates; low confidence flags for human review
+- **Storage**: Memories table with curation fields (primary_topic, curation_status, curation_notes, enriched_context, curation_confidence, last_curated)
+- **Run Tracking**: `memory_curation_runs` table logs each curation job (processed, updated, flagged, deleted counts)
+- **Background Jobs**: arq cron runs curation 4x daily (0:30, 6:30, 12:30, 18:30) when Redis available
+- **Dashboard**: Curation page shows stats, progress bar, topic breakdown, review queue with approve/reject actions
+- **API Endpoints**:
+  - `GET /api/curation/stats/{user_id}` - Curation statistics and topic breakdown
+  - `GET /api/curation/flagged/{user_id}` - Memories needing review
+  - `POST /api/curation/run` - Trigger manual curation run
+  - `POST /api/curation/approve/{memory_id}` - Mark memory as clean
+  - `POST /api/curation/reject/{memory_id}` - Reject/delete memory
+  - `POST /api/curation/batch-action` - Bulk approve/reject operations
+
 ### MCP Server
 - **Protocol**: Model Context Protocol for AI tool integration
 - **Package**: Published to PyPI as `mcp-server-omi`

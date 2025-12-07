@@ -7,6 +7,36 @@ export interface Memory {
   tags: string[];
   created_at: string;
   manually_added: boolean;
+  primary_topic?: string;
+  curation_status?: string;
+  curation_notes?: string;
+  curation_confidence?: number;
+  enriched_context?: Record<string, unknown>;
+}
+
+export interface CurationStats {
+  total_memories: number;
+  pending_curation: number;
+  clean: number;
+  flagged: number;
+  needs_review: number;
+  curation_progress: number;
+  by_topic: Record<string, number>;
+  recent_runs: CurationRun[];
+}
+
+export interface CurationRun {
+  id: string;
+  user_id: string;
+  status: string;
+  memories_processed: number;
+  memories_updated: number;
+  memories_flagged: number;
+  memories_deleted: number;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+  error_message: string | null;
 }
 
 export interface Task {
@@ -189,6 +219,62 @@ export const api = {
       return res.json();
     } catch {
       return null;
+    }
+  },
+
+  async getCurationStats(userId = 'default_user'): Promise<CurationStats | null> {
+    try {
+      const res = await fetch(`${API_BASE}/curation/stats/${userId}`);
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async getFlaggedMemories(userId = 'default_user', limit = 50): Promise<Memory[]> {
+    const res = await fetch(`${API_BASE}/curation/flagged/${userId}?limit=${limit}`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async runCuration(userId = 'default_user', batchSize = 20, autoDelete = false, reprocessAll = false): Promise<CurationRun | null> {
+    try {
+      const res = await fetch(`${API_BASE}/curation/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          batch_size: batchSize,
+          auto_delete: autoDelete,
+          reprocess_all: reprocessAll,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to run curation');
+      return res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async approveMemory(memoryId: string): Promise<Memory | null> {
+    try {
+      const res = await fetch(`${API_BASE}/curation/approve/${memoryId}`, { method: 'POST' });
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async rejectMemory(memoryId: string, deletePermanently = false): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/curation/reject/${memoryId}?delete_permanently=${deletePermanently}`, {
+        method: 'POST',
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   },
 };

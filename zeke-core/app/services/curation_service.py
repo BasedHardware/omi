@@ -1,0 +1,467 @@
+import logging
+import json
+from datetime import datetime
+from typing import List, Optional, Dict, Any, Tuple
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_, func
+import uuid
+
+from ..models.memory import (
+    MemoryDB, MemoryResponse, CurationRunDB, CurationRunResponse,
+    CurationStatus, PrimaryTopic
+)
+from ..integrations.openai import OpenAIClient
+from ..core.database import get_db_context
+
+logger = logging.getLogger(__name__)
+
+TOPIC_KEYWORDS = {
+    "personal_profile": ["i am", "my name", "i'm", "my age", "i live", "born in", "my birthday"],
+    "relationships": ["my wife", "my husband", "my friend", "my mom", "my dad", "my sister", "my brother", "my family", "my partner", "my girlfriend", "my boyfriend"],
+    "commitments": ["promised", "agreed to", "committed", "will do", "scheduled", "appointment", "meeting", "deadline"],
+    "health": ["doctor", "hospital", "medicine", "workout", "exercise", "diet", "sleep", "sick", "allergy", "medication"],
+    "travel": ["trip", "vacation", "flight", "hotel", "destination", "travel", "visiting", "tour"],
+    "finance": ["money", "budget", "salary", "expense", "investment", "saving", "cost", "price", "payment", "subscription"],
+    "hobbies": ["hobby", "game", "sport", "music", "book", "movie", "show", "art", "craft", "cooking", "gardening"],
+    "work": ["job", "work", "office", "project", "client", "meeting", "deadline", "boss", "colleague", "career"],
+    "preferences": ["prefer", "like", "love", "hate", "dislike", "favorite", "best", "worst", "always", "never"],
+    "facts": ["fact", "learned", "know that", "discovered", "found out", "realized"],
+}
+
+HIGH_CONFIDENCE_THRESHOLD = 0.85
+MEDIUM_CONFIDENCE_THRESHOLD = 0.65
+LOW_CONFIDENCE_THRESHOLD = 0.4
+
+
+class MemoryCurationService:
+    def __init__(self, openai_client: Optional[OpenAIClient] = None):
+        self._openai = openai_client
+        self._openai_initialized = openai_client is not None
+    
+    @property
+    def openai(self) -> Optional[OpenAIClient]:
+        if not self._openai_initialized:
+            try:
+                self._openai = OpenAIClient()
+                self._openai_initialized = True
+            except Exception as e:
+                logger.warning(f"OpenAI client not available: {e}")
+                self._openai = None
+        return self._openai
+    
+    def _require_openai(self) -> OpenAIClient:
+        client = self.openai
+        if client is None:
+            raise RuntimeError("OpenAI client is required for curation but is not available.")
+        return client
+    
+    def _detect_topic_by_keywords(self, content: str) -> Optional[str]:
+        content_lower = content.lower()
+        topic_scores = {}
+        
+        for topic, keywords in TOPIC_KEYWORDS.items():
+            score = sum(1 for kw in keywords if kw in content_lower)
+            if score > 0:
+                topic_scores[topic] = score
+        
+        if topic_scores:
+            return max(topic_scores, key=topic_scores.get)
+        return None
+    
+    async def classify_memory(self, memory: MemoryDB) -> Dict[str, Any]:
+        keyword_topic = self._detect_topic_by_keywords(memory.content)
+        
+        if keyword_topic:
+            return {
+                "primary_topic": keyword_topic,
+                "confidence": 0.7,
+                "method": "keywords",
+                "tags": [keyword_topic]
+            }
+        
+        openai_client = self._require_openai()
+        
+        prompt = f"""Analyze this memory and classify it. Return a JSON object with:
+- primary_topic: One of: personal_profile, relationships, commitments, health, travel, finance, hobbies, work, preferences, facts, other
+- tags: List of 1-3 relevant tags (lowercase, single words)
+- sentiment: positive, negative, or neutral
+- importance: high, medium, or low
+- is_actionable: true if this requires follow-up action
+- confidence: 0.0-1.0 indicating classification confidence
+
+Memory: "{memory.content}"
+
+Return only valid JSON, no other text."""
+
+        try:
+            response = await openai_client.chat_completion([
+                {"role": "user", "content": prompt}
+            ], temperature=0.2)
+            
+            result = json.loads(response.choices[0].message.content)
+            result["method"] = "llm"
+            return result
+            
+        except Exception as e:
+            logger.error(f"LLM classification failed: {e}")
+            return {
+                "primary_topic": "other",
+                "confidence": 0.3,
+                "method": "fallback",
+                "tags": []
+            }
+    
+    async def enrich_memory(self, memory: MemoryDB) -> Dict[str, Any]:
+        openai_client = self._require_openai()
+        
+        prompt = f"""Extract structured context from this memory. Return a JSON object with:
+- entities: List of people, places, or things mentioned (e.g., ["John", "New York", "Tesla Model 3"])
+- timeframe: Any time reference mentioned (e.g., "next week", "March 2024", null if none)
+- source_type: One of: conversation, observation, user_input, inferred
+- summary: One-sentence summary (max 20 words)
+- related_topics: List of 0-2 related topic areas
+
+Memory: "{memory.content}"
+
+Return only valid JSON, no other text."""
+
+        try:
+            response = await openai_client.chat_completion([
+                {"role": "user", "content": prompt}
+            ], temperature=0.2)
+            
+            return json.loads(response.choices[0].message.content)
+            
+        except Exception as e:
+            logger.error(f"LLM enrichment failed: {e}")
+            return {
+                "entities": [],
+                "timeframe": None,
+                "source_type": "unknown",
+                "summary": memory.content[:100]
+            }
+    
+    async def assess_quality(
+        self,
+        memory: MemoryDB,
+        all_user_memories: List[MemoryDB]
+    ) -> Dict[str, Any]:
+        issues = []
+        quality_score = 1.0
+        
+        content = memory.content.strip()
+        if len(content) < 10:
+            issues.append("Too short - lacks meaningful content")
+            quality_score -= 0.3
+        
+        if len(content) > 2000:
+            issues.append("Very long - consider splitting")
+            quality_score -= 0.1
+        
+        vague_indicators = ["something", "stuff", "things", "whatever", "etc"]
+        if any(v in content.lower() for v in vague_indicators):
+            issues.append("Contains vague language")
+            quality_score -= 0.1
+        
+        invalid_indicators = ["error", "failed", "null", "undefined", "none", "[object"]
+        if any(v in content.lower() for v in invalid_indicators):
+            if content.lower().startswith(tuple(invalid_indicators)):
+                issues.append("Appears to be an error or invalid data")
+                quality_score -= 0.5
+        
+        for other_memory in all_user_memories:
+            if other_memory.id == memory.id:
+                continue
+            if self._is_contradiction(memory.content, other_memory.content):
+                issues.append(f"May contradict existing memory: {other_memory.content[:50]}...")
+                quality_score -= 0.2
+                break
+        
+        return {
+            "quality_score": max(0, quality_score),
+            "issues": issues,
+            "should_flag": quality_score < 0.5,
+            "should_delete": quality_score < 0.2
+        }
+    
+    def _is_contradiction(self, content1: str, content2: str) -> bool:
+        negation_pairs = [
+            ("likes", "dislikes"), ("loves", "hates"),
+            ("is", "is not"), ("does", "doesn't"),
+            ("can", "cannot"), ("will", "won't")
+        ]
+        
+        c1_lower = content1.lower()
+        c2_lower = content2.lower()
+        
+        for pos, neg in negation_pairs:
+            if (pos in c1_lower and neg in c2_lower) or (neg in c1_lower and pos in c2_lower):
+                if len(set(c1_lower.split()) & set(c2_lower.split())) > 3:
+                    return True
+        return False
+    
+    async def curate_memory(
+        self,
+        memory: MemoryDB,
+        all_user_memories: List[MemoryDB],
+        auto_delete: bool = False
+    ) -> Tuple[str, Dict[str, Any]]:
+        try:
+            classification = await self.classify_memory(memory)
+        except Exception as e:
+            logger.warning(f"Classification failed for memory {memory.id}: {e}")
+            classification = {
+                "primary_topic": self._detect_topic_by_keywords(memory.content) or "other",
+                "confidence": 0.3,
+                "method": "fallback_error",
+                "tags": []
+            }
+        
+        quality = await self.assess_quality(memory, all_user_memories)
+        
+        enriched_context = None
+        if quality["quality_score"] >= 0.5 and self.openai:
+            try:
+                enriched_context = await self.enrich_memory(memory)
+            except Exception as e:
+                logger.warning(f"Enrichment failed for memory {memory.id}: {e}")
+                enriched_context = None
+        
+        if quality["should_delete"] and auto_delete:
+            action = "delete"
+            curation_status = CurationStatus.deleted.value
+            notes = f"Auto-deleted: {', '.join(quality['issues'])}"
+        elif quality["should_flag"]:
+            action = "flag"
+            curation_status = CurationStatus.flagged.value
+            notes = f"Flagged for review: {', '.join(quality['issues'])}"
+        elif classification.get("confidence", 0) < MEDIUM_CONFIDENCE_THRESHOLD:
+            action = "review"
+            curation_status = CurationStatus.needs_review.value
+            notes = "Low classification confidence"
+        else:
+            action = "clean"
+            curation_status = CurationStatus.clean.value
+            notes = None
+        
+        updates = {
+            "primary_topic": classification.get("primary_topic", "other"),
+            "curation_status": curation_status,
+            "curation_notes": notes,
+            "curation_confidence": classification.get("confidence", 0.5),
+            "last_curated": datetime.utcnow(),
+        }
+        
+        if enriched_context:
+            existing_context = memory.enriched_context or {}
+            existing_context.update(enriched_context)
+            existing_context["classification"] = classification
+            updates["enriched_context"] = existing_context
+        
+        if classification.get("tags"):
+            current_tags = memory.tags or []
+            new_tags = list(set(current_tags + classification["tags"]))
+            updates["tags"] = new_tags
+        
+        return action, updates
+    
+    async def run_curation(
+        self,
+        user_id: str,
+        batch_size: int = 20,
+        auto_delete: bool = False,
+        reprocess_all: bool = False
+    ) -> CurationRunResponse:
+        run_id = str(uuid.uuid4())
+        started_at = datetime.utcnow()
+        
+        with get_db_context() as db:
+            run = CurationRunDB(
+                id=run_id,
+                user_id=user_id,
+                status="running",
+                started_at=started_at,
+                run_config={
+                    "batch_size": batch_size,
+                    "auto_delete": auto_delete,
+                    "reprocess_all": reprocess_all
+                }
+            )
+            db.add(run)
+            db.flush()
+        
+        try:
+            with get_db_context() as db:
+                query = db.query(MemoryDB).filter(MemoryDB.uid == user_id)
+                
+                if not reprocess_all:
+                    query = query.filter(
+                        or_(
+                            MemoryDB.curation_status == CurationStatus.pending.value,
+                            MemoryDB.curation_status.is_(None)
+                        )
+                    )
+                
+                memories = query.order_by(MemoryDB.created_at.desc()).limit(batch_size).all()
+                
+                all_user_memories = db.query(MemoryDB).filter(
+                    MemoryDB.uid == user_id,
+                    MemoryDB.curation_status != CurationStatus.deleted.value
+                ).all()
+            
+            stats = {
+                "processed": 0,
+                "updated": 0,
+                "flagged": 0,
+                "deleted": 0
+            }
+            
+            for memory in memories:
+                try:
+                    action, updates = await self.curate_memory(
+                        memory,
+                        all_user_memories,
+                        auto_delete=auto_delete
+                    )
+                    
+                    with get_db_context() as db:
+                        db_memory = db.query(MemoryDB).filter(MemoryDB.id == memory.id).first()
+                        if db_memory:
+                            if action == "delete" and auto_delete:
+                                db.delete(db_memory)
+                                stats["deleted"] += 1
+                            else:
+                                for key, value in updates.items():
+                                    setattr(db_memory, key, value)
+                                stats["updated"] += 1
+                                if action == "flag":
+                                    stats["flagged"] += 1
+                            db.flush()
+                    
+                    stats["processed"] += 1
+                    
+                except Exception as e:
+                    logger.error(f"Error curating memory {memory.id}: {e}")
+                    continue
+            
+            with get_db_context() as db:
+                db_run = db.query(CurationRunDB).filter(CurationRunDB.id == run_id).first()
+                if db_run:
+                    db_run.status = "completed"
+                    db_run.completed_at = datetime.utcnow()
+                    db_run.memories_processed = stats["processed"]
+                    db_run.memories_updated = stats["updated"]
+                    db_run.memories_flagged = stats["flagged"]
+                    db_run.memories_deleted = stats["deleted"]
+                    db.flush()
+                    return CurationRunResponse.model_validate(db_run)
+                    
+        except Exception as e:
+            logger.error(f"Curation run failed: {e}")
+            with get_db_context() as db:
+                db_run = db.query(CurationRunDB).filter(CurationRunDB.id == run_id).first()
+                if db_run:
+                    db_run.status = "failed"
+                    db_run.completed_at = datetime.utcnow()
+                    db_run.error_message = str(e)
+                    db.flush()
+                    return CurationRunResponse.model_validate(db_run)
+            raise
+        
+        with get_db_context() as db:
+            db_run = db.query(CurationRunDB).filter(CurationRunDB.id == run_id).first()
+            return CurationRunResponse.model_validate(db_run)
+    
+    async def get_flagged_memories(
+        self,
+        user_id: str,
+        limit: int = 50
+    ) -> List[MemoryResponse]:
+        with get_db_context() as db:
+            memories = db.query(MemoryDB).filter(
+                MemoryDB.uid == user_id,
+                or_(
+                    MemoryDB.curation_status == CurationStatus.flagged.value,
+                    MemoryDB.curation_status == CurationStatus.needs_review.value
+                )
+            ).order_by(MemoryDB.created_at.desc()).limit(limit).all()
+            
+            return [MemoryResponse.model_validate(m) for m in memories]
+    
+    async def approve_memory(self, memory_id: str) -> Optional[MemoryResponse]:
+        with get_db_context() as db:
+            memory = db.query(MemoryDB).filter(MemoryDB.id == memory_id).first()
+            if memory:
+                memory.curation_status = CurationStatus.clean.value
+                memory.curation_notes = "Manually approved"
+                memory.last_curated = datetime.utcnow()
+                db.flush()
+                db.refresh(memory)
+                return MemoryResponse.model_validate(memory)
+            return None
+    
+    async def reject_memory(self, memory_id: str, delete: bool = False) -> bool:
+        with get_db_context() as db:
+            memory = db.query(MemoryDB).filter(MemoryDB.id == memory_id).first()
+            if memory:
+                if delete:
+                    db.delete(memory)
+                else:
+                    memory.curation_status = CurationStatus.deleted.value
+                    memory.curation_notes = "Manually rejected"
+                    memory.last_curated = datetime.utcnow()
+                db.flush()
+                return True
+            return False
+    
+    async def get_curation_stats(self, user_id: str) -> Dict[str, Any]:
+        with get_db_context() as db:
+            total = db.query(func.count(MemoryDB.id)).filter(
+                MemoryDB.uid == user_id
+            ).scalar() or 0
+            
+            pending = db.query(func.count(MemoryDB.id)).filter(
+                MemoryDB.uid == user_id,
+                or_(
+                    MemoryDB.curation_status == CurationStatus.pending.value,
+                    MemoryDB.curation_status.is_(None)
+                )
+            ).scalar() or 0
+            
+            clean = db.query(func.count(MemoryDB.id)).filter(
+                MemoryDB.uid == user_id,
+                MemoryDB.curation_status == CurationStatus.clean.value
+            ).scalar() or 0
+            
+            flagged = db.query(func.count(MemoryDB.id)).filter(
+                MemoryDB.uid == user_id,
+                MemoryDB.curation_status == CurationStatus.flagged.value
+            ).scalar() or 0
+            
+            needs_review = db.query(func.count(MemoryDB.id)).filter(
+                MemoryDB.uid == user_id,
+                MemoryDB.curation_status == CurationStatus.needs_review.value
+            ).scalar() or 0
+            
+            recent_runs = db.query(CurationRunDB).filter(
+                CurationRunDB.user_id == user_id
+            ).order_by(CurationRunDB.started_at.desc()).limit(5).all()
+            
+            by_topic = db.query(
+                MemoryDB.primary_topic,
+                func.count(MemoryDB.id)
+            ).filter(
+                MemoryDB.uid == user_id,
+                MemoryDB.primary_topic.isnot(None)
+            ).group_by(MemoryDB.primary_topic).all()
+            
+            return {
+                "total_memories": total,
+                "pending_curation": pending,
+                "clean": clean,
+                "flagged": flagged,
+                "needs_review": needs_review,
+                "curation_progress": round((total - pending) / total * 100, 1) if total > 0 else 0,
+                "by_topic": {topic: count for topic, count in by_topic},
+                "recent_runs": [CurationRunResponse.model_validate(r) for r in recent_runs]
+            }

@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, Brain, CheckSquare } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Brain, CheckSquare, Sparkles } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/memories', icon: Brain, label: 'Memory' },
   { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
+  { to: '/curation', icon: Sparkles, label: 'Curate' },
 ];
 
 export function BottomNav() {

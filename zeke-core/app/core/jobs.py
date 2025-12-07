@@ -112,17 +112,52 @@ async def flush_notification_queue(ctx: Dict[str, Any]):
         raise
 
 
+async def run_memory_curation(ctx: Dict[str, Any], user_id: str = "default_user"):
+    from app.services.curation_service import MemoryCurationService
+    
+    logger.info(f"Running memory curation for user {user_id}")
+    
+    try:
+        curation_service = MemoryCurationService()
+        
+        result = await curation_service.run_curation(
+            user_id=user_id,
+            batch_size=20,
+            auto_delete=False,
+            reprocess_all=False
+        )
+        
+        logger.info(
+            f"Curation completed: processed={result.memories_processed}, "
+            f"updated={result.memories_updated}, flagged={result.memories_flagged}"
+        )
+        
+        return {
+            "status": result.status,
+            "processed": result.memories_processed,
+            "updated": result.memories_updated,
+            "flagged": result.memories_flagged,
+            "deleted": result.memories_deleted
+        }
+        
+    except Exception as e:
+        logger.error(f"Error running memory curation: {e}")
+        raise
+
+
 class WorkerSettings:
     functions = [
         process_conversation,
         send_scheduled_reminder,
         check_due_tasks,
         flush_notification_queue,
+        run_memory_curation,
     ]
     
     cron_jobs = [
         cron(check_due_tasks, minute={0, 15, 30, 45}),
         cron(flush_notification_queue, minute={5, 20, 35, 50}),
+        cron(run_memory_curation, hour={0, 6, 12, 18}, minute=30),
     ]
     
     max_jobs = 10

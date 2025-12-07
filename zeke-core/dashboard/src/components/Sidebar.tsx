@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, MessageSquare, Brain, CheckSquare, X } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Brain, CheckSquare, Sparkles, X } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
   { to: '/memories', icon: Brain, label: 'Memories' },
   { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
+  { to: '/curation', icon: Sparkles, label: 'Curation' },
 ];
 
 interface SidebarProps {
