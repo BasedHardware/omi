@@ -24,7 +24,7 @@ class LimitlessClient:
         self.api_key = api_key or settings.limitless_api_key
         self.base_url = "https://api.limitless.ai"
         self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "X-API-Key": self.api_key,
             "Content-Type": "application/json"
         }
     
