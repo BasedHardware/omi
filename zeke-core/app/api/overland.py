@@ -12,7 +12,7 @@ from ..models.location import (
 )
 from ..core.config import get_settings
 
-router = APIRouter(prefix="/overland", tags=["overland"])
+router = APIRouter(prefix="/overland", tags=["overland"], redirect_slashes=False)
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
@@ -58,6 +58,7 @@ def verify_overland_token(authorization: Optional[str] = Header(None)) -> Option
 
 
 @router.post("/", response_model=OverlandResponse)
+@router.post("", response_model=OverlandResponse, include_in_schema=False)
 async def receive_overland_data(
     request: Request,
     authorization: Optional[str] = Header(None),
