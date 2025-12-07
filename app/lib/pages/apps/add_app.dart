@@ -7,6 +7,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:omi/pages/apps/widgets/external_trigger_fields_widget.dart';
+import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/pages/apps/widgets/payment_details_widget.dart';
@@ -98,6 +99,7 @@ class _AddAppPageState extends State<AddAppPage> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          const AiAppGeneratorBanner(),
                           GestureDetector(
                             onTap: () {
                               MixpanelManager().pageOpened('App Submission Help');
