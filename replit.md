@@ -67,6 +67,9 @@ Preferred communication style: Simple, everyday language.
 - **Resource Lifecycle Management**: Ensures proper cleanup and prevents memory leaks.
 - **Notification Permission System**: Controls plugin notification access.
 - **Memory Curation System**: Automates classification, tagging, and enrichment of memories.
+- **Emotional Memory Context**: Analyzes memories for sentiment (score -1 to +1), emotional weight (0.0-1.0), milestone detection (family moments, personal achievements, creative breakthroughs), and personal significance classification. Emotionally significant memories receive a 30% boost in RAG retrieval.
+- **Personal Life Context Engine**: Time-based context modes (Morning Planning, Family Time, Writing Mode, Work Mode) with automatic switching, proactive briefings (morning/evening), focus support features (drift detection, refocus prompts), and parking lot for capturing tangent ideas during focused work.
+- **Time-Sensitive Reminders**: Dedicated reminder system for urgent items (school pickups, appointments) with lead time notifications and priority levels.
 
 ### MCP Server
 - **Protocol**: Model Context Protocol for AI tool integration.

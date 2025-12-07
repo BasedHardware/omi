@@ -6,3 +6,7 @@ from .conversation import ConversationDB
 from .contact import ContactDB
 from .location import LocationDB
 from .knowledge_graph import EntityDB, RelationshipDB, EntityType, RelationType
+from .context_mode import (
+    ContextModeDB, UserContextStateDB, ParkingLotItemDB, TimeSensitiveReminderDB,
+    ContextModeType
+)

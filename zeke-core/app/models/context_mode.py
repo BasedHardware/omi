@@ -1,7 +1,7 @@
 from datetime import datetime, time
 from typing import Optional, List, Dict, Any
 from sqlalchemy import Column, String, Text, Boolean, DateTime, Float, JSON, Integer, Time
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 from .base import Base, TimestampMixin, UUIDMixin
@@ -115,7 +115,7 @@ class TimeSensitiveReminderDB(Base, UUIDMixin, TimestampMixin):
     completed_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
     
     source_task_id: Optional[str] = Column(String(36), nullable=True)
-    metadata: Optional[Dict[str, Any]] = Column(JSON, nullable=True)
+    extra_data: Optional[Dict[str, Any]] = Column(JSON, nullable=True)
 
 
 class ContextModeCreate(BaseModel):
@@ -155,8 +155,16 @@ class ContextModeResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+    
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def convert_time_to_str(cls, v):
+        if v is None:
+            return None
+        if hasattr(v, 'strftime'):
+            return v.strftime("%H:%M")
+        return str(v)
 
 
 class ParkingLotItemCreate(BaseModel):

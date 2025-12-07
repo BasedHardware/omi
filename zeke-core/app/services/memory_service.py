@@ -143,21 +143,19 @@ class MemoryService:
         else:
             access_recency_boost = 0
         
-        emotional_boost = (emotional_weight - 0.5) * 0.3
+        emotional_boost = emotional_weight * 0.3
         
-        milestone_boost = 0.15 if is_milestone else 0
-        
-        base_similarity = 1 - similarity
+        milestone_boost = 0.2 if is_milestone else 0
         
         score = (
-            base_similarity * 0.5 +
-            recency_boost * 0.2 +
+            similarity * 0.5 +
+            recency_boost * 0.15 +
             frequency_boost * 0.05 +
             access_recency_boost * 0.05 +
-            emotional_boost +
-            milestone_boost
+            emotional_boost * 0.15 +
+            milestone_boost * 0.1
         )
-        return min(max(score, 0), 1.0)
+        return min(max(score, 0.0), 1.0)
     
     async def search(
         self,
@@ -183,12 +181,17 @@ class MemoryService:
             
             scored_memories = []
             for mem, distance in candidates:
+                raw_distance = float(distance) if distance else 1.0
+                clamped_similarity = max(0.0, min(1.0, 1.0 - raw_distance))
+                
+                emo_weight = mem.emotional_weight if mem.emotional_weight is not None else 0.0
+                
                 score = self._compute_relevance_score(
-                    similarity=float(distance) if distance else 0.5,
+                    similarity=clamped_similarity,
                     created_at=mem.created_at,
                     access_count=mem.access_count or 0,
                     last_accessed=mem.last_accessed,
-                    emotional_weight=mem.emotional_weight or 0.5,
+                    emotional_weight=emo_weight,
                     is_milestone=mem.is_milestone or False
                 )
                 scored_memories.append((mem, score))

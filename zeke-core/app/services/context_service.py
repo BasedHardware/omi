@@ -173,6 +173,10 @@ class ContextService:
                     ).first()
                     if override_mode:
                         return ContextModeResponse.model_validate(override_mode)
+                else:
+                    state.mode_override = None
+                    state.override_until = None
+                    db.flush()
             
             modes = db.query(ContextModeDB).filter(
                 and_(

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import Column, String, Text, DateTime, JSON
+from sqlalchemy import Column, String, Text, DateTime, JSON, Integer
 from pydantic import BaseModel, Field
 
 from .base import Base, TimestampMixin, UUIDMixin
@@ -21,9 +21,9 @@ class ContactDB(Base, UUIDMixin, TimestampMixin):
     tags: List[str] = Column(JSON, default=list)
     
     last_mentioned_at: Optional[datetime] = Column(DateTime(timezone=True), nullable=True)
-    mention_count: int = Column(default=0)
+    mention_count: int = Column(Integer, default=0)
     
-    metadata: dict = Column(JSON, default=dict)
+    extra_data: dict = Column(JSON, default=dict)
 
 
 class ContactCreate(BaseModel):

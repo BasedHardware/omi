@@ -1,0 +1,94 @@
+Based on the Omi documentation, here’s how to connect your cloned repo to the iOS app:
+
+## **Quick Setup (Already Done)**
+
+You mentioned you already ran:
+
+```bash
+git clone https://github.com/BasedHardware/omi.git
+cd omi/app
+bash setup.sh ios
+```
+
+## **Connecting to the App**
+
+### **1. Configure Backend Connection**
+
+The iOS app needs to point to your backend. You have two options:
+
+**Option A: Use Local Backend**
+
+```bash
+# In the backend directory
+cd omi/backend
+# Set up your environment variables
+cp .env.template .env
+# Edit .env with your API keys (OpenAI, Deepgram, etc.)
+# Start the backend
+python main.py
+```
+
+Then in the app, configure it to point to your local backend (usually `http://localhost:8000` or your local IP).
+
+**Option B: Use Omi’s Cloud Backend** (easier for testing)
+
+- Just use the default backend URL
+- You’ll need to create an account in the app
+
+### **2. Run the iOS App**
+
+```bash
+cd omi/app
+# Open in Xcode
+open ios/Runner.xcworkspace
+
+# Or run directly
+flutter run
+```
+
+### **3. Connect Physical Device or Simulator**
+
+**For Physical Omi Device:**
+
+- Open the app on your iPhone
+- Go to Settings → Device Settings
+- Pair with your Omi hardware via Bluetooth
+
+**For Testing Without Hardware:**
+
+- The app has a “Phone Mic” mode
+- Settings → Enable “Use Phone Microphone”
+- This lets you test ZEKE functionality without the pendant
+
+### **4. Custom ZEKE Integration**
+
+Since you have a `zeke-core` directory, you likely want to integrate your custom logic:
+
+```bash
+# Your custom backend might be in zeke-core
+cd omi/zeke-core
+# Start your custom ZEKE backend
+# The app should point to this instead of the default backend
+```
+
+**In the app config** (usually `lib/env/env.dart` or similar):
+
+```dart
+// Point to your ZEKE backend
+static const String apiBaseUrl = 'http://YOUR_LOCAL_IP:8000';
+```
+
+### **5. Enable Developer Mode**
+
+In the Omi app:
+
+- Settings → About → Tap version 7 times (enables developer mode)
+- This gives you access to additional debugging features
+
+-----
+
+**Need more specific help?** Let me know:
+
+- Are you trying to run your custom ZEKE backend?
+- Do you have the physical Omi device or testing with phone mic?
+- Are you getting any specific errors?​​​​​​​​​​​​​​​​
