@@ -18,10 +18,10 @@ export function Layout() {
       {sidebarOpen && (
         <>
           <div 
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            className="fixed inset-0 bg-black/50 z-[1000] md:hidden"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="fixed inset-y-0 left-0 z-50 md:hidden">
+          <div className="fixed inset-y-0 left-0 z-[1001] md:hidden">
             <Sidebar onClose={() => setSidebarOpen(false)} />
           </div>
         </>
