@@ -225,6 +225,7 @@ enum DeviceType {
   bee,
   fieldy,
   friendPendant,
+  limitless,
 }
 
 Map<String, DeviceType> cachedDevicesMap = {};
@@ -563,6 +564,7 @@ class BtDevice {
       case DeviceType.bee:
       case DeviceType.fieldy:
       case DeviceType.friendPendant:
+      case DeviceType.limitless:
         return 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
@@ -592,6 +594,10 @@ class BtDevice {
       case DeviceType.friendPendant:
         return 'Your $name\'s current firmware works great with Omi.\n\n'
             'We recommend keeping your current firmware and not updating through the Friend app, as newer versions may affect compatibility.';
+
+      case DeviceType.limitless:
+        return 'Your $name\'s current firmware works great with Omi.\n\n'
+            'We recommend keeping your current firmware and not updating through the Limitless app, as newer versions may affect compatibility.';
 
       case DeviceType.omi:
       case DeviceType.openglass:

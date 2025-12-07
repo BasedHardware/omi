@@ -194,6 +194,10 @@ class $AssetsImagesGen {
   AssetGenImage get instruction3 =>
       const AssetGenImage('assets/images/instruction_3.png');
 
+  /// File path: assets/images/limitless.png
+  AssetGenImage get limitless =>
+      const AssetGenImage('assets/images/limitless.png');
+
   /// File path: assets/images/link_icon.svg
   String get linkIcon => 'assets/images/link_icon.svg';
 
@@ -362,6 +366,7 @@ class $AssetsImagesGen {
     instruction1,
     instruction2,
     instruction3,
+    limitless,
     linkIcon,
     linkedinLogo,
     logoTransparent,
