@@ -77,9 +77,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// - 0x22 (marker)
   /// - Length byte(s) (varint)
   /// - Opus frame starting with TOC byte
-  ///
-  /// Returns: (extracted_frames, remaining_buffer_start_position)
-  /// The remaining buffer contains any partial frame that spans packet boundaries
   List<dynamic> _extractOpusFrames(List<int> data) {
     final frames = <List<int>>[];
     int pos = 0;
@@ -107,7 +104,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
           final frameEndPos = frameStartPos + length;
 
           if (frameEndPos <= data.length) {
-            // Complete frame available
             final frame = data.sublist(frameStartPos, frameEndPos);
 
             // Check if first byte is valid Opus TOC
@@ -122,12 +118,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
               continue;
             }
           } else {
-            // Incomplete frame - we have marker and length but not the full frame data
-            // Keep everything from marker position onwards for next extraction
             break;
           }
         } else {
-          // Invalid length, skip this marker
           pos = markerPos + 1;
           continue;
         }
@@ -326,19 +319,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
         }
       }
 
-      // Remove only the processed bytes, keep any partial frame for next extraction
       if (remainingStartPos > 0) {
         final remaining = _rawDataBuffer.sublist(remainingStartPos);
         _rawDataBuffer.clear();
         _rawDataBuffer.addAll(remaining);
       } else if (frames.isNotEmpty) {
-        // If we extracted frames but didn't track position, clear buffer
-        // This shouldn't happen with the new logic, but keep as fallback
+        // This shouldn't really happen but we don't know how the device behaves so we clear the buffer just in case.
         _rawDataBuffer.clear();
       }
-      // If no frames extracted, keep buffer intact (might be waiting for more data)
 
-      // Safety: prevent buffer from growing unbounded (max 64KB)
       if (_rawDataBuffer.length > 65536) {
         debugPrint('Limitless: Buffer overflow, clearing buffer');
         _rawDataBuffer.clear();
