@@ -6,6 +6,7 @@ import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
@@ -200,6 +201,8 @@ Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
     deviceType = DeviceType.fieldy;
   } else if (BtDevice.isFriendPendantDeviceFromDevice(device)) {
     deviceType = DeviceType.friendPendant;
+  } else if (BtDevice.isLimitlessDeviceFromDevice(device)) {
+    deviceType = DeviceType.limitless;
   } else if (BtDevice.isOmiDeviceFromDevice(device)) {
     // Check if the device has the image data stream characteristic
     final hasImageStream = device.servicesList
@@ -352,6 +355,8 @@ class BtDevice {
       return await _getDeviceInfoFromFieldy(conn);
     } else if (type == DeviceType.friendPendant) {
       return await _getDeviceInfoFromFriendPendant(conn);
+    } else if (type == DeviceType.limitless) {
+      return await _getDeviceInfoFromLimitless(conn as LimitlessDeviceConnection);
     } else if (type == DeviceType.omi) {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
@@ -553,6 +558,31 @@ class BtDevice {
       hardwareRevision: hardwareRevision,
       manufacturerName: manufacturerName,
       type: DeviceType.friendPendant,
+    );
+  }
+
+  Future _getDeviceInfoFromLimitless(LimitlessDeviceConnection conn) async {
+    var modelNumber = 'Limitless Pendant';
+    var firmwareRevision = '1.0.0';
+    var hardwareRevision = 'Unknown';
+    var manufacturerName = 'Limitless';
+
+    try {
+      final deviceInfo = await conn.getDeviceInfo();
+      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
+      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
+      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
+      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
+    } catch (e) {
+      Logger.error('Error getting Limitless device info: $e');
+    }
+
+    return copyWith(
+      modelNumber: modelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: manufacturerName,
+      type: DeviceType.limitless,
     );
   }
 
