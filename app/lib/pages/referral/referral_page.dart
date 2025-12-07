@@ -26,12 +26,6 @@ class _ReferralPageState extends State<ReferralPage> {
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
         ..setNavigationDelegate(
           NavigationDelegate(
-            onProgress: (int progress) {
-              if (!mounted) return;
-              if (progress == 100) {
-                setState(() => _isLoading = false);
-              }
-            },
             onPageStarted: (String url) {
               if (!mounted) return;
               setState(() => _isLoading = true);
