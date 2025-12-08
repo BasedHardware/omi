@@ -394,7 +394,21 @@ def get_public_conversations() -> List[str]:
     return [x.decode() for x in val]
 
 
-def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 150):
+def acquire_conversation_lock(uid: str, ttl: int = 10) -> bool:
+    """
+    Acquire a distributed lock for conversation management.
+    Returns True if lock acquired, False otherwise.
+    """
+    lock_key = f'users:{uid}:conversation_lock'
+    return r.set(lock_key, '1', nx=True, ex=ttl) is not None
+
+
+def release_conversation_lock(uid: str):
+    """Release the conversation management lock."""
+    r.delete(f'users:{uid}:conversation_lock')
+
+
+def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 600):
     r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
     r.expire(f'users:{uid}:in_progress_memory_id', ttl)
 

@@ -515,12 +515,40 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection(conversations_collection).where(
-        filter=FieldFilter('status', '==', 'in_progress')
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
     return conversation
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def get_orphaned_in_progress_conversations(uid: str) -> List[dict]:
+    """
+    Get all in-progress conversations except the latest one.
+    These are considered orphaned and should be processed or cleaned up.
+    
+    Returns:
+        List of orphaned conversation dicts (excludes the latest in-progress)
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    docs = [doc.to_dict() for doc in conversations_ref.stream()]
+    
+    # Skip the first (latest) one, return the rest as orphaned
+    if len(docs) <= 1:
+        return []
+    
+    return docs[1:]
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
