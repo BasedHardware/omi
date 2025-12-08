@@ -1,0 +1,120 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "Inter",
+      "role": "body"
+    },
+    {
+      "family": "Segoe UI",
+      "role": "body"
+    },
+    {
+      "family": "-apple-system",
+      "role": "body"
+    },
+    {
+      "family": "BlinkMacSystemFont",
+      "role": "body"
+    },
+    {
+      "family": "system-ui",
+      "role": "body"
+    }
+  ],
+  "colors": {
+    "primary": "#111827",
+    "accent": "#B6DFD5",
+    "background": "#FFFFFF",
+    "textPrimary": "#3E4342",
+    "link": "#B6DFD5"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "Inter",
+      "heading": "Inter"
+    },
+    "fontStacks": {
+      "heading": [
+        "Inter",
+        "-apple-system",
+        "BlinkMacSystemFont",
+        "Segoe UI",
+        "system-ui",
+        "sans-serif"
+      ],
+      "body": [
+        "Inter",
+        "-apple-system",
+        "BlinkMacSystemFont",
+        "Segoe UI",
+        "system-ui",
+        "sans-serif"
+      ],
+      "paragraph": [
+        "Inter",
+        "-apple-system",
+        "BlinkMacSystemFont",
+        "Segoe UI",
+        "system-ui",
+        "sans-serif"
+      ]
+    },
+    "fontSizes": {
+      "h1": "30px",
+      "h2": "24px",
+      "body": "18px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "6px"
+  },
+  "components": {
+    "input": {
+      "borderColor": "#CCCCCC",
+      "borderRadius": "6px"
+    },
+    "buttonPrimary": {
+      "background": "#FFFFFF",
+      "textColor": "#707473",
+      "borderRadius": "12px",
+      "shadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgba(158, 163, 162, 0.3) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+    }
+  },
+  "images": {
+    "logo": "File saved at: attached_assets/logo.svg",
+    "favicon": "File saved at: attached_assets/favicon.png",
+    "ogImage": "https://omi.mintlify.app/mintlify-assets/_next/image?url=%2F_mintlify%2Fapi%2Fog%3Fdivision%3DBuild%2BApps%26title%3DIntroduction%26description%3DAs%2Ba%2Bdeveloper%252C%2Byou%2Bcan%2Bcreate%2Ban%2Bapp%2Bfor%2BOmi%252C%2Bletting%2Bother%2Bpeople%2Bto%2Buse%2Byour%2Bapps%2Band%2Bearn.%26primaryColor%3D%25230D9373%26lightColor%3D%252355D799%26darkColor%3D%25230D9373%26backgroundLight%3D%2523ffffff%26backgroundDark%3D%25230b0d0e&w=1200&q=100"
+  },
+  "__framework_hints": [
+    "Mintlify"
+  ],
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": 0,
+      "text": "Search...Ctrl K",
+      "reasoning": "The button has a light background color (#FFFFFF) and muted text color (#707473), which does not fit the criteria for a primary CTA. However, since it is the only button available, it is selected as the primary button by default. There are no vibrant colors present to indicate a stronger primary action."
+    },
+    "secondary": {
+      "index": -1,
+      "text": "N/A",
+      "reasoning": "There are no other buttons available to select as a secondary button, as the only button present is the primary button. Therefore, no valid secondary button exists."
+    },
+    "confidence": 0.7
+  },
+  "personality": {
+    "tone": "modern",
+    "energy": "medium",
+    "targetAudience": "developers and tech enthusiasts"
+  },
+  "designSystem": {
+    "framework": "tailwind",
+    "componentLibrary": "Mintlify"
+  },
+  "confidence": {
+    "buttons": 0.7,
+    "colors": 0.8,
+    "overall": 0.75
+  }
+}
