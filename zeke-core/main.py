@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import asyncio
+import subprocess
+import os
 import uvicorn
 
 from app.api import chat, memories, tasks, omi, sms, overland, curation, knowledge_graph, auth, context
@@ -21,6 +23,7 @@ settings = get_settings()
 
 _redis_available = False
 _limitless_sync_task = None
+_mcp_server_process = None
 LIMITLESS_SYNC_INTERVAL = 90
 
 
@@ -90,6 +93,39 @@ async def init_redis():
         logger.warning(f"Redis not available ({e}) - using in-process handling")
 
 
+def start_mcp_server():
+    global _mcp_server_process
+    try:
+        mcp_venv_path = os.path.join(os.path.dirname(__file__), "..", "mcp", ".venv", "bin", "mcp-server-omi")
+        if os.path.exists(mcp_venv_path):
+            _mcp_server_process = subprocess.Popen(
+                [mcp_venv_path, "-v"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env={**os.environ, "OMI_API_KEY": os.getenv("OMI_API_KEY", "")}
+            )
+            logger.info(f"Omi MCP Server started (PID: {_mcp_server_process.pid})")
+        else:
+            logger.warning(f"MCP server not found at {mcp_venv_path} - skipping MCP startup")
+    except Exception as e:
+        logger.error(f"Failed to start MCP server: {e}")
+
+
+def stop_mcp_server():
+    global _mcp_server_process
+    if _mcp_server_process:
+        try:
+            _mcp_server_process.terminate()
+            _mcp_server_process.wait(timeout=5)
+            logger.info("Omi MCP Server stopped")
+        except subprocess.TimeoutExpired:
+            _mcp_server_process.kill()
+            logger.info("Omi MCP Server killed")
+        except Exception as e:
+            logger.error(f"Error stopping MCP server: {e}")
+        _mcp_server_process = None
+
+
 async def limitless_sync_loop():
     from app.integrations.limitless_bridge import LimitlessBridge
     from app.services.conversation_service import ConversationService
@@ -128,6 +164,8 @@ async def lifespan(app: FastAPI):
     await init_redis()
     register_event_handlers()
     
+    start_mcp_server()
+    
     _limitless_sync_task = asyncio.create_task(limitless_sync_loop())
     logger.info(f"Limitless auto-sync started (every {LIMITLESS_SYNC_INTERVAL}s)")
     
@@ -140,6 +178,8 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         logger.info("Limitless auto-sync stopped")
+    
+    stop_mcp_server()
     
     await close_redis_pool()
     logger.info("Shutting down Zeke Core...")
