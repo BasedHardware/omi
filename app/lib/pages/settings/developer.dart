@@ -2,25 +2,25 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import 'widgets/appbar_with_banner.dart';
-import 'widgets/toggle_section_widget.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
@@ -39,6 +39,350 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     super.initState();
   }
 
+  Widget _buildSectionContainer({required List<Widget> children}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, {String? subtitle, Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (trailing != null) trailing,
+            ],
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSttChip() {
+    final useCustom = SharedPreferencesUtil().useCustomStt;
+    final config = SharedPreferencesUtil().customSttConfig;
+    final label = useCustom ? SttProviderConfig.get(config.provider).displayName : 'Omi';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade800,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.grey,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExperimentalItem({
+    required String title,
+    required String description,
+    required IconData icon,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF2A2A2E),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: FaIcon(icon, color: Colors.grey.shade400, size: 16),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  color: Colors.grey.shade500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: const Color(0xFF22C55E),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebhookItem({
+    required String title,
+    required String description,
+    required IconData icon,
+    required bool isEnabled,
+    required ValueChanged<bool> onToggle,
+    required TextEditingController controller,
+    Widget? extraField,
+  }) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2E),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: FaIcon(icon, color: Colors.grey.shade400, size: 16),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: isEnabled,
+              onChanged: onToggle,
+              activeColor: const Color(0xFF22C55E),
+            ),
+          ],
+        ),
+        if (isEnabled) ...[
+          const SizedBox(height: 12),
+          _buildTextField(controller: controller, label: 'Endpoint URL'),
+          if (extraField != null) ...[
+            const SizedBox(height: 8),
+            extraField,
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    String? hint,
+    TextInputType? keyboardType,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2C2C2E),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white, fontSize: 15),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          labelStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+          hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Colors.white24, width: 1),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildApiKeysList(BuildContext context) {
+    return Consumer<McpProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading && provider.keys.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+          );
+        }
+        if (provider.error != null) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                'Error: ${provider.error}',
+                style: TextStyle(color: Colors.red.shade300),
+              ),
+            ),
+          );
+        }
+        if (provider.keys.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                FaIcon(FontAwesomeIcons.key, color: Colors.grey.shade600, size: 28),
+                const SizedBox(height: 12),
+                Text(
+                  'No API keys yet',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 15),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Create a key to get started',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+        return _buildSectionContainer(
+          children: provider.keys.asMap().entries.map((entry) {
+            final index = entry.key;
+            final key = entry.value;
+            return Column(
+              children: [
+                McpApiKeyListItem(apiKey: key),
+                if (index < provider.keys.length - 1) const Divider(height: 1, color: Color(0xFF3C3C43)),
+              ],
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildDocsButton(String url, String label) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: () {
+          launchUrl(Uri.parse(url));
+          MixpanelManager().pageOpened('$label Docs');
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            'Docs',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreateKeyButton(VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+            const SizedBox(width: 6),
+            const Text(
+              'Create Key',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -46,205 +390,318 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
       child: Consumer<DeveloperModeProvider>(
         builder: (context, provider, child) {
           return Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBarWithBanner(
-              appBar: AppBar(
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                title: const Text('Developer Settings'),
-                actions: [
-                  TextButton(
-                    onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4.0),
-                      child: Text(
-                        'Save',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                      ),
-                    ),
-                  )
-                ],
+            backgroundColor: const Color(0xFF0D0D0D),
+            appBar: AppBar(
+              backgroundColor: const Color(0xFF0D0D0D),
+              elevation: 0,
+              leading: IconButton(
+                icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                onPressed: () => Navigator.of(context).pop(),
               ),
-              showAppBar: provider.savingSettingsLoading,
-              child: Container(
-                color: Colors.green,
-                child: const Center(
+              title: const Text(
+                'Developer Settings',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+              ),
+              centerTitle: true,
+              actions: [
+                TextButton(
+                  onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
                   child: Text(
-                    'Syncing Developer Settings...',
-                    style: TextStyle(color: Colors.white, fontSize: 12),
+                    provider.savingSettingsLoading ? 'Saving...' : 'Save',
+                    style: TextStyle(
+                      color: provider.savingSettingsLoading ? Colors.grey : Colors.white,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-            body: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: ListView(
-                shrinkWrap: true,
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 24),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Debug logs'),
-                    subtitle: const Text('Helps diagnose issues. Auto-deletes after 3 days.'),
-                    value: SharedPreferencesUtil().devLogsToFileEnabled,
-                    onChanged: (v) async {
-                      await DebugLogManager.setEnabled(v);
-                      setState(() {});
-                    },
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          icon: const Icon(Icons.upload_file, size: 16),
-                          label: const Text('Share Logs'),
-                          onPressed: () async {
-                            final files = await DebugLogManager.listLogFiles();
-                            if (files.isEmpty) {
-                              AppSnackbar.showSnackbarError('No log files found.');
-                              return;
-                            }
-                            if (files.length == 1) {
-                              final result = await Share.shareXFiles([XFile(files.first.path)], text: 'Omi debug log');
-                              if (result.status == ShareResultStatus.success) {
-                                debugPrint('Log shared');
-                              }
-                              return;
-                            }
-
-                            if (!mounted) return;
-                            final selected = await showModalBottomSheet<File>(
-                              context: context,
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                              ),
-                              builder: (ctx) {
-                                return SafeArea(
-                                  child: ListView.separated(
-                                    shrinkWrap: true,
-                                    itemCount: files.length,
-                                    separatorBuilder: (_, __) => Divider(color: Colors.grey.shade800, height: 1),
-                                    itemBuilder: (ctx, i) {
-                                      final f = files[i];
-                                      final name = f.uri.pathSegments.last;
-                                      return ListTile(
-                                        title: Text(name, style: const TextStyle(color: Colors.white)),
-                                        trailing: const Icon(Icons.chevron_right, color: Colors.white70),
-                                        onTap: () => Navigator.of(ctx).pop(f),
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
-                            );
-
-                            if (selected != null) {
-                              final result = await Share.shareXFiles([XFile(selected.path)], text: 'Omi debug log');
-                              if (result.status == ShareResultStatus.success) {
-                                debugPrint('Log shared');
-                              }
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            backgroundColor: Colors.grey.shade700,
-                            minimumSize: const Size(double.infinity, 40),
-                          ),
+                  // Transcription Section
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const TranscriptionSettingsPage(),
                         ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        tooltip: 'Clear log',
-                        onPressed: () async {
-                          await DebugLogManager.clear();
-                          AppSnackbar.showSnackbar('Debug log cleared');
-                        },
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  //TODO: Model selection commented out because Soniox model is no longer being used
-                  // const SizedBox(height: 32),
-                  // const Padding(
-                  //   padding: EdgeInsets.symmetric(horizontal: 0),
-                  //   child: Align(
-                  //     alignment: Alignment.centerLeft,
-                  //     child: Text(
-                  //       'Transcription Model',
-                  //       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  //     ),
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 14),
-                  // Center(
-                  //   child: Container(
-                  //     height: 60,
-                  //     decoration: BoxDecoration(
-                  //       border: Border.all(color: Colors.white),
-                  //       borderRadius: BorderRadius.circular(14),
-                  //     ),
-                  //     padding: const EdgeInsets.only(left: 16, right: 12, top: 8, bottom: 10),
-                  //     child: DropdownButton<String>(
-                  //       menuMaxHeight: 350,
-                  //       value: SharedPreferencesUtil().transcriptionModel,
-                  //       onChanged: (newValue) {
-                  //         if (newValue == null) return;
-                  //         if (newValue == SharedPreferencesUtil().transcriptionModel) return;
-                  //         setState(() => SharedPreferencesUtil().transcriptionModel = newValue);
-                  //         if (newValue == 'soniox') {
-                  //           showDialog(
-                  //             context: context,
-                  //             barrierDismissible: false,
-                  //             builder: (c) => getDialog(
-                  //               context,
-                  //               () => Navigator.of(context).pop(),
-                  //               () => {},
-                  //               'Model Limitations',
-                  //               'Soniox model is only available for English, and with devices with latest firmware version 1.0.4. '
-                  //                   'If you use a different configuration, it will fallback to deepgram.',
-                  //               singleButton: true,
-                  //             ),
-                  //           );
-                  //         }
-                  //       },
-                  //       dropdownColor: Colors.black,
-                  //       style: const TextStyle(color: Colors.white, fontSize: 16),
-                  //       underline: Container(height: 0, color: Colors.white),
-                  //       isExpanded: true,
-                  //       itemHeight: 48,
-                  //       items: ['deepgram', 'soniox'].map<DropdownMenuItem<String>>((String value) {
-                  //         // 'speechmatics'
-                  //         return DropdownMenuItem<String>(
-                  //           value: value,
-                  //           child: Text(
-                  //             value == 'deepgram'
-                  //                 ? 'Deepgram (faster)'
-                  //                 : value == 'speechmatics'
-                  //                     ? 'Speechmatics (Experimental)'
-                  //                     : 'Soniox (better quality)',
-                  //             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 16),
-                  //           ),
-                  //         );
-                  //       }).toList(),
-                  //     ),
-                  //   ),
-                  // ),
-                  const SizedBox(height: 32.0),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Export Conversations'),
-                    subtitle: const Text('Export all your conversations to a JSON file.'),
-                    trailing: provider.loadingExportMemories
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 1,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          )
-                        : const Icon(Icons.upload),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.microphone,
+                                color: Colors.grey.shade400,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Transcription',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Configure STT provider',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buildSttChip(),
+                          const SizedBox(width: 8),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Debug Logs Section
+                  _buildSectionHeader('Debug & Diagnostics'),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        // Debug Logs toggle
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(
+                                  FontAwesomeIcons.bug,
+                                  color: Colors.grey.shade400,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Debug Logs',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    SharedPreferencesUtil().devLogsToFileEnabled
+                                        ? 'Auto-deletes after 3 days.'
+                                        : 'Helps diagnose issues',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Switch(
+                              value: SharedPreferencesUtil().devLogsToFileEnabled,
+                              onChanged: (v) async {
+                                await DebugLogManager.setEnabled(v);
+                                setState(() {});
+                              },
+                              activeColor: const Color(0xFF22C55E),
+                            ),
+                          ],
+                        ),
+
+                        // Action buttons when enabled
+                        if (SharedPreferencesUtil().devLogsToFileEnabled) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () async {
+                                    final files = await DebugLogManager.listLogFiles();
+                                    if (files.isEmpty) {
+                                      AppSnackbar.showSnackbarError('No log files found.');
+                                      return;
+                                    }
+                                    if (files.length == 1) {
+                                      final result =
+                                          await Share.shareXFiles([XFile(files.first.path)], text: 'Omi debug log');
+                                      if (result.status == ShareResultStatus.success) {
+                                        debugPrint('Log shared');
+                                      }
+                                      return;
+                                    }
+
+                                    if (!mounted) return;
+                                    final selected = await showModalBottomSheet<File>(
+                                      context: context,
+                                      backgroundColor: const Color(0xFF1C1C1E),
+                                      shape: const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                      ),
+                                      builder: (ctx) {
+                                        return SafeArea(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Container(
+                                                margin: const EdgeInsets.only(top: 8),
+                                                height: 4,
+                                                width: 36,
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF3C3C43),
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              ),
+                                              const Padding(
+                                                padding: EdgeInsets.all(16),
+                                                child: Text(
+                                                  'Select Log File',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              Flexible(
+                                                child: ListView.separated(
+                                                  shrinkWrap: true,
+                                                  itemCount: files.length,
+                                                  separatorBuilder: (_, __) =>
+                                                      const Divider(height: 1, color: Color(0xFF3C3C43)),
+                                                  itemBuilder: (ctx, i) {
+                                                    final f = files[i];
+                                                    final name = f.uri.pathSegments.last;
+                                                    return ListTile(
+                                                      title: Text(name, style: const TextStyle(color: Colors.white)),
+                                                      trailing: const FaIcon(FontAwesomeIcons.chevronRight,
+                                                          color: Color(0xFF3C3C43), size: 14),
+                                                      onTap: () => Navigator.of(ctx).pop(f),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    );
+
+                                    if (selected != null) {
+                                      final result =
+                                          await Share.shareXFiles([XFile(selected.path)], text: 'Omi debug log');
+                                      if (result.status == ShareResultStatus.success) {
+                                        debugPrint('Log shared');
+                                      }
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2A2A2E),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        FaIcon(FontAwesomeIcons.fileArrowUp, color: Colors.grey.shade300, size: 16),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Share Logs',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade300,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: () async {
+                                  await DebugLogManager.clear();
+                                  AppSnackbar.showSnackbar('Debug log cleared');
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'Clear',
+                                        style: TextStyle(
+                                          color: Colors.redAccent,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GestureDetector(
                     onTap: provider.loadingExportMemories
                         ? null
                         : () async {
@@ -252,13 +709,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content:
-                                    Text('Conversations Export Started. This may take a few seconds, please wait.'),
+                                content: Text('Export started. This may take a few seconds...'),
                                 duration: Duration(seconds: 3),
                               ),
                             );
-                            List<ServerConversation> memories =
-                                await getConversations(limit: 10000, offset: 0); // 10k for now
+                            List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
                             String json = const JsonEncoder.withIndent("     ").convert(memories);
                             final directory = await getApplicationDocumentsDirectory();
                             final file = File('${directory.path}/conversations.json');
@@ -267,166 +722,219 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             final result =
                                 await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
                             if (result.status == ShareResultStatus.success) {
-                              debugPrint('Thank you for sharing the picture!');
+                              debugPrint('Export shared');
                             }
                             MixpanelManager().exportMemories();
                             setState(() => provider.loadingExportMemories = false);
                           },
-                  ),
-                  // KEEP ME?
-                  // ListTile(
-                  //   title: const Text('Import Memories'),
-                  //   subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
-                  //   contentPadding: EdgeInsets.zero,
-                  //   trailing: provider.loadingImportMemories
-                  //       ? const SizedBox(
-                  //           height: 16,
-                  //           width: 16,
-                  //           child: CircularProgressIndicator(
-                  //             color: Colors.white,
-                  //             strokeWidth: 2,
-                  //           ),
-                  //         )
-                  //       : const Icon(Icons.download),
-                  //   onTap: () async {
-                  //     if (provider.loadingImportMemories) return;
-                  //     setState(() => provider.loadingImportMemories = true);
-                  //     // open file picker
-                  //     var file = await FilePicker.platform.pickFiles(
-                  //       type: FileType.custom,
-                  //       allowedExtensions: ['json'],
-                  //     );
-                  //     MixpanelManager().importMemories();
-                  //     if (file == null) {
-                  //       setState(() => provider.loadingImportMemories = false);
-                  //       return;
-                  //     }
-                  //     var xFile = file.files.first.xFile;
-                  //     try {
-                  //       var content = (await xFile.readAsString());
-                  //       var decoded = jsonDecode(content);
-                  //       // Export uses [ServerMemory] structure
-                  //       List<ServerMemory> memories =
-                  //           decoded.map<ServerMemory>((e) => ServerMemory.fromJson(e)).toList();
-                  //       debugPrint('Memories: $memories');
-                  //       var memoriesJson = memories.map((m) => m.toJson()).toList();
-                  //       bool result = await migrateMemoriesToBackend(memoriesJson);
-                  //       if (!result) {
-                  //         SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
-                  //         _snackBar('Failed to import memories. Make sure the file is a valid JSON file.', seconds: 3);
-                  //       }
-                  //       _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
-                  //       MixpanelManager().importedMemories();
-                  //       SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
-                  //     } catch (e) {
-                  //       debugPrint(e.toString());
-                  //       _snackBar('Make sure the file is a valid JSON file.');
-                  //     }
-                  //     setState(() => provider.loadingImportMemories = false);
-                  //   },
-                  // ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 16),
-                  const DeveloperApiKeysSection(),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'MCP',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      GestureDetector(
-                        onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/MCP'));
-                          MixpanelManager().pageOpened('MCP Docs');
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text(
-                            'Docs',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.fileExport,
+                                color: Colors.grey.shade400,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Export All Data',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Export conversations to a JSON file',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (provider.loadingExportMemories)
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          else
+                            FaIcon(
+                              FontAwesomeIcons.chevronRight,
+                              color: Colors.grey.shade400,
+                              size: 16,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Developer API Keys Section
+                  const DeveloperApiKeysSection(),
+
+                  const SizedBox(height: 32),
+
+                  // MCP Section
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'MCP',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        _buildDocsButton('https://docs.omi.me/doc/developer/MCP', 'MCP'),
+                        const SizedBox(width: 8),
+                        _buildCreateKeyButton(() => showDialog(
+                              context: context,
+                              builder: (context) => const CreateMcpApiKeyDialog(),
+                            )),
+                      ],
+                    ),
+                  ),
+                  _buildApiKeysList(context),
+
+                  const SizedBox(height: 24),
+
+                  // Claude Desktop Integration
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.desktop, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Claude Desktop',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Add to claude_desktop_config.json',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Code block with JSON syntax highlighting
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0D0D0D),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
+                          ),
+                          child: RichText(
+                            text: TextSpan(
+                              style: const TextStyle(
+                                fontFamily: 'Ubuntu Mono',
+                                fontSize: 11,
+                                height: 1.6,
+                              ),
+                              children: [
+                                const TextSpan(text: '{\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '  ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"mcpServers"', style: TextStyle(color: Colors.cyan.shade300)),
+                                const TextSpan(text: ': {\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '    ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"omi"', style: TextStyle(color: Colors.cyan.shade300)),
+                                const TextSpan(text: ': {\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '      ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"command"', style: TextStyle(color: Colors.cyan.shade300)),
+                                const TextSpan(text: ': ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"docker"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: ',\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '      ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"args"', style: TextStyle(color: Colors.cyan.shade300)),
+                                const TextSpan(text: ': [\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '        ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"run"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: ', ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"--rm"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: ', ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"-i"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: ', ', style: TextStyle(color: Colors.white)),
+                                TextSpan(text: '"-e"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: ',\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '        ', style: TextStyle(color: Colors.white)),
+                                TextSpan(
+                                    text: '"OMI_API_KEY=<your_key>"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: ',\n', style: TextStyle(color: Colors.white)),
+                                const TextSpan(text: '        ', style: TextStyle(color: Colors.white)),
+                                TextSpan(
+                                    text: '"omiai/mcp-server:latest"', style: TextStyle(color: Colors.orange.shade300)),
+                                const TextSpan(text: '\n      ]\n    }\n  }\n}', style: TextStyle(color: Colors.white)),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'API Keys',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => showDialog(
-                          context: context,
-                          builder: (context) => const CreateMcpApiKeyDialog(),
-                        ),
-                        icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                        label: const Text('Create Key', style: TextStyle(color: Colors.white)),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Consumer<McpProvider>(
-                    builder: (context, provider, child) {
-                      if (provider.isLoading && provider.keys.isEmpty) {
-                        return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-                      }
-                      if (provider.error != null) {
-                        return Center(child: Text('Error: ${provider.error}'));
-                      }
-                      if (provider.keys.isEmpty) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('No API keys found. Create one to get started.'),
-                          ),
-                        );
-                      }
-                      return Column(
-                        children: provider.keys.map((key) => McpApiKeyListItem(apiKey: key)).toList(),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Claude Desktop Integration',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Add the following to your claude_desktop_config.json file. Remember to replace "your_api_key_here" with a valid key.',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copy Config'),
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.grey.shade700,
-                      minimumSize: const Size(double.infinity, 40),
-                    ),
-                    onPressed: () {
-                      const config = '''{
+                        const SizedBox(height: 12),
+                        GestureDetector(
+                          onTap: () {
+                            const config = '''{
   "mcpServers": {
     "omi": {
       "command": "docker",
@@ -434,223 +942,187 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     }
   }
 }''';
-                      Clipboard.setData(const ClipboardData(text: config));
-                      AppSnackbar.showSnackbar('Claude config copied to clipboard.');
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text(
-                        'Webhooks',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                      ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: () {
-                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
-                          MixpanelManager().pageOpened('Advanced Mode Docs');
-                        },
-                        child: const Padding(
-                          padding: EdgeInsets.all(8.0),
-                          child: Text(
-                            'Docs',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
+                            Clipboard.setData(const ClipboardData(text: config));
+                            AppSnackbar.showSnackbar('Config copied to clipboard');
+                          },
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade300, size: 14),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Copy Config',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade300,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(
-                    height: 10,
-                  ),
-                  ToggleSectionWidget(
-                    isSectionEnabled: provider.conversationEventsToggled,
-                    sectionTitle: 'Conversation Events',
-                    sectionDescription: 'Triggers when a new conversation is created.',
-                    options: [
-                      TextField(
-                        controller: provider.webhookOnConversationCreated,
-                        obscureText: false,
-                        autocorrect: false,
-                        enabled: true,
-                        enableSuggestions: false,
-                        decoration: _getTextFieldDecoration('Endpoint URL'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    onSectionEnabledChanged: provider.onConversationEventsToggled,
-                  ),
-                  ToggleSectionWidget(
-                      isSectionEnabled: provider.transcriptsToggled,
-                      sectionTitle: 'Real-time Transcript',
-                      sectionDescription: 'Triggers when a new transcript is received.',
-                      options: [
-                        TextField(
-                          controller: provider.webhookOnTranscriptReceived,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          decoration: _getTextFieldDecoration('Endpoint URL'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
                       ],
-                      onSectionEnabledChanged: provider.onTranscriptsToggled),
-                  ToggleSectionWidget(
-                      isSectionEnabled: provider.audioBytesToggled,
-                      sectionTitle: 'Realtime Audio Bytes',
-                      sectionDescription: 'Triggers when audio bytes are received.',
-                      options: [
-                        TextField(
-                          controller: provider.webhookAudioBytes,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          decoration: _getTextFieldDecoration('Endpoint URL'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        TextField(
-                          controller: provider.webhookAudioBytesDelay,
-                          obscureText: false,
-                          autocorrect: false,
-                          enabled: true,
-                          enableSuggestions: false,
-                          keyboardType: TextInputType.number,
-                          decoration: _getTextFieldDecoration('Every x seconds'),
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                      onSectionEnabledChanged: provider.onAudioBytesToggled),
-                  ToggleSectionWidget(
-                    isSectionEnabled: provider.daySummaryToggled,
-                    sectionTitle: 'Day Summary',
-                    sectionDescription: 'Triggers when day summary is generated.',
-                    options: [
-                      TextField(
-                        controller: provider.webhookDaySummary,
-                        obscureText: false,
-                        autocorrect: false,
-                        enabled: true,
-                        enableSuggestions: false,
-                        decoration: _getTextFieldDecoration('Endpoint URL'),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    onSectionEnabledChanged: provider.onDaySummaryToggled,
+                    ),
                   ),
 
-                  // const Text(
-                  //   'Websocket Real-time audio bytes:',
-                  //   style: TextStyle(color: Colors.white, fontSize: 16),
-                  // ),
-                  // TextField(
-                  //   controller: provider.webhookAudioBytes,
-                  //   obscureText: false,
-                  //   autocorrect: false,
-                  //   enabled: true,
-                  //   enableSuggestions: false,
-                  //   decoration: _getTextFieldDecoration('Endpoint URL'),
-                  //   style: const TextStyle(color: Colors.white),
-                  // ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
                   const SizedBox(height: 32),
-                  const Text(
-                    'Experimental',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Try the latest experimental features from Omi Team.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Transcription service diagnostic status',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+
+                  // Webhooks Section
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Webhooks',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        _buildDocsButton('https://docs.omi.me/doc/developer/apps/Introduction', 'Webhooks'),
+                      ],
                     ),
-                    subtitle: const Text(
-                      'Enable detailed diagnostic messages from the transcription service',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    value: provider.transcriptionDiagnosticEnabled,
-                    onChanged: provider.onTranscriptionDiagnosticChanged,
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Auto-create and tag new speakers',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    child: Column(
+                      children: [
+                        // Conversation Events
+                        _buildWebhookItem(
+                          title: 'Conversation Events',
+                          description: 'New conversation created',
+                          icon: FontAwesomeIcons.message,
+                          isEnabled: provider.conversationEventsToggled,
+                          onToggle: provider.onConversationEventsToggled,
+                          controller: provider.webhookOnConversationCreated,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Real-time Transcript
+                        _buildWebhookItem(
+                          title: 'Real-time Transcript',
+                          description: 'Transcript received',
+                          icon: FontAwesomeIcons.closedCaptioning,
+                          isEnabled: provider.transcriptsToggled,
+                          onToggle: provider.onTranscriptsToggled,
+                          controller: provider.webhookOnTranscriptReceived,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Realtime Audio Bytes
+                        _buildWebhookItem(
+                          title: 'Audio Bytes',
+                          description: 'Audio data received',
+                          icon: FontAwesomeIcons.waveSquare,
+                          isEnabled: provider.audioBytesToggled,
+                          onToggle: provider.onAudioBytesToggled,
+                          controller: provider.webhookAudioBytes,
+                          extraField: _buildTextField(
+                            controller: provider.webhookAudioBytesDelay,
+                            label: 'Interval (seconds)',
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Day Summary
+                        _buildWebhookItem(
+                          title: 'Day Summary',
+                          description: 'Summary generated',
+                          icon: FontAwesomeIcons.calendarDay,
+                          isEnabled: provider.daySummaryToggled,
+                          onToggle: provider.onDaySummaryToggled,
+                          controller: provider.webhookDaySummary,
+                        ),
+                      ],
                     ),
-                    subtitle: const Text(
-                      'Automatically create a new person when a name is detected in the transcript.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Experimental Section
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+                    child: const Text(
+                      'Experimental',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    value: provider.autoCreateSpeakersEnabled,
-                    onChanged: provider.onAutoCreateSpeakersChanged,
                   ),
-                  const SizedBox(height: 16.0),
-                  const SizedBox(height: 36),
-                  const Text(
-                    'Pilot Features',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'These features are tests and no support is guaranteed.',
-                    style: TextStyle(color: Colors.grey.shade200, fontSize: 14),
-                  ),
-                  const SizedBox(height: 16.0),
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    title: const Text(
-                      'Suggest follow up question',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    value: provider.followUpQuestionEnabled,
-                    onChanged: provider.onFollowUpQuestionChanged,
+                    child: Column(
+                      children: [
+                        // Transcription Diagnostics
+                        _buildExperimentalItem(
+                          title: 'Transcription Diagnostics',
+                          description: 'Detailed diagnostic messages',
+                          icon: FontAwesomeIcons.stethoscope,
+                          value: provider.transcriptionDiagnosticEnabled,
+                          onChanged: provider.onTranscriptionDiagnosticChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Auto-create Speakers
+                        _buildExperimentalItem(
+                          title: 'Auto-create Speakers',
+                          description: 'Auto-create when name detected',
+                          icon: FontAwesomeIcons.userPlus,
+                          value: provider.autoCreateSpeakersEnabled,
+                          onChanged: provider.onAutoCreateSpeakersChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Follow-up Questions
+                        _buildExperimentalItem(
+                          title: 'Follow-up Questions',
+                          description: 'Suggest questions after conversations',
+                          icon: FontAwesomeIcons.lightbulb,
+                          value: provider.followUpQuestionEnabled,
+                          onChanged: provider.onFollowUpQuestionChanged,
+                        ),
+                      ],
+                    ),
                   ),
+
+                  const SizedBox(height: 48),
                 ],
               ),
             ),
           );
         },
       ),
-    );
-  }
-
-  _getTextFieldDecoration(String label, {IconButton? suffixIcon, bool canBeDisabled = false, String hintText = ''}) {
-    return InputDecoration(
-      labelText: label,
-      enabled: true && canBeDisabled,
-      hintText: hintText,
-      // labelText: hintText,
-      labelStyle: const TextStyle(
-        fontSize: 16,
-        color: Colors.grey,
-        decoration: TextDecoration.underline,
-      ),
-      // bottom border
-      enabledBorder: InputBorder.none,
-      focusedBorder: const UnderlineInputBorder(
-        borderSide: BorderSide(color: Colors.grey),
-      ),
-      suffixIcon: suffixIcon,
     );
   }
 }

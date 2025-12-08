@@ -326,6 +326,43 @@ def delete_conversation(uid, conversation_id):
     conversation_ref.delete()
 
 
+def delete_conversations_by_source(uid: str, source: str, batch_size: int = 450) -> int:
+    """
+    Delete all conversations with a specific source.
+
+    Args:
+        uid: User ID
+        source: Source type (e.g., 'limitless')
+        batch_size: Number of documents to delete per batch
+
+    Returns:
+        Number of deleted conversations
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+
+    total_deleted = 0
+
+    while True:
+        # Query for conversations with matching source
+        query = conversations_ref.where(filter=FieldFilter('source', '==', source)).limit(batch_size)
+        docs = list(query.stream())
+
+        if not docs:
+            break
+
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+            total_deleted += 1
+        batch.commit()
+
+        if len(docs) < batch_size:
+            break
+
+    return total_deleted
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def filter_conversations_by_date(uid, start_date, end_date):
