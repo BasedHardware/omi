@@ -60,6 +60,7 @@ Preferred communication style: Simple, everyday language.
 ### Zeke Core (Personal AI Assistant)
 - **Purpose**: Proactive task management and skill orchestration.
 - **Stack**: FastAPI, PostgreSQL + pgvector, Celery + Redis workers.
+- **Dashboard**: React + Vite + TailwindCSS with gradient-themed UI, responsive bottom navigation, and dynamic category filtering.
 - **Features**: Memory curation, task planning, research, location awareness (Overland iOS integration).
 - **Semantic Cache**: Optimizes LLM responses via cosine similarity caching.
 - **GraphRAG Knowledge Graph**: Uses entity relationships for multi-hop reasoning on memories.
