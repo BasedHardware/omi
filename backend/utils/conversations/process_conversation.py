@@ -2,60 +2,61 @@ import os
 import random
 import re
 import threading
-import time
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple, Union
+from datetime import timezone, timedelta, datetime
+from typing import Union, Tuple, List, Optional
 
 from fastapi import HTTPException
 
-import database.action_items as action_items_db
-import database.conversations as conversations_db
+from database import redis_db
 import database.memories as memories_db
+import database.conversations as conversations_db
 import database.notifications as notification_db
+import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
-import database.users as users_db
-from database import redis_db
-from database.apps import get_app_by_id_db, get_omi_personas_by_uid_db, record_app_usage
-from database.vector_db import update_vector_metadata, upsert_vector2
+import database.action_items as action_items_db
+from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
+from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
+from models.memories import MemoryDB, Memory
 from models.conversation import *
 from models.conversation import (
-    Conversation,
-    ConversationSource,
-    CreateConversation,
     ExternalIntegrationCreateConversation,
+    Conversation,
+    CreateConversation,
+    ConversationSource,
 )
-from models.memories import Memory, MemoryDB
-from models.notification_message import NotificationMessage
 from models.other import Person
-from models.task import Task, TaskAction, TaskActionProvider, TaskStatus
+from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
-from utils.analytics import record_usage
-from utils.apps import get_available_apps, sync_update_persona_prompt, update_personas_async
-from utils.llm.chat import (
-    obtain_emotional_message,
-    retrieve_metadata_fields_from_transcript,
-    retrieve_metadata_from_message,
-    retrieve_metadata_from_text,
-)
-from utils.llm.clients import generate_embedding
+from models.notification_message import NotificationMessage
+from utils.apps import get_available_apps, update_personas_async, sync_update_persona_prompt
 from utils.llm.conversation_processing import (
-    get_app_result,
-    get_reprocess_transcript_structure,
-    get_suggested_apps_for_conversation,
     get_transcript_structure,
-    select_best_app_for_conversation,
+    get_app_result,
     should_discard_conversation,
+    select_best_app_for_conversation,
+    get_suggested_apps_for_conversation,
+    get_reprocess_transcript_structure,
 )
-from utils.llm.external_integrations import get_message_structure, summarize_experience_text
+from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
-from utils.notifications import send_action_item_data_message, send_notification
-from utils.other.hume import HumeJobCallbackModel, HumeJobModelPredictionResponseModel, get_hume
+from utils.llm.chat import (
+    retrieve_metadata_from_text,
+    retrieve_metadata_from_message,
+    retrieve_metadata_fields_from_transcript,
+    obtain_emotional_message,
+)
+from utils.llm.external_integrations import get_message_structure
+from utils.llm.clients import generate_embedding
+from utils.notifications import send_notification
+from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredictionResponseModel
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
+from utils.notifications import send_action_item_data_message
 
 
 def _get_structured(
@@ -677,88 +678,15 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
     return
 
 
-def _retrieve_in_progress_conversation_unlocked(uid, update_redis_cache: bool = False):
-    conversation_id = redis_db.get_in_progress_conversation_id(uid)
-
-    if conversation_id:
-        existing = conversations_db.get_conversation(uid, conversation_id)
-        if existing and existing['status'] == 'in_progress':
-            return existing
-
-    # Fallback to DB lookup
-    existing = conversations_db.get_in_progress_conversation(uid)
-    if existing:
-        if update_redis_cache:
-            redis_db.set_in_progress_conversation_id(uid, existing['id'])
-        return existing
-
-    return None
-
-
 def retrieve_in_progress_conversation(uid):
     conversation_id = redis_db.get_in_progress_conversation_id(uid)
+    existing = None
 
     if conversation_id:
         existing = conversations_db.get_conversation(uid, conversation_id)
-        if existing and existing['status'] == 'in_progress':
-            return existing
+        if existing and existing['status'] != 'in_progress':
+            existing = None
 
-    # Fallback to DB lookup
-    existing = conversations_db.get_in_progress_conversation(uid)
-    if existing:
-        max_retries = 5
-        for attempt in range(max_retries):
-            if redis_db.acquire_conversation_lock(uid, ttl=10):
-                try:
-                    redis_db.set_in_progress_conversation_id(uid, existing['id'])
-                    return existing
-                finally:
-                    redis_db.release_conversation_lock(uid)
-            time.sleep(0.2 * (attempt + 1))
-        print(f"Failed to acquire conversation lock for uid={uid}")
-        return existing
-
-    return None
-
-
-def remove_in_progress_conversation_if_matches(uid: str, conversation_id: str) -> bool:
-    if not conversation_id:
-        return True
-
-    if not redis_db.acquire_conversation_lock(uid, ttl=10):
-        print(f"Could not acquire conversation lock for uid={uid}", conversation_id)
-        return False
-
-    try:
-        redis_conversation_id = redis_db.get_in_progress_conversation_id(uid)
-        if redis_conversation_id and redis_conversation_id == conversation_id:
-            redis_db.remove_in_progress_conversation_id(uid)
-            print(f"Cleared in-progress reference for conversation {conversation_id}")
-        return True
-    finally:
-        redis_db.release_conversation_lock(uid)
-
-
-def create_in_progress_conversation_with_lock(uid: str, conversation_data: dict) -> Optional[str]:
-    max_retries = 5
-    for attempt in range(max_retries):
-        if redis_db.acquire_conversation_lock(uid, ttl=10):
-            try:
-                # Double-check no in-progress conversation exists, lock-free
-                existing = _retrieve_in_progress_conversation_unlocked(uid, update_redis_cache=True)
-                if existing:
-                    print(f"Found existing in-progress conversation during creation: {existing['id']}")
-                    return existing['id']
-
-                # Create new conversation
-                conversation_id = conversation_data['id']
-                conversations_db.upsert_conversation(uid, conversation_data=conversation_data)
-                redis_db.set_in_progress_conversation_id(uid, conversation_id)
-                print(f"Created new in-progress conversation with lock: {conversation_id}")
-                return conversation_id
-            finally:
-                redis_db.release_conversation_lock(uid)
-        time.sleep(0.2 * (attempt + 1))
-
-    print(f"Failed to acquire conversation lock for uid={uid}")
-    return None
+    if not existing:
+        existing = conversations_db.get_in_progress_conversation(uid)
+    return existing

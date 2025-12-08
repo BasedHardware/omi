@@ -1,7 +1,6 @@
 import base64
 import json
 import os
-from datetime import datetime, timedelta, timezone
 from typing import List, Union, Optional
 
 import redis
@@ -395,21 +394,7 @@ def get_public_conversations() -> List[str]:
     return [x.decode() for x in val]
 
 
-def acquire_conversation_lock(uid: str, ttl: int = 10) -> bool:
-    """
-    Acquire a distributed lock for conversation management.
-    Returns True if lock acquired, False otherwise.
-    """
-    lock_key = f'users:{uid}:conversation_lock'
-    return r.set(lock_key, '1', nx=True, ex=ttl) is not None
-
-
-def release_conversation_lock(uid: str):
-    """Release the conversation management lock."""
-    r.delete(f'users:{uid}:conversation_lock')
-
-
-def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 600):
+def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300):
     r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
     r.expire(f'users:{uid}:in_progress_memory_id', ttl)
 
@@ -701,21 +686,3 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
     """Remove an app ID from the conversation summary apps set"""
     result = r.srem(CONVERSATION_SUMMARY_APPS_KEY, app_id)
     return result > 0
-
-
-# ******************************************************
-# ************** PERSONA UPDATE RATE LIMIT *************
-# ******************************************************
-
-
-def set_persona_update_timestamp(uid: str):
-    """Mark that user has updated personas (expires at 00:00 UTC)"""
-    now = datetime.now(timezone.utc)
-    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ttl = int((tomorrow - now).total_seconds())
-    r.set(f'users:{uid}:persona_updated', '1', ex=ttl)
-
-
-def can_update_persona(uid: str) -> bool:
-    """Check if user can update personas (not updated since last 00:00 UTC)"""
-    return not r.exists(f'users:{uid}:persona_updated')
