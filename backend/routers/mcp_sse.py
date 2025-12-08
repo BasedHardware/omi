@@ -9,6 +9,7 @@ Implements the MCP 2025-03-26 Streamable HTTP Transport specification.
 
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional, Union, List, Any
@@ -484,8 +485,11 @@ async def mcp_sse_get(
                     break
                 yield f"event: ping\ndata: {{}}\n\n"
                 await asyncio.sleep(30)
-        except Exception:
+        except asyncio.CancelledError:
+            # Normal cancellation when client disconnects
             pass
+        except Exception as e:
+            logging.warning(f"MCP SSE event generator error: {e}")
     
     return StreamingResponse(
         event_generator(),
