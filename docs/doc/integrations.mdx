@@ -65,7 +65,71 @@ The most effective way to learn the protocol is to capture the communication bet
 
 #### Using iOS
 
-Capturing traffic on iOS is more challenging. Apps like [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nrf-connect-for-mobile) or [LightBlue](https://apps.apple.com/us/app/lightblue-explorer/id557428110) allow you to manually explore your device's services and characteristics. This process requires more trial and error but can still reveal the necessary information.
+There are two approaches for iOS: manual exploration using third-party apps, or full packet capture using Apple's official tools.
+
+##### Option A: Manual Exploration (Quick Start)
+
+Apps like [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nrf-connect-for-mobile) or [LightBlue](https://apps.apple.com/us/app/lightblue-explorer/id557428110) allow you to manually explore your device's services and characteristics. This process requires more trial and error but can quickly reveal basic information about UUIDs and simple data formats.
+
+##### Option B: Full Packet Capture with PacketLogger (Recommended)
+
+For comprehensive BLE traffic analysis comparable to Android, Apple provides official debugging tools through the **PacketLogger** application. This method captures all Bluetooth HCI traffic and provides rich protocol decoding.
+
+**Requirements:**
+- iOS 13+ device and a Lightning/USB-C cable
+- Mac computer with macOS
+- [Apple Developer Program account](https://developer.apple.com/programs/) (free tier works)
+
+**Step 1: Install the Bluetooth Debugging Profile**
+
+1. On your **iOS device**, open Safari and navigate to:
+   ```
+   https://developer.apple.com/bug-reporting/profiles-and-logs/?name=bluetooth
+   ```
+2. Sign in with your Apple Developer account when prompted.
+3. Under **Bluetooth for iOS**, tap **Profile** to download the debugging profile.
+4. When prompted, select **iPhone** to install the profile.
+5. Open the **Settings** app on your iOS device.
+6. Tap **Profile Downloaded** (appears near the top after download).
+7. Tap **Install** and follow the prompts to complete installation.
+
+> **Note:** You may need to restart your device for the profile to take full effect.
+
+**Step 2: Install Xcode and PacketLogger**
+
+1. Install [Xcode](https://developer.apple.com/xcode/) from the Mac App Store if you haven't already.
+2. Download **Additional Tools for Xcode** from [Apple's developer downloads page](https://developer.apple.com/download/all/?q=Additional%20Tools).
+   - Look for the version matching your Xcode (e.g., "Additional Tools for Xcode 15").
+3. Open the downloaded `.dmg` file and navigate to the **Hardware** folder.
+4. Drag **PacketLogger.app** to your **Applications** folder.
+
+**Step 3: Capture BLE Traffic**
+
+1. Connect your profile-enabled iOS device to your Mac via cable.
+2. Open **PacketLogger** on your Mac.
+3. Go to **File → New iOS Trace** to start capturing.
+4. A pulse icon will appear in the top-left corner of your iOS device, indicating an active trace.
+5. Use the vendor's app to interact with your device—connect, start recording, etc.
+6. When finished, stop the trace and save the capture file.
+
+> **Pro Tip:** Record your screen while performing actions in the vendor app. This helps you correlate timestamps in PacketLogger with specific user actions.
+
+**PacketLogger Features:**
+- Decodes all Bluetooth SIG-defined protocols and Apple-specific extensions
+- Supports both Bluetooth Classic (BR/EDR) and Bluetooth Low Energy
+- Rich filtering options and text/regex search
+- Ability to comment and flag packets for later reference
+- Export raw data for analysis in other tools (including Wireshark)
+
+**Step 4: Analyze in PacketLogger or Export to Wireshark**
+
+PacketLogger provides excellent built-in analysis, but you can also export captures for use in Wireshark:
+
+1. In PacketLogger, go to **File → Export**.
+2. Choose a format compatible with Wireshark (e.g., `.pcap` or `.pklg`).
+3. Open the exported file in Wireshark for cross-platform analysis.
+
+> **Reference:** For more details, see Apple's [WWDC 2019 Session on Bluetooth debugging](https://developer.apple.com/videos/play/wwdc2019/901/) and the [Bluetooth SIG's guide](https://www.bluetooth.com/blog/a-new-way-to-debug-iosbluetooth-applications/).
 
 ### Step 1.2: Analyze Traffic in Wireshark
 
