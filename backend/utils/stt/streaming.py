@@ -2,7 +2,7 @@ import asyncio
 import os
 import random
 import time
-from typing import List
+from typing import List, Callable
 from enum import Enum
 
 import websockets
@@ -202,12 +202,15 @@ def get_stt_service_for_language(language: str):
     return STTService.deepgram, 'en', 'nova-2-general'
 
 
-async def send_initial_file_path(file_path: str, transcript_socket_async_send):
+async def send_initial_file_path(file_path: str, transcript_socket_async_send, is_active: Callable = None):
     print('send_initial_file_path')
     start = time.time()
     # Reading and sending in chunks
     with open(file_path, "rb") as file:
         while True:
+            if is_active and not is_active():
+                print('send_initial_file_path stopped early via is_active check')
+                break
             chunk = file.read(320)
             if not chunk:
                 break
