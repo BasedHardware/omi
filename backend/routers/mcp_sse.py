@@ -166,7 +166,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             try:
                 valid_categories.append(MemoryCategory(cat).value)
             except ValueError:
-                pass
+                raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
         
         memories = memories_db.get_memories(user_id, limit, offset, valid_categories)
         # Apply locked content truncation
