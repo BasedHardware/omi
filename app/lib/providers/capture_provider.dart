@@ -176,6 +176,8 @@ class CaptureProvider extends ChangeNotifier
         return 'frame';
       case DeviceType.appleWatch:
         return 'apple_watch';
+      case DeviceType.limitless:
+        return 'limitless';
     }
   }
 
