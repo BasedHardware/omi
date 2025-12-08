@@ -72,6 +72,7 @@ Preferred communication style: Simple, everyday language.
 - **Personal Life Context Engine**: Time-based context modes (Morning Planning, Family Time, Writing Mode, Work Mode) with automatic switching, proactive briefings (morning/evening), focus support features (drift detection, refocus prompts), and parking lot for capturing tangent ideas during focused work.
 - **Time-Sensitive Reminders**: Dedicated reminder system for urgent items (school pickups, appointments) with lead time notifications and priority levels.
 - **Omi iOS App Integration**: Direct webhook endpoint at `/api/omi/conversation` that receives raw conversation data from the Omi iOS app, processes transcripts, extracts memories, and enables personalized ZEKE interactions.
+- **Real-Time Audio Streaming**: Configurable audio streaming endpoint at `/api/omi/audio` that receives raw PCM audio bytes from Omi devices, stores as WAV files with path traversal protection. Settings: `omi_audio_streaming_enabled`, `omi_audio_storage_path`, `omi_audio_auto_transcribe`.
 
 ### MCP Server
 - **Protocol**: Model Context Protocol for AI tool integration.
