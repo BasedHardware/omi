@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Request, HTTPException, Header, Query
+from fastapi import APIRouter, Request, HTTPException, Header, Query, Response
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List, Union
 import logging
 import hmac
 import hashlib
+import os
+import struct
+import io
+import re
+from datetime import datetime
 
 from ..integrations.omi import OmiWebhookHandler, OmiClient
 from ..services.conversation_service import ConversationService
@@ -15,6 +20,13 @@ from ..core.events import event_bus, Event, EventTypes
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/omi", tags=["omi"])
 settings = get_settings()
+
+
+def sanitize_uid(uid: str) -> str:
+    """Sanitize user ID to prevent path traversal attacks."""
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', uid)
+    sanitized = sanitized[:64]
+    return sanitized or "unknown_user"
 
 
 class OmiWebhookPayload(BaseModel):
@@ -269,5 +281,137 @@ async def omi_health_check():
     return {
         "status": "healthy",
         "service": "zeke-core",
-        "omi_integration": "active"
+        "omi_integration": "active",
+        "audio_streaming": settings.omi_audio_streaming_enabled
     }
+
+
+def create_wav_header(sample_rate: int, num_samples: int, num_channels: int = 1, bits_per_sample: int = 16) -> bytes:
+    """Create a WAV file header for raw PCM audio data."""
+    byte_rate = sample_rate * num_channels * bits_per_sample // 8
+    block_align = num_channels * bits_per_sample // 8
+    data_size = num_samples * num_channels * bits_per_sample // 8
+    
+    header = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF',
+        36 + data_size,
+        b'WAVE',
+        b'fmt ',
+        16,
+        1,
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,
+        b'data',
+        data_size
+    )
+    return header
+
+
+@router.post("/audio")
+async def receive_audio_stream(
+    request: Request,
+    sample_rate: int = Query(default=16000, description="Audio sample rate in Hz"),
+    uid: str = Query(default="default_user", description="User ID from Omi app")
+):
+    """
+    Receive real-time audio bytes from Omi device.
+    Configure in Omi app Settings > Developer Mode > Realtime audio bytes.
+    
+    The audio is received as raw PCM bytes (octet-stream).
+    - DevKit1 (v1.0.4+) and DevKit2: 16,000 Hz sample rate
+    - DevKit1 (v1.0.2): 8,000 Hz sample rate
+    """
+    if not settings.omi_audio_streaming_enabled:
+        return {"status": "disabled", "message": "Audio streaming is not enabled"}
+    
+    try:
+        audio_bytes = await request.body()
+        
+        if not audio_bytes:
+            return {"status": "error", "message": "No audio data received"}
+        
+        bytes_received = len(audio_bytes)
+        num_samples = bytes_received // 2
+        duration_seconds = num_samples / sample_rate
+        
+        safe_uid = sanitize_uid(uid)
+        logger.info(f"Received {bytes_received} audio bytes from user {safe_uid} at {sample_rate}Hz ({duration_seconds:.2f}s)")
+        
+        storage_path = settings.omi_audio_storage_path
+        os.makedirs(storage_path, exist_ok=True)
+        
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"omi_audio_{safe_uid}_{timestamp}.wav"
+        filepath = os.path.join(storage_path, filename)
+        
+        wav_header = create_wav_header(sample_rate, num_samples)
+        
+        with open(filepath, 'wb') as f:
+            f.write(wav_header)
+            f.write(audio_bytes)
+        
+        logger.info(f"Saved audio file: {filepath}")
+        
+        result = {
+            "status": "success",
+            "bytes_received": bytes_received,
+            "duration_seconds": round(duration_seconds, 2),
+            "sample_rate": sample_rate,
+            "file_saved": filename
+        }
+        
+        if settings.omi_audio_auto_transcribe:
+            result["transcription_queued"] = True
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error processing audio stream: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/audio/status")
+async def audio_streaming_status():
+    """Check audio streaming configuration and recent files."""
+    storage_path = settings.omi_audio_storage_path
+    
+    files = []
+    if os.path.exists(storage_path):
+        all_files = sorted(os.listdir(storage_path), reverse=True)[:10]
+        for f in all_files:
+            filepath = os.path.join(storage_path, f)
+            if os.path.isfile(filepath):
+                files.append({
+                    "filename": f,
+                    "size_bytes": os.path.getsize(filepath),
+                    "created": datetime.fromtimestamp(os.path.getctime(filepath)).isoformat()
+                })
+    
+    return {
+        "enabled": settings.omi_audio_streaming_enabled,
+        "auto_transcribe": settings.omi_audio_auto_transcribe,
+        "storage_path": storage_path,
+        "recent_files": files
+    }
+
+
+@router.delete("/audio/files")
+async def clear_audio_files():
+    """Clear all stored audio files."""
+    storage_path = settings.omi_audio_storage_path
+    
+    if not os.path.exists(storage_path):
+        return {"status": "success", "files_deleted": 0}
+    
+    deleted = 0
+    for f in os.listdir(storage_path):
+        filepath = os.path.join(storage_path, f)
+        if os.path.isfile(filepath) and f.endswith('.wav'):
+            os.remove(filepath)
+            deleted += 1
+    
+    return {"status": "success", "files_deleted": deleted}

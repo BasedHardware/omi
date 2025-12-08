@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     home_location: Optional[str] = None
     location_retention_days: int = 90
     
+    omi_audio_streaming_enabled: bool = True
+    omi_audio_storage_path: str = "./audio_storage"
+    omi_audio_auto_transcribe: bool = False
+    
     user_name: str = "Nate"
     user_timezone: str = "America/New_York"
     user_location: str = "Abington, MA, US"
