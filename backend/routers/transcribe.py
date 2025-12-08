@@ -317,6 +317,7 @@ async def _listen(
     started_at = time.time()
     inactivity_timeout_seconds = 90
     last_audio_received_time = None
+    last_activity_time = None
 
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
@@ -336,7 +337,7 @@ async def _listen(
                     break
 
                 # Inactivity timeout
-                if last_audio_received_time and time.time() - last_audio_received_time > inactivity_timeout_seconds:
+                if last_activity_time and time.time() - last_activity_time > inactivity_timeout_seconds:
                     print(f"Session timeout due to inactivity ({inactivity_timeout_seconds}s)", uid, session_id)
                     websocket_close_code = 1001
                     websocket_active = False
@@ -1166,14 +1167,16 @@ async def _listen(
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
-        nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
+        nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
 
         timer_start = time.time()
         last_audio_received_time = timer_start
+        last_activity_time = timer_start
         try:
             while websocket_active:
                 message = await websocket.receive()
+                last_activity_time = time.time()
 
                 if message.get("bytes") is not None:
 
