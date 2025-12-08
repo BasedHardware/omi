@@ -1119,9 +1119,42 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         Divider(color: Colors.grey.shade800, height: 1),
                         const SizedBox(height: 20),
                         
-                        // OAuth Section for ChatGPT
+                        // API Key Auth Section
                         Text(
-                          'OAuth (for ChatGPT)',
+                          'API Key Auth',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                'Header',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                'Authorization: Bearer <key>',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 12,
+                                  fontFamily: 'Ubuntu Mono',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 20),
+                        Divider(color: Colors.grey.shade800, height: 1),
+                        const SizedBox(height: 20),
+                        
+                        // OAuth Section
+                        Text(
+                          'OAuth',
                           style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 12),
