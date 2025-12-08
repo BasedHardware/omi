@@ -116,7 +116,7 @@ class GetSummaryWidgets extends StatelessWidget {
       children: [
         // Date chip
         _buildChip(
-          label: _getDateFormat(conversation.createdAt),
+          label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
           icon: Icons.calendar_today,
         ),
         // Time chip
