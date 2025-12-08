@@ -13,7 +13,7 @@ import 'package:path_provider/path_provider.dart';
 
 const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
-const sdcardChunkSizeSecs = 60;
+const sdcardChunkSizeSecs = 300; // 5 minutes - aligned with firmware chunking
 const newFrameSyncDelaySeconds = 15;
 
 abstract class IWalSyncProgressListener {
@@ -270,6 +270,11 @@ class SDCardWalSync implements IWalSync {
       debugPrint("SDCard bad state, offset > total");
       storageOffset = 0;
     }
+
+    // Firmware now creates time-based chunked files (5-minute chunks) when disconnected.
+    // These chunked files have timestamps in their filenames (e.g., audio_<timestamp>.bin).
+    // The app syncs data in 5-minute chunks (sdcardChunkSizeSecs = 300) to align with firmware chunking,
+    // ensuring each 5-minute period is synced as a separate chunk file on the phone side.
 
     //> 10s
     BleAudioCodec codec = await _getAudioCodec(deviceId);
