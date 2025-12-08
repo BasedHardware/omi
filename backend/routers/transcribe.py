@@ -390,20 +390,13 @@ async def _listen(
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
     async def finalize_processing_conversations():
-        # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
-        # also fix from getConversations endpoint?
         processing = conversations_db.get_processing_conversations(uid)
         print('finalize_processing_conversations len(processing):', len(processing), uid, session_id)
         if not processing or len(processing) == 0:
             return
 
-        # sleep for 1 second to yeld the network for ws accepted.
-        await asyncio.sleep(1)
         for conversation in processing:
             await _create_conversation(conversation)
-
-    # Process processing conversations
-    asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
     def send_last_conversation():
@@ -941,6 +934,16 @@ async def _listen(
                 await _create_new_in_progress_conversation()
                 continue
 
+            # Check if conversation status is not in_progress
+            if conversation.get('status') != ConversationStatus.in_progress:
+                print(
+                    f"WARN: conversation {current_conversation_id} status is {conversation.get('status')}, not in_progress. Creating new conversation.",
+                    uid,
+                    session_id,
+                )
+                await _create_new_in_progress_conversation()
+                continue
+
             # Check if conversation should be processed
             finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
             seconds_since_last_update = (datetime.now(timezone.utc) - finished_at).total_seconds()
@@ -1290,6 +1293,7 @@ async def _listen(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
         lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
+        cleanup_task = asyncio.create_task(finalize_processing_conversations())
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -1299,6 +1303,7 @@ async def _listen(
             heartbeat_task,
             record_usage_task,
             lifecycle_manager_task,
+            cleanup_task,
         ] + pusher_tasks
         await asyncio.gather(*tasks)
 

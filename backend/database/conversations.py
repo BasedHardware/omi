@@ -515,8 +515,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection(conversations_collection).where(
-        filter=FieldFilter('status', '==', 'in_progress')
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
