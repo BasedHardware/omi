@@ -415,3 +415,24 @@ async def clear_audio_files():
             deleted += 1
     
     return {"status": "success", "files_deleted": deleted}
+
+
+@router.post("/audio/toggle")
+async def toggle_audio_streaming(enabled: Optional[bool] = None):
+    """Toggle audio streaming on or off.
+    
+    If enabled is not provided, it will toggle the current state.
+    If enabled is provided, it will set to that value.
+    """
+    global settings
+    
+    if enabled is None:
+        settings.omi_audio_streaming_enabled = not settings.omi_audio_streaming_enabled
+    else:
+        settings.omi_audio_streaming_enabled = enabled
+    
+    return {
+        "status": "success",
+        "audio_streaming_enabled": settings.omi_audio_streaming_enabled,
+        "message": f"Audio streaming is now {'enabled' if settings.omi_audio_streaming_enabled else 'disabled'}"
+    }
