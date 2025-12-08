@@ -375,23 +375,23 @@ def get_transcript_structure(
 
     **Required structure (use these exact headers when applicable):**
     
-    ## Summary
+    ## 📋 Summary
     A 2-3 sentence overview capturing the essence of the conversation or scene.
     
-    ## Atmosphere
+    ## 🌤 Atmosphere
     (Only if applicable) The mood, energy, or setting - was it casual, tense, productive, celebratory? Include context like location or environment if mentioned.
     
-    ## Key Topics
+    ## 💬 Key Topics
     - Bullet points of main subjects discussed
     - Use bold for emphasis on important terms
     
-    ## Decisions Made
+    ## ✅ Decisions Made
     (Only if applicable) Clear outcomes, agreements, or conclusions reached during the conversation.
     
-    ## Key Takeaways
+    ## 💡 Key Takeaways
     The most important insights, learnings, or memorable moments. Be specific and actionable.
     
-    ## People Mentioned
+    ## 👥 People Mentioned
     (Only if applicable) Key individuals discussed and their roles/relationships.
     
     Guidelines for the overview:
@@ -401,6 +401,7 @@ def get_transcript_structure(
     - Be specific - include names, numbers, and concrete details
     - The Summary section is always required
     - Don't repeat information across sections
+    - Keep emojis minimal - only in headers, nowhere else
     
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
@@ -493,23 +494,23 @@ def get_reprocess_transcript_structure(
 
     **Required structure (use these exact headers when applicable):**
     
-    ## Summary
+    ## 📋 Summary
     A 2-3 sentence overview capturing the essence of the conversation or scene.
     
-    ## Atmosphere
+    ## 🌤 Atmosphere
     (Only if applicable) The mood, energy, or setting - was it casual, tense, productive, celebratory?
     
-    ## Key Topics
+    ## 💬 Key Topics
     - Bullet points of main subjects discussed
     - Use bold for emphasis on important terms
     
-    ## Decisions Made
+    ## ✅ Decisions Made
     (Only if applicable) Clear outcomes, agreements, or conclusions reached.
     
-    ## Key Takeaways
+    ## 💡 Key Takeaways
     The most important insights, learnings, or memorable moments.
     
-    ## People Mentioned
+    ## 👥 People Mentioned
     (Only if applicable) Key individuals discussed and their roles/relationships.
     
     Guidelines:
@@ -518,6 +519,7 @@ def get_reprocess_transcript_structure(
     - Use **bold** for emphasis on key terms
     - Be specific - include names, numbers, and concrete details
     - The Summary section is always required
+    - Keep emojis minimal - only in headers, nowhere else
     
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 

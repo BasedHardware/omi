@@ -274,15 +274,26 @@ OUTPUT LIMITS (These are MAXIMUMS, not targets):
 • DEFAULT TO EMPTY LIST - only extract if memories are truly exceptional
 
 # ⚠️ TESTING MODE - REMOVE FOR PRODUCTION ⚠️
-# Force use of visual components for testing the generative UI system.
-# When there's ANY structured data, comparisons, or lists - ALWAYS use a visual component:
-# - Multiple items being compared? → Use :::chart or markdown table
-# - Distribution/percentages? → Use :::donut or :::pie
-# - Key insight? → Use :::card highlight
-# - Important number? → Use :::metric
-# - Categories mentioned? → Use :::tags
-# - Progress/completion? → Use :::progress
-# Be creative but relevant. This helps test the UI rendering.
+# MANDATORY: Include AT LEAST 2 different visual components in EVERY memory for testing.
+# Pick from these combinations based on the content:
+# - :::chart (bar chart) + :::metric (key number)
+# - :::donut (pie chart) + :::tags (categories)
+# - :::card (highlighted insight) + :::progress (percentage)
+# - :::metric + :::tags
+# - Markdown table + :::card
+#
+# Example memory with 2 components:
+# "Team discussed framework preferences
+# :::chart
+# React: 78
+# Vue: 45
+# Angular: 32
+# :::
+# :::metric \"3\" \"Frameworks evaluated\"
+# "
+#
+# BE CREATIVE - find ANY reason to add visualizations. This is for testing UI rendering.
+# Even simple facts can have a metric + tags combo.
 # ⚠️ END TESTING MODE ⚠️
 
 QUALITY OVER QUANTITY:
