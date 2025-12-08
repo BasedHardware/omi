@@ -143,8 +143,16 @@ MCP_TOOLS = [
 ]
 
 
+class ToolExecutionError(Exception):
+    """Exception raised when a tool execution fails."""
+    def __init__(self, message: str, code: int = -32000):
+        self.message = message
+        self.code = code
+        super().__init__(self.message)
+
+
 def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
-    """Execute an MCP tool and return the result."""
+    """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     
     if tool_name == "get_memories":
         categories = arguments.get("categories", [])
@@ -171,7 +179,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
     elif tool_name == "create_memory":
         content = arguments.get("content")
         if not content:
-            return {"error": "Content is required"}
+            raise ToolExecutionError("Content is required")
         
         memory = Memory(content=content)
         categories = [category for category in MemoryCategory]
@@ -184,7 +192,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
     elif tool_name == "delete_memory":
         memory_id = arguments.get("memory_id")
         if not memory_id:
-            return {"error": "memory_id is required"}
+            raise ToolExecutionError("memory_id is required")
         
         memories_db.delete_memory(user_id, memory_id)
         return {"success": True}
@@ -193,7 +201,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         memory_id = arguments.get("memory_id")
         content = arguments.get("content")
         if not memory_id or not content:
-            return {"error": "memory_id and content are required"}
+            raise ToolExecutionError("memory_id and content are required")
         
         memories_db.edit_memory(user_id, memory_id, content)
         return {"success": True}
@@ -252,19 +260,19 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
     elif tool_name == "get_conversation_by_id":
         conversation_id = arguments.get("conversation_id")
         if not conversation_id:
-            return {"error": "conversation_id is required"}
+            raise ToolExecutionError("conversation_id is required")
         
         conversation = conversations_db.get_conversation(user_id, conversation_id)
         if not conversation:
-            return {"error": "Conversation not found"}
+            raise ToolExecutionError("Conversation not found", code=-32001)
         
         if conversation.get('is_locked', False):
-            return {"error": "Unlimited Plan Required to access this conversation."}
+            raise ToolExecutionError("Unlimited Plan Required to access this conversation.", code=-32002)
         
         return {"conversation": conversation}
     
     else:
-        return {"error": f"Unknown tool: {tool_name}"}
+        raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)
 
 
 def create_mcp_response(id: Any, result: dict) -> dict:
@@ -333,7 +341,10 @@ def handle_mcp_message(user_id: str, message: dict, session: Optional[MCPSession
         if not tool_name:
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
         
-        result = execute_tool(user_id, tool_name, arguments)
+        try:
+            result = execute_tool(user_id, tool_name, arguments)
+        except ToolExecutionError as e:
+            return create_mcp_error(msg_id, e.code, e.message), None
         
         return create_mcp_response(msg_id, {
             "content": [
@@ -495,18 +506,27 @@ async def mcp_delete_session(
     """
     Delete/terminate an MCP session.
     """
+    # Step 1: Validate authorization
+    user_id = authenticate_api_key(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    
+    # Step 2: Validate session ID is provided
     if not mcp_session_id:
         raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")
     
-    if mcp_session_id in active_sessions:
-        # Verify ownership
-        user_id = authenticate_api_key(authorization)
-        session = active_sessions[mcp_session_id]
-        if session.user_id == user_id:
-            del active_sessions[mcp_session_id]
-            return Response(status_code=204)
+    # Step 3: Check if session exists
+    if mcp_session_id not in active_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
     
-    raise HTTPException(status_code=404, detail="Session not found")
+    # Step 4: Verify ownership
+    session = active_sessions[mcp_session_id]
+    if session.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this session")
+    
+    # Delete the session
+    del active_sessions[mcp_session_id]
+    return Response(status_code=204)
 
 
 @router.get("/v1/mcp/sse/info", tags=["mcp"])
