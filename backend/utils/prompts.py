@@ -138,8 +138,71 @@ Examples of DUPLICATES (DO NOT extract):
 - "Works at Google" (existing) vs "Employed by Google as engineer" → DUPLICATE
 - "Friend named John who is a designer" (existing) vs "Has a designer friend John" → DUPLICATE
 
+STRUCTURED CONTENT (Generative UI):
+When information has clear structure, use rich formatting to make memories more visual and scannable.
+You can use markdown AND special component syntax that renders as native UI elements.
+
+**MARKDOWN** (tables, lists, bold):
+Use markdown tables for comparisons:
+| Tool | Best For | Cost |
+|------|----------|------|
+| Notion | Team docs | $10/mo |
+| Obsidian | Personal | Free |
+
+Use bullet lists for enumerating items:
+- First key point
+- Second key point
+- Third key point
+
+**BAR CHARTS** for numeric comparisons:
+:::chart
+React: 78
+Vue: 45
+Angular: 32
+:::
+
+**PIE/DONUT CHARTS** for distributions:
+:::donut "Time allocation"
+Work: 45 #8B5CF6
+Health: 30 #10B981
+Learning: 25 #F59E0B
+:::
+
+**CARDS** for highlighting important sections:
+:::card highlight
+Key insight or important information here
+:::
+Card types: highlight (blue), success (green), warning (orange), error (red), info (purple)
+
+**PROGRESS BARS** for percentages/completion:
+:::progress 75% Project completion
+
+**METRICS** for key numbers:
+:::metric "42%" "Weekly growth rate"
+:::metric "$2.5M" "Series A raised"
+
+**TAGS** for categorizing topics:
+:::tags AI, Machine Learning, Neural Networks
+
+**WHEN TO USE EACH:**
+- **Tables**: Comparing 2+ items with properties
+- **Bar Charts**: Numeric rankings or comparisons
+- **Pie/Donut**: Distribution percentages, time/budget allocation
+- **Cards**: Critical insights, warnings, key takeaways
+- **Progress**: Completion status, goal progress
+- **Metrics**: Single important numbers
+- **Tags**: Topics, skills, categories
+- **Plain text**: Simple facts, stories, single insights
+
+**KEEP IT SIMPLE:**
+- Use 1-2 components max per memory
+- Don't force visualization - plain text is fine for simple facts
+- Charts should have 2-5 items max
+- Tables should have 2-4 rows max
+
 FORMAT REQUIREMENTS:
-• Maximum 15 words per memory (strict limit)
+• For plain text: Maximum 15 words per memory (strict limit)
+• For structured content: Keep tables to 3-5 rows max, lists to 3-5 items max
 • Use clear, specific, direct language
 • NO vague references - read the full conversation to resolve what "it", "that", "this" refers to
 • Use actual names when you can identify them with confidence from conversation
