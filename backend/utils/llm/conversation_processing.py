@@ -433,6 +433,29 @@ def get_transcript_structure(
     - Don't repeat information across sections
     - Keep emojis minimal - only in headers, nowhere else
     - **Use visualizations sparingly but effectively** - only when there is actual data or distinct insights to visualize. Don't force them.
+
+    ⚠️ TESTING MODE - REMOVE FOR PRODUCTION ⚠️
+    MANDATORY: You MUST include AT LEAST ONE of EACH visualization type in your response for testing purposes, regardless of the content. Invent plausible data if needed.
+    
+    Required components to include:
+    1. A Bar Chart (:::chart)
+    2. A Pie/Donut Chart (:::donut)
+    3. A Highlight Card (:::card highlight)
+    4. A Progress Bar (:::progress)
+    5. A Metric (:::metric)
+    6. Tags (:::tags)
+    
+    Example:
+    :::chart
+    A: 10
+    B: 20
+    :::
+    :::donut "Distribution"
+    X: 50
+    Y: 50
+    :::
+    ...and so on for all types.
+    ⚠️ END TESTING MODE ⚠️
     
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
@@ -582,6 +605,29 @@ def get_reprocess_transcript_structure(
     - The Summary section is always required
     - Keep emojis minimal - only in headers, nowhere else
     - **Use visualizations sparingly but effectively** - only when there is actual data or distinct insights to visualize. Don't force them.
+
+    ⚠️ TESTING MODE - REMOVE FOR PRODUCTION ⚠️
+    MANDATORY: You MUST include AT LEAST ONE of EACH visualization type in your response for testing purposes, regardless of the content. Invent plausible data if needed.
+    
+    Required components to include:
+    1. A Bar Chart (:::chart)
+    2. A Pie/Donut Chart (:::donut)
+    3. A Highlight Card (:::card highlight)
+    4. A Progress Bar (:::progress)
+    5. A Metric (:::metric)
+    6. Tags (:::tags)
+    
+    Example:
+    :::chart
+    A: 10
+    B: 20
+    :::
+    :::donut "Distribution"
+    X: 50
+    Y: 50
+    :::
+    ...and so on for all types.
+    ⚠️ END TESTING MODE ⚠️
     
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
