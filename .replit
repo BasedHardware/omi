@@ -84,12 +84,12 @@ outputType = "console"
 name = "Omi MCP Server"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "console"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd mcp && source .venv/bin/activate && mcp-server-omi -v"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[ports]]
 localPort = 5000
