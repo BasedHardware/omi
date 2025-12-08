@@ -52,12 +52,7 @@ from utils.analytics import record_usage
 from utils.app_integrations import trigger_external_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
-from utils.conversations.process_conversation import (
-    process_conversation,
-    retrieve_in_progress_conversation,
-    remove_in_progress_conversation_if_matches,
-    create_in_progress_conversation_with_lock,
-)
+from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists
@@ -394,38 +389,21 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def cleanup_stale_conversations():
-        # Handle conversations that were in 'processing' status
+    async def finalize_processing_conversations():
+        # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
+        # also fix from getConversations endpoint?
         processing = conversations_db.get_processing_conversations(uid)
-        print('cleanup_stale_conversations len(processing):', len(processing), uid, session_id)
-
-        # Handle orphaned in-progress conversations (all except the latest)
-        orphaned = conversations_db.get_orphaned_in_progress_conversations(uid)
-        print('cleanup_stale_conversations len(orphaned):', len(orphaned), uid, session_id)
-
-        if not processing and not orphaned:
+        print('finalize_processing_conversations len(processing):', len(processing), uid, session_id)
+        if not processing or len(processing) == 0:
             return
 
-        # Sleep for 1 second to yield the network for ws accepted
+        # sleep for 1 second to yeld the network for ws accepted.
         await asyncio.sleep(1)
-
-        # Process 'processing' status conversations
         for conversation in processing:
             await _create_conversation(conversation)
 
-        # Process or clean up orphaned in-progress conversations
-        for conversation in orphaned:
-            conversation_id = conversation['id']
-            has_content = conversation.get('transcript_segments') or conversation.get('photos')
-            if has_content:
-                print(f'Processing orphaned conversation {conversation_id}', uid, session_id)
-                await _create_conversation(conversation)
-            else:
-                print(f'Clean up orphaned conversation {conversation_id}, reason: no content', uid, session_id)
-                conversations_db.delete_conversation(uid, conversation_id)
-
-    # Process stale conversations (processing status + orphaned in-progress)
-    asyncio.create_task(cleanup_stale_conversations())
+    # Process processing conversations
+    asyncio.create_task(finalize_processing_conversations())
 
     # Send last completed conversation to client
     def send_last_conversation():
@@ -463,29 +441,16 @@ async def _listen(
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
         )
-
-        # Use locked creation to prevent race conditions
-        result_id = create_in_progress_conversation_with_lock(uid, stub_conversation.dict())
-        if result_id:
-            current_conversation_id = result_id
-        else:
-            print(f"Failed to create in-progress conversation", uid, session_id)
-            return
-
+        conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
+        redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
+        current_conversation_id = new_conversation_id
         seconds_to_trim = None
         seconds_to_add = None
 
-        print(f"Created new stub conversation: {current_conversation_id}", uid, session_id)
+        print(f"Created new stub conversation: {new_conversation_id}", uid, session_id)
 
     async def _process_current_conversation(conversation_id: str):
         print("_process_current_conversation", uid, session_id)
-
-        # Clear Redis reference with lock
-        ok = remove_in_progress_conversation_if_matches(uid, conversation_id)
-        if not ok:
-            print(f'Failed to remove the in_progress convo {conversation_id}', uid, session_id)
-
-        # Process
         conversation = conversations_db.get_conversation(uid, conversation_id)
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
