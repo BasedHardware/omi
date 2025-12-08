@@ -528,6 +528,20 @@ def get_in_progress_conversation(uid: str):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
+def get_in_progress_conversations(uid: str):
+    """Get all in-progress conversations for a user, ordered by created_at descending."""
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection).where(

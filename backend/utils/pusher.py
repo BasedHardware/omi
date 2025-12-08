@@ -6,7 +6,7 @@ import websockets
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
 
-async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3):
+async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3, is_active: callable = None):
     print("connect_to_trigger_pusher", uid)
     for attempt in range(retries):
         try:
@@ -15,6 +15,10 @@ async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: 
             print(f'An error occurred: {error}', uid)
             if attempt == retries - 1:
                 raise
+        # Check if session is still active before waiting for retry
+        if is_active is not None and not is_active():
+            print("Session ended, aborting Pusher retry", uid)
+            return None
         backoff_delay = calculate_backoff_with_jitter(attempt)
         print(f"Waiting {backoff_delay:.0f}ms before next retry...", uid)
         await asyncio.sleep(backoff_delay / 1000)
