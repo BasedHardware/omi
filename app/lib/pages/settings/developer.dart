@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
@@ -968,6 +969,97 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               ],
                             ),
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Pre-hosted MCP Section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.globe, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Pre-hosted MCP',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Connect without Docker',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Builder(
+                          builder: (context) {
+                            final mcpUrl = '${Env.apiBaseUrl}v1/mcp/sse';
+                            return GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: mcpUrl));
+                                AppSnackbar.showSnackbar('URL copied');
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0D0D0D),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        mcpUrl,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontFamily: 'Ubuntu Mono',
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
