@@ -315,7 +315,7 @@ async def _listen(
 
     # Heart beat
     started_at = time.time()
-    inactivity_timeout_seconds = 30
+    inactivity_timeout_seconds = 90
     last_audio_received_time = None
 
     # Send pong every 10s then handle it in the app \
