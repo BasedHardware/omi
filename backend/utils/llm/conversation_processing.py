@@ -393,7 +393,37 @@ def get_transcript_structure(
     
     ## 👥 People Mentioned
     (Only if applicable) Key individuals discussed and their roles/relationships.
+
+    **Visualizations (Use where appropriate to visualize data/insights):**
+    You can include visual components using this specific syntax:
     
+    - **Bar Chart**: For comparing values
+      :::chart
+      Label1: Value1
+      Label2: Value2
+      :::
+      
+    - **Pie/Donut Chart**: For distribution/percentages
+      :::donut "Title"
+      Label1: Value1
+      Label2: Value2
+      :::
+      
+    - **Highlight Card**: For key insights or important callouts
+      :::card highlight
+      The content of the card here.
+      :::
+      (Types: highlight, success, warning, error, info)
+      
+    - **Progress Bar**: For completion or status
+      :::progress 75% Label Text
+      
+    - **Key Metric**: For important numbers
+      :::metric "Value" "Label"
+      
+    - **Tags**: For quick categorization
+      :::tags Tag1, Tag2, Tag3
+
     Guidelines for the overview:
     - Keep each section concise (2-4 bullets or sentences max)
     - Skip sections that aren't relevant (not every conversation has decisions or atmosphere worth noting)
@@ -402,6 +432,7 @@ def get_transcript_structure(
     - The Summary section is always required
     - Don't repeat information across sections
     - Keep emojis minimal - only in headers, nowhere else
+    - **Use visualizations sparingly but effectively** - only when there is actual data or distinct insights to visualize. Don't force them.
     
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
@@ -512,7 +543,37 @@ def get_reprocess_transcript_structure(
     
     ## 👥 People Mentioned
     (Only if applicable) Key individuals discussed and their roles/relationships.
+
+    **Visualizations (Use where appropriate to visualize data/insights):**
+    You can include visual components using this specific syntax:
     
+    - **Bar Chart**: For comparing values
+      :::chart
+      Label1: Value1
+      Label2: Value2
+      :::
+      
+    - **Pie/Donut Chart**: For distribution/percentages
+      :::donut "Title"
+      Label1: Value1
+      Label2: Value2
+      :::
+      
+    - **Highlight Card**: For key insights or important callouts
+      :::card highlight
+      The content of the card here.
+      :::
+      (Types: highlight, success, warning, error, info)
+      
+    - **Progress Bar**: For completion or status
+      :::progress 75% Label Text
+      
+    - **Key Metric**: For important numbers
+      :::metric "Value" "Label"
+      
+    - **Tags**: For quick categorization
+      :::tags Tag1, Tag2, Tag3
+
     Guidelines:
     - Keep each section concise (2-4 bullets or sentences max)
     - Skip sections that aren't relevant
@@ -520,6 +581,7 @@ def get_reprocess_transcript_structure(
     - Be specific - include names, numbers, and concrete details
     - The Summary section is always required
     - Keep emojis minimal - only in headers, nowhere else
+    - **Use visualizations sparingly but effectively** - only when there is actual data or distinct insights to visualize. Don't force them.
     
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 

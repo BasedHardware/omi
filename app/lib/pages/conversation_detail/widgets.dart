@@ -24,6 +24,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
+import 'package:omi/widgets/rich_content.dart';
 
 import 'maps_util.dart';
 
@@ -486,11 +487,13 @@ class AppResultDetailWidget extends StatelessWidget {
                       ),
                     ],
                   )
-                : ConversationMarkdownWidget(
-                    content: content,
-                    searchQuery: searchQuery,
-                    currentResultIndex: currentResultIndex,
-                  ),
+                : content.contains(':::')
+                    ? RichContent(content: content)
+                    : ConversationMarkdownWidget(
+                        content: content,
+                        searchQuery: searchQuery,
+                        currentResultIndex: currentResultIndex,
+                      ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty

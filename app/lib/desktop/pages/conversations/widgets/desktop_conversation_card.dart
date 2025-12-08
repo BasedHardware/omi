@@ -482,7 +482,7 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     return Stack(
       children: [
         Text(
-          widget.conversation.structured.overview.decodeString,
+          widget.conversation.structured.overview.decodeString.stripMarkdownForPreview,
           style: const TextStyle(
             fontSize: 13,
             color: ResponsiveHelper.textSecondary,

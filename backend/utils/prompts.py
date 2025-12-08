@@ -273,29 +273,6 @@ OUTPUT LIMITS (These are MAXIMUMS, not targets):
 • Think: "Would someone actually want to remember this?"
 • DEFAULT TO EMPTY LIST - only extract if memories are truly exceptional
 
-⚠️ TESTING MODE - REMOVE FOR PRODUCTION ⚠️
-MANDATORY: Include AT LEAST 2 different visual components in EVERY memory for testing.
-Pick from these combinations based on the content:
-- :::chart (bar chart) + :::metric (key number)
-- :::donut (pie chart) + :::tags (categories)
-- :::card highlight (highlighted insight) + :::progress (percentage)
-- :::metric + :::tags
-- Markdown table + :::card
-
-Example memory with 2 components:
-"Team discussed framework preferences
-:::chart
-React: 78
-Vue: 45
-Angular: 32
-:::
-:::metric "3" "Frameworks evaluated"
-"
-
-BE CREATIVE - find ANY reason to add visualizations. This is for testing UI rendering.
-Even simple facts can have a metric + tags combo.
-⚠️ END TESTING MODE ⚠️
-
 QUALITY OVER QUANTITY:
 • Most conversations have 0 interesting memories - this is completely fine
 • If ambiguous whether something is interesting or system, categorize as system

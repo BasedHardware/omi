@@ -229,7 +229,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         Stack(
           children: [
             Text(
-              structured.overview.decodeString,
+              structured.overview.decodeString.stripMarkdownForPreview,
               style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
