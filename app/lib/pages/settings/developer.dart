@@ -1026,16 +1026,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'Server URL',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 6),
                         GestureDetector(
                           onTap: () {
                             final url = '${Env.apiBaseUrl}v1/mcp/sse';
                             Clipboard.setData(ClipboardData(text: url));
-                            AppSnackbar.showSnackbar('Server URL copied');
+                            AppSnackbar.showSnackbar('URL copied');
                           },
                           child: Container(
                             width: double.infinity,
@@ -1059,29 +1054,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
                               ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'API Key',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0D0D0D),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-                          ),
-                          child: Text(
-                            'Use your MCP API key (omi_mcp_...)',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontFamily: 'Ubuntu Mono',
-                              fontSize: 13,
                             ),
                           ),
                         ),
