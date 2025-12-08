@@ -410,28 +410,10 @@ async def _listen(
         for conversation in processing:
             await _create_conversation(conversation)
 
-    async def cleanup_timed_out_in_progress_conversations():
-        """Clean up in-progress conversations that have timed out."""
-        in_progress = conversations_db.get_in_progress_conversations(uid)
-        print('cleanup_timed_out_in_progress_conversations len(in_progress):', len(in_progress), uid, session_id)
-
-        for conversation in in_progress:
-            # Skip current active conversation
-            if conversation['id'] == current_conversation_id:
-                continue
-
-            finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
-            seconds_since_last_update = (datetime.now(timezone.utc) - finished_at).total_seconds()
-
-            if seconds_since_last_update >= conversation_creation_timeout:
-                print(f'Cleaning up timed out in-progress conversation {conversation["id"]}', uid, session_id)
-                await _process_conversation(conversation['id'])
-
     async def process_pending_conversations(timed_out_id: Optional[str]):
         await asyncio.sleep(7.0)
         if timed_out_id:
             await _process_conversation(timed_out_id)
-        await cleanup_timed_out_in_progress_conversations()
         await cleanup_processing_conversations()
 
     # Send last completed conversation to client
