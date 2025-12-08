@@ -261,6 +261,51 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     );
   }
 
+  Widget _buildMcpConfigRow(String label, String value) {
+    return GestureDetector(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: value));
+        AppSnackbar.showSnackbar('$label copied');
+      },
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D0D0D),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade600, size: 11),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildApiKeysList(BuildContext context) {
     return Consumer<McpProvider>(
       builder: (context, provider, child) {
@@ -976,7 +1021,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   const SizedBox(height: 24),
 
-                  // Pre-hosted MCP Section
+                  // MCP Server Section
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -996,7 +1041,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Center(
-                                child: FaIcon(FontAwesomeIcons.globe, color: Colors.grey.shade400, size: 16),
+                                child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -1005,7 +1050,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Pre-hosted MCP',
+                                    'MCP Server',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
@@ -1014,7 +1059,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Connect without Docker',
+                                    'Connect AI assistants to your data',
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 13,
@@ -1025,7 +1070,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 20),
+                        
+                        // Server URL
+                        Text(
+                          'Server URL',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
                         Builder(
                           builder: (context) {
                             final mcpUrl = '${Env.apiBaseUrl}v1/mcp/sse';
@@ -1036,7 +1088,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               },
                               child: Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF0D0D0D),
                                   borderRadius: BorderRadius.circular(10),
@@ -1048,18 +1100,58 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                       child: Text(
                                         mcpUrl,
                                         style: const TextStyle(
-                                          color: Colors.white70,
+                                          color: Colors.white,
                                           fontFamily: 'Ubuntu Mono',
                                           fontSize: 13,
                                         ),
                                       ),
                                     ),
+                                    const SizedBox(width: 8),
                                     FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
                                   ],
                                 ),
                               ),
                             );
                           },
+                        ),
+                        
+                        const SizedBox(height: 20),
+                        Divider(color: Colors.grey.shade800, height: 1),
+                        const SizedBox(height: 20),
+                        
+                        // OAuth Section for ChatGPT
+                        Text(
+                          'OAuth (for ChatGPT)',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Client ID
+                        _buildMcpConfigRow('Client ID', 'omi'),
+                        const SizedBox(height: 8),
+                        
+                        // Client Secret hint
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                'Client Secret',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                'Use your MCP API key',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

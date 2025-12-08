@@ -519,17 +519,86 @@ async def mcp_sse_info():
         "transport": "streamable-http",
         "protocol_version": "2025-03-26",
         "authentication": {
-            "method": "api_key",
-            "header": "Authorization",
-            "format": "Bearer <api_key> or raw <api_key>"
+            "methods": ["api_key", "oauth2"],
+            "api_key": {
+                "header": "Authorization",
+                "format": "Bearer <api_key>"
+            },
+            "oauth2": {
+                "token_endpoint": "/v1/mcp/sse/token",
+                "grant_type": "client_credentials",
+                "client_secret": "Your MCP API key (omi_mcp_...)"
+            }
         },
         "instructions": {
             "step1": "Create an MCP API key in the Omi app (Settings > Developer > MCP)",
             "step2": "Set Server URL to: https://api.omi.me/v1/mcp/sse",
-            "step3": "Set API Key to your MCP API key (omi_mcp_...)"
-        },
-        "example": {
-            "server_url": "https://api.omi.me/v1/mcp/sse",
-            "api_key": "omi_mcp_your_key_here"
+            "step3": "For API Key auth: Set Authorization header to your key",
+            "step4": "For OAuth: Use client_secret = your MCP API key"
         }
+    }
+
+
+class TokenRequest(BaseModel):
+    """OAuth2 token request body."""
+    grant_type: str = "client_credentials"
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+
+
+@router.post("/v1/mcp/sse/token", tags=["mcp"])
+async def mcp_oauth_token(
+    request: Request,
+    grant_type: Optional[str] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None,
+):
+    """
+    OAuth2 Client Credentials token endpoint for MCP.
+    
+    Used by ChatGPT and other OAuth-aware MCP clients.
+    - client_id: Optional (not used)
+    - client_secret: Your MCP API key (omi_mcp_...)
+    
+    Returns an access token that can be used with the /v1/mcp/sse endpoint.
+    """
+    # Try to get credentials from form data or JSON body
+    secret = client_secret
+    
+    if not secret:
+        # Try form data
+        try:
+            form = await request.form()
+            secret = form.get("client_secret")
+        except Exception:
+            pass
+    
+    if not secret:
+        # Try JSON body
+        try:
+            body = await request.json()
+            secret = body.get("client_secret")
+        except Exception:
+            pass
+    
+    if not secret:
+        raise HTTPException(
+            status_code=400,
+            detail="client_secret is required (use your MCP API key)"
+        )
+    
+    # Validate the API key
+    user_id = authenticate_api_key(secret)
+    if not user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid client_secret (MCP API key)"
+        )
+    
+    # Return the API key as the access token
+    # ChatGPT will use this in the Authorization header
+    return {
+        "access_token": secret,
+        "token_type": "Bearer",
+        "expires_in": 31536000  # 1 year (keys don't expire)
     }
