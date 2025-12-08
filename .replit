@@ -30,6 +30,10 @@ args = "Redis Server"
 task = "workflow.run"
 args = "Zeke Celery Worker"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Omi MCP Server"
+
 [[workflows.workflow]]
 name = "Zeke Core API"
 author = "agent"
@@ -72,6 +76,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "cd zeke-core && python worker.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Omi MCP Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd mcp && source .venv/bin/activate && mcp-server-omi -v"
 
 [workflows.workflow.metadata]
 outputType = "console"
@@ -123,6 +138,10 @@ externalPort = 3002
 [[ports]]
 localPort = 43317
 externalPort = 5173
+
+[[ports]]
+localPort = 44721
+externalPort = 8081
 
 [[ports]]
 localPort = 44899
