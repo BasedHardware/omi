@@ -60,8 +60,6 @@ from database.redis_db import (
     is_username_taken,
     get_user_app_subscription_customer_id,
     set_user_app_subscription_customer_id,
-    can_update_persona,
-    set_persona_update_timestamp,
 )
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
@@ -601,15 +599,9 @@ def generate_persona_desc(uid: str, persona_name: str):
 
 
 def update_personas_async(uid: str):
-    if not can_update_persona(uid):
-        print(f"[PERSONAS] Rate limited - uid={uid} already updated today")
-        return
-
     print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
-        set_persona_update_timestamp(uid)
-
         threads = []
         for persona in personas:
             threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
