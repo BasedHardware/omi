@@ -394,6 +394,14 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
+    # Conversation timeout (to process the conversation after x seconds of silence)
+    # Max: 4h, min 2m
+    conversation_creation_timeout = conversation_timeout
+    if conversation_creation_timeout == -1:
+        conversation_creation_timeout = 4 * 60 * 60
+    if conversation_creation_timeout < 120:
+        conversation_creation_timeout = 120
+
     async def cleanup_stale_conversations():
         # Handle conversations that were in 'processing' status
         processing = conversations_db.get_processing_conversations(uid)
@@ -416,9 +424,30 @@ async def _listen(
         # Process or clean up orphaned in-progress conversations
         for conversation in orphaned:
             conversation_id = conversation['id']
+
+            # Check if conversation has timed out
+            finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
+            seconds_since_last_update = (datetime.now(timezone.utc) - finished_at).total_seconds()
+            if seconds_since_last_update < conversation_creation_timeout:
+                print(
+                    f'Skipping orphaned conversation {conversation_id}, not timed out yet ({seconds_since_last_update:.1f}s < {conversation_creation_timeout}s)',
+                    uid,
+                    session_id,
+                )
+                continue
+
+            # Clear Redis reference with lock
+            ok = remove_in_progress_conversation_if_matches(uid, conversation_id)
+            if not ok:
+                print(f'Failed to remove the in_progress convo {conversation_id}', uid, session_id)
+
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                print(f'Processing orphaned conversation {conversation_id}', uid, session_id)
+                print(
+                    f'Processing orphaned conversation {conversation_id} (timed out: {seconds_since_last_update:.1f}s)',
+                    uid,
+                    session_id,
+                )
                 await _create_conversation(conversation)
             else:
                 print(f'Clean up orphaned conversation {conversation_id}, reason: no content', uid, session_id)
@@ -496,14 +525,6 @@ async def _listen(
                 conversations_db.delete_conversation(uid, conversation_id)
 
         await _create_new_in_progress_conversation()
-
-    # Conversation timeout (to process the conversation after x seconds of silence)
-    # Max: 4h, min 2m
-    conversation_creation_timeout = conversation_timeout
-    if conversation_creation_timeout == -1:
-        conversation_creation_timeout = 4 * 60 * 60
-    if conversation_creation_timeout < 120:
-        conversation_creation_timeout = 120
 
     # Process existing conversations
     def _prepare_in_progess_conversations():
@@ -973,6 +994,16 @@ async def _listen(
             conversation = conversations_db.get_conversation(uid, current_conversation_id)
             if not conversation:
                 print(f"WARN: the current conversation is not found (id: {current_conversation_id})", uid, session_id)
+                await _create_new_in_progress_conversation()
+                continue
+
+            # Check if conversation status is not in_progress
+            if conversation.get('status') != ConversationStatus.in_progress:
+                print(
+                    f"WARN: conversation {current_conversation_id} status is {conversation.get('status')}, not in_progress. Creating new conversation.",
+                    uid,
+                    session_id,
+                )
                 await _create_new_in_progress_conversation()
                 continue
 
