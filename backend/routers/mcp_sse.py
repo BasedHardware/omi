@@ -594,8 +594,8 @@ async def mcp_oauth_token(
         try:
             form = await request.form()
             secret = form.get("client_secret")
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning(f"Could not parse form data in OAuth token endpoint: {e}")
     
     if not secret:
         # Try JSON body
