@@ -1026,36 +1026,40 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: () {
-                            final url = '${Env.apiBaseUrl}v1/mcp/sse';
-                            Clipboard.setData(ClipboardData(text: url));
-                            AppSnackbar.showSnackbar('URL copied');
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0D0D0D),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '${Env.apiBaseUrl}v1/mcp/sse',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontFamily: 'Ubuntu Mono',
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                        Builder(
+                          builder: (context) {
+                            final mcpUrl = '${Env.apiBaseUrl}v1/mcp/sse';
+                            return GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: mcpUrl));
+                                AppSnackbar.showSnackbar('URL copied');
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0D0D0D),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
                                 ),
-                                FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
-                              ],
-                            ),
-                          ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        mcpUrl,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontFamily: 'Ubuntu Mono',
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),

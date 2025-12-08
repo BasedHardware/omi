@@ -7,6 +7,7 @@ allowing clients to connect without running a local MCP server.
 Implements the MCP 2025-03-26 Streamable HTTP Transport specification.
 """
 
+import asyncio
 import json
 import uuid
 from datetime import datetime
@@ -466,7 +467,6 @@ async def mcp_sse_get(
     # For backwards compatibility, also support the old SSE flow
     # Return an empty SSE stream that just sends keepalives
     async def event_generator():
-        import asyncio
         try:
             while True:
                 if await request.is_disconnected():
