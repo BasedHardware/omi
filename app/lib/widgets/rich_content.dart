@@ -514,7 +514,9 @@ class RichContent extends StatelessWidget {
             style: style.copyWith(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blueAccent),
           ),
           const SizedBox(width: 8),
-          Text(component.label, style: style.copyWith(fontSize: 13, color: Colors.white70)),
+          Flexible(
+            child: Text(component.label, style: style.copyWith(fontSize: 13, color: Colors.white70)),
+          ),
         ],
       ),
     );
