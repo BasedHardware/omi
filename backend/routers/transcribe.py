@@ -453,9 +453,6 @@ async def _listen(
                 print(f'Clean up orphaned conversation {conversation_id}, reason: no content', uid, session_id)
                 conversations_db.delete_conversation(uid, conversation_id)
 
-    # Process stale conversations (processing status + orphaned in-progress)
-    asyncio.create_task(cleanup_stale_conversations())
-
     # Send last completed conversation to client
     def send_last_conversation():
         last_conversation = conversations_db.get_last_completed_conversation(uid)
@@ -1356,6 +1353,7 @@ async def _listen(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
         lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
+        cleanup_task = asyncio.create_task(cleanup_stale_conversations())
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -1365,6 +1363,7 @@ async def _listen(
             heartbeat_task,
             record_usage_task,
             lifecycle_manager_task,
+            cleanup_task,
         ] + pusher_tasks
         await asyncio.gather(*tasks)
 
