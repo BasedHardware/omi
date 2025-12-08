@@ -370,7 +370,38 @@ def get_transcript_structure(
     The content language is {language_code}. Use the same language {language_code} for your response.
 
     For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip")
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    
+    For the overview, create a well-structured summary using markdown headers. Include ONLY sections that are relevant to the content (skip sections that don't apply):
+
+    **Required structure (use these exact headers when applicable):**
+    
+    ## Summary
+    A 2-3 sentence overview capturing the essence of the conversation or scene.
+    
+    ## Atmosphere
+    (Only if applicable) The mood, energy, or setting - was it casual, tense, productive, celebratory? Include context like location or environment if mentioned.
+    
+    ## Key Topics
+    - Bullet points of main subjects discussed
+    - Use bold for emphasis on important terms
+    
+    ## Decisions Made
+    (Only if applicable) Clear outcomes, agreements, or conclusions reached during the conversation.
+    
+    ## Key Takeaways
+    The most important insights, learnings, or memorable moments. Be specific and actionable.
+    
+    ## People Mentioned
+    (Only if applicable) Key individuals discussed and their roles/relationships.
+    
+    Guidelines for the overview:
+    - Keep each section concise (2-4 bullets or sentences max)
+    - Skip sections that aren't relevant (not every conversation has decisions or atmosphere worth noting)
+    - Use **bold** for emphasis on key terms
+    - Be specific - include names, numbers, and concrete details
+    - The Summary section is always required
+    - Don't repeat information across sections
+    
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.
@@ -457,7 +488,37 @@ def get_reprocess_transcript_structure(
     The content language is {language_code}. Use the same language {language_code} for your response.
 
     For the title, use ```{title}```, if it is empty, use the main topic of the content.
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    
+    For the overview, create a well-structured summary using markdown headers. Include ONLY sections that are relevant to the content (skip sections that don't apply):
+
+    **Required structure (use these exact headers when applicable):**
+    
+    ## Summary
+    A 2-3 sentence overview capturing the essence of the conversation or scene.
+    
+    ## Atmosphere
+    (Only if applicable) The mood, energy, or setting - was it casual, tense, productive, celebratory?
+    
+    ## Key Topics
+    - Bullet points of main subjects discussed
+    - Use bold for emphasis on important terms
+    
+    ## Decisions Made
+    (Only if applicable) Clear outcomes, agreements, or conclusions reached.
+    
+    ## Key Takeaways
+    The most important insights, learnings, or memorable moments.
+    
+    ## People Mentioned
+    (Only if applicable) Key individuals discussed and their roles/relationships.
+    
+    Guidelines:
+    - Keep each section concise (2-4 bullets or sentences max)
+    - Skip sections that aren't relevant
+    - Use **bold** for emphasis on key terms
+    - Be specific - include names, numbers, and concrete details
+    - The Summary section is always required
+    
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.

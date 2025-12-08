@@ -273,6 +273,18 @@ OUTPUT LIMITS (These are MAXIMUMS, not targets):
 • Think: "Would someone actually want to remember this?"
 • DEFAULT TO EMPTY LIST - only extract if memories are truly exceptional
 
+# ⚠️ TESTING MODE - REMOVE FOR PRODUCTION ⚠️
+# Force use of visual components for testing the generative UI system.
+# When there's ANY structured data, comparisons, or lists - ALWAYS use a visual component:
+# - Multiple items being compared? → Use :::chart or markdown table
+# - Distribution/percentages? → Use :::donut or :::pie
+# - Key insight? → Use :::card highlight
+# - Important number? → Use :::metric
+# - Categories mentioned? → Use :::tags
+# - Progress/completion? → Use :::progress
+# Be creative but relevant. This helps test the UI rendering.
+# ⚠️ END TESTING MODE ⚠️
+
 QUALITY OVER QUANTITY:
 • Most conversations have 0 interesting memories - this is completely fine
 • If ambiguous whether something is interesting or system, categorize as system
