@@ -221,7 +221,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             try:
                 start_dt = datetime.strptime(start_date, "%Y-%m-%d")
             except ValueError:
-                pass
+                raise ToolExecutionError(f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602)
         if end_date:
             try:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d")
