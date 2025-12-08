@@ -2,6 +2,7 @@ import base64
 import json
 import os
 from typing import List, Union, Optional
+from datetime import datetime, timedelta, timezone
 
 import redis
 
@@ -686,3 +687,16 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
     """Remove an app ID from the conversation summary apps set"""
     result = r.srem(CONVERSATION_SUMMARY_APPS_KEY, app_id)
     return result > 0
+
+
+def set_persona_update_timestamp(uid: str):
+    """Mark that user has updated personas (expires at 00:00 UTC)"""
+    now = datetime.now(timezone.utc)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    ttl = int((tomorrow - now).total_seconds())
+    r.set(f'users:{uid}:persona_updated', '1', ex=ttl)
+
+
+def can_update_persona(uid: str) -> bool:
+    """Check if user can update personas (not updated since last 00:00 UTC)"""
+    return not r.exists(f'users:{uid}:persona_updated')
