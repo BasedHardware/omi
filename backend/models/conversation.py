@@ -390,23 +390,20 @@ class Conversation(BaseModel):
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
     def as_dict_cleaned_dates(self):
+        def convert_datetime_to_iso(obj):
+            """Recursively convert datetime objects to ISO format strings"""
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            elif isinstance(obj, dict):
+                return {key: convert_datetime_to_iso(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_datetime_to_iso(item) for item in obj]
+            else:
+                return obj
+
         conversation_dict = self.dict()
-        conversation_dict['structured']['events'] = [
-            {**event, 'start': event['start'].isoformat()} for event in conversation_dict['structured']['events']
-        ]
-
-        if 'external_data' in conversation_dict and conversation_dict['external_data']:
-            conversation_dict['external_data']['started_at'] = conversation_dict['started_at'].isoformat()
-            conversation_dict['external_data']['finished_at'] = conversation_dict['finished_at'].isoformat()
-
-        conversation_dict['created_at'] = conversation_dict['created_at'].isoformat()
-        conversation_dict['started_at'] = (
-            conversation_dict['started_at'].isoformat() if conversation_dict['started_at'] else None
-        )
-        conversation_dict['finished_at'] = (
-            conversation_dict['finished_at'].isoformat() if conversation_dict['finished_at'] else None
-        )
-
+        # Convert all datetime objects recursively
+        conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict
 
 
