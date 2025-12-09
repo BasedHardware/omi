@@ -40,6 +40,7 @@ class AddAppProvider extends ChangeNotifier {
   TextEditingController instructionsController = TextEditingController();
   TextEditingController authUrlController = TextEditingController();
   TextEditingController appHomeUrlController = TextEditingController();
+  TextEditingController chatToolsManifestUrlController = TextEditingController();
 
   // Pricing
   TextEditingController priceController = TextEditingController();
@@ -81,7 +82,7 @@ class AddAppProvider extends ChangeNotifier {
     appProvider = provider;
   }
 
-  Future init({bool presetForConversationAnalysis = false}) async {
+  Future init({bool presetForConversationAnalysis = false, bool presetExternalIntegration = false}) async {
     setIsLoading(true);
     if (categories.isEmpty) {
       await getCategories();
@@ -110,6 +111,17 @@ class AddAppProvider extends ChangeNotifier {
       appNameController.text = 'My Conversation Analyzer';
       appDescriptionController.text = 'A custom app to analyze and summarize conversations based on my specific needs.';
 
+      checkValidity();
+    }
+
+    // Preset external integration capability
+    if (presetExternalIntegration) {
+      final externalIntegrationCapability = capabilities.firstWhereOrNull(
+        (cap) => cap.id == 'external_integration',
+      );
+      if (externalIntegrationCapability != null && !selectedCapabilities.contains(externalIntegrationCapability)) {
+        selectedCapabilities.add(externalIntegrationCapability);
+      }
       checkValidity();
     }
 
@@ -168,6 +180,7 @@ class AddAppProvider extends ChangeNotifier {
       setupCompletedController.text = app.externalIntegration!.setupCompletedUrl ?? '';
       instructionsController.text = app.externalIntegration!.setupInstructionsFilePath ?? '';
       appHomeUrlController.text = app.externalIntegration!.appHomeUrl ?? '';
+      chatToolsManifestUrlController.text = app.externalIntegration!.chatToolsManifestUrl ?? '';
       if (app.externalIntegration!.authSteps.isNotEmpty) {
         authUrlController.text = app.externalIntegration!.authSteps.first.url;
       }
@@ -196,6 +209,7 @@ class AddAppProvider extends ChangeNotifier {
     // Set existing thumbnails
     thumbnailUrls = app.thumbnailUrls;
     thumbnailIds = app.thumbnailIds;
+
     isValid = false;
     setIsLoading(false);
     notifyListeners();
@@ -214,6 +228,7 @@ class AddAppProvider extends ChangeNotifier {
     instructionsController.clear();
     authUrlController.clear();
     appHomeUrlController.clear();
+    chatToolsManifestUrlController.clear();
     priceController.clear();
     selectePaymentPlan = null;
     termsAgreed = false;
@@ -367,7 +382,7 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool isFormValid() {
-    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null && termsAgreed) {
+    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null) {
       if (metadataKey.currentState != null && metadataKey.currentState!.validate()) {
         bool isValid = false;
         for (var capability in selectedCapabilities) {
@@ -438,10 +453,6 @@ class AddAppProvider extends ChangeNotifier {
         AppSnackbar.showSnackbarError('Please select a payment plan and enter a price for your app');
         return false;
       }
-      if (!termsAgreed) {
-        AppSnackbar.showSnackbarError('Please agree to the terms and conditions to proceed');
-        return false;
-      }
       if (!capabilitySelected()) {
         AppSnackbar.showSnackbarError('Please select at least one capability for your app');
         return false;
@@ -503,6 +514,7 @@ class AddAppProvider extends ChangeNotifier {
       'payment_plan': selectePaymentPlan,
       'thumbnails': thumbnailIds,
     };
+
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
         data['external_integration'] = {
@@ -511,6 +523,7 @@ class AddAppProvider extends ChangeNotifier {
           'setup_completed_url': setupCompletedController.text.trim(),
           'setup_instructions_file_path': instructionsController.text.trim(),
           'app_home_url': appHomeUrlController.text.trim(),
+          'chat_tools_manifest_url': chatToolsManifestUrlController.text.trim(),
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {
@@ -573,6 +586,7 @@ class AddAppProvider extends ChangeNotifier {
       'payment_plan': selectePaymentPlan,
       'thumbnails': thumbnailIds,
     };
+
     for (var capability in selectedCapabilities) {
       if (capability.id == 'external_integration') {
         data['external_integration'] = {
@@ -581,6 +595,7 @@ class AddAppProvider extends ChangeNotifier {
           'setup_completed_url': setupCompletedController.text.trim(),
           'setup_instructions_file_path': instructionsController.text.trim(),
           'app_home_url': appHomeUrlController.text.trim(),
+          'chat_tools_manifest_url': chatToolsManifestUrlController.text.trim(),
           'auth_steps': [],
         };
         if (authUrlController.text.isNotEmpty) {

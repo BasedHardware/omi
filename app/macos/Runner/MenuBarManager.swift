@@ -1,5 +1,6 @@
 import Cocoa
 import ServiceManagement
+import Carbon.HIToolbox
 
 // MARK: - Menu Bar Manager
 class MenuBarManager: NSObject {
@@ -8,6 +9,7 @@ class MenuBarManager: NSObject {
     static let toggleWindowNotification = Notification.Name("com.omi.menubar.toggleWindow")
     static let toggleFloatingChatNotification = Notification.Name("com.omi.menubar.toggleFloatingChat")
     static let openChatWindowNotification = Notification.Name("com.omi.menubar.openChatWindow")
+    static let openKeyboardShortcutsNotification = Notification.Name("com.omi.menubar.openKeyboardShortcuts")
     static let quitApplicationNotification = Notification.Name("com.omi.menubar.quitApplication")
     
     // MARK: - Singleton
@@ -37,6 +39,17 @@ class MenuBarManager: NSObject {
             print("ERROR: Failed to create status bar item")
             return
         }
+        
+        // Register observer for shortcut changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleShortcutDidChange),
+            name: GlobalShortcutManager.shortcutDidChangeNotification,
+            object: nil
+        )
+        
+        // Setup main application menu for keyboard shortcuts to actually work
+        setupMainAppMenu()
         
         // Set up the button with custom icon
         if let button = statusBarItem.button {
@@ -71,12 +84,20 @@ class MenuBarManager: NSObject {
         toggleControlBarItem.tag = 200
         menu.addItem(toggleControlBarItem)
         
-        // Chat Window
-        let openChatWindowItem = NSMenuItem(title: "Ask AI", action: #selector(openChatWindow), keyEquivalent: "\r")
+        // Chat Window - no shortcut label here since it's app-scoped (shown in main app menu)
+        let openChatWindowItem = NSMenuItem(title: "Ask omi", action: #selector(openChatWindow), keyEquivalent: "")
         openChatWindowItem.target = self
-        openChatWindowItem.keyEquivalentModifierMask = [.command]
         openChatWindowItem.tag = 201
         menu.addItem(openChatWindowItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Keyboard Shortcuts
+        let keyboardShortcutsItem = NSMenuItem(title: "Keyboard Shortcuts...", action: #selector(openKeyboardShortcuts), keyEquivalent: ",")
+        keyboardShortcutsItem.target = self
+        keyboardShortcutsItem.keyEquivalentModifierMask = [.command]
+        keyboardShortcutsItem.tag = 202
+        menu.addItem(keyboardShortcutsItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -101,8 +122,65 @@ class MenuBarManager: NSObject {
         menu.addItem(quitItem)
         
         statusBarItem.menu = menu
+    }
+    
+    // MARK: - Main Application Menu (for keyboard shortcuts)
+    
+    private func setupMainAppMenu() {
+        // Get or create the main menu
+        if NSApp.mainMenu == nil {
+            NSApp.mainMenu = NSMenu()
+        }
         
-        print("INFO: Menu bar item created successfully")
+        guard let mainMenu = NSApp.mainMenu else { return }
+        
+        // Find or create the app menu item
+        var appMenuItem: NSMenuItem
+        if let existingItem = mainMenu.item(at: 0) {
+            appMenuItem = existingItem
+        } else {
+            appMenuItem = NSMenuItem()
+            mainMenu.addItem(appMenuItem)
+        }
+        
+        // Create submenu if needed
+        if appMenuItem.submenu == nil {
+            appMenuItem.submenu = NSMenu(title: "Omi")
+        }
+        
+        guard let appMenu = appMenuItem.submenu else { return }
+        
+        // Remove existing Ask omi item if present
+        if let existingItem = appMenu.item(withTag: 301) {
+            appMenu.removeItem(existingItem)
+        }
+        
+        // Add Ask omi shortcut to the main app menu
+        let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
+        let keyEquivalent = keyEquivalentString(for: keyCode)
+        
+        let askOmiItem = NSMenuItem(title: "Ask omi", action: #selector(openChatWindow), keyEquivalent: keyEquivalent)
+        askOmiItem.target = self
+        askOmiItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
+        askOmiItem.tag = 301
+        
+        // Insert at beginning of app menu
+        appMenu.insertItem(askOmiItem, at: 0)
+    }
+    
+    private func updateMainAppMenuShortcut() {
+        guard let mainMenu = NSApp.mainMenu,
+              let appMenuItem = mainMenu.item(at: 0),
+              let appMenu = appMenuItem.submenu,
+              let askOmiItem = appMenu.item(withTag: 301) else {
+            return
+        }
+        
+        let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
+        let keyEquivalent = keyEquivalentString(for: keyCode)
+        
+        askOmiItem.keyEquivalent = keyEquivalent
+        askOmiItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
     }
     
     // MARK: - Public Methods
@@ -178,7 +256,6 @@ class MenuBarManager: NSObject {
     }
     
     @objc private func openOmiWindow() {
-        print("INFO: Menu bar open Omi window action triggered")
         NotificationCenter.default.post(name: MenuBarManager.toggleWindowNotification, object: nil)
     }
 
@@ -190,15 +267,95 @@ class MenuBarManager: NSObject {
         NotificationCenter.default.post(name: MenuBarManager.openChatWindowNotification, object: nil)
     }
     
+    @objc private func openKeyboardShortcuts() {
+        NotificationCenter.default.post(name: MenuBarManager.openKeyboardShortcutsNotification, object: nil)
+    }
+    
     @objc private func openOmiWebsite() {
-        print("INFO: Menu bar about action triggered - opening omi.me")
         if let url = URL(string: "https://omi.me") {
             NSWorkspace.shared.open(url)
         }
     }
     
     @objc private func quitApplication() {
-        print("INFO: Menu bar quit action triggered")
         NotificationCenter.default.post(name: MenuBarManager.quitApplicationNotification, object: nil)
+    }
+    
+    @objc private func handleShortcutDidChange() {
+        updateAskOmiMenuItem()
+        updateMainAppMenuShortcut()
+    }
+    
+    private func updateAskOmiMenuItem() {
+        // Status bar menu item no longer shows shortcut (it's app-scoped, shown in main app menu)
+        // This method kept for potential future use
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func keyEquivalentString(for keyCode: Int) -> String {
+        switch keyCode {
+        case Int(kVK_Return), Int(kVK_ANSI_KeypadEnter):
+            return "\r"
+        case 42: // backslash
+            return "\\"
+        // Letter keys (ANSI codes are NOT contiguous, must handle individually)
+        case Int(kVK_ANSI_A): return "a"
+        case Int(kVK_ANSI_B): return "b"
+        case Int(kVK_ANSI_C): return "c"
+        case Int(kVK_ANSI_D): return "d"
+        case Int(kVK_ANSI_E): return "e"
+        case Int(kVK_ANSI_F): return "f"
+        case Int(kVK_ANSI_G): return "g"
+        case Int(kVK_ANSI_H): return "h"
+        case Int(kVK_ANSI_I): return "i"
+        case Int(kVK_ANSI_J): return "j"
+        case Int(kVK_ANSI_K): return "k"
+        case Int(kVK_ANSI_L): return "l"
+        case Int(kVK_ANSI_M): return "m"
+        case Int(kVK_ANSI_N): return "n"
+        case Int(kVK_ANSI_O): return "o"
+        case Int(kVK_ANSI_P): return "p"
+        case Int(kVK_ANSI_Q): return "q"
+        case Int(kVK_ANSI_R): return "r"
+        case Int(kVK_ANSI_S): return "s"
+        case Int(kVK_ANSI_T): return "t"
+        case Int(kVK_ANSI_U): return "u"
+        case Int(kVK_ANSI_V): return "v"
+        case Int(kVK_ANSI_W): return "w"
+        case Int(kVK_ANSI_X): return "x"
+        case Int(kVK_ANSI_Y): return "y"
+        case Int(kVK_ANSI_Z): return "z"
+        // Number keys
+        case Int(kVK_ANSI_0): return "0"
+        case Int(kVK_ANSI_1): return "1"
+        case Int(kVK_ANSI_2): return "2"
+        case Int(kVK_ANSI_3): return "3"
+        case Int(kVK_ANSI_4): return "4"
+        case Int(kVK_ANSI_5): return "5"
+        case Int(kVK_ANSI_6): return "6"
+        case Int(kVK_ANSI_7): return "7"
+        case Int(kVK_ANSI_8): return "8"
+        case Int(kVK_ANSI_9): return "9"
+        default:
+            return ""
+        }
+    }
+    
+    private func modifierMask(for carbonModifiers: UInt32) -> NSEvent.ModifierFlags {
+        var mask: NSEvent.ModifierFlags = []
+        if (carbonModifiers & UInt32(cmdKey)) != 0 {
+            mask.insert(.command)
+        }
+        if (carbonModifiers & UInt32(shiftKey)) != 0 {
+            mask.insert(.shift)
+        }
+        if (carbonModifiers & UInt32(optionKey)) != 0 {
+            mask.insert(.option)
+        }
+        if (carbonModifiers & UInt32(controlKey)) != 0 {
+            mask.insert(.control)
+        }
+        return mask
     }
 } 

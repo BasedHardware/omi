@@ -25,14 +25,22 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   try {
     if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
     final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+    // Parse grouped response from backend
     final groups = (data['groups'] as List?) ?? [];
     final List<Map<String, dynamic>> parsed = [];
     for (final g in groups) {
+      final capability = g['capability'] as Map<String, dynamic>?;
       final category = g['category'] as Map<String, dynamic>?;
       final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
       final items = (g['data'] as List?) ?? [];
       final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-      parsed.add({'category': category, 'data': apps, 'pagination': pagination});
+      parsed.add({
+        'capability': capability,
+        'category': category,
+        'data': apps,
+        'pagination': pagination,
+      });
     }
     return parsed;
   } catch (e, stackTrace) {
@@ -69,6 +77,78 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     debugPrint(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
+  }
+}
+
+Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? capability})> retrieveAppsByCapability({
+  required String capability,
+  int offset = 0,
+  int limit = 20,
+  bool includeReviews = false,
+}) async {
+  final url =
+      '${Env.apiBaseUrl}v2/apps?capability=$capability&offset=$offset&limit=$limit&include_reviews=$includeReviews';
+  final response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+      return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, capability: null);
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final items = (data['data'] as List?) ?? [];
+    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
+    final cap = (data['capability'] as Map<String, dynamic>?);
+    return (apps: apps, pagination: pagination, capability: cap);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, capability: null);
+  }
+}
+
+Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>
+    retrieveCapabilityAppsGroupedByCategory({
+  required String capability,
+  bool includeReviews = true,
+}) async {
+  final url = '${Env.apiBaseUrl}v2/apps/capability/$capability/grouped?include_reviews=$includeReviews';
+  final response = await makeApiCall(
+    url: url,
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200 || response.body.isEmpty) {
+      return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final groups = (data['groups'] as List?) ?? [];
+    final List<Map<String, dynamic>> parsed = [];
+    for (final g in groups) {
+      final category = g['category'] as Map<String, dynamic>?;
+      final items = (g['data'] as List?) ?? [];
+      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
+      final count = g['count'] as int? ?? apps.length;
+      parsed.add({
+        'category': category,
+        'data': apps,
+        'count': count,
+      });
+    }
+    final cap = (data['capability'] as Map<String, dynamic>?);
+    final meta = (data['meta'] as Map<String, dynamic>?) ?? {};
+    final totalApps = meta['totalApps'] as int? ?? 0;
+    return (groups: parsed, capability: cap, totalApps: totalApps);
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
   }
 }
 
@@ -499,6 +579,81 @@ Future<String> getGenratedDescription(String name, String description) async {
     debugPrint(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return '';
+  }
+}
+
+// AI App Generator APIs
+
+/// Fetches AI-generated sample prompts for the app generator
+Future<List<String>> getGeneratedAppPrompts() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-prompts',
+    headers: {},
+    body: '',
+    method: 'GET',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      return [];
+    }
+    log('getGeneratedAppPrompts: ${response.body}');
+    var data = jsonDecode(response.body);
+    return (data['prompts'] as List<dynamic>).cast<String>();
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return [];
+  }
+}
+
+/// Generates app configuration from a natural language prompt using AI
+Future<Map<String, dynamic>?> generateAppFromPrompt(String prompt) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'prompt': prompt}),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      debugPrint('generateAppFromPrompt failed: ${response?.body}');
+      return null;
+    }
+    log('generateAppFromPrompt: ${response.body}');
+    var data = jsonDecode(response.body);
+    return data['app'] as Map<String, dynamic>;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return null;
+  }
+}
+
+/// Generates an app icon using AI (DALL-E)
+/// Returns base64 encoded PNG image string
+Future<String?> generateAppIcon(String name, String description, String category) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-icon',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({
+      'name': name,
+      'description': description,
+      'category': category,
+    }),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      debugPrint('generateAppIcon failed: ${response?.body}');
+      return null;
+    }
+    log('generateAppIcon: success');
+    var data = jsonDecode(response.body);
+    return data['icon_base64'] as String;
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return null;
   }
 }
 

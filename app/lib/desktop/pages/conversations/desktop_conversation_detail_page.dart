@@ -279,7 +279,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${dateTimeFormat('MMM d, yyyy', widget.conversation.createdAt)} ${widget.conversation.startedAt == null ? 'at' : 'from'} ${setTime(widget.conversation.startedAt, widget.conversation.createdAt, widget.conversation.finishedAt)}',
+                  '${dateTimeFormat('MMM d, yyyy', widget.conversation.startedAt ?? widget.conversation.createdAt)} ${widget.conversation.startedAt == null ? 'at' : 'from'} ${setTime(widget.conversation.startedAt, widget.conversation.createdAt, widget.conversation.finishedAt)}',
                   style: const TextStyle(
                     fontSize: 14,
                     color: ResponsiveHelper.textSecondary,

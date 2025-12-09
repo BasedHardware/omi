@@ -12,6 +12,8 @@ import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
+import 'package:omi/desktop/pages/settings/desktop_shortcuts_page.dart';
+import 'package:omi/services/shortcut_service.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -183,6 +185,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     super.initState();
     SharedPreferencesUtil().onboardingCompleted = true;
     _showGetOmiWidget = SharedPreferencesUtil().showGetOmiCard;
+
+    // Initialize shortcut service to listen for native navigation requests
+    if (ShortcutService.isSupported) {
+      ShortcutService.initialize();
+      ShortcutService.onOpenKeyboardShortcutsPage = () {
+        if (mounted) {
+          routeToPage(context, const DesktopShortcutsPage());
+        }
+      };
+    }
 
     // Initialize animations
     _sidebarAnimationController = AnimationController(
@@ -1022,8 +1034,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     // Calculate profile card width - exact same width as the profile card
     final profileCardWidth = profileCardSize.width;
 
-    // Menu height estimate (profile header + dividers + 7 menu items)
-    const double menuHeight = 320.0;
+    // Menu height estimate (profile header + dividers + 8 menu items)
+    const double menuHeight = 360.0;
     const double gap = 8.0; // Gap between popup and profile card
 
     showMenu<String>(
@@ -1071,6 +1083,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         // Settings options
         _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
         _buildPopupMenuItem('usage', FontAwesomeIcons.chartBar, 'Plan & Usage', profileCardWidth),
+        if (ShortcutService.isSupported)
+          _buildPopupMenuItem('shortcuts', Icons.keyboard, 'Keyboard Shortcuts', profileCardWidth),
         _buildPopupMenuItem('device', Icons.bluetooth_connected, 'Device Settings', profileCardWidth),
         _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
         _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
@@ -1189,6 +1203,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
             builder: (context) => const DeviceSettings(),
           ),
         );
+        break;
+      case 'shortcuts':
+        routeToPage(context, const DesktopShortcutsPage());
         break;
       case 'developer':
         routeToPage(context, const DesktopDeveloperSettingsPage());

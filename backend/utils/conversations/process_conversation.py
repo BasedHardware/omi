@@ -151,22 +151,26 @@ def _get_conversation_obj(
 ):
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
+        # Use started_at as created_at for imported conversations to preserve original timestamp
+        created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
             structured=structured,
             **conversation.dict(),
-            created_at=datetime.now(timezone.utc),
+            created_at=created_at,
             discarded=discarded,
         )
         if conversation.photos:
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
+        # Use started_at as created_at for external integrations to preserve original timestamp
+        created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             **conversation.dict(),
-            created_at=datetime.now(timezone.utc),
+            created_at=created_at,
             structured=structured,
             discarded=discarded,
         )

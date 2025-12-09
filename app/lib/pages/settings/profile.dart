@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
+import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -302,6 +303,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     ConversationTimeoutDialog.show(context);
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Import Data',
+                  icon: const FaIcon(FontAwesomeIcons.fileImport, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const ImportHistoryPage());
                   },
                 ),
               ],

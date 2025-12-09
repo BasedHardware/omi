@@ -231,7 +231,12 @@ class _FoundDevicesState extends State<FoundDevices> {
             if (!provider.isConnected) ..._devicesList(provider),
             if (provider.isConnected)
               Text(
-                '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})',
+                () {
+                  final sameNameCount = provider.deviceList.where((d) => d.name == provider.deviceName).length;
+                  return sameNameCount > 1
+                      ? '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})'
+                      : provider.deviceName;
+                }(),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontWeight: FontWeight.w500,
@@ -316,7 +321,10 @@ class _FoundDevicesState extends State<FoundDevices> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              '${device.name} (${device.getShortId()})',
+                              () {
+                                final sameNameCount = provider.deviceList.where((d) => d.name == device.name).length;
+                                return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
+                              }(),
                               textAlign: TextAlign.left,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w500,

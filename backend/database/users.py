@@ -222,6 +222,16 @@ def get_default_payment_method(uid: str):
     return user_data.get('default_payment_method', None)
 
 
+def get_stripe_customer_id(uid: str) -> Optional[str]:
+    """Get the Stripe customer ID for a user."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        return user_data.get('stripe_customer_id')
+    return None
+
+
 def set_stripe_customer_id(uid: str, customer_id: str):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'stripe_customer_id': customer_id})
@@ -539,3 +549,85 @@ def set_default_task_integration(uid: str, app_key: str) -> None:
     """
     user_ref = db.collection('users').document(uid)
     user_ref.set({'default_task_integration': app_key}, merge=True)
+
+
+# **************************************
+# ******** Integrations ********
+# **************************************
+
+
+def get_integration(uid: str, app_key: str) -> Optional[dict]:
+    """
+    Get a specific integration connection.
+
+    Args:
+        uid: User ID
+        app_key: Integration app key (e.g., 'google_calendar', 'whoop')
+
+    Returns:
+        Connection details or None if not found
+    """
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('integrations').document(app_key)
+    doc = integration_ref.get()
+
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
+
+def set_integration(uid: str, app_key: str, data: dict) -> None:
+    """
+    Save or update an integration connection.
+
+    Args:
+        uid: User ID
+        app_key: Integration app key (e.g., 'google_calendar', 'whoop')
+        data: Connection details to save
+    """
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('integrations').document(app_key)
+
+    # Add timestamp
+    data['updated_at'] = datetime.now(timezone.utc)
+    if not integration_ref.get().exists:
+        data['created_at'] = datetime.now(timezone.utc)
+
+    integration_ref.set(data, merge=True)
+
+
+def delete_integration(uid: str, app_key: str) -> bool:
+    """
+    Delete an integration connection.
+
+    Args:
+        uid: User ID
+        app_key: Integration app key
+
+    Returns:
+        True if deleted, False if not found
+    """
+    user_ref = db.collection('users').document(uid)
+    integration_ref = user_ref.collection('integrations').document(app_key)
+
+    if not integration_ref.get().exists:
+        return False
+
+    integration_ref.delete()
+    return True
+
+
+# Legacy function names for backward compatibility
+def get_calendar_integration(uid: str, app_key: str) -> Optional[dict]:
+    """Legacy function name - use get_integration instead."""
+    return get_integration(uid, app_key)
+
+
+def set_calendar_integration(uid: str, app_key: str, data: dict) -> None:
+    """Legacy function name - use set_integration instead."""
+    return set_integration(uid, app_key, data)
+
+
+def delete_calendar_integration(uid: str, app_key: str) -> bool:
+    """Legacy function name - use delete_integration instead."""
+    return delete_integration(uid, app_key)

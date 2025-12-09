@@ -52,10 +52,26 @@ class ExternalIntegration(BaseModel):
     auth_steps: Optional[List[AuthStep]] = []
     app_home_url: Optional[str] = None
     actions: Optional[List[Action]] = []
+    # URL to fetch chat tools manifest from (e.g., https://my-app.com/.well-known/omi-tools.json)
+    chat_tools_manifest_url: Optional[str] = None
 
 
 class ProactiveNotification(BaseModel):
     scopes: Set[str]
+
+
+class ChatTool(BaseModel):
+    """Definition of a tool that an app provides for chat"""
+
+    name: str  # Tool name (e.g., "send_slack_message")
+    description: str  # Tool description for LLM
+    endpoint: str  # URL endpoint to call when tool is invoked
+    method: str = "POST"  # HTTP method (GET, POST, etc.)
+    parameters: Optional[dict] = None  # JSON schema for parameters (optional)
+    auth_required: bool = True  # Whether to include user auth in request
+    status_message: Optional[str] = (
+        None  # Optional status message shown to user when tool is called (e.g., "Searching Slack")
+    )
 
 
 class ApiKey(BaseModel):
@@ -92,6 +108,7 @@ class App(BaseModel):
     enabled: bool = False
     trigger_workflow_memories: bool = True  # default true
     installs: int = 0
+    score: Optional[float] = None  # Computed ranking score for sorting
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
     money_made: Optional[float] = None
@@ -108,6 +125,7 @@ class App(BaseModel):
     thumbnail_urls: Optional[List[str]] = []  # List of thumbnail URLs
     is_influencer: Optional[bool] = False
     is_popular: Optional[bool] = False
+    chat_tools: Optional[List[ChatTool]] = []  # Tools this app provides for chat
 
     def get_rating_avg(self) -> Optional[str]:
         return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
@@ -144,6 +162,10 @@ class App(BaseModel):
     def get_image_url(self) -> str:
         return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
 
+    def has_chat_tools(self) -> bool:
+        """Check if app provides chat tools"""
+        return bool(self.chat_tools and len(self.chat_tools) > 0)
+
 
 class AppCreate(BaseModel):
     id: str
@@ -171,6 +193,7 @@ class AppCreate(BaseModel):
     price: Optional[float] = 0.0  # cents/100
     payment_plan: Optional[str] = None
     thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
+    chat_tools: Optional[List[ChatTool]] = []
 
 
 class AppUpdate(BaseModel):
@@ -197,6 +220,7 @@ class AppUpdate(BaseModel):
     price: Optional[float] = None  # cents/100
     payment_plan: Optional[str] = None
     thumbnails: Optional[List[str]] = None  # List of thumbnail IDs
+    chat_tools: Optional[List[ChatTool]] = None
     updated_at: Optional[datetime] = None
 
 

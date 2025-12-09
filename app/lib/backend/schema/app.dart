@@ -98,6 +98,51 @@ class Action {
   }
 }
 
+class ChatTool {
+  String name;
+  String description;
+  String endpoint;
+  String method;
+  bool authRequired;
+  String? statusMessage;
+
+  ChatTool({
+    required this.name,
+    required this.description,
+    required this.endpoint,
+    this.method = 'POST',
+    this.authRequired = true,
+    this.statusMessage,
+  });
+
+  factory ChatTool.fromJson(Map<String, dynamic> json) {
+    return ChatTool(
+      name: json['name'],
+      description: json['description'],
+      endpoint: json['endpoint'],
+      method: json['method'] ?? 'POST',
+      authRequired: json['auth_required'] ?? true,
+      statusMessage: json['status_message'],
+    );
+  }
+
+  toJson() {
+    return {
+      'name': name,
+      'description': description,
+      'endpoint': endpoint,
+      'method': method,
+      'auth_required': authRequired,
+      if (statusMessage != null) 'status_message': statusMessage,
+    };
+  }
+
+  static List<ChatTool> fromJsonList(List<dynamic>? jsonList) {
+    if (jsonList == null) return [];
+    return jsonList.map((e) => ChatTool.fromJson(e)).toList();
+  }
+}
+
 class ExternalIntegration {
   String? triggersOn;
   String? webhookUrl;
@@ -107,6 +152,7 @@ class ExternalIntegration {
   List<AuthStep> authSteps = [];
   String? appHomeUrl;
   List<Action>? actions;
+  String? chatToolsManifestUrl;
 
   ExternalIntegration({
     this.triggersOn,
@@ -117,6 +163,7 @@ class ExternalIntegration {
     this.authSteps = const [],
     this.appHomeUrl,
     this.actions,
+    this.chatToolsManifestUrl,
   });
 
   factory ExternalIntegration.fromJson(Map<String, dynamic> json) {
@@ -131,6 +178,7 @@ class ExternalIntegration {
           ? []
           : (json['auth_steps'] ?? []).map<AuthStep>((e) => AuthStep.fromJson(e)).toList(),
       actions: json['actions'] == null ? null : (json['actions'] ?? []).map<Action>((e) => Action.fromJson(e)).toList(),
+      chatToolsManifestUrl: json['chat_tools_manifest_url'],
     );
   }
 
@@ -157,6 +205,7 @@ class ExternalIntegration {
       'setup_instructions_file_path': setupInstructionsFilePath,
       'auth_steps': authSteps.map((e) => e.toJson()).toList(),
       'actions': actions?.map((e) => e.toJson()).toList(),
+      'chat_tools_manifest_url': chatToolsManifestUrl,
     };
   }
 }
@@ -226,6 +275,10 @@ class App {
   List<String> thumbnailUrls;
   String? username;
   bool? isPopular;
+  List<ChatTool>? chatTools;
+  DateTime? createdAt;
+  DateTime? updatedAt;
+  double? score; // Computed ranking score for sorting (temporary debug field)
 
   App({
     required this.id,
@@ -264,6 +317,10 @@ class App {
     this.connectedAccounts = const [],
     this.twitter,
     this.isPopular = false,
+    this.chatTools,
+    this.createdAt,
+    this.updatedAt,
+    this.score,
   });
 
   String getName() {
@@ -343,6 +400,10 @@ class App {
       connectedAccounts: (json['connected_accounts'] as List<dynamic>?)?.cast<String>() ?? [],
       twitter: json['twitter'],
       isPopular: json['is_popular'] ?? false,
+      chatTools: ChatTool.fromJsonList(json['chat_tools']),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']).toLocal() : null,
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']).toLocal() : null,
+      score: json['score']?.toDouble(),
     );
   }
 
@@ -387,6 +448,11 @@ class App {
 
   String getCategoryName() {
     return category.decodeString.split('-').map((e) => e.capitalize()).join(' ');
+  }
+
+  /// Returns the most recent date (updated_at preferred, falls back to created_at)
+  DateTime? getLastUpdatedDate() {
+    return updatedAt ?? createdAt;
   }
 
   List<AppCapability> getCapabilitiesFromIds(List<AppCapability> allCapabilities) {

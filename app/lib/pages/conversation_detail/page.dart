@@ -1086,6 +1086,7 @@ class TranscriptWidgets extends StatelessWidget {
                             }
 
                             MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+
                             for (final segmentId in segmentIds) {
                               final segmentIndex =
                                   provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);

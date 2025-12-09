@@ -2,6 +2,7 @@ import base64
 import json
 import os
 from typing import List, Union, Optional
+from datetime import datetime, timedelta, timezone
 
 import redis
 
@@ -394,7 +395,7 @@ def get_public_conversations() -> List[str]:
     return [x.decode() for x in val]
 
 
-def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 150):
+def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300):
     r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
     r.expire(f'users:{uid}:in_progress_memory_id', ttl)
 
@@ -686,3 +687,53 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
     """Remove an app ID from the conversation summary apps set"""
     result = r.srem(CONVERSATION_SUMMARY_APPS_KEY, app_id)
     return result > 0
+
+
+# ******************************************************
+# *************** LISTEN RATE LIMIT ********************
+# ******************************************************
+
+
+def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
+    """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
+    result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def set_persona_update_timestamp(uid: str):
+    """Mark that user has updated personas (expires at 00:00 UTC)"""
+    now = datetime.now(timezone.utc)
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    ttl = int((tomorrow - now).total_seconds())
+    r.set(f'users:{uid}:persona_updated', '1', ex=ttl)
+
+
+def can_update_persona(uid: str) -> bool:
+    """Check if user can update personas (not updated since last 00:00 UTC)"""
+    return not r.exists(f'users:{uid}:persona_updated')
+
+
+# ******************************************************
+# *************** SPEECH PROFILE CACHE *****************
+# ******************************************************
+
+
+@try_catch_decorator
+def set_speech_profile_duration(uid: str, duration: float):
+    """Cache speech profile duration (write-ahead on upload)"""
+    r.set(f'users:{uid}:speech_profile_duration', str(duration))
+
+
+@try_catch_decorator
+def get_speech_profile_duration(uid: str) -> Optional[float]:
+    """Get cached speech profile duration"""
+    val = r.get(f'users:{uid}:speech_profile_duration')
+    if val:
+        return float(val.decode())
+    return None
+
+
+@try_catch_decorator
+def delete_speech_profile_duration(uid: str):
+    """Delete cached speech profile duration"""
+    r.delete(f'users:{uid}:speech_profile_duration')
