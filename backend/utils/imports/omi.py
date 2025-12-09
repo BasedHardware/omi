@@ -185,7 +185,7 @@ def process_omi_import(job_id: str, uid: str, zip_path: str) -> None:
             
             for memory in memories:
                 try:
-                    memory['source'] = 'omi_import'
+                    memory['source'] = 'omi_imported'
                     memories_db.create_memory(uid, memory)
                     memories_imported += 1
                 except Exception as e:
