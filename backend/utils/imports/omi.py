@@ -150,8 +150,8 @@ def process_omi_import(job_id: str, uid: str, zip_path: str) -> None:
             messages_imported = 0
             
             if memories_file:
-                content = zf.read(memories_file).decode('utf-8')
-                memories = json.loads(content)
+                with zf.open(memories_file) as f:
+                    memories = json.load(f)
                 total_items += len(memories)
             else:
                 memories = []
