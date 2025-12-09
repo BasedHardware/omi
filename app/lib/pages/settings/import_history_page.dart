@@ -1068,7 +1068,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.primary,
         title: const Text(
-          'Import Data',
+          'Import/Export Data',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         leading: IconButton(
