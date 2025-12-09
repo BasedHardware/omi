@@ -237,6 +237,6 @@ Future<int?> deleteOmiImportedData() async {
 }
 
 Future<Directory> getTemporaryDirectory() async {
-  return Directory.systemTemp;
+  return await path_provider.getTemporaryDirectory();
 }
 
