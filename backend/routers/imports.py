@@ -212,7 +212,7 @@ async def import_omi_data(
     job = create_omi_import_job(uid, ImportSourceType.omi)
     
     os.makedirs(TEMP_DIR, exist_ok=True)
-    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{os.path.basename(file.filename)}")
     
     try:
         with open(zip_path, 'wb') as f:
