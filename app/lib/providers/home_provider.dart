@@ -31,6 +31,7 @@ class HomeProvider extends ChangeNotifier {
     'Chinese (Mandarin, Simplified)': 'zh',
     'Hindi': 'hi',
     'Portuguese': 'pt',
+    'Portuguese (Brazil)': 'pt-BR',
     'Russian': 'ru',
     'Japanese': 'ja',
     'German': 'de',
