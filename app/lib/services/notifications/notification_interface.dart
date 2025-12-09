@@ -6,7 +6,7 @@ import 'package:omi/backend/schema/message.dart';
 abstract class NotificationInterface {
   Future<void> initialize();
 
-  void showNotification({
+  Future<void> showNotification({
     required int id,
     required String title,
     required String body,
