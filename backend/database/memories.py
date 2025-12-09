@@ -227,6 +227,29 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
     print('delete_memories_for_conversation', memory_id, len(removed_ids))
 
 
+def delete_memories_by_source(uid: str, source: str, batch_size: int = 450) -> int:
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    query = memories_ref.where(filter=FieldFilter('source', '==', source))
+    
+    total_deleted = 0
+    while True:
+        docs = list(query.limit(batch_size).stream())
+        if not docs:
+            break
+        
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+        batch.commit()
+        total_deleted += len(docs)
+        
+        if len(docs) < batch_size:
+            break
+    
+    return total_deleted
+
+
 def unlock_all_memories(uid: str):
     """
     Finds all memories for a user with is_locked: True and updates them to is_locked = False.

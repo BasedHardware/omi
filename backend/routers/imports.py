@@ -241,12 +241,19 @@ async def delete_omi_imported_data(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
-    Delete all data imported from OMI.
+    Delete all data imported from OMI exports.
     """
     deleted_conversations = conversations_db.delete_conversations_by_source(uid, 'omi_import')
+    deleted_memories = memories_db.delete_memories_by_source(uid, 'omi_import')
+    deleted_messages = chat_db.delete_messages_by_source(uid, 'omi_import')
+    
+    total_deleted = deleted_conversations + deleted_memories + deleted_messages
     
     return {
         'deleted_conversations': deleted_conversations,
-        'message': f'Successfully deleted {deleted_conversations} imported conversations'
+        'deleted_memories': deleted_memories,
+        'deleted_messages': deleted_messages,
+        'total_deleted': total_deleted,
+        'message': f'Successfully deleted {total_deleted} imported items'
     }
 

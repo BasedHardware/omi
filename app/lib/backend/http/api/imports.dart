@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 
@@ -225,7 +226,7 @@ Future<int?> deleteOmiImportedData() async {
     if (response != null && response.statusCode == 200) {
       var data = jsonDecode(response.body);
       debugPrint('deleteOmiImportedData Response: $data');
-      return data['deleted_conversations'] as int?;
+      return data['total_deleted'] as int?;
     } else {
       debugPrint('Failed to delete OMI imported data. Response: ${response?.body}');
       return null;

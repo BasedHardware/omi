@@ -209,7 +209,7 @@ def process_omi_import(job_id: str, uid: str, zip_path: str) -> None:
             
             for message in chat_messages:
                 try:
-                    message['memories'] = []
+                    message.update({'memories': [], 'source': 'omi_import'})
                     chat_db.add_message(uid, message)
                     messages_imported += 1
                 except Exception as e:

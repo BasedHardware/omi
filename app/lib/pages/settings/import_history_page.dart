@@ -94,14 +94,15 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final filePath = await downloadOmiExport();
       
       if (!mounted) return;
-      setState(() => _isExporting = false);
       
       if (filePath != null) {
         await Share.shareXFiles(
           [XFile(filePath)],
           subject: 'OMI Data Export',
         );
+        if (mounted) setState(() => _isExporting = false);
       } else {
+        setState(() => _isExporting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Row(
