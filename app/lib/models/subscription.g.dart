@@ -11,6 +11,7 @@ Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
       status: $enumDecode(_$SubscriptionStatusEnumMap, json['status']),
       currentPeriodEnd: (json['current_period_end'] as num?)?.toInt(),
       stripeSubscriptionId: json['stripe_subscription_id'] as String?,
+      currentPriceId: json['current_price_id'] as String?,
       features: (json['features'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -24,6 +25,7 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
       'status': _$SubscriptionStatusEnumMap[instance.status]!,
       'current_period_end': instance.currentPeriodEnd,
       'stripe_subscription_id': instance.stripeSubscriptionId,
+      'current_price_id': instance.currentPriceId,
       'features': instance.features,
       'cancel_at_period_end': instance.cancelAtPeriodEnd,
     };

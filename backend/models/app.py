@@ -52,6 +52,8 @@ class ExternalIntegration(BaseModel):
     auth_steps: Optional[List[AuthStep]] = []
     app_home_url: Optional[str] = None
     actions: Optional[List[Action]] = []
+    # URL to fetch chat tools manifest from (e.g., https://my-app.com/.well-known/omi-tools.json)
+    chat_tools_manifest_url: Optional[str] = None
 
 
 class ProactiveNotification(BaseModel):
@@ -106,6 +108,7 @@ class App(BaseModel):
     enabled: bool = False
     trigger_workflow_memories: bool = True  # default true
     installs: int = 0
+    score: Optional[float] = None  # Computed ranking score for sorting
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
     money_made: Optional[float] = None

@@ -66,9 +66,9 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Omi.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Omi accesses your calendar to automatically detect upcoming meetings and help you start recording at the right time. Your calendar data stays private and is never sent to our servers.</string>
+	<string>Access most functions for calendar viewing and editing.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Omi accesses your calendar to automatically detect upcoming meetings and help you start recording at the right time. Your calendar data stays private and is never sent to our servers.</string>
+	<string>Access most functions for calendar viewing and editing.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required to report issues</string>
 	<key>NSContactsUsageDescription</key>
@@ -97,8 +97,6 @@
 	<false/>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>
@@ -110,5 +108,7 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>SUPublicEDKey</key>
+	<string>EYZ94JfSI+WJzZMRUizMwCaQXuB2/EjTSZ382u9XukQ=</string>
 </dict>
 </plist>

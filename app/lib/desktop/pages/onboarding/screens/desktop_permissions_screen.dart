@@ -195,84 +195,84 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Microphone Permission
+                              // Bluetooth Permission
                               OmiSelectableTile(
-                                leading: Icon(Icons.mic_rounded,
-                                    color: provider.hasMicrophonePermission
+                                leading: Icon(Icons.bluetooth_rounded,
+                                    color: provider.hasBluetoothPermission
                                         ? ResponsiveHelper.purplePrimary
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
-                                title: 'Microphone Access',
-                                subtitle: 'Record audio conversations',
-                                selected: provider.hasMicrophonePermission,
+                                title: 'Bluetooth Access',
+                                subtitle: 'Connect to your Omi device',
+                                selected: provider.hasBluetoothPermission,
                                 onTap: () {
-                                  if (!provider.hasMicrophonePermission) {
+                                  if (!provider.hasBluetoothPermission) {
                                     _showPermissionDialog(
-                                      title: 'Microphone Access',
+                                      title: 'Bluetooth Access',
                                       description:
-                                          'Omi needs microphone access to record your conversations and provide transcriptions.',
+                                          'This app uses Bluetooth to connect and communicate with your device. Your device data stays private and secure.',
                                       onContinue: () async {
-                                        await provider.askForMicrophonePermissions();
+                                        await provider.askForBluetoothPermissions();
                                       },
                                     );
                                   } else {
-                                    provider.updateMicrophonePermission(false);
+                                    provider.updateBluetoothPermission(false);
                                   }
                                 },
                               ),
 
                               const SizedBox(height: 12),
 
-                              // Screen Capture Permission
+                              // Location Permission
                               OmiSelectableTile(
-                                leading: Icon(Icons.screen_share_rounded,
-                                    color: provider.hasScreenCapturePermission
+                                leading: Icon(Icons.location_on_rounded,
+                                    color: provider.hasLocationPermission
                                         ? ResponsiveHelper.purplePrimary
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
-                                title: 'Screen Recording',
-                                subtitle: 'Capture system audio from meetings',
-                                selected: provider.hasScreenCapturePermission,
+                                title: 'Location Services',
+                                subtitle: 'Tag conversations with location',
+                                selected: provider.hasLocationPermission,
                                 onTap: () {
-                                  if (!provider.hasScreenCapturePermission) {
+                                  if (!provider.hasLocationPermission) {
                                     _showPermissionDialog(
-                                      title: 'Screen Recording',
+                                      title: 'Location Services',
                                       description:
-                                          'Omi needs screen recording permission to capture system audio from your browser-based meetings.',
+                                          'This app may use your location to tag your conversations and improve your experience.',
                                       onContinue: () async {
-                                        await provider.askForScreenCapturePermissions();
+                                        await provider.askForLocationPermissions();
                                       },
                                     );
                                   } else {
-                                    provider.updateScreenCapturePermission(false);
+                                    provider.updateLocationPermission(false);
                                   }
                                 },
                               ),
 
                               const SizedBox(height: 12),
 
-                              // Accessibility Permission
+                              // Notification Permission
                               OmiSelectableTile(
-                                leading: Icon(Icons.accessibility_new_rounded,
-                                    color: provider.hasAccessibilityPermission
+                                leading: Icon(Icons.notifications_rounded,
+                                    color: provider.hasNotificationPermission
                                         ? ResponsiveHelper.purplePrimary
                                         : const Color(0xFF9CA3AF),
                                     size: 20),
-                                title: 'Accessibility',
-                                subtitle: 'Detect browser-based meetings',
-                                selected: provider.hasAccessibilityPermission,
+                                title: 'Notifications',
+                                subtitle: 'Receive important updates',
+                                selected: provider.hasNotificationPermission,
                                 onTap: () {
-                                  if (!provider.hasAccessibilityPermission) {
+                                  if (!provider.hasNotificationPermission) {
                                     _showPermissionDialog(
-                                      title: 'Accessibility',
+                                      title: 'Notifications',
                                       description:
-                                          'Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.',
+                                          'This app would like to send you notifications to keep you informed about important updates and activities.',
                                       onContinue: () async {
-                                        await provider.askForAccessibilityPermissions();
+                                        await provider.askForNotificationPermissions();
                                       },
                                     );
                                   } else {
-                                    provider.updateAccessibilityPermission(false);
+                                    provider.updateNotificationPermission(false);
                                   }
                                 },
                               ),
@@ -291,9 +291,9 @@ class _DesktopPermissionsScreenState extends State<DesktopPermissionsScreen>
                               OmiButton(
                                 label: provider.isLoading
                                     ? 'Please wait...'
-                                    : (provider.hasMicrophonePermission ||
-                                            provider.hasScreenCapturePermission ||
-                                            provider.hasAccessibilityPermission)
+                                    : (provider.hasBluetoothPermission ||
+                                            provider.hasLocationPermission ||
+                                            provider.hasNotificationPermission)
                                         ? 'Continue'
                                         : 'Skip',
                                 onPressed: provider.isLoading

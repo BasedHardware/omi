@@ -445,20 +445,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             _buildSectionContainer(
               children: [
                 _buildSettingsItem(
-                  title: 'Send Feedback',
+                  title: 'Feedback / Bug',
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    final Uri url = Uri.parse('https://feedback.omi.me/');
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-                    }
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildSettingsItem(
-                  title: 'Report a bug',
-                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     Navigator.pop(context);
                     final Uri url = Uri.parse('https://feedback.omi.me/');
@@ -500,7 +488,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Developer Mode',
+                title: 'Developer Settings',
                 icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);

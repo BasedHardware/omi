@@ -227,32 +227,171 @@ return jsonify({'error': 'Channel not found. Please check the channel name.'}), 
 
 ## Part 2: Adding Chat Tools in Omi App Store
 
-When creating or updating your app in the Omi App Store, you can add chat tools through the mobile app UI.
+Chat tools are defined via a **manifest endpoint** hosted on your server. When you create or update your app in the Omi App Store, Omi will automatically fetch the tool definitions from your manifest URL.
 
-### Using the Mobile App UI
+**Benefits:**
 
-1. **Open the Omi mobile app**
-2. **Navigate to Apps → Create App** (or edit an existing app)
-3. **Fill in basic app details**:
-   - App name
-   - Description
-   - Category
-   - Thumbnails
-4. **Select External Integration capability**:
-   - Chat Tools require the `external_integration` capability
-   - Fill in external integration fields if needed (webhook URL, OAuth steps, etc.)
-5. **Scroll down to the Chat Tools section**
-6. **Click "Add Tool"** for each tool you want to create
-7. **Fill in tool details** for each tool:
+- Single source of truth for tool definitions
+- Easy to update tools by modifying your manifest (just re-save the app in Omi to refresh)
+- Full control over tool parameters and schemas
+- Version control friendly
+- No need to manually configure each tool in the UI
 
-   - **Tool Name**: A descriptive name (e.g., `send_slack_message`)
-   - **Description**: Detailed description explaining when and how to use the tool
-   - **Endpoint URL**: Your backend endpoint URL (e.g., `https://your-server.com/api/send_message`)
-   - **HTTP Method**: POST, GET, PUT, PATCH, or DELETE
-   - **Auth Required**: Check if the tool requires user authentication
-   - **Status Message** (Optional): Custom message shown to users when the tool is called (e.g., "Sending message to Slack")
+### Step 1: Create the Manifest File
 
-8. **Submit your app**
+Create a JSON file at `/.well-known/omi-tools.json` on your server (or any URL you prefer):
+
+```json
+{
+  "tools": [
+    {
+      "name": "send_slack_message",
+      "description": "Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack.",
+      "endpoint": "/api/send_message",
+      "method": "POST",
+      "parameters": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "description": "The Slack channel to send to (e.g., '#general')"
+          },
+          "message": {
+            "type": "string",
+            "description": "The message text to send"
+          }
+        },
+        "required": ["channel", "message"]
+      },
+      "auth_required": true,
+      "status_message": "Sending message to Slack..."
+    },
+    {
+      "name": "search_slack_messages",
+      "description": "Search for messages in Slack. Use this when the user wants to find specific messages or look up past conversations.",
+      "endpoint": "/api/search_messages",
+      "method": "POST",
+      "parameters": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Optional channel to search in"
+          }
+        },
+        "required": ["query"]
+      },
+      "auth_required": true,
+      "status_message": "Searching Slack..."
+    }
+  ]
+}
+```
+
+### Step 2: Host the Manifest
+
+Make sure your manifest is accessible via HTTPS. Common locations:
+
+- `https://your-app.com/.well-known/omi-tools.json` (recommended)
+- `https://your-app.com/omi/manifest.json`
+- `https://your-app.com/api/tools-manifest`
+
+### Step 3: Add Manifest URL in Omi App Store
+
+1. Open the Omi mobile app
+2. Navigate to Apps → Create App (or edit an existing app)
+3. Select External Integration capability
+4. In the **Chat Tools Manifest URL** field, enter your manifest URL:
+   ```
+   https://your-app.com/.well-known/omi-tools.json
+   ```
+5. Submit your app
+
+Omi will automatically fetch your tool definitions when the app is created or updated.
+
+<Note>
+  **Endpoint URLs in Manifest**: You can use relative paths (e.g.,
+  `/api/send_message`) in your manifest. Omi will automatically resolve them
+  using your `App Home URL` as the base URL.
+</Note>
+
+### Manifest Schema Reference
+
+Each tool in the manifest should have these fields:
+
+| Field            | Type    | Required | Description                                                            |
+| ---------------- | ------- | -------- | ---------------------------------------------------------------------- |
+| `name`           | string  | ✅       | Unique tool identifier (e.g., `send_slack_message`)                    |
+| `description`    | string  | ✅       | Detailed description for the AI to understand when/how to use the tool |
+| `endpoint`       | string  | ✅       | URL endpoint (can be relative or absolute)                             |
+| `method`         | string  | ❌       | HTTP method (default: `POST`)                                          |
+| `parameters`     | object  | ❌       | JSON Schema defining tool parameters (see below)                       |
+| `auth_required`  | boolean | ❌       | Whether user auth is required (default: `true`)                        |
+| `status_message` | string  | ❌       | Message shown to user when tool is called                              |
+
+**Parameters Schema:**
+
+```json
+{
+  "parameters": {
+    "properties": {
+      "param_name": {
+        "type": "string | integer | boolean | array | object",
+        "description": "Description of what this parameter does"
+      }
+    },
+    "required": ["param_name"]
+  }
+}
+```
+
+### Example: FastAPI Manifest Endpoint
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/.well-known/omi-tools.json")
+async def get_omi_tools_manifest():
+    return {
+        "tools": [
+            {
+                "name": "search_songs",
+                "description": "Search for songs on Spotify",
+                "endpoint": "/tools/search_songs",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"},
+                        "limit": {"type": "integer", "description": "Max results"}
+                    },
+                    "required": ["query"]
+                },
+                "auth_required": True,
+                "status_message": "Searching Spotify..."
+            },
+            {
+                "name": "add_to_playlist",
+                "description": "Add a song to a playlist",
+                "endpoint": "/tools/add_to_playlist",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "song_name": {"type": "string", "description": "Song name"},
+                        "artist_name": {"type": "string", "description": "Artist name"},
+                        "playlist_name": {"type": "string", "description": "Playlist name"}
+                    },
+                    "required": ["song_name"]
+                },
+                "auth_required": True,
+                "status_message": "Adding to playlist..."
+            }
+        ]
+    }
+```
 
 ### Tool Definition Fields Explained
 

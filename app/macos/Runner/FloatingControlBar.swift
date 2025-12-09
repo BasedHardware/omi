@@ -121,7 +121,7 @@ private struct ResizableTextEditor: NSViewRepresentable {
         }
 
         textView.font = .systemFont(ofSize: 13)
-        textView.textColor = .white
+        textView.textColor = .labelColor  // Adaptive: white in dark mode, black in light mode
         textView.backgroundColor = .clear
         textView.drawsBackground = false
         textView.isRichText = false
@@ -287,9 +287,9 @@ private struct AskAIInputView: View {
                 HStack(spacing: 4) {
                     Text("esc")
                         .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.6))
+                        .foregroundColor(.secondary)
                         .frame(width: 30, height: 16)
-                        .background(Color.white.opacity(0.08))
+                        .background(Color.primary.opacity(0.1))
                         .cornerRadius(4)
                     Text("to close")
                         .font(.system(size: 11))
@@ -304,22 +304,20 @@ private struct AskAIInputView: View {
                 if let url = fileUrl {
                     filePreviewView(url: url)
                 } else {
-                    HStack(spacing: 4) {
-                        // Quick capture button
-                        Button(action: { onCaptureScreenshot?() }) {
-                            Image(systemName: "camera.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(.secondary)
-                                .frame(width: 32, height: 32)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Capture")
+                    // Quick capture button
+                    Button(action: { onCaptureScreenshot?() }) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.secondary)
+                            .frame(width: 32, height: 32)
+                            .background(Color.primary.opacity(0.1))
+                            .cornerRadius(8)
                     }
+                    .buttonStyle(.plain)
+                    .help("Capture")
                 }
 
-                // Dropdown menu with standard macOS arrow
+                // Dropdown menu - always visible
                 Menu("") {
                     Button(action: { onCaptureScreenshot?() }) {
                         Label("Capture", systemImage: "camera.fill")
@@ -329,6 +327,7 @@ private struct AskAIInputView: View {
                     }
                 }
                 .menuStyle(.borderlessButton)
+                .frame(width: 20)
                 .help("Attach file")
 
                 ZStack(alignment: .topLeading) {
@@ -409,7 +408,7 @@ private struct AskAIInputView: View {
                         .font(.system(size: 20))
                         .foregroundColor(.secondary)
                         .frame(width: 32, height: 32)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.primary.opacity(0.1))
                         .cornerRadius(8)
                 }
             }
@@ -418,10 +417,10 @@ private struct AskAIInputView: View {
             Button(action: { onRemoveScreenshot?() }) {
                 Image(systemName: "xmark")
                     .font(.system(size: 8))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .frame(width: 16, height: 16)
                     .background(Color.black.opacity(0.6), in: Circle())
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5))
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .offset(x: 6, y: -6)
@@ -489,7 +488,7 @@ private struct ShortcutRecordingView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(recordedKeyCode != nil ? Color.primary : Color.secondary.opacity(0.2))
+                .background(recordedKeyCode != nil ? Color.accentColor : Color.secondary.opacity(0.2))
                 .foregroundColor(recordedKeyCode != nil ? .white : .secondary)
                 .cornerRadius(8)
             }
@@ -534,15 +533,15 @@ private struct AIResponseView: View {
             if isLoading {
                 LoadingSpinner()
                     .frame(width: 16, height: 16)
-                    .background(Color.white)
+                    .background(Color.primary)
                     .clipShape(Circle())
                 Text("thinking")
                     .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.secondary)
             } else {
                 Text("omi says")
                     .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(.secondary)
             }
 
             Spacer()
@@ -554,7 +553,7 @@ private struct AIResponseView: View {
                 .font(.system(size: 12))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.white.opacity(0.1))
+                .background(Color.primary.opacity(0.1))
                 .cornerRadius(8)
                 .buttonStyle(.plain)
             }
@@ -564,7 +563,7 @@ private struct AIResponseView: View {
                     .font(.system(size: 8))
                     .foregroundColor(.secondary)
                     .frame(width: 16, height: 16)
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 0.5))
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
         }
@@ -595,7 +594,7 @@ private struct AIResponseView: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                                 .frame(width: 24, height: 24)
-                                .background(Color.white.opacity(0.1))
+                                .background(Color.primary.opacity(0.1))
                                 .cornerRadius(4)
                         }
                     }
@@ -607,7 +606,7 @@ private struct AIResponseView: View {
                         ScrollView {
                             Text(userInput)
                                 .font(.system(size: 13))
-                                .foregroundColor(.white)
+                                .foregroundColor(.primary)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -615,7 +614,7 @@ private struct AIResponseView: View {
                     } else {
                         Text(userInput)
                             .font(.system(size: 13))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .lineLimit(1)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -634,7 +633,7 @@ private struct AIResponseView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.08))
+            .background(Color.primary.opacity(0.1))
             .cornerRadius(8)
             .contextMenu {
                 Button("Copy") {
@@ -679,6 +678,7 @@ private struct AIResponseView: View {
                 ScrollView {
                     Markdown(responseText)
                         .textSelection(.enabled)
+                        .environment(\.colorScheme, .dark)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
@@ -737,7 +737,7 @@ private struct FloatingControlBarView: View {
                     }
                     .overlay(
                         RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                            .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
                     )
                     .padding(.horizontal, 8)
                     .padding(.bottom, 8)
@@ -894,9 +894,9 @@ private struct FloatingControlBarView: View {
                 ForEach(keys, id: \.self) { key in
                     Text(key)
                         .font(.system(size: 11))
-                        .foregroundColor(Color.primary.opacity(0.9))
+                        .foregroundColor(.primary)
                         .frame(width: 20, height: 20)
-                        .background(Color.primary.opacity(0.12))
+                        .background(Color.primary.opacity(0.1))
                         .cornerRadius(4)
                 }
             }
@@ -906,24 +906,6 @@ private struct FloatingControlBarView: View {
             title == "Ask omi"
                 ? "Ask omi • \(GlobalShortcutManager.shared.getAskAIShortcutString())" : ""
         )
-        .contextMenu {
-            if title == "Ask omi" {
-                Button("Customize Shortcut...") {
-                    showShortcutCustomizer()
-                }
-
-                Button("Reset to Default") {
-                    GlobalShortcutManager.shared.resetAskAIShortcut()
-                }
-            }
-        }
-    }
-
-    private func showShortcutCustomizer() {
-        // Trigger parent window to enter shortcut recording mode
-        if let parentWindow = window as? FloatingControlBar {
-            parentWindow.startShortcutRecording()
-        }
     }
 
     private var playPauseIcon: String {
@@ -972,6 +954,9 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
             backing: backingStoreType,
             defer: flag)
 
+        // Force dark appearance for consistent look regardless of system theme
+        self.appearance = NSAppearance(named: .vibrantDark)
+        
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
@@ -1037,7 +1022,12 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
             }
         ).environmentObject(state)
 
-        hostingView = NSHostingView(rootView: AnyView(swiftUIView))
+        hostingView = NSHostingView(rootView: AnyView(
+            swiftUIView
+                .preferredColorScheme(.dark)
+                .environment(\.colorScheme, .dark)
+        ))
+        hostingView?.appearance = NSAppearance(named: .vibrantDark)
         self.contentView = hostingView
 
         // Observe drag notifications
@@ -1308,25 +1298,6 @@ class FloatingControlBar: NSWindow, NSWindowDelegate {
             } ?? FloatingControlBar.defaultSize
 
         resizeAnchored(to: targetSize, makeResizable: true, animated: animated)
-    }
-
-    // MARK: - Shortcut Recording
-
-    public func startShortcutRecording() {
-        DispatchQueue.main.async {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                self.state.isRecordingShortcut = true
-                self.state.recordedKeyCode = nil
-                self.state.recordedModifiers = nil
-                self.state.shortcutRecordingError = nil
-            }
-
-            // Resize to fixed height for recording view
-            self.resizeToFixedHeight(160, animated: true)
-
-            // Make window key to receive keyboard events
-            self.makeKeyAndOrderFront(nil)
-        }
     }
 
     private func saveShortcut(keyCode: Int, modifiers: UInt32) {

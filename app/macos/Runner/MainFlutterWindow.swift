@@ -25,25 +25,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     private var floatingControlBarChannel: FlutterMethodChannel!
     private var askAIChannel: FlutterMethodChannel!
 
-    // Meeting detection
-    private var meetingDetector: MeetingDetector?
-    private var meetingDetectorChannel: FlutterMethodChannel!
-    private var meetingDetectorEventChannel: FlutterEventChannel!
-
-    // Calendar monitoring
-    private var calendarMonitor: CalendarMonitor?
-    private var calendarChannel: FlutterMethodChannel!
-    private var calendarEventChannel: FlutterEventChannel!
-
-    // Recording source tracking - determines auto-stop behavior
-    private enum RecordingSource {
-        case none
-        case calendar      // Started from calendar meeting nub (before user joined)
-        case microphoneLinked  // Started from calendar, then mic activity detected (user joined)
-        case microphoneOnly    // Started from mic detection nub (no calendar context)
-        case manual        // Started manually from app UI
-    }
-    private var recordingSource: RecordingSource = .none
+    // Shortcuts
+    private var shortcutChannel: FlutterMethodChannel!
 
     override func awakeFromNib() {
         let flutterViewController = FlutterViewController()
@@ -66,22 +49,9 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             name: "com.omi/ask_ai",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
-        // Setup meeting detection channels
-        meetingDetectorChannel = FlutterMethodChannel(
-            name: "com.omi/meeting_detector",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
-        meetingDetectorEventChannel = FlutterEventChannel(
-            name: "com.omi/meeting_detector_events",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
-        // Setup calendar monitoring channels
-        calendarChannel = FlutterMethodChannel(
-            name: "com.omi/calendar",
-            binaryMessenger: flutterViewController.engine.binaryMessenger)
-
-        calendarEventChannel = FlutterEventChannel(
-            name: "com.omi/calendar/events",
+        // Setup shortcuts channel
+        shortcutChannel = FlutterMethodChannel(
+            name: "com.omi/shortcuts",
             binaryMessenger: flutterViewController.engine.binaryMessenger)
 
         // Configure the shared window manager
@@ -133,11 +103,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         // Setup audio manager with Flutter channel
         audioManager.setFlutterChannel(screenCaptureChannel)
 
-        // Setup meeting detection
-        setupMeetingDetection()
-
-        // Setup calendar monitoring
-        setupCalendarMonitoring()
+        // Setup shortcuts channel
+        setupShortcutsChannel()
 
         floatingControlBarChannel.setMethodCallHandler { [weak self] (call, result) in
             guard let self = self else { return }
@@ -220,16 +187,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                     result(granted)
                 }
 
-            case "checkAccessibilityPermission":
-                let status = self.permissionManager.checkAccessibilityPermission()
-                result(status)
-
-            case "requestAccessibilityPermission":
-                Task {
-                    let granted = await self.permissionManager.requestAccessibilityPermission()
-                    result(granted)
-                }
-
             case "bringAppToFront":
                 DispatchQueue.main.async {
                     NSApp.activate(ignoringOtherApps: true)
@@ -240,12 +197,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 result(nil)
 
             case "start":
-                // Track that recording was started manually from the app
-                // BUT only if not already set by nub click (microphoneOnly, calendar, etc.)
-                if self.recordingSource == .none {
-                    self.recordingSource = .manual
-                }
-
                 Task {
                     // Check permissions before starting
                     let micStatus = self.permissionManager.checkMicrophonePermission()
@@ -283,11 +234,6 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 }
             case "stop":
                 self.audioManager.stopCapture()
-                result(nil)
-
-            case "resetRecordingSource":
-                // Called when user explicitly stops recording from UI
-                self.recordingSource = .none
                 result(nil)
 
             case "isRecording":
@@ -450,327 +396,62 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
         setupMenuBarObservers()
     }
 
-    // MARK: - Meeting Detection Setup
+    // MARK: - Shortcuts Setup
 
-    private func setupMeetingDetection() {
-        // Initialize meeting detector
-        meetingDetector = MeetingDetector()
-
-        // Configure event channel
-        meetingDetector?.configure(eventChannel: meetingDetectorEventChannel)
-
-        // Set main window reference in NubManager
-        NubManager.shared.setMainWindow(self)
-
-        // Setup method channel handler
-        meetingDetectorChannel.setMethodCallHandler { [weak self] (call, result) in
-            guard let self = self else { return }
+    private func setupShortcutsChannel() {
+        shortcutChannel.setMethodCallHandler { [weak self] (call, result) in
+            guard self != nil else { return }
 
             switch call.method {
-            case "startDetection":
-                self.meetingDetector?.start()
-                result(nil)
+            case "getAskAIShortcut":
+                let (keyCode, modifiers) = GlobalShortcutManager.shared.getAskAIShortcut()
+                result([
+                    "keyCode": keyCode,
+                    "modifiers": Int(modifiers),
+                    "displayString": GlobalShortcutManager.shared.getAskAIShortcutString()
+                ])
 
-            case "stopDetection":
-                self.meetingDetector?.stop()
-                result(nil)
+            case "setAskAIShortcut":
+                if let args = call.arguments as? [String: Any],
+                   let keyCode = args["keyCode"] as? Int,
+                   let modifiers = args["modifiers"] as? Int {
+                    GlobalShortcutManager.shared.setAskAIShortcut(
+                        keyCode: keyCode,
+                        modifiers: UInt32(modifiers)
+                    )
+                    result(true)
+                } else {
+                    result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments", details: nil))
+                }
 
-            case "getActiveMeetingApps":
-                let apps = self.meetingDetector?.getActiveMeetingApps() ?? []
-                result(apps)
+            case "resetAskAIShortcut":
+                GlobalShortcutManager.shared.resetAskAIShortcut()
+                result(true)
 
-            case "showNub":
-                NubManager.shared.showNub()
-                result(nil)
+            case "validateShortcut":
+                if let args = call.arguments as? [String: Any],
+                   let keyCode = args["keyCode"] as? Int,
+                   let modifiers = args["modifiers"] as? Int {
+                    let isValid = ShortcutValidator.isValid(keyCode: keyCode, modifiers: UInt32(modifiers))
+                    result(isValid)
+                } else {
+                    result(false)
+                }
 
-            case "hideNub":
-                NubManager.shared.hideNub()
-                result(nil)
-
-            case "isNubVisible":
-                let isVisible = NubManager.shared.isNubVisible()
-                result(isVisible)
+            case "getToggleControlBarShortcut":
+                // Fixed shortcut: Cmd+\
+                result([
+                    "keyCode": 42,
+                    "modifiers": 256, // cmdKey
+                    "displayString": "⌘\\"
+                ])
 
             default:
                 result(FlutterMethodNotImplemented)
             }
         }
-
-        // Start meeting detection after 10 seconds warmup
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
-            print("MainFlutterWindow: Starting meeting detection after warmup")
-            self?.meetingDetector?.start()
-        }
-
-        // Setup observer for meeting state changes to control nub
-        setupMeetingStateObserver()
     }
 
-    private func setupMeetingStateObserver() {
-        NubManager.shared.setMainWindow(self)
-
-        // Provide callback to check if recording is active
-        NubManager.shared.isRecordingActive = { [weak self] in
-            return self?.audioManager.isRecording() ?? false
-        }
-
-        // Listen for nub clicks to start recording
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleNubStartRecording),
-            name: .nubClicked,
-            object: nil
-        )
-
-        // Handle when meeting ends (mic activity stopped)
-        meetingDetector?.onMeetingEnded = { [weak self] in
-            guard let self = self else {
-                return
-            }
-
-            let isRecording = self.audioManager.isRecording()
-
-            guard isRecording else {
-                return
-            }
-
-            // Decide whether to auto-stop based on recording source
-            let shouldAutoStop: Bool
-            let reason: String
-
-            switch self.recordingSource {
-            case .microphoneOnly:
-                // Recording started from mic nub -> auto-stop when mic ends
-                shouldAutoStop = true
-                reason = "mic-only recording ended"
-            case .microphoneLinked:
-                // Recording started from calendar, user joined meeting, now left -> auto-stop
-                shouldAutoStop = true
-                reason = "user left meeting (calendar + mic)"
-            case .calendar:
-                // Recording started from calendar but user never joined -> DON'T auto-stop
-                shouldAutoStop = false
-                reason = "calendar recording (user never joined)"
-            case .manual:
-                // Recording started manually -> DON'T auto-stop
-                shouldAutoStop = false
-                reason = "manual recording"
-            case .none:
-                // Unknown source -> DON'T auto-stop
-                shouldAutoStop = false
-                reason = "unknown source"
-            }
-
-            print("MainFlutterWindow: shouldAutoStop = \(shouldAutoStop), reason = \(reason)")
-
-            if shouldAutoStop {
-                print("MainFlutterWindow: Auto-stopping recording")
-                self.screenCaptureChannel.invokeMethod("recordingStoppedAutomatically", arguments: nil)
-                self.audioManager.stopCapture()
-                self.hideFloatingControlBar()
-                self.recordingSource = .none
-            }
-        }
-        
-        // Handle when meeting starts (mic activity detected)
-        meetingDetector?.onShowNub = { [weak self] appName in
-            guard let self = self else { return }
-
-            // Check if recording is active AND not paused
-            if self.audioManager.isRecording() {
-                // Query Flutter to check if recording is paused
-                self.screenCaptureChannel.invokeMethod("isRecordingPaused", arguments: nil) { result in
-                    let isPaused = result as? Bool ?? false
-
-                    // If recording is active but NOT paused, don't show nub
-                    if !isPaused {
-                        // Only upgrade from calendar to microphoneLinked (one-time)
-                        if self.recordingSource == .calendar {
-                            self.recordingSource = .microphoneLinked
-                        }
-                        return
-                    }
-
-                    // Recording is paused, show nub to let user resume/restart
-                    NubManager.shared.showNub(for: appName)
-                }
-                return
-            }
-
-            // Not recording yet, show nub to let user start
-            NubManager.shared.showNub(for: appName)
-        }
-
-        // Handle hiding nub
-        meetingDetector?.onHideNub = {
-            NubManager.shared.hideNub()
-        }
-    }
-
-    // MARK: - Calendar Monitoring Setup
-
-    private func setupCalendarMonitoring() {
-        // Initialize calendar monitor
-        calendarMonitor = CalendarMonitor()
-
-        // Configure event channel
-        calendarEventChannel.setStreamHandler(calendarMonitor)
-
-        // Setup method channel handler
-        calendarChannel.setMethodCallHandler { [weak self] (call, result) in
-            guard let self = self else { return }
-
-            switch call.method {
-            case "requestPermission":
-                self.calendarMonitor?.requestAccess { granted in
-                    if granted {
-                        result("authorized")
-                    } else {
-                        result("denied")
-                    }
-                }
-
-            case "checkPermissionStatus":
-                let isAuthorized = self.calendarMonitor?.checkAuthorizationStatus() ?? false
-                result(isAuthorized ? "authorized" : "denied")
-
-            case "startMonitoring":
-                self.calendarMonitor?.startMonitoring()
-                result(nil)
-
-            case "stopMonitoring":
-                self.calendarMonitor?.stopMonitoring()
-                result(nil)
-
-            case "getUpcomingMeetings":
-                let meetings = self.calendarMonitor?.getUpcomingMeetings() ?? []
-                result(meetings)
-                
-            case "getAvailableCalendars":
-                let calendars = self.calendarMonitor?.getAvailableCalendars() ?? []
-                result(calendars)
-                
-            case "updateCalendarSettings":
-                if let args = call.arguments as? [String: Any],
-                   let showEventsWithNoParticipants = args["showEventsWithNoParticipants"] as? Bool {
-                    self.calendarMonitor?.updateSettings(showEventsWithNoParticipants: showEventsWithNoParticipants)
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Settings required", details: nil))
-                }
-
-            case "snoozeMeeting":
-                if let args = call.arguments as? [String: Any],
-                   let eventId = args["eventId"] as? String,
-                   let minutes = args["minutes"] as? Int {
-                    let duration = TimeInterval(minutes * 60)
-                    self.calendarMonitor?.snoozeMeeting(eventId: eventId, duration: duration)
-                    result(nil)
-                } else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Event ID and minutes required", details: nil))
-                }
-
-            default:
-                result(FlutterMethodNotImplemented)
-            }
-        }
-
-        // Start calendar monitoring after 10 seconds warmup
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
-            guard let self = self else { return }
-
-            // Only start monitoring if already authorized (user enabled it previously)
-            let isAuthorized = self.calendarMonitor?.checkAuthorizationStatus() == true
-
-            if isAuthorized {
-                self.calendarMonitor?.startMonitoring()
-            }
-        }
-    }
-
-    @objc private func handleNubStartRecording(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else {
-                return
-            }
-
-            // Check if microphone is currently active (user already in meeting)
-            let isMicActive = !(self.meetingDetector?.getActiveMeetingApps().isEmpty ?? true)
-
-            // Determine recording source based on nub context AND current mic state
-            if let meetingSource = NubManager.shared.getCurrentMeetingSource() {
-                switch meetingSource {
-                case .calendar:
-                    // User clicked nub for calendar meeting
-                    // Check if they've already joined (mic active)
-                    if isMicActive {
-                        self.recordingSource = .microphoneLinked
-                    } else {
-                        self.recordingSource = .calendar
-                    }
-                case .microphone:
-                    // User clicked nub for mic-only detection
-                    self.recordingSource = .microphoneOnly
-                case .hybrid:
-                    // User clicked nub for calendar meeting where they already joined
-                    self.recordingSource = .microphoneLinked
-                }
-            } else {
-                self.recordingSource = .manual
-            }
-
-            // 1. Start recording
-            Task {
-                do {
-                    // Check permissions first
-                    let micStatus = self.permissionManager.checkMicrophonePermission()
-                    if micStatus != "granted" {
-                        // Open main window to show permission request
-                        self.makeKeyAndOrderFront(nil)
-                        NSApp.activate(ignoringOtherApps: true)
-                        return
-                    }
-
-                    let screenStatus = await self.permissionManager.checkScreenCapturePermission()
-                    if screenStatus != "granted" {
-                        // Open main window to show permission request
-                        self.makeKeyAndOrderFront(nil)
-                        NSApp.activate(ignoringOtherApps: true)
-                        return
-                    }
-
-                    // Start audio capture
-                    try await self.audioManager.startCapture()
-
-                    // 2. Show floating control bar
-                    DispatchQueue.main.async {
-                        self.showFloatingControlBar()
-
-                        // Manually update the floating control bar state since recording was started from native
-                        self.floatingControlBar?.updateRecordingState(
-                            isRecording: true,
-                            isPaused: false,
-                            duration: 0,
-                            isInitialising: false
-                        )
-                    }
-
-                    // 3. Notify Flutter that recording started
-                    self.screenCaptureChannel.invokeMethod("recordingStartedFromNub", arguments: nil)
-
-                } catch {
-                    print("MainFlutterWindow: Error starting recording from nub: \(error.localizedDescription)")
-
-                    // Show main window if there's an error
-                    DispatchQueue.main.async {
-                        self.makeKeyAndOrderFront(nil)
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                }
-            }
-        }
-    }
-    
     private func setupMenuBarObservers() {
         NotificationCenter.default.addObserver(
             self,
@@ -797,6 +478,13 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
             self,
             selector: #selector(handleMenuBarOpenChatWindow),
             name: MenuBarManager.openChatWindowNotification,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMenuBarOpenKeyboardShortcuts),
+            name: MenuBarManager.openKeyboardShortcutsNotification,
             object: nil
         )
     }
@@ -833,7 +521,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
                 FloatingChatWindowManager.shared.floatingButton = self.floatingControlBar
                 self.menuBarManager?.observeFloatingControlBar(self.floatingControlBar!)
 
-                self.floatingControlBar?.onAskAI = { fileUrl in
+                self.floatingControlBar?.onAskAI = { [weak self] fileUrl in
                     let screenshot: URL?
                     if let url = fileUrl {
                         screenshot = url
@@ -948,12 +636,6 @@ extension MainFlutterWindow {
             name: GlobalShortcutManager.toggleFloatingButtonNotification,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAskAIShortcut),
-            name: GlobalShortcutManager.askAINotification,
-            object: nil
-        )
     }
 
     // MARK: - Menu Bar Action Handlers
@@ -971,13 +653,28 @@ extension MainFlutterWindow {
     }
 
     @objc private func handleMenuBarOpenChatWindow() {
-        // Ensure floating control bar exists before using it
-        if floatingControlBar == nil {
+        // Activate the app first so it can receive keyboard input
+        NSApp.activate(ignoringOtherApps: true)
+
+        let fileUrl = ScreenCaptureManager.captureScreen()
+
+        // Ensure floating control bar exists and is visible
+        if floatingControlBar == nil || !(floatingControlBar?.isVisible ?? false) {
             showFloatingControlBar()
         }
 
-        let fileUrl = ScreenCaptureManager.captureScreen()
-        FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        // Small delay to ensure floating bar is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
+        }
+    }
+
+    @objc private func handleMenuBarOpenKeyboardShortcuts() {
+        // Open the main window and navigate to keyboard shortcuts
+        handleOpenWindow()
+        
+        // Tell Flutter to navigate to keyboard shortcuts page
+        shortcutChannel.invokeMethod("openKeyboardShortcutsPage", arguments: nil)
     }
 
     private func handlePlayPauseWithRetry() {
@@ -1006,22 +703,6 @@ extension MainFlutterWindow {
             // Activate the app first so it can receive keyboard input
             NSApp.activate(ignoringOtherApps: true)
             showFloatingControlBar()
-        }
-    }
-
-    @objc private func handleAskAIShortcut() {
-        // Activate the app first so it can receive keyboard input
-        NSApp.activate(ignoringOtherApps: true)
-
-        let fileUrl = ScreenCaptureManager.captureScreen()
-
-        // Ensure floating control bar exists and is visible
-        if floatingControlBar == nil || !(floatingControlBar?.isVisible ?? false) {
-            showFloatingControlBar()
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            FloatingChatWindowManager.shared.toggleAIConversation(fileUrl: fileUrl)
         }
     }
 }

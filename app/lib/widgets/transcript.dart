@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -621,20 +622,44 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       const SizedBox(height: 4),
                                       _buildTranslationNotice(),
                                     ],
-                                    // Timestamp inside bubble (bottom right)
-                                    if (widget.canDisplaySeconds) ...[
+                                    // Timestamp and provider inside bubble (bottom right)
+                                    if (widget.canDisplaySeconds || data.sttProvider != null) ...[
                                       const SizedBox(height: 4),
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
-                                          Text(
-                                            data.getTimestampString(),
-                                            style: TextStyle(
-                                              color:
-                                                  isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
-                                              fontSize: 11,
+                                          if (data.sttProvider != null) ...[
+                                            Text(
+                                              SttProviderConfig.getDisplayName(data.sttProvider),
+                                              style: TextStyle(
+                                                color: isUser
+                                                    ? Colors.white.withValues(alpha: 0.5)
+                                                    : Colors.grey.shade500,
+                                                fontSize: 10,
+                                                fontStyle: FontStyle.italic,
+                                              ),
                                             ),
-                                          ),
+                                            if (widget.canDisplaySeconds) ...[
+                                              Text(
+                                                ' · ',
+                                                style: TextStyle(
+                                                  color: isUser
+                                                      ? Colors.white.withValues(alpha: 0.5)
+                                                      : Colors.grey.shade500,
+                                                  fontSize: 10,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                          if (widget.canDisplaySeconds)
+                                            Text(
+                                              data.getTimestampString(),
+                                              style: TextStyle(
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.7) : Colors.grey.shade400,
+                                                fontSize: 11,
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ],

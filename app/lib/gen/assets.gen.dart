@@ -194,6 +194,10 @@ class $AssetsImagesGen {
   AssetGenImage get instruction3 =>
       const AssetGenImage('assets/images/instruction_3.png');
 
+  /// File path: assets/images/limitless.png
+  AssetGenImage get limitless =>
+      const AssetGenImage('assets/images/limitless.png');
+
   /// File path: assets/images/link_icon.svg
   String get linkIcon => 'assets/images/link_icon.svg';
 
@@ -362,6 +366,7 @@ class $AssetsImagesGen {
     instruction1,
     instruction2,
     instruction3,
+    limitless,
     linkIcon,
     linkedinLogo,
     logoTransparent,
@@ -410,6 +415,18 @@ class $AssetsIntegrationAppLogosGen {
   AssetGenImage get clickupLogo =>
       const AssetGenImage('assets/integration_app_logos/clickup-logo.png');
 
+  /// File path: assets/integration_app_logos/github-logo.png
+  AssetGenImage get githubLogo =>
+      const AssetGenImage('assets/integration_app_logos/github-logo.png');
+
+  /// File path: assets/integration_app_logos/gmail-logo.jpeg
+  AssetGenImage get gmailLogo =>
+      const AssetGenImage('assets/integration_app_logos/gmail-logo.jpeg');
+
+  /// File path: assets/integration_app_logos/google-calendar.png
+  AssetGenImage get googleCalendar =>
+      const AssetGenImage('assets/integration_app_logos/google-calendar.png');
+
   /// File path: assets/integration_app_logos/google-tasks-logo.png
   AssetGenImage get googleTasksLogo =>
       const AssetGenImage('assets/integration_app_logos/google-tasks-logo.png');
@@ -417,6 +434,10 @@ class $AssetsIntegrationAppLogosGen {
   /// File path: assets/integration_app_logos/monday-logo.jpeg
   AssetGenImage get mondayLogo =>
       const AssetGenImage('assets/integration_app_logos/monday-logo.jpeg');
+
+  /// File path: assets/integration_app_logos/notion-logo.png
+  AssetGenImage get notionLogo =>
+      const AssetGenImage('assets/integration_app_logos/notion-logo.png');
 
   /// File path: assets/integration_app_logos/todoist-logo.webp
   AssetGenImage get todoistLogo =>
@@ -426,14 +447,27 @@ class $AssetsIntegrationAppLogosGen {
   AssetGenImage get trelloLogo =>
       const AssetGenImage('assets/integration_app_logos/trello-logo.png');
 
+  /// File path: assets/integration_app_logos/whoop.png
+  AssetGenImage get whoop =>
+      const AssetGenImage('assets/integration_app_logos/whoop.png');
+
+  /// File path: assets/integration_app_logos/x-logo.avif
+  String get xLogo => 'assets/integration_app_logos/x-logo.avif';
+
   /// List of all assets
-  List<AssetGenImage> get values => [
+  List<dynamic> get values => [
     asanaLogo,
     clickupLogo,
+    githubLogo,
+    gmailLogo,
+    googleCalendar,
     googleTasksLogo,
     mondayLogo,
+    notionLogo,
     todoistLogo,
     trelloLogo,
+    whoop,
+    xLogo,
   ];
 }
 
