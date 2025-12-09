@@ -107,8 +107,7 @@ class _DesktopConversationDetailPageState extends State<DesktopConversationDetai
       if (provider.conversation.appResults.isEmpty) {
         final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
         final date = provider.selectedDate;
-        final list = convoProvider.groupedConversations[date] ?? [];
-        final idx = list.indexWhere((c) => c.id == provider.conversation.id);
+        final idx = convoProvider.getConversationIndexById(provider.conversation.id, date);
         if (idx != -1) {
           await convoProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
         }

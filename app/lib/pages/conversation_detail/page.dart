@@ -173,8 +173,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
         final date = provider.selectedDate;
-        final list = conversationProvider.groupedConversations[date] ?? [];
-        final idx = list.indexWhere((c) => c.id == provider.conversation.id);
+        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
         if (idx != -1) {
           await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
         }
@@ -275,8 +274,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             {
               final convoProvider = context.read<ConversationProvider>();
               final date = provider.selectedDate;
-              final list = convoProvider.groupedConversations[date] ?? [];
-              final idx = list.indexWhere((c) => c.id == provider.conversation.id);
+              final idx = convoProvider.getConversationIndexById(provider.conversation.id, date);
               convoProvider.deleteConversation(provider.conversation, idx);
             }
             Navigator.pop(context); // Close dialog
