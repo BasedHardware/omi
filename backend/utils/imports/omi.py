@@ -197,7 +197,7 @@ def process_omi_import(job_id: str, uid: str, zip_path: str) -> None:
             
             for conversation in conversations:
                 try:
-                    conversation['source'] = 'omi_import'
+                    conversation['source'] = 'omi_imported'
                     conversations_db.upsert_conversation(uid, conversation)
                     conversations_imported += 1
                 except Exception as e:
