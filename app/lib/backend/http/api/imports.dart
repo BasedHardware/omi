@@ -226,7 +226,7 @@ Future<int?> deleteOmiImportedData() async {
     if (response != null && response.statusCode == 200) {
       var data = jsonDecode(response.body);
       debugPrint('deleteOmiImportedData Response: $data');
-      return data['total_deleted'] as int?;
+      return data['total_deleted'] is int ? data['total_deleted'] as int : null;
     } else {
       debugPrint('Failed to delete OMI imported data. Response: ${response?.body}');
       return null;
