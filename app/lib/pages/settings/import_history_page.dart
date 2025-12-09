@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/http/api/imports.dart';
 
@@ -20,6 +21,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   List<ImportJobResponse> _jobs = [];
   bool _isLoading = true;
   bool _isUploading = false;
+  bool _isExporting = false;
   Timer? _pollTimer;
 
   @override
@@ -80,6 +82,202 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       }
     } catch (e) {
       debugPrint('Error refreshing jobs: $e');
+    }
+  }
+
+  Future<void> _startOmiExport() async {
+    if (_isExporting) return;
+    
+    setState(() => _isExporting = true);
+    
+    try {
+      final filePath = await downloadOmiExport();
+      
+      if (!mounted) return;
+      setState(() => _isExporting = false);
+      
+      if (filePath != null) {
+        await Share.shareXFiles(
+          [XFile(filePath)],
+          subject: 'OMI Data Export',
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(child: Text('Failed to export data. Please try again.')),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Export error: $e');
+      if (mounted) {
+        setState(() => _isExporting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _startOmiImport() async {
+    try {
+      setState(() => _isUploading = true);
+      
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      
+      if (result == null || result.files.isEmpty) {
+        setState(() => _isUploading = false);
+        return;
+      }
+      
+      final filePath = result.files.single.path;
+      if (filePath == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Could not access the selected file'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+        setState(() => _isUploading = false);
+        return;
+      }
+      
+      final file = File(filePath);
+      final response = await startOmiImport(file);
+      
+      setState(() => _isUploading = false);
+      
+      if (response != null) {
+        await _loadJobs();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Import started!')),
+                ],
+              ),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Failed to start import'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Import error: $e');
+      setState(() => _isUploading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showDeleteOmiDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1F1F25),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete All Imported OMI Data?',
+          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        content: Text(
+          'This will permanently delete all data imported from OMI exports. This action cannot be undone.',
+          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          backgroundColor: Color(0xFF1F1F25),
+          content: Row(
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(width: 16),
+              Text('Deleting...', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+      
+      final deletedCount = await deleteOmiImportedData();
+      
+      if (mounted) {
+        Navigator.of(context).pop();
+        
+        if (deletedCount != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Deleted $deletedCount items')),
+                ],
+              ),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Failed to delete data'),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -275,6 +473,105 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     }
   }
 
+  Widget _buildOmiCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3), width: 1),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              'assets/images/logo_transparent_v2.png',
+              width: 48,
+              height: 48,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'OMI',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Export or import your data',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_isExporting || _isUploading)
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.deepPurple,
+              ),
+            )
+          else
+            PullDownButton(
+              itemBuilder: (context) => [
+                PullDownMenuItem(
+                  title: 'Export Data',
+                  iconWidget: const FaIcon(FontAwesomeIcons.download, size: 16, color: Colors.white),
+                  onTap: _startOmiExport,
+                ),
+                PullDownMenuItem(
+                  title: 'Import Data',
+                  iconWidget: const FaIcon(FontAwesomeIcons.upload, size: 16, color: Colors.white),
+                  onTap: _startOmiImport,
+                ),
+                const PullDownMenuDivider(),
+                PullDownMenuItem(
+                  title: 'Delete Imported Data',
+                  iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                  isDestructive: true,
+                  onTap: _showDeleteOmiDialog,
+                ),
+              ],
+              buttonBuilder: (context, showMenu) => GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  showMenu();
+                },
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.more_horiz,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildImportSourceCard({
     required String name,
     required String logoPath,
@@ -404,6 +701,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildOmiCard(),
         _buildImportSourceCard(
           name: 'Limitless',
           logoPath: 'assets/competitor-logos/limitless-logo.jpg',

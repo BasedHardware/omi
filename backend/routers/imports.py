@@ -5,15 +5,20 @@ Import endpoints for importing data from external sources.
 import os
 import threading
 import uuid
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 import database.import_jobs as import_jobs_db
 import database.conversations as conversations_db
+import database.memories as memories_db
+import database.chat as chat_db
 from models.import_job import ImportJob, ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.imports.omi import export_omi_data, create_import_job as create_omi_import_job, process_omi_import
 
 router = APIRouter()
 
@@ -161,3 +166,87 @@ async def delete_limitless_conversations(
     deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
 
     return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}
+
+
+@router.get(
+    '/v1/export/omi',
+    tags=['export'],
+)
+async def export_omi_user_data(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Export all OMI user data as a ZIP file.
+    
+    Returns:
+        ZIP file containing memories.json, conversations.json, and chat_history.json
+    """
+    zip_buffer = export_omi_data(uid)
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    filename = f'omi_export_{date_str}.zip'
+    
+    return StreamingResponse(
+        zip_buffer,
+        media_type='application/zip',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
+
+
+@router.post(
+    '/v1/import/omi',
+    response_model=ImportJobResponse,
+    tags=['import'],
+)
+async def import_omi_data(
+    file: UploadFile = File(...),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Start an OMI data import from a ZIP file export.
+    
+    The import runs in the background. Use GET /v1/import/jobs/{job_id} to check status.
+    """
+    if not file.filename or not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="File must be a ZIP archive")
+    
+    job = create_omi_import_job(uid, ImportSourceType.omi)
+    
+    os.makedirs(TEMP_DIR, exist_ok=True)
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    
+    try:
+        with open(zip_path, 'wb') as f:
+            while contents := await file.read(1024 * 1024):
+                f.write(contents)
+    except Exception as e:
+        import_jobs_db.update_import_job(
+            job.id, {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"}
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
+    
+    thread = threading.Thread(target=process_omi_import, args=(job.id, uid, zip_path), daemon=True)
+    thread.start()
+    
+    return ImportJobResponse(
+        job_id=job.id,
+        status=ImportJobStatus.pending,
+    )
+
+
+@router.delete(
+    '/v1/import/omi/data',
+    tags=['import'],
+)
+async def delete_omi_imported_data(
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Delete all data imported from OMI.
+    """
+    deleted_conversations = conversations_db.delete_conversations_by_source(uid, 'omi_import')
+    
+    return {
+        'deleted_conversations': deleted_conversations,
+        'message': f'Successfully deleted {deleted_conversations} imported conversations'
+    }
+

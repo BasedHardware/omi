@@ -164,3 +164,79 @@ Future<int?> deleteLimitlessConversations() async {
     return null;
   }
 }
+
+Future<String?> downloadOmiExport() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/export/omi',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+
+    if (response != null && response.statusCode == 200) {
+      final directory = await getTemporaryDirectory();
+      final date = DateTime.now().toIso8601String().split('T')[0];
+      final filePath = '${directory.path}/omi_export_$date.zip';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+      return filePath;
+    } else {
+      debugPrint('Failed to download OMI export. Status: ${response?.statusCode}');
+      return null;
+    }
+  } catch (e) {
+    debugPrint('Error downloading OMI export: $e');
+    return null;
+  }
+}
+
+Future<ImportJobResponse?> startOmiImport(File zipFile) async {
+  try {
+    var response = await makeMultipartApiCall(
+      url: '${Env.apiBaseUrl}v1/import/omi',
+      files: [zipFile],
+      fileFieldName: 'file',
+    );
+
+    if (response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      debugPrint('startOmiImport Response: $data');
+      return ImportJobResponse.fromJson(data);
+    } else {
+      debugPrint('Failed to start OMI import. Status: ${response.statusCode}, Body: ${response.body}');
+      return null;
+    }
+  } catch (e) {
+    debugPrint('Error starting OMI import: $e');
+    return null;
+  }
+}
+
+Future<int?> deleteOmiImportedData() async {
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/import/omi/data',
+      headers: {},
+      method: 'DELETE',
+      body: '',
+    );
+
+    if (response != null && response.statusCode == 200) {
+      var data = jsonDecode(response.body);
+      debugPrint('deleteOmiImportedData Response: $data');
+      return data['deleted_conversations'] as int?;
+    } else {
+      debugPrint('Failed to delete OMI imported data. Response: ${response?.body}');
+      return null;
+    }
+  } catch (e) {
+    debugPrint('Error deleting OMI imported data: $e');
+    return null;
+  }
+}
+
+Future<Directory> getTemporaryDirectory() async {
+  return Directory.systemTemp;
+}
+
