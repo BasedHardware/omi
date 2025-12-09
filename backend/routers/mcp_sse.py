@@ -226,7 +226,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             try:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d")
             except ValueError:
-                pass
+                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
         
         # Validate categories
         valid_categories = []
