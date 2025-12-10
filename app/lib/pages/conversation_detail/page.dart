@@ -435,6 +435,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       provider.conversation.id,
                                       newStarredState,
                                     );
+                                    if (!mounted) return;
                                     if (success) {
                                       provider.conversation.starred = newStarredState;
                                       // Update in conversation provider
@@ -446,13 +447,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         const SnackBar(content: Text('Failed to update starred status.')),
                                       );
                                     }
-                                    setState(() {
-                                      _isTogglingStarred = false;
-                                    });
                                   } catch (e) {
-                                    setState(() {
-                                      _isTogglingStarred = false;
-                                    });
+                                    debugPrint('Failed to toggle starred status: $e');
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _isTogglingStarred = false;
+                                      });
+                                    }
                                   }
                                 },
                           icon: _isTogglingStarred
