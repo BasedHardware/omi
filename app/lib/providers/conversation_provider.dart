@@ -18,6 +18,7 @@ class ConversationProvider extends ChangeNotifier {
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
   bool showShortConversations = false; // conversations < 2 minutes
+  bool showStarredOnly = false; // filter to show only starred conversations
   DateTime? selectedDate;
 
   String previousQuery = '';
@@ -168,6 +169,12 @@ class ConversationProvider extends ChangeNotifier {
     groupConversationsByDate();
   }
 
+  void toggleStarredFilter() {
+    showStarredOnly = !showStarredOnly;
+    groupConversationsByDate();
+    notifyListeners();
+  }
+
   void setLoadingConversations(bool value) {
     isLoadingConversations = value;
     notifyListeners();
@@ -287,6 +294,13 @@ class ConversationProvider extends ChangeNotifier {
       if (!showShortConversations) {
         final durationSeconds = convo.getDurationInSeconds();
         if (durationSeconds < 60) {
+          return false;
+        }
+      }
+
+      // Filter by starred status if enabled
+      if (showStarredOnly) {
+        if (!convo.starred) {
           return false;
         }
       }

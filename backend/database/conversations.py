@@ -720,6 +720,12 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
+def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'starred': starred})
+
+
 def unlock_all_conversations(uid: str):
     """
     Finds all conversations for a user with is_locked: True and updates them to is_locked = False.

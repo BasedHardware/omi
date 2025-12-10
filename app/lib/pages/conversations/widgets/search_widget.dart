@@ -217,31 +217,31 @@ class _SearchWidgetState extends State<SearchWidget> {
               );
             },
           ),
-          // const SizedBox(
-          //   width: 8,
-          // ),
-          // // Filter button
-          // Consumer<ConversationProvider>(
-          //     builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
-          //   return Container(
-          //     decoration: BoxDecoration(
-          //       color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : const Color(0xFF1F1F25),
-          //       borderRadius: const BorderRadius.all(Radius.circular(16)),
-          //     ),
-          //     child: IconButton(
-          //       onPressed: () {
-          //         HapticFeedback.mediumImpact();
-          //         convoProvider.toggleDiscardConversations();
-          //         MixpanelManager().deletedConversationsFilterToggled(!convoProvider.showDiscardedConversations);
-          //       },
-          //       icon: Icon(
-          //         FontAwesomeIcons.trashCan,
-          //         color: Colors.white,
-          //         size: 18,
-          //       ),
-          //     ),
-          //   );
-          // }),
+          const SizedBox(width: 8),
+          // Starred filter button
+          Consumer<ConversationProvider>(
+            builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: convoProvider.showStarredOnly ? Colors.amber.withOpacity(0.5) : const Color(0xFF1F1F25),
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    convoProvider.toggleStarredFilter();
+                  },
+                  icon: Icon(
+                    convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                    color: convoProvider.showStarredOnly ? Colors.amber : Colors.white,
+                    size: 18,
+                  ),
+                  tooltip:
+                      convoProvider.showStarredOnly ? 'Showing starred only - Tap to show all' : 'Filter by starred',
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
