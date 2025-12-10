@@ -1,21 +1,61 @@
 ---
 title: "App Setup"
-description: "Follow these steps to get started with your Omi. Don't want to bother with code? Use our official version on / store"
+description: "Set up the Omi Flutter app for development. Build automatically with our dev backend, or manually with your own."
 ---
 
-#### Prerequisites[​](#prerequisites)
+## Overview
+
+There are two ways to set up the Omi app for development:
+
+<CardGroup cols={2}>
+  <Card title="Automatic Setup" icon="wand-magic-sparkles" href="#build-the-app-automatically">
+    **Recommended for most developers**
+
+    One command setup using Omi's development backend
+  </Card>
+  <Card title="Manual Setup" icon="wrench" href="#build-the-app-manually">
+    **For custom backends**
+
+    Full control over configuration and backend
+  </Card>
+</CardGroup>
+
+<Info>
+Don't want to build from source? Download the official app from the [App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) or [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios).
+</Info>
+
+---
+
+## Prerequisites
 
 Before starting, make sure you have the following installed:
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (includes Dart).
-- [Xcode](https://developer.apple.com/xcode/) (for iOS)
-- [Android Studio](https://developer.android.com/studio) (for Android)
-- [CocoaPods](https://cocoapods.org/) (for iOS dependencies)
-- [NDK](https://developer.android.com/ndk/downloads) (to build Opus for ARM Devices).
+<CardGroup cols={2}>
+  <Card title="Flutter SDK" icon="flutter" href="https://docs.flutter.dev/get-started/install">
+    Includes Dart - the core framework
+  </Card>
+  <Card title="Xcode" icon="apple" href="https://developer.apple.com/xcode/">
+    Required for iOS development
+  </Card>
+  <Card title="Android Studio" icon="android" href="https://developer.android.com/studio">
+    Required for Android development
+  </Card>
+  <Card title="CocoaPods" icon="gem" href="https://cocoapods.org/">
+    iOS dependency manager
+  </Card>
+</CardGroup>
 
-## Build the app automatically[​](#build-the-app-automatically)
+<Note>
+You'll also need [NDK](https://developer.android.com/ndk/downloads) to build Opus for ARM devices.
+</Note>
 
-#### Video Walkthrough[​](#video-walkthrough)
+---
+
+## Build the App Automatically
+
+This is the **recommended** way to get started. It sets up your environment to use Omi's development backend with just one command.
+
+### Video Walkthrough
 
 <iframe
   width="560"
@@ -27,199 +67,257 @@ Before starting, make sure you have the following installed:
   allowFullScreen
 ></iframe>
 
-Building the app automatically means setting up your environment to use Omi's Development backend. That makes it much easier for you to get started - with just one command\!
+### Setup Steps
 
-This is the best way to get started, make changes to the app, and build apps on Omi.
+<Steps>
+  <Step title="Navigate to the app directory" icon="folder">
+    ```bash
+    cd app
+    ```
+  </Step>
+  <Step title="Run setup for your platform" icon="terminal">
+    <Tabs>
+      <Tab title="iOS">
+        ```bash
+        bash setup.sh ios
+        ```
+      </Tab>
+      <Tab title="Android">
+        ```bash
+        bash setup.sh android
+        ```
+      </Tab>
+      <Tab title="macOS">
+        ```bash
+        bash setup.sh macos
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        .\setup\scripts\setup.ps1
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Run in simulator" icon="play">
+    Open the app in your IDE and hit run:
+    - **Xcode**: Open `app/ios` folder
+    - **Android Studio**: Open `app/android` folder
 
-Alternatively, you can [build the app manually (see below)](#build-the-app-manually) - which allows you to use your own backend, etc.
+    Or run from terminal:
+    ```bash
+    flutter run --flavor dev
+    ```
+  </Step>
+</Steps>
 
-**1. Navigate to the  directory:**
+<Tip>
+The automatic setup uses Omi's development backend, making it the fastest way to start building apps and making changes.
+</Tip>
 
-```
-cd app
-```
+---
 
-**2. Build the app for iOS:**
+## Build the App Manually
 
-```
-bash setup.sh ios
-```
+Manual setup gives you full control, allowing you to use your own backend.
 
-**3. Build the app for Android:**
+<Steps>
+  <Step title="Verify Flutter Installation" icon="check">
+    Ensure Flutter is installed by following the official [Flutter Installation Guide](https://docs.flutter.dev/get-started/install).
 
-```
-bash setup.sh android
-```
+    Verify your setup:
+    ```bash
+    flutter doctor -v
+    ```
 
-**4. Build the app for macOS:**
+    <AccordionGroup>
+      <Accordion title="Example output" icon="terminal">
+        ```
+        [✓] Flutter (Channel stable, 3.35.3, on macOS 15.4.1)
+        [✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0)
+        [✓] Xcode - develop for iOS and macOS (Xcode 16.4)
+        [✓] Chrome - develop for the web
+        [✓] Android Studio (version 2025.1)
+        [✓] VS Code (version 1.101.0)
+        [✓] Connected device (4 available)
+        [✓] Network resources
+        ```
+      </Accordion>
+      <Accordion title="Recommended versions" icon="info-circle">
+        This project is tested with specific tool versions. See [`app/setup.sh`](https://github.com/BasedHardware/omi/blob/main/app/setup.sh) for recommended versions:
+        - Flutter 3.35.3
+        - Xcode 16.4
+        - Android SDK Platform 35
+        - NDK 28.2.13676358
+        - JDK 21
 
-```
-bash setup.sh macos
-```
+        To set a specific JDK on macOS:
+        ```bash
+        flutter config --jdk-dir /Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
+        ```
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+  <Step title="Get Flutter Dependencies" icon="download">
+    From the `app` directory, install packages:
+    ```bash
+    cd app
+    flutter pub get
+    ```
+  </Step>
+  <Step title="Install iOS Pods" icon="apple">
+    Navigate to iOS directory and install CocoaPods dependencies:
+    ```bash
+    cd ios
+    pod install
+    pod repo update
+    ```
+  </Step>
+  <Step title="Configure Environment" icon="gear">
+    Create your environment file from the template:
+    ```bash
+    cd ..
+    cat .env.template > .dev.env
+    ```
+  </Step>
+  <Step title="Add API Keys" icon="key">
+    Edit `.dev.env` and add your API keys:
 
-**If you use windows run the following commands**
+    | Key | Description |
+    |-----|-------------|
+    | `API_BASE_URL` | Your backend URL (use `https://api.omiapi.com/` for dev, or [set up your own](/doc/developer/backend/Backend_Setup)) |
+    | `OPENAI_API_KEY` | Optional - for AI features |
+    | `GOOGLE_MAPS_API_KEY` | Optional - for location features |
 
-```
-.\setup\scripts\setup.ps1
-```
+    <Warning>
+    Be sure to include the trailing `/` in `API_BASE_URL` or you'll get malformed URLs. If you change this later, delete the builds folder and recreate the runner.
+    </Warning>
+  </Step>
+  <Step title="Run Build Runner" icon="hammer">
+    Generate necessary files:
+    ```bash
+    dart pub run build_runner clean
+    dart pub run build_runner build
+    ```
+  </Step>
+  <Step title="Setup Firebase" icon="fire">
+    Firebase is **mandatory** for the app to run.
 
+    1. Follow the official [Firebase Flutter Setup](https://firebase.google.com/docs/flutter/setup) through Step 1
 
-**4. Run app in simulator:**
+    2. For Apple login, [create an identifier](https://developer.apple.com/account/resources/identifiers/list) first
 
-Now that we've built the app, we can run it in the simulator. Open the app in Xcode (open folder `app/ios`) or Android Studio (open folder `app/android`) - then just hit the run button\!
+    3. Configure for **production**:
+    ```bash
+    flutterfire config \
+      --out=lib/firebase_options_prod.dart \
+      --ios-bundle-id=YOUR_IOS_BUNDLE_ID \
+      --android-app-id=com.friend.ios \
+      --android-out=android/app/src/prod/ \
+      --ios-out=ios/Config/Prod/ \
+      --macos-bundle-id=YOUR_MACOS_BUNDLE_ID \
+      --macos-out=macos/Config/Prod
+    ```
 
-Alternatively, run `flutter run --flavor dev` in terminal
+    4. Configure for **development**:
+    ```bash
+    flutterfire config \
+      --out=lib/firebase_options_dev.dart \
+      --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
+      --android-app-id=com.friend.ios.dev \
+      --android-out=android/app/src/dev/ \
+      --ios-out=ios/Config/Dev/ \
+      --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
+      --macos-out=macos/Config/Prod
+    ```
 
-## Build the app manually:[​](#build-the-app-manually)
+    5. Generate SHA1/SHA256 keys for your keystore and add them to Firebase ([StackOverflow guide](https://stackoverflow.com/a/56091158) | [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en))
 
-Manual setup is useful if you want to build the app with your own backend.
+    <Tip>
+    If you're facing auth issues, enable Google/Apple sign-in in the Firebase Console under **Authentication → Sign-in method**.
+    </Tip>
+  </Step>
+  <Step title="Run the App" icon="play">
+    Select your target device and run:
+    ```bash
+    flutter run -v --flavor dev
+    ```
 
-### 1. Flutter Setup
-Ensure Flutter is installed by following the official [Flutter Installation Guide](https://docs.flutter.dev/get-started/install).
+    To build an APK:
+    ```bash
+    flutter build apk --flavor dev
+    ```
+  </Step>
+</Steps>
 
-After installation, run the following to verify your setup and see if any additional tools are required:
+---
 
-```
-flutter doctor -v
-```
+## Code Formatting
 
-**Example output:**
+We use `dart format` with a line length of 120 characters.
 
-```
-[✓] Flutter (Channel stable, 3.35.3, on macOS 15.4.1 24E263 darwin-arm64)
-    • Flutter version 3.35.3 on channel stable at /REDACTED/flutter
-    • Upstream repository https://github.com/flutter/flutter.git
-    • Framework revision a402d9a437 (8 days ago), 2025-09-03 14:54:31 -0700
-    • Engine revision ddf47dd3ff
-    • Dart version 3.9.2
-    • DevTools version 2.48.0
-
-[✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0)
-    • Android SDK at /Users/mohsin/Library/Android/sdk
-    • Platform android-36, build-tools 36.0.0
-    • Java binary at: /Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java
-      This is the JDK bundled with the latest Android Studio installation on this machine.
-      To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
-    • Java version OpenJDK Runtime Environment (build 21.0.7+-13880790-b1038.5)
-    • All Android licenses accepted.
-
-[✓] Xcode - develop for iOS and macOS (Xcode 16.4)
-    • Xcode at /Applications/Xcode.app/Contents/Developer
-    • Build 16F6
-    • CocoaPods version 1.16.2
-
-[✓] Chrome - develop for the web
-    • Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-
-[✓] Android Studio (version 2025.1)
-    • Android Studio at /Applications/Android Studio.app/Contents
-    • Java version OpenJDK Runtime Environment (build 21.0.7+-13880790-b1038.5)
-
-[✓] VS Code (version 1.101.0)
-    • VS Code at /Applications/Visual Studio Code.app/Contents
-    • Flutter extension version 3.112.0
-
-[✓] Connected device (4 available)
-    • sdk gphone64 arm64 (mobile)     • emulator-5554         • android-arm64  • Android 13 (API 33) (emulator)
-    • macOS (desktop)                 • macos                 • darwin-arm64   • macOS 15.3.2 24D81 darwin-arm64
-    • Mac Designed for iPad (desktop) • mac-designed-for-ipad • darwin         • macOS 15.3.2 24D81 darwin-arm64
-    • Chrome (web)                    • chrome                • web-javascript • Google Chrome 136.0.7103.114
-
-[✓] Network resources
-    • All expected network resources are available.
-
-! Doctor found issues in 1 category.
-```
-
-**Notes:**
-- This project is tested with specific versions of tools like Flutter SDK, Xcode, Android SDK, NDK, and JDK. Please refer to the [`app/setup.sh`](https://github.com/BasedHardware/omi/blob/main/app/setup.sh) script for these recommended versions (e.g., Flutter 3.35.3, Xcode 16.4, Android SDK Platform 35, NDK 28.2.13676358, JDK 21).
-
-- To ensure Android builds use the recommended JDK version (e.g., JDK 21), you might need to set it explicitly if it was installed separately from Android Studio. For example, on macOS, you can configure Flutter to use a specific JDK path:
-```
-flutter config --jdk-dir /Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
-```
-
-- CocoaPods must be installed to run on iOS/macOS.
-- Android Studio and VS Code editor versions generally do not matter as long as `flutter` commands are used from the correctly configured Flutter SDK.
-
-### 2. Get Flutter Dependencies[​](#2-get-flutter-dependencies)
-
-From within `app` directory, install flutter packages:
-
-```
-cd app 
-flutter pub get
-```
-
-### 3. Install iOS Pods[​](#3-install-ios-pods)
-
-Navigate to the iOS directory and install the CocoaPods dependencies:
-
-```
-cd ios
-pod install 
-pod repo update
-```
-
-### 4. Environment Configuration[​](#4-environment-configuration)
-
-Create `.env` using template `.env.template`, the env template has OPENAI_API_KEY, GOOGLE_MAPS_API_KEY which are optional.
-
-```
-cd ..
-cat .env.template > .dev.env
-```
-
-### 5. API Keys[​](#5-api-keys)
-
-Add your API keys to the `.env` file. (Sentry is not needed)
-
-- `API_BASE_URL` is your backend url. You can use our dev backend URL https://api.omiapi.com/ or Follow this guide to [install backend](https://docs.omi.me/doc/developer/backend/Backend_Setup)
-- Be sure to include the trailing '/' or you'll get malformed URL's
-- If you want to update this later on, you will need to delete the builds folder, and recreate the runner using dart.
-
-### 6. Run Build Runner[​](#6-run-build-runner)
-
-Generate necessary files with Build Runner:
-
-```
-dart pub run build_runner clean
-dart pub run build_runner build
-```
-
-### 7. Setup Firebase[​](#7-setup-firebase)
-- This step is mandatory for running the app, otherwise firebase related code needs to be removed from the app.
-- Follow official [Firebase Docs](https://firebase.google.com/docs/flutter/setup) till Step 1
-- If you want to use Apple login, first go and [create an identifier on the apple developer website](https://developer.apple.com/account/resources/identifiers/list)
-- Run the following command to register the prod flavor of the app. The command will prompt you to select `configuration type`; under it, select `Target` and then `Runner`
-  - substitute your apple identifier with the IOS_BUNDLE_ID and MACOS_BUNDLE_ID in the command below 
-  ```
-  flutterfire config --out=lib/firebase_options_prod.dart --ios-bundle-id=IOS_BUNDLE_ID --android-app-id=com.friend.ios --android-out=android/app/src/prod/  --ios-out=ios/Config/Prod/ --macos-bundle-id=MACOS_BUNDLE_ID --macos-out=macos/Config/Prod
-  ```
-- Similarly for dev environment
-
-  ```
-  flutterfire config --out=lib/firebase_options_dev.dart --ios-bundle-id=com.friend-app-with-wearable.ios12.development --android-app-id=com.friend.ios.dev --android-out=android/app/src/dev/  --ios-out=ios/Config/Dev/ --macos-bundle-id=com.friend-app-with-wearable.ios12.development --macos-out=macos/Config/Prod
-  ```
-- Generate SHA1/SHA256 Keys for your Keystore and add them to Firebase. Follow the steps mentioned in this [StackOverflow answer](https://stackoverflow.com/a/56091158) or the [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en). This is required for Firebase Auth through Google OAuth to work.
-
-If you're facing auth issues running the app, enable Google/Apple sign-in in Firebase. Go to the Firebase console and select your project. In the left-hand menu, click on "Authentication." On the "Sign-in method" tab, scroll down to the "Sign-in providers" section. Click on the "Google" sign-in provider. Click the "Enable" switch to enable Google Sign-In for your Firebase project.
-
-### 8. Run the App[​](#8-run-the-app)
-
-- Select your target device in Xcode or Android Studio.
-- Run the app using `flutter run -v --flavor dev`
-- To generate a dev apk `flutter build apk --flavor dev`
-
-### 9. Code Formatting[​](#9-code-formatting)
-
-To ensure code consistency, we use `dart format` with a line length of 120 characters.
-
-To automatically format your code on commit, install the pre-commit hook:
+To automatically format code on commit, install the pre-commit hook:
 
 ```bash
 # From the root of the repository
 ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
 ```
 
-Having troubles? [Join Discord and search your issue in help channel](http://discord.omi.me)
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Flutter doctor shows issues" icon="stethoscope">
+    - Run `flutter doctor -v` for detailed output
+    - Follow the suggestions to fix each issue
+    - Make sure all required SDKs are installed
+  </Accordion>
+  <Accordion title="iOS build fails" icon="apple">
+    - Ensure CocoaPods is installed: `sudo gem install cocoapods`
+    - Run `pod install` in the `ios` directory
+    - Try `pod repo update` if dependencies fail
+  </Accordion>
+  <Accordion title="Android build fails" icon="android">
+    - Check NDK is installed via Android Studio SDK Manager
+    - Verify JDK version matches requirements (JDK 21)
+    - Accept all Android licenses: `flutter doctor --android-licenses`
+  </Accordion>
+  <Accordion title="Firebase auth not working" icon="fire">
+    - Enable Google/Apple sign-in in Firebase Console
+    - Verify SHA1/SHA256 keys are added to Firebase
+    - Check bundle IDs match your Firebase configuration
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="http://discord.omi.me">
+    Search the help channel or ask questions
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/BasedHardware/omi/issues">
+    Report bugs or browse existing issues
+  </Card>
+</CardGroup>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Backend Setup" icon="server" href="/doc/developer/backend/Backend_Setup">
+    Set up your own Omi backend
+  </Card>
+  <Card title="Build Apps" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+    Create Omi apps and integrations
+  </Card>
+  <Card title="Firmware Setup" icon="microchip" href="/doc/get_started/Flash_device">
+    Flash and update device firmware
+  </Card>
+  <Card title="Contribution Guide" icon="code-branch" href="/doc/developer/Contribution">
+    How to contribute to Omi
+  </Card>
+</CardGroup>
