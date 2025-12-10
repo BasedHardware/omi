@@ -283,6 +283,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
+    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
 
     PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
     _disconnectNotificationTimer?.cancel();
@@ -349,6 +350,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
+    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(device);
 
     notifyListeners();
 

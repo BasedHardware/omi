@@ -66,6 +66,7 @@ enum WalStorage {
   mem,
   disk,
   sdcard,
+  flashPage,
 }
 
 class WalStats {
@@ -653,6 +654,372 @@ class SDCardWalSync implements IWalSync {
   }
 }
 
+class FlashPageWalSync implements IWalSync {
+  static const int pagesPerChunk = 25;
+
+  List<Wal> _wals = const [];
+  BtDevice? _device;
+
+  StreamSubscription? _pageStream;
+
+  // Sync state
+  int _oldestPage = 0;
+  int _newestPage = 0;
+  int _currentSession = 0;
+
+  IWalSyncListener listener;
+
+  FlashPageWalSync(this.listener);
+
+  Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return null;
+
+    try {
+      final dynamic limitlessConnection = connection;
+      return await limitlessConnection.getStorageStatus();
+    } catch (e) {
+      debugPrint('FlashPageSync: Not a Limitless device or getStorageStatus not available: $e');
+      return null;
+    }
+  }
+
+  Future<void> _acknowledgeProcessedData(String deviceId, int upToIndex) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+
+    try {
+      final dynamic limitlessConnection = connection;
+      await limitlessConnection.acknowledgeProcessedData(upToIndex);
+    } catch (e) {
+      debugPrint('FlashPageSync: Could not acknowledge processed data: $e');
+    }
+  }
+
+  /// Switch back to real-time mode after sync
+  Future<void> _enableRealTimeMode(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+
+    try {
+      final dynamic limitlessConnection = connection;
+      await limitlessConnection.enableRealTimeMode();
+    } catch (e) {
+      debugPrint('FlashPageSync: Could not enable real-time mode: $e');
+    }
+  }
+
+  @override
+  Future deleteWal(Wal wal) async {
+    _wals.removeWhere((w) => w.id == wal.id);
+
+    // If the WAL has been synced, acknowledge to delete from pendant
+    if (_device != null && wal.status == WalStatus.synced) {
+      await _acknowledgeProcessedData(_device!.id, wal.storageTotalBytes);
+    }
+
+    listener.onWalUpdated();
+  }
+
+  Future<List<Wal>> _getMissingWals() async {
+    if (_device == null) return [];
+
+    if (_device!.type != DeviceType.limitless) return [];
+
+    String deviceId = _device!.id;
+    List<Wal> wals = [];
+
+    var storageStatus = await _getStorageStatus(deviceId);
+    if (storageStatus == null || storageStatus.isEmpty) return [];
+
+    _oldestPage = storageStatus['oldest_flash_page'] ?? 0;
+    _newestPage = storageStatus['newest_flash_page'] ?? 0;
+    _currentSession = storageStatus['current_storage_session'] ?? 0;
+
+    int pageCount = _newestPage - _oldestPage + 1;
+    if (pageCount <= 0) return [];
+
+    // Estimate duration: ~2 seconds per page
+    int estimatedSeconds = pageCount * 2;
+
+    // Only create WAL if there's meaningful data (> 10 seconds)
+    if (estimatedSeconds > 10) {
+      int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
+
+      // Device model
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var pd = await _device!.getDeviceInfo(connection);
+      String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
+
+      wals.add(Wal(
+        codec: BleAudioCodec.opus,
+        timerStart: timerStart,
+        status: WalStatus.miss,
+        storage: WalStorage.flashPage,
+        seconds: estimatedSeconds,
+        storageOffset: _oldestPage,
+        storageTotalBytes: _newestPage,
+        fileNum: _currentSession,
+        device: _device!.id,
+        deviceModel: deviceModel,
+        totalFrames: pageCount * 8,
+        syncedFrameOffset: 0,
+      ));
+    }
+
+    return wals;
+  }
+
+  @override
+  Future<List<Wal>> getMissingWals() async {
+    return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
+  }
+
+  @override
+  Future start() async {
+    _wals = await _getMissingWals();
+    listener.onWalUpdated();
+  }
+
+  @override
+  Future stop() async {
+    _wals = [];
+    await _pageStream?.cancel();
+  }
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
+    if (wals.isEmpty) {
+      debugPrint("FlashPageSync: All synced!");
+      return null;
+    }
+
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    for (var i = wals.length - 1; i >= 0; i--) {
+      var wal = wals[i];
+
+      wal.isSyncing = true;
+      wal.syncStartedAt = DateTime.now();
+      listener.onWalUpdated();
+
+      var partialRes = await _syncWal(wal, progress);
+      if (partialRes != null) {
+        resp.newConversationIds
+            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      }
+
+      wal.status = WalStatus.synced;
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+      listener.onWalUpdated();
+    }
+
+    return resp;
+  }
+
+  @override
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    var walToSync = _wals.where((w) => w == wal).toList().first;
+
+    walToSync.isSyncing = true;
+    walToSync.syncStartedAt = DateTime.now();
+    listener.onWalUpdated();
+
+    var resp = await _syncWal(walToSync, progress);
+
+    walToSync.status = WalStatus.synced;
+    walToSync.isSyncing = false;
+    walToSync.syncStartedAt = null;
+    walToSync.syncEtaSeconds = null;
+
+    listener.onWalUpdated();
+    return resp;
+  }
+
+  Future<SyncLocalFilesResponse?> _syncWal(Wal wal, IWalSyncProgressListener? progress) async {
+    if (_device == null) return null;
+
+    debugPrint("FlashPageSync: Starting sync for ${wal.id}, pages ${wal.storageOffset} to ${wal.storageTotalBytes}");
+
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    String deviceId = _device!.id;
+
+    try {
+      // Get connection
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) {
+        debugPrint("FlashPageSync: Could not get connection");
+        return null;
+      }
+
+      final dynamic limitlessConnection = connection;
+
+      // Clear any existing data in buffer before starting batch mode
+      limitlessConnection.clearBuffer();
+
+      // Use WAL timerStart as the file timestamp (estimated recording time)
+      int fileTimestampMs = wal.timerStart * 1000;
+
+      // Enable batch mode to start receiving flash pages
+      await limitlessConnection.enableBatchMode();
+      debugPrint("FlashPageSync: Batch mode enabled, waiting for data...");
+
+      // Accumulate frames for chunking
+      List<List<int>> allFrames = [];
+      int extractionCount = 0;
+      int totalPages = wal.storageTotalBytes - wal.storageOffset + 1;
+
+      // Use a timer to periodically extract frames from buffer
+      // Same approach as real-time extraction, but we save to files instead of WebSocket
+      Completer<void> syncComplete = Completer<void>();
+      int emptyExtractions = 0;
+      const maxEmptyExtractions = 60; // 30 seconds of no data = done
+
+      Timer extractionTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+        // Extract frames from buffer
+        final frames = limitlessConnection.extractFramesFromBuffer() as List<List<int>>;
+
+        if (frames.isNotEmpty) {
+          allFrames.addAll(frames);
+          emptyExtractions = 0; // Reset timeout counter
+          extractionCount++;
+
+          debugPrint("FlashPageSync: Extracted ${frames.length} frames (total: ${allFrames.length})");
+
+          if (allFrames.length >= 1000) {
+            final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
+            debugPrint("FlashPageSync: Flushing ${allFrames.length} frames to file (timestamp: $chunkTimestamp)");
+            _flushChunk(List.from(allFrames), chunkTimestamp, wal, resp, 0);
+            allFrames.clear();
+            limitlessConnection.resetFlashPageTimestamp();
+            fileTimestampMs = chunkTimestamp + 62000;
+          }
+        } else {
+          emptyExtractions++;
+        }
+
+        double estimatedProgress = (extractionCount / (totalPages * 0.5)).clamp(0.0, 0.95);
+        progress?.onWalSyncedProgress(estimatedProgress);
+
+        // If no data for 30 seconds, assume sync is complete
+        if (emptyExtractions >= maxEmptyExtractions) {
+          debugPrint("FlashPageSync: No more data received, completing sync");
+          timer.cancel();
+          if (!syncComplete.isCompleted) {
+            syncComplete.complete();
+          }
+        }
+      });
+
+      await syncComplete.future.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          debugPrint("FlashPageSync: Sync timeout after 5 minutes");
+        },
+      );
+
+      extractionTimer.cancel();
+
+      if (allFrames.isNotEmpty) {
+        final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
+        await _flushChunk(allFrames, chunkTimestamp, wal, resp, 0);
+      }
+
+      // Acknowledge processed pages
+      await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
+      debugPrint("FlashPageSync: Acknowledged up to page ${wal.storageTotalBytes}");
+
+      // Switch back to real-time mode
+      await limitlessConnection.enableRealTimeMode();
+
+      debugPrint("FlashPageSync: Completed sync. Extracted ${extractionCount} batches");
+      progress?.onWalSyncedProgress(1.0);
+    } catch (e) {
+      debugPrint("FlashPageSync: Error during sync: $e");
+      // Try to switch back to real-time mode on error
+      try {
+        await _enableRealTimeMode(deviceId);
+      } catch (_) {}
+    }
+
+    return resp;
+  }
+
+  /// Flush accumulated frames to a file and sync
+  Future<void> _flushChunk(
+      List<List<int>> frames, int timestampMs, Wal wal, SyncLocalFilesResponse resp, int pageIndex) async {
+    if (frames.isEmpty) return;
+
+    debugPrint("FlashPageSync: Flushing chunk with ${frames.length} frames");
+
+    try {
+      // Create a temp file with length-prefixed frames (same format as SD card WALs)
+      // Filename includes _fs320 because Limitless uses opus_fs320 codec (frame_size=320)
+      int timerStart = timestampMs ~/ 1000;
+      final tempDir = await getApplicationDocumentsDirectory();
+      final fileName = 'audio_limitless_opus_16000_1_fs320_$timerStart.bin';
+      final filePath = '${tempDir.path}/$fileName';
+
+      final file = File(filePath);
+      final sink = file.openWrite();
+
+      // Write length-prefixed frames
+      for (final frame in frames) {
+        // Write 4-byte length prefix (little-endian) - matches backend decode_opus_file_to_wav
+        sink.add([
+          frame.length & 0xFF,
+          (frame.length >> 8) & 0xFF,
+          (frame.length >> 16) & 0xFF,
+          (frame.length >> 24) & 0xFF,
+        ]);
+        sink.add(frame);
+      }
+
+      await sink.close();
+
+      debugPrint("FlashPageSync: Created file $fileName with ${frames.length} frames");
+
+      // Upload to backend
+      final partialResp = await syncLocalFiles([file]);
+
+      // Merge response
+      resp.newConversationIds
+          .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+      // Clean up temp file
+      await file.delete();
+
+      debugPrint("FlashPageSync: Uploaded and deleted temp file");
+    } catch (e) {
+      debugPrint("FlashPageSync: Error flushing chunk: $e");
+    }
+  }
+
+  void setDevice(BtDevice? device) async {
+    _device = device;
+    if (device != null && device.type == DeviceType.limitless) {
+      _wals = await _getMissingWals();
+    } else {
+      _wals = [];
+    }
+    listener.onWalUpdated();
+  }
+
+  Future<void> deleteAllSyncedWals() async {
+    final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
+    for (final wal in syncedWals) {
+      await deleteWal(wal);
+    }
+  }
+}
+
 class LocalWalSync implements IWalSync {
   List<Wal> _wals = const [];
 
@@ -1102,17 +1469,22 @@ class WalSyncs implements IWalSync {
   late SDCardWalSync _sdcardSync;
   SDCardWalSync get sdcard => _sdcardSync;
 
+  late FlashPageWalSync _flashPageSync;
+  FlashPageWalSync get flashPage => _flashPageSync;
+
   IWalSyncListener listener;
 
   WalSyncs(this.listener) {
     _phoneSync = LocalWalSync(listener);
     _sdcardSync = SDCardWalSync(listener);
+    _flashPageSync = FlashPageWalSync(listener);
   }
 
   @override
   Future deleteWal(Wal wal) async {
     await _phoneSync.deleteWal(wal);
     await _sdcardSync.deleteWal(wal);
+    await _flashPageSync.deleteWal(wal);
   }
 
   @override
@@ -1120,6 +1492,7 @@ class WalSyncs implements IWalSync {
     List<Wal> wals = [];
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
+    wals.addAll(await _flashPageSync.getMissingWals());
     return wals;
   }
 
@@ -1127,6 +1500,7 @@ class WalSyncs implements IWalSync {
     List<Wal> wals = [];
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getAllWals());
+    wals.addAll(await _flashPageSync.getMissingWals());
     return wals;
   }
 
@@ -1190,18 +1564,21 @@ class WalSyncs implements IWalSync {
   Future<void> deleteAllSyncedWals() async {
     await _phoneSync.deleteAllSyncedWals();
     await _sdcardSync.deleteAllSyncedWals();
+    await _flashPageSync.deleteAllSyncedWals();
   }
 
   @override
   void start() {
     _phoneSync.start();
     _sdcardSync.start();
+    _flashPageSync.start();
   }
 
   @override
   Future stop() async {
     await _phoneSync.stop();
     await _sdcardSync.stop();
+    await _flashPageSync.stop();
   }
 
   @override
@@ -1226,6 +1603,15 @@ class WalSyncs implements IWalSync {
           .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     }
 
+    // flash pages (Limitless)
+    partialRes = await _flashPageSync.syncAll(progress: progress);
+    if (partialRes != null) {
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+    }
+
     return resp;
   }
 
@@ -1233,6 +1619,8 @@ class WalSyncs implements IWalSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) {
     if (wal.storage == WalStorage.sdcard) {
       return _sdcardSync.syncWal(wal: wal, progress: progress);
+    } else if (wal.storage == WalStorage.flashPage) {
+      return _flashPageSync.syncWal(wal: wal, progress: progress);
     } else {
       return _phoneSync.syncWal(wal: wal, progress: progress);
     }

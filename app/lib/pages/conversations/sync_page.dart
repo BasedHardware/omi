@@ -188,7 +188,9 @@ class WalListItem extends StatelessWidget {
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          '${secondsToHumanReadable(wal.seconds)} • ${wal.deviceModel ?? "Omi Device"}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
+                                          wal.storage == WalStorage.flashPage
+                                              ? '${wal.deviceModel ?? "Limitless"} • Offline Recording'
+                                              : '${secondsToHumanReadable(wal.seconds)} • ${wal.deviceModel ?? "Omi Device"}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
                                           style: TextStyle(
                                             color: Colors.grey.shade400,
                                             fontSize: 14,
@@ -475,6 +477,12 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     label: 'SD Card',
                     isSelected: syncProvider.storageFilter == WalStorage.sdcard,
                     onTap: () => syncProvider.setStorageFilter(WalStorage.sdcard),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    label: 'Limitless',
+                    isSelected: syncProvider.storageFilter == WalStorage.flashPage,
+                    onTap: () => syncProvider.setStorageFilter(WalStorage.flashPage),
                   ),
                 ],
               ),
