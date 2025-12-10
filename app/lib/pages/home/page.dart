@@ -454,10 +454,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   alignment: Alignment.bottomCenter,
                                   child: Container(
                                     width: double.infinity,
-                                    height: 80,
-                                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                                    height: 100,
+                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                                     decoration: const BoxDecoration(
-                                      color: Color.fromARGB(255, 15, 15, 15),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        stops: [0.0, 0.30, 1.0],
+                                        colors: [
+                                          Colors.transparent,
+                                          Color.fromARGB(255, 15, 15, 15),
+                                          Color.fromARGB(255, 15, 15, 15),
+                                        ],
+                                      ),
                                     ),
                                     child: Row(
                                       children: [
@@ -476,28 +485,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.house,
-                                                      color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Home',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 0
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.house,
+                                                  color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -518,28 +510,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.listCheck,
-                                                      color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Tasks',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 1
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.listCheck,
+                                                  color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -562,28 +537,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.brain,
-                                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Memories',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 2
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.brain,
+                                                  color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -604,28 +562,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.puzzlePiece,
-                                                      color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Apps',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 3
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.puzzlePiece,
+                                                  color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
