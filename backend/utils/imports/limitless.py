@@ -84,19 +84,31 @@ def parse_lifelog_md(
     # Extract H2 and H3 headers (these are Limitless AI-generated topic summaries)
     # Create two versions:
     # 1. formatted_summary: H2 as markdown headers, H3 as bullet points (for apps_results)
+    #    - If all headers are H2 (no H3s), convert H2s to bullet points instead
     # 2. plain_summary: unformatted text dump (for overview)
-    formatted_parts = []
     plain_parts = []
+    header_data = []  # List of (hashes, text) tuples
 
-    # Process all headers in order
+    # First pass: collect all headers and check for H3s
+    has_h3 = False
     for match in re.finditer(r'^(#{2,3})\s+(.+)$', content, re.MULTILINE):
         hashes, text = match.groups()
         text = text.strip()
         plain_parts.append(text)
+        header_data.append((hashes, text))
+        if hashes == '###':
+            has_h3 = True
 
+    # Second pass: format based on whether H3s exist
+    formatted_parts = []
+    for hashes, text in header_data:
         if hashes == '##':
-            # Keep H2 as markdown header
-            formatted_parts.append(f'## {text}')
+            if has_h3:
+                # Keep H2 as markdown header when H3s are present
+                formatted_parts.append(f'## {text}')
+            else:
+                # Convert H2 to bullet point when no H3s exist
+                formatted_parts.append(f'- {text}')
         else:
             # Convert H3 to markdown bullet point
             formatted_parts.append(f'- {text}')
