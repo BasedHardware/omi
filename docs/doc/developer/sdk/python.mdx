@@ -1,138 +1,170 @@
 ---
-title: Python SDK
-description: ''
+title: "Python SDK"
+description: "Connect to Omi devices over Bluetooth, decode Opus audio, and transcribe in real-time using Deepgram"
 ---
 
-# 🎧 Omi Python SDK 
+## Overview
 
-A pip-installable Python SDK for connecting to **Omi wearable devices** over **Bluetooth**, decoding **Opus-encoded audio**, and transcribing it in **real time using Deepgram**.
+A pip-installable Python SDK for connecting to Omi wearable devices over Bluetooth, decoding Opus-encoded audio, and transcribing it in real time using Deepgram.
 
-## 📦 Installation
+<CardGroup cols={3}>
+  <Card title="Bluetooth Connection" icon="bluetooth">
+    Connect to any Omi device
+  </Card>
+  <Card title="Opus Decoding" icon="waveform">
+    Decode Opus audio to PCM
+  </Card>
+  <Card title="Real-time Transcription" icon="microphone">
+    Deepgram-powered STT
+  </Card>
+</CardGroup>
+
+---
+
+## Installation
 
 ### Prerequisites
-The Omi SDK requires the Opus audio codec library to be installed on your system:
 
-**macOS:**
-```bash
-brew install opus
-```
+The SDK requires the Opus audio codec library:
 
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install libopus0 libopus-dev
-```
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    brew install opus
+    ```
+  </Tab>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    sudo apt-get install libopus0 libopus-dev
+    ```
+  </Tab>
+  <Tab title="CentOS/RHEL">
+    ```bash
+    sudo yum install opus opus-devel
+    ```
+  </Tab>
+  <Tab title="Fedora">
+    ```bash
+    sudo dnf install opus opus-devel
+    ```
+  </Tab>
+</Tabs>
 
-**CentOS/RHEL/Fedora:**
-```bash
-sudo yum install opus opus-devel  # CentOS/RHEL
-sudo dnf install opus opus-devel  # Fedora
-```
+### Install the SDK
 
-### Option 1: Install from PyPI (when published)
-```bash
-pip install omi-sdk
-```
+<Tabs>
+  <Tab title="From PyPI">
+    ```bash
+    pip install omi-sdk
+    ```
+  </Tab>
+  <Tab title="From Source">
+    ```bash
+    git clone https://github.com/BasedHardware/omi.git
+    cd omi/sdks/python
+    pip install -e .
+    ```
+  </Tab>
+</Tabs>
 
-### Option 2: Install from source
-```bash
-git clone https://github.com/BasedHardware/omi.git
-cd omi/sdks/python
-pip install -e .
-```
+---
 
-## 🚀 Quick Start
+## Quick Start
 
-### 1. Set up your environment
-```bash
-# Get a free API key from https://deepgram.com
-export DEEPGRAM_API_KEY=your_actual_deepgram_key
-```
+<Steps>
+  <Step title="Set Up Your Environment">
+    Get a free API key from [Deepgram](https://deepgram.com):
 
-### 2. Find your Omi device
-```bash
-# Scan for nearby Bluetooth devices
-omi-scan
-```
+    ```bash
+    export DEEPGRAM_API_KEY=your_actual_deepgram_key
+    ```
+  </Step>
+  <Step title="Find Your Omi Device">
+    Scan for nearby Bluetooth devices:
 
-Look for a device named "Omi" and copy its MAC address:
-```
-0. Omi [7F52EC55-50C9-D1B9-E8D7-19B83217C97D]
-```
+    ```bash
+    omi-scan
+    ```
 
-### 3. Use in your Python code
-```python
-import asyncio
-import os
-from omi import listen_to_omi, OmiOpusDecoder, transcribe
-from asyncio import Queue
+    Look for a device named "Omi" and copy its MAC address:
 
-# Configuration
-OMI_MAC = "YOUR_OMI_MAC_ADDRESS_HERE"  # From omi-scan
-OMI_CHAR_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"  # Standard Omi audio UUID
-DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+    ```
+    0. Omi [7F52EC55-50C9-D1B9-E8D7-19B83217C97D]
+    ```
+  </Step>
+  <Step title="Write Your Code">
+    ```python
+    import asyncio
+    import os
+    from omi import listen_to_omi, OmiOpusDecoder, transcribe
+    from asyncio import Queue
 
-async def main():
-    audio_queue = Queue()
-    decoder = OmiOpusDecoder()
-    
-    def handle_audio(sender, data):
-        pcm_data = decoder.decode_packet(data)
-        if pcm_data:
-            audio_queue.put_nowait(pcm_data)
-    
-    def handle_transcript(transcript):
-        # Custom transcript handling
-        print(f"🎤 {transcript}")
-        # Save to file, send to API, etc.
-    
-    # Start transcription and device connection
-    await asyncio.gather(
-        listen_to_omi(OMI_MAC, OMI_CHAR_UUID, handle_audio),
-        transcribe(audio_queue, DEEPGRAM_API_KEY, on_transcript=handle_transcript)
-    )
+    # Configuration
+    OMI_MAC = "YOUR_OMI_MAC_ADDRESS_HERE"  # From omi-scan
+    OMI_CHAR_UUID = "19B10001-E8F2-537E-4F6C-D104768A1214"  # Standard Omi audio UUID
+    DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
 
-if __name__ == "__main__":
-    asyncio.run(main())
-```
+    async def main():
+        audio_queue = Queue()
+        decoder = OmiOpusDecoder()
 
-### 4. Run the example
+        def handle_audio(sender, data):
+            pcm_data = decoder.decode_packet(data)
+            if pcm_data:
+                audio_queue.put_nowait(pcm_data)
 
-The included example demonstrates connecting to an Omi device and real-time transcription:
+        def handle_transcript(transcript):
+            print(f"Transcription: {transcript}")
+            # Save to file, send to API, etc.
 
-```bash
-# 1. Set your Deepgram API key
-export DEEPGRAM_API_KEY=your_actual_deepgram_key
+        # Start transcription and device connection
+        await asyncio.gather(
+            listen_to_omi(OMI_MAC, OMI_CHAR_UUID, handle_audio),
+            transcribe(audio_queue, DEEPGRAM_API_KEY, on_transcript=handle_transcript)
+        )
 
-# 2. Find your Omi device MAC address
-omi-scan
+    if __name__ == "__main__":
+        asyncio.run(main())
+    ```
+  </Step>
+  <Step title="Run the Example">
+    ```bash
+    python examples/main.py
+    ```
 
-# 3. Update examples/main.py with your device's MAC address
-# Edit line 10: OMI_MAC = "YOUR_DEVICE_MAC_HERE"
+    The example will:
+    - Connect to your Omi device via Bluetooth
+    - Decode incoming Opus audio packets to PCM
+    - Transcribe audio in real-time using Deepgram
+    - Print transcriptions to the console
+  </Step>
+</Steps>
 
-# 4. Run the example
-python examples/main.py
-```
+---
 
-The example will:
-- Connect to your Omi device via Bluetooth
-- Decode incoming Opus audio packets to PCM
-- Transcribe audio in real-time using Deepgram
-- Print transcriptions to the console
-
-## 📚 API Reference
+## API Reference
 
 ### Core Functions
-- `omi.print_devices()` - Scan for Bluetooth devices
-- `omi.listen_to_omi(mac, uuid, handler)` - Connect to Omi device
-- `omi.OmiOpusDecoder()` - Decode Opus audio to PCM
-- `omi.transcribe(queue, api_key)` - Real-time transcription
+
+| Function | Description |
+|----------|-------------|
+| `omi.print_devices()` | Scan for Bluetooth devices |
+| `omi.listen_to_omi(mac, uuid, handler)` | Connect to Omi device and receive audio |
+| `omi.OmiOpusDecoder()` | Decode Opus audio to PCM |
+| `omi.transcribe(queue, api_key)` | Real-time transcription via Deepgram |
 
 ### Command Line Tools
-- `omi-scan` - Scan for nearby Bluetooth devices
 
-## 🔧 Development
+| Command | Description |
+|---------|-------------|
+| `omi-scan` | Scan for nearby Bluetooth devices |
 
-### Local development setup
+---
+
+## Development
+
+### Local Development Setup
+
 ```bash
 git clone https://github.com/BasedHardware/omi.git
 cd omi/sdks/python
@@ -148,18 +180,43 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-## 🧩 Troubleshooting
+---
 
-- **Opus library error**: Make sure Opus audio codec is installed (see Prerequisites section)
-- **Bluetooth permission errors on macOS**: Go to System Preferences → Privacy & Security → Bluetooth and grant access to Terminal and Python
-- **Python version**: Requires Python 3.10+
-- **Omi device**: Make sure device is powered on and nearby
-- **WebSocket issues**: SDK uses `websockets>=11.0`
+## Troubleshooting
 
-## 📄 License
+<AccordionGroup>
+  <Accordion title="Opus library error" icon="circle-exclamation">
+    Make sure the Opus audio codec is installed on your system. See the Prerequisites section above for installation commands.
+  </Accordion>
+  <Accordion title="Bluetooth permission errors on macOS" icon="apple">
+    Go to **System Preferences → Privacy & Security → Bluetooth** and grant access to Terminal and Python.
+  </Accordion>
+  <Accordion title="Python version issues" icon="python">
+    The SDK requires Python 3.10 or higher. Check your version with `python --version`.
+  </Accordion>
+  <Accordion title="Device not found" icon="bluetooth">
+    Make sure your Omi device is powered on and nearby. Try running `omi-scan` to verify it's discoverable.
+  </Accordion>
+  <Accordion title="WebSocket issues" icon="plug">
+    The SDK uses `websockets>=11.0`. Try upgrading: `pip install --upgrade websockets`
+  </Accordion>
+</AccordionGroup>
 
-MIT License — this is an unofficial SDK built by the community, not affiliated with Omi.
+---
 
-## 🙌 Credits
+## License
 
-Built by the Omi community using Omi hardware and Deepgram's transcription engine.
+MIT License — this is an unofficial SDK built by the community.
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="SDK Overview" icon="cube" href="/doc/developer/sdk/sdk">
+    Compare all available SDKs
+  </Card>
+  <Card title="GitHub Source" icon="github" href="https://github.com/BasedHardware/omi/tree/main/sdks/python">
+    View source code and contribute
+  </Card>
+</CardGroup>
