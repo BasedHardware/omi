@@ -472,18 +472,8 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
       children: [
         FilesHandlerWidget(message: widget.message),
         widget.showTypingIndicator && widget.messageText.isEmpty
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
-                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -665,18 +655,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         //   ),
         // ),
         widget.showTypingIndicator && widget.messageText == '...'
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
-                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
