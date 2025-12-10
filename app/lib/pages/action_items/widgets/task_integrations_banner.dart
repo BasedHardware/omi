@@ -34,7 +34,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: Colors.deepPurpleAccent.withOpacity(0.2),
             width: 1,

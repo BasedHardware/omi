@@ -158,6 +158,10 @@ async def delete_limitless_conversations(
     Returns:
         Number of deleted conversations
     """
-    deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
+    # TODO: This deletes all the other conversations as well (which were created in omi using the pendant)
+    # TODO: Add a flag to the conversation to indicate that it was imported
+    # deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
 
-    return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}
+    # return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}
+
+    return {'deleted_count': 0, 'message': 'Successfully deleted 0 Limitless conversations'}
