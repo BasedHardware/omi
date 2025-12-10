@@ -382,7 +382,7 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool isFormValid() {
-    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null && termsAgreed) {
+    if (capabilitySelected() && (imageFile != null || imageUrl != null) && appCategory != null) {
       if (metadataKey.currentState != null && metadataKey.currentState!.validate()) {
         bool isValid = false;
         for (var capability in selectedCapabilities) {
@@ -451,10 +451,6 @@ class AddAppProvider extends ChangeNotifier {
       }
       if (isPaid && (priceController.text.isEmpty || selectePaymentPlan == null)) {
         AppSnackbar.showSnackbarError('Please select a payment plan and enter a price for your app');
-        return false;
-      }
-      if (!termsAgreed) {
-        AppSnackbar.showSnackbarError('Please agree to the terms and conditions to proceed');
         return false;
       }
       if (!capabilitySelected()) {

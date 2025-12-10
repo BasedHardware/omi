@@ -149,7 +149,7 @@ def search_apps_db(
 
     # 3. Add capability filter
     if capability and not my_apps:
-        filters.append(FieldFilter('capabilities', 'array-contains', capability))
+        filters.append(FieldFilter('capabilities', 'array_contains', capability))
 
     # Execute query with all filters
     if filters:

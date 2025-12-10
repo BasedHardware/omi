@@ -401,6 +401,43 @@ def update_conversation_merged_data(uid: str, conversation_id: str, merged_data:
     doc_ref.update(prepared_data)
 
 
+def delete_conversations_by_source(uid: str, source: str, batch_size: int = 450) -> int:
+    """
+    Delete all conversations with a specific source.
+
+    Args:
+        uid: User ID
+        source: Source type (e.g., 'limitless')
+        batch_size: Number of documents to delete per batch
+
+    Returns:
+        Number of deleted conversations
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+
+    total_deleted = 0
+
+    while True:
+        # Query for conversations with matching source
+        query = conversations_ref.where(filter=FieldFilter('source', '==', source)).limit(batch_size)
+        docs = list(query.stream())
+
+        if not docs:
+            break
+
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+            total_deleted += 1
+        batch.commit()
+
+        if len(docs) < batch_size:
+            break
+
+    return total_deleted
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def filter_conversations_by_date(uid, start_date, end_date):
@@ -553,12 +590,29 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection(conversations_collection).where(
-        filter=FieldFilter('status', '==', 'in_progress')
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
     return conversation
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def get_in_progress_conversations(uid: str):
+    """Get all in-progress conversations for a user, ordered by created_at descending."""
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
