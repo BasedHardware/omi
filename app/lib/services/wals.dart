@@ -873,31 +873,39 @@ class FlashPageWalSync implements IWalSync {
       List<List<int>> allFrames = [];
       int extractionCount = 0;
       int totalPages = wal.storageTotalBytes - wal.storageOffset + 1;
+      bool allUploadsSuccessful = true;
+      int chunkIndex = 0;
+
+      // Queue chunks for sequential upload
+      List<Map<String, dynamic>> pendingChunks = [];
 
       // Use a timer to periodically extract frames from buffer
-      // Same approach as real-time extraction, but we save to files instead of WebSocket
       Completer<void> syncComplete = Completer<void>();
       int emptyExtractions = 0;
       const maxEmptyExtractions = 60; // 30 seconds of no data = done
+      const int framesPerChunk = 2000; // ~2 minutes of audio per chunk
 
       Timer extractionTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-        // Extract frames from buffer
         final frames = limitlessConnection.extractFramesFromBuffer() as List<List<int>>;
 
         if (frames.isNotEmpty) {
           allFrames.addAll(frames);
-          emptyExtractions = 0; // Reset timeout counter
+          emptyExtractions = 0;
           extractionCount++;
 
           debugPrint("FlashPageSync: Extracted ${frames.length} frames (total: ${allFrames.length})");
 
-          if (allFrames.length >= 1000) {
+          if (allFrames.length >= framesPerChunk) {
             final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
-            debugPrint("FlashPageSync: Flushing ${allFrames.length} frames to file (timestamp: $chunkTimestamp)");
-            _flushChunk(List.from(allFrames), chunkTimestamp, wal, resp, 0);
+            // Queue for upload with unique index
+            pendingChunks.add({
+              'frames': List<List<int>>.from(allFrames),
+              'timestamp': chunkTimestamp,
+              'index': chunkIndex++,
+            });
             allFrames.clear();
             limitlessConnection.resetFlashPageTimestamp();
-            fileTimestampMs = chunkTimestamp + 62000;
+            fileTimestampMs = chunkTimestamp + 120000; // 2 minutes
           }
         } else {
           emptyExtractions++;
@@ -906,7 +914,6 @@ class FlashPageWalSync implements IWalSync {
         double estimatedProgress = (extractionCount / (totalPages * 0.5)).clamp(0.0, 0.95);
         progress?.onWalSyncedProgress(estimatedProgress);
 
-        // If no data for 30 seconds, assume sync is complete
         if (emptyExtractions >= maxEmptyExtractions) {
           debugPrint("FlashPageSync: No more data received, completing sync");
           timer.cancel();
@@ -925,19 +932,43 @@ class FlashPageWalSync implements IWalSync {
 
       extractionTimer.cancel();
 
+      // Add remaining frames to queue
       if (allFrames.isNotEmpty) {
         final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
-        await _flushChunk(allFrames, chunkTimestamp, wal, resp, 0);
+        pendingChunks.add({
+          'frames': List<List<int>>.from(allFrames),
+          'timestamp': chunkTimestamp,
+          'index': chunkIndex++,
+        });
       }
 
-      // Acknowledge processed pages
-      await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
-      debugPrint("FlashPageSync: Acknowledged up to page ${wal.storageTotalBytes}");
+      // Upload chunks sequentially to avoid race conditions and 429 errors
+      debugPrint("FlashPageSync: Uploading ${pendingChunks.length} chunks sequentially");
+      for (final chunk in pendingChunks) {
+        final success = await _flushChunk(
+          chunk['frames'] as List<List<int>>,
+          chunk['timestamp'] as int,
+          wal,
+          resp,
+          chunk['index'] as int,
+        );
+        if (!success) allUploadsSuccessful = false;
+        // Small delay between uploads to avoid rate limiting
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // Only acknowledge if ALL uploads succeeded - prevents data loss
+      if (allUploadsSuccessful) {
+        await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
+        debugPrint("FlashPageSync: Acknowledged up to page ${wal.storageTotalBytes}");
+      } else {
+        debugPrint("FlashPageSync: Some uploads failed - NOT acknowledging to preserve data on pendant");
+      }
 
       // Switch back to real-time mode
       await limitlessConnection.enableRealTimeMode();
 
-      debugPrint("FlashPageSync: Completed sync. Extracted ${extractionCount} batches");
+      debugPrint("FlashPageSync: Completed sync. ${pendingChunks.length} chunks, allSuccessful=$allUploadsSuccessful");
       progress?.onWalSyncedProgress(1.0);
     } catch (e) {
       debugPrint("FlashPageSync: Error during sync: $e");
@@ -950,27 +981,24 @@ class FlashPageWalSync implements IWalSync {
     return resp;
   }
 
-  /// Flush accumulated frames to a file and sync
-  Future<void> _flushChunk(
-      List<List<int>> frames, int timestampMs, Wal wal, SyncLocalFilesResponse resp, int pageIndex) async {
-    if (frames.isEmpty) return;
+  /// Flush accumulated frames to a file and sync. Returns true if upload succeeded.
+  Future<bool> _flushChunk(
+      List<List<int>> frames, int timestampMs, Wal wal, SyncLocalFilesResponse resp, int chunkIndex) async {
+    if (frames.isEmpty) return true;
 
-    debugPrint("FlashPageSync: Flushing chunk with ${frames.length} frames");
+    debugPrint("FlashPageSync: Flushing chunk $chunkIndex with ${frames.length} frames");
 
     try {
-      // Create a temp file with length-prefixed frames (same format as SD card WALs)
-      // Filename includes _fs320 because Limitless uses opus_fs320 codec (frame_size=320)
       int timerStart = timestampMs ~/ 1000;
       final tempDir = await getApplicationDocumentsDirectory();
-      final fileName = 'audio_limitless_opus_16000_1_fs320_$timerStart.bin';
+      // Use chunkIndex in filename to avoid collisions, timestamp last for backend parsing
+      final fileName = 'audio_limitless_opus_16000_1_fs320_c${chunkIndex}_$timerStart.bin';
       final filePath = '${tempDir.path}/$fileName';
 
       final file = File(filePath);
       final sink = file.openWrite();
 
-      // Write length-prefixed frames
       for (final frame in frames) {
-        // Write 4-byte length prefix (little-endian) - matches backend decode_opus_file_to_wav
         sink.add([
           frame.length & 0xFF,
           (frame.length >> 8) & 0xFF,
@@ -981,24 +1009,22 @@ class FlashPageWalSync implements IWalSync {
       }
 
       await sink.close();
-
       debugPrint("FlashPageSync: Created file $fileName with ${frames.length} frames");
 
       // Upload to backend
       final partialResp = await syncLocalFiles([file]);
 
-      // Merge response
       resp.newConversationIds
           .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
       resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
           .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
 
-      // Clean up temp file
       await file.delete();
-
       debugPrint("FlashPageSync: Uploaded and deleted temp file");
+      return true;
     } catch (e) {
       debugPrint("FlashPageSync: Error flushing chunk: $e");
+      return false;
     }
   }
 
