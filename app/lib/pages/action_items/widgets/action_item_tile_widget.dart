@@ -145,10 +145,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        // color: chipColor,
-        borderRadius: BorderRadius.circular(12),
+        color: chipColor,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
