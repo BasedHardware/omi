@@ -1,232 +1,188 @@
 ---
-Title: "Sending Notifications with OMI"
-description: "Learn how to send notifications to OMI users from your applications, including direct text notifications and best practices for implementation."
+title: "Sending Notifications"
+description: "Send push notifications to Omi users from your apps - both direct text notifications and AI-generated proactive notifications."
 ---
 
-## Types of Notifications 📬
+## Overview
 
-### 1. 📱 Direct Text Notifications
+Omi supports two types of notifications you can send to users:
 
-Direct text notifications allow you to send immediate messages to specific OMI users. This is useful for alerts, updates, or responses to user actions.
+<CardGroup cols={2}>
+  <Card title="Direct Notifications" icon="message">
+    Send immediate, exact-text messages to specific users
+  </Card>
+  <Card title="Proactive Notifications" icon="robot">
+    AI-generated contextual messages based on real-time conversations
+  </Card>
+</CardGroup>
 
-#### Example Use Cases
+```mermaid
+flowchart LR
+    subgraph Direct["Direct Notifications"]
+        A[Your Server] -->|POST /notification| O[Omi API]
+        O -->|Push| U1[User]
+    end
 
-- Send task reminders and event notifications
-- Notify users about service updates or changes
-- Deliver real-time alerts and warnings
-- Respond to user queries or actions
-- Announce new features or important changes
-
-### 2. 🎯 Proactive Notifications
-
-Proactive notifications are context-aware, AI-generated messages that leverage user data to send personalized, intelligent notifications during real-time conversations. Unlike direct notifications where you send the exact message text, proactive notifications let you provide a prompt template and Omi generates the final message based on user context.
-
-#### Example Use Cases
-
-- Provide real-time mentoring advice during meetings
-- Suggest relevant information based on conversation topics
-- Offer context-aware reminders
-- Send personalized insights based on user's goals and history
-- Trigger intelligent responses to specific conversation patterns
-
-## Implementing Notifications 🛠️
-
-### Step 1: Set Up Authentication 🔑
-
-Before sending notifications, you'll need:
-
-1. Your OMI App ID (`app_id`)
-2. Your OMI App Secret (API Key)
-
-Store these securely as environment variables:
-```bash
-OMI_APP_ID=your_app_id_here
-OMI_APP_SECRET=your_app_secret_here
+    subgraph Proactive["Proactive Notifications"]
+        T[Real-time Transcript] -->|Webhook| W[Your Server]
+        W -->|Prompt Template| O2[Omi API]
+        O2 -->|AI Generated| U2[User]
+    end
 ```
 
-### Step 2: Configure Your Endpoint 🔌
+---
 
-#### Base URL and Endpoint
+## Direct Notifications
 
-```markdown
-* **Method:** `POST`
-* **URL:** `/v2/integrations/{app_id}/notification`
-* **Base URL:** `api.omi.me`
-```
+Send immediate messages to specific users. Perfect for alerts, updates, and responses to user actions.
 
-#### Required Headers
+<AccordionGroup>
+  <Accordion title="Use Cases" icon="lightbulb">
+    - Task reminders and event notifications
+    - Service updates or changes
+    - Real-time alerts and warnings
+    - Responses to user queries
+    - New feature announcements
+  </Accordion>
+</AccordionGroup>
 
-```markdown
-* **Authorization:** `Bearer <YOUR_APP_SECRET>`
-* **Content-Type:** `application/json`
-* **Content-Length:** `0`
-```
+### API Reference
 
-#### Query Parameters
+| Setting | Value |
+|---------|-------|
+| Method | `POST` |
+| URL | `https://api.omi.me/v2/integrations/{app_id}/notification` |
+| Auth | `Bearer <YOUR_APP_SECRET>` |
 
-```markdown
-* `uid` (string, **required**): The target user's OMI ID
-* `message` (string, **required**): The notification text
-```
+**Query Parameters:**
 
-### Step 3: Implement the Code 💻
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `uid` | Yes | Target user's Omi ID |
+| `message` | Yes | Notification text |
 
-Here's a complete Node.js implementation:
+### Implementation
 
-```javascript
-const https = require('https');
+<Steps>
+  <Step title="Get Credentials" icon="key">
+    You'll need your App ID and App Secret from the Omi developer portal.
 
-/**
- * Sends a direct notification to an Omi user.
- * @param {string} userId - The Omi user's unique ID
- * @param {string} message - The notification text
- * @returns {Promise<object>} Response data or error
- */
-function sendOmiNotification(userId, message) {
-    const appId = process.env.OMI_APP_ID;
-    const appSecret = process.env.OMI_APP_SECRET;
+    ```bash
+    export OMI_APP_ID="your_app_id"
+    export OMI_APP_SECRET="your_app_secret"
+    ```
 
-    if (!appId) throw new Error("OMI_APP_ID not set");
-    if (!appSecret) throw new Error("OMI_APP_SECRET not set");
+    <Warning>
+    Store credentials securely - never commit them to version control.
+    </Warning>
+  </Step>
+  <Step title="Send Notification" icon="paper-plane">
+    Make a POST request with the user ID and message:
 
-    const options = {
-        hostname: 'api.omi.me',
-        path: `/v2/integrations/${appId}/notification?uid=${encodeURIComponent(userId)}&message=${encodeURIComponent(message)}`,
+    ```bash
+    curl -X POST "https://api.omi.me/v2/integrations/${OMI_APP_ID}/notification?uid=USER_ID&message=Hello!" \
+      -H "Authorization: Bearer ${OMI_APP_SECRET}" \
+      -H "Content-Type: application/json"
+    ```
+  </Step>
+  <Step title="Handle Response" icon="check">
+    Check the response status code to confirm delivery.
+  </Step>
+</Steps>
+
+### Code Examples
+
+<Tabs>
+  <Tab title="Node.js" icon="node-js">
+    ```javascript
+    const https = require('https');
+
+    async function sendNotification(userId, message) {
+      const appId = process.env.OMI_APP_ID;
+      const appSecret = process.env.OMI_APP_SECRET;
+
+      const url = new URL(`https://api.omi.me/v2/integrations/${appId}/notification`);
+      url.searchParams.set('uid', userId);
+      url.searchParams.set('message', message);
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
-            'Authorization': `Bearer ${appSecret}`,
-            'Content-Type': 'application/json',
-            'Content-Length': 0
+          'Authorization': `Bearer ${appSecret}`,
+          'Content-Type': 'application/json'
         }
-    };
+      });
 
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    try {
-                        resolve(data ? JSON.parse(data) : {});
-                    } catch (e) {
-                        resolve({ raw: data });
-                    }
-                } else {
-                    reject(new Error(`API Error (${res.statusCode}): ${data}`));
-                }
-            });
-        });
-        req.on('error', reject);
-        req.end();
-    });
-}
-```
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
 
-### Step 4: Test Your Implementation 🧪
+      return response.json();
+    }
 
-1. Set up your environment variables:
-   ```bash
-   export OMI_APP_ID="your_app_id"
-   export OMI_APP_SECRET="your_app_secret"
-   ```
+    // Usage
+    sendNotification('user123', 'Your task is due in 1 hour!')
+      .then(console.log)
+      .catch(console.error);
+    ```
+  </Tab>
+  <Tab title="Python" icon="python">
+    ```python
+    import os
+    import requests
 
-2. Test with a sample notification:
-   ```javascript
-   sendOmiNotification("user_id_here", "Test notification!")
-       .then(response => console.log("Success:", response))
-       .catch(error => console.error("Error:", error));
-   ```
+    def send_notification(user_id: str, message: str) -> dict:
+        app_id = os.environ['OMI_APP_ID']
+        app_secret = os.environ['OMI_APP_SECRET']
 
-3. Verify the notification appears in the user's OMI app
+        response = requests.post(
+            f'https://api.omi.me/v2/integrations/{app_id}/notification',
+            params={'uid': user_id, 'message': message},
+            headers={'Authorization': f'Bearer {app_secret}'}
+        )
+        response.raise_for_status()
+        return response.json()
 
-## Best Practices 🎯
+    # Usage
+    send_notification('user123', 'Your task is due in 1 hour!')
+    ```
+  </Tab>
+</Tabs>
 
-1. **Rate Limiting**
-   - Implement reasonable delays between notifications
-   - Avoid sending duplicate notifications
-   - Group related notifications when possible
+---
 
-2. **Content Guidelines**
-   - Keep messages concise and clear
-   - Include relevant context
-   - Use appropriate urgency levels
+## Proactive Notifications
 
-3. **Error Handling**
-   - Implement retry logic for failed attempts
-   - Log errors for debugging
-   - Monitor notification delivery status
+Context-aware, AI-generated notifications that leverage user data during real-time conversations. You provide a prompt template, Omi generates the personalized message.
 
-4. **Security**
-   - Store API credentials securely
-   - Validate user IDs before sending
-   - Implement request timeouts
+<Info>
+Unlike direct notifications, proactive notifications require an app with specific capabilities and user-granted permissions.
+</Info>
 
-## Troubleshooting 🔍
+<AccordionGroup>
+  <Accordion title="Use Cases" icon="lightbulb">
+    - Real-time mentoring advice during meetings
+    - Context-aware suggestions based on conversation topics
+    - Personalized insights based on user's goals
+    - Intelligent responses to specific phrases
+    - Meeting action item reminders
+  </Accordion>
+  <Accordion title="How It Works" icon="gear">
+    1. User installs your app and grants permissions
+    2. During conversations, Omi sends transcripts to your webhook
+    3. Your webhook analyzes the transcript and returns a prompt template
+    4. Omi fills in user context (name, facts, etc.) and generates the notification
+    5. User receives a personalized, contextual notification
+  </Accordion>
+</AccordionGroup>
 
-### Common Issues
+### App Configuration
 
-1. **Authentication Errors**
-   - Verify your API credentials
-   - Check the Bearer token format
-   - Ensure environment variables are set
-
-2. **Delivery Issues**
-   - Validate the user ID exists
-   - Check message encoding
-   - Verify network connectivity
-
-3. **Rate Limiting**
-   - Monitor API response headers
-   - Implement exponential backoff
-   - Track notification frequency
-
-### Error Response Codes
-
-| Status Code | Meaning | Action |
-|------------|---------|---------|
-| 401 | Unauthorized | Check API credentials |
-| 404 | User not found | Verify user ID |
-| 429 | Too many requests | Implement rate limiting |
-| 500 | Server error | Retry with backoff |
-
-## Example Implementations 💡
-
-### 1. Task Reminder
-
-```javascript
-function sendTaskReminder(userId, taskName, dueDate) {
-    const message = `Reminder: "${taskName}" is due ${dueDate}`;
-    return sendOmiNotification(userId, message);
-}
-```
-
-### 2. Service Update
-
-```javascript
-function sendServiceUpdate(userId, serviceName, status) {
-    const message = `${serviceName} status: ${status}`;
-    return sendOmiNotification(userId, message);
-}
-```
-
-## Implementing Proactive Notifications 🔔
-
-Proactive notifications require creating an OMI app with specific capabilities. Unlike direct notifications, these leverage the app system to access user context and generate intelligent, personalized messages.
-
-### Step 1: Create Your OMI App 🔑
-
-First, create an app in the [OMI App Store](https://omi.me/apps) with the following configuration:
-
-**Required Capabilities:**
-- `external_integration` - Enables real-time transcript webhooks
-- `proactive_notification` - Allows sending AI-generated contextual notifications
-
-**Example App Configuration:**
+Your app needs these capabilities:
 
 ```json
 {
   "name": "Your App Name",
-  "description": "App description",
   "capabilities": ["external_integration", "proactive_notification"],
   "external_integration": {
     "triggers_on": "transcript_processed",
@@ -238,184 +194,231 @@ First, create an app in the [OMI App Store](https://omi.me/apps) with the follow
 }
 ```
 
-**Available Scopes:**
+### Available Scopes
 
 | Scope | Template Variable | Description |
 |-------|------------------|-------------|
-| `user_name` | `{{user_name}}` | User's name |
-| `user_facts` | `{{user_facts}}` | User's known facts |
+| `user_name` | `{{user_name}}` | User's display name |
+| `user_facts` | `{{user_facts}}` | Known facts about the user |
 | `user_context` | `{{user_context}}` | Relevant conversation context |
-| `user_chat` | `{{user_chat}}` | Recent chat history with app |
+| `user_chat` | `{{user_chat}}` | Recent chat history with your app |
 
-**Important:** Users must install your app from the OMI App Store and grant the requested scopes before you can send them proactive notifications.
+### Webhook Implementation
 
-### Step 2: Set Up Your Webhook Server 🔌
+Your webhook receives real-time transcripts and returns notification prompts:
 
-Your app's webhook endpoint receives real-time transcripts during conversations. When you want to send a notification, return a notification prompt in your webhook response.
-
-**Webhook receives:**
+**Incoming Request:**
 ```
-POST /your-webhook?session_id={session_id}&uid={user_id}
+POST /your-webhook?session_id=abc123&uid=user123
 ```
 
-**Request includes:**
-- `session_id`: Unique conversation identifier
-- `segments`: Array of transcript segments with speaker info
-- User context (based on requested scopes)
+**Request Body:**
+```json
+{
+  "session_id": "abc123",
+  "segments": [
+    {"text": "What do you think about this approach?", "speaker": "SPEAKER_01", "is_user": false}
+  ]
+}
+```
 
-**Response Format:**
+**Response (when you want to send a notification):**
 ```json
 {
   "session_id": "abc123",
   "notification": {
-    "prompt": "You are mentoring {{user_name}}. Based on {{user_facts}} and {{user_context}}, provide brief advice in 50 words.",
+    "prompt": "You are mentoring {{user_name}}. Based on {{user_facts}} and {{user_context}}, provide brief actionable advice in 50 words.",
     "params": ["user_name", "user_facts", "user_context"]
   }
 }
 ```
 
-**Template variables** are replaced with actual user data by OMI, then AI generates the final notification.
-
-### Step 3: Deploy and Publish Your App 💻
-
-1. **Deploy your webhook server** to a public HTTPS endpoint
-2. **Test your app** in Developer Mode
-3. **Submit for review** in the OMI App Store
-4. **Users install** your app and grant permissions
-
-Here's a complete Python implementation:
-
-```python
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
-
-app = FastAPI()
-
-class TranscriptSegment(BaseModel):
-    text: str
-    speaker: str
-    is_user: bool
-
-class RealtimeRequest(BaseModel):
-    session_id: str
-    segments: List[TranscriptSegment]
-
-@app.post("/webhook")
-def proactive_notification(data: RealtimeRequest):
-    # Detect trigger phrases
-    transcript = " ".join([s.text for s in data.segments])
-    
-    if "what do you think" in transcript.lower():
-        return {
-            "session_id": data.session_id,
-            "notification": {
-                "prompt": """You are mentoring {{user_name}}. 
-                Based on {{user_facts}} and the discussion {{user_context}}, 
-                provide specific advice in 100 words.""",
-                "params": ["user_name", "user_facts", "user_context"]
-            }
-        }
-    
-    return {"session_id": data.session_id}
+**Response (when no notification needed):**
+```json
+{
+  "session_id": "abc123"
+}
 ```
 
-### Step 4: Test Your Implementation 🧪
+### Complete Example
 
-1. Enable Developer Mode in OMI app (Settings → Developer Mode)
-2. Install your app in Developer Mode
-3. Set webhook URL in Developer Settings
-4. Grant requested scopes to your app
-5. Start a conversation with trigger phrases
-6. Verify notification appears
+<Tabs>
+  <Tab title="Python (FastAPI)" icon="python">
+    ```python
+    from fastapi import FastAPI
+    from pydantic import BaseModel
+    from typing import List, Optional
 
-**Testing Checklist:**
-- [ ] App configuration has both required capabilities
-- [ ] Webhook endpoint is publicly accessible via HTTPS
-- [ ] User has installed the app
-- [ ] User has granted the requested scopes
-- [ ] Webhook returns proper notification format
-- [ ] Notification appears within 30 seconds
+    app = FastAPI()
 
-**Rate Limit:** 1 notification per user per app every 30 seconds.
+    class TranscriptSegment(BaseModel):
+        text: str
+        speaker: str
+        is_user: bool
 
-## Best Practices 🎯
+    class WebhookRequest(BaseModel):
+        session_id: str
+        segments: List[TranscriptSegment]
 
-**For Direct Notifications:**
-- Implement rate limiting
-- Keep messages concise
-- Validate user IDs
-- Handle errors gracefully
+    @app.post("/webhook")
+    def handle_transcript(data: WebhookRequest, uid: str, session_id: str):
+        # Combine all segments into transcript
+        transcript = " ".join([s.text for s in data.segments]).lower()
 
-**For Proactive Notifications:**
-- Only trigger on relevant conversation moments
-- Use session state to avoid duplicate notifications
-- Keep prompts under 128,000 characters
-- Test with different user contexts
-
-## Troubleshooting 🔍
-
-### Common Issues
-
-**Direct Notifications:**
-1. **Authentication Errors** - Verify API credentials and Bearer token format
-2. **Delivery Issues** - Validate user ID exists
-3. **Rate Limiting** - Implement exponential backoff
-
-**Proactive Notifications:**
-1. **Not Appearing** - Check `proactive_notification` capability is enabled
-2. **Messages Too Short** - Add specific instructions to prompt (min 5 characters)
-3. **Not Contextual** - Request additional scopes in app configuration
-
-### Error Response Codes
-
-| Status Code | Meaning | Action |
-|------------|---------|---------|
-| 401 | Unauthorized | Check API credentials |
-| 404 | User not found | Verify user ID |
-| 429 | Too many requests | Implement rate limiting |
-| 500 | Server error | Retry with backoff |
-
-## Example Implementations 💡
-
-### 1. Real-Time Mentor
-
-```python
-@app.post("/mentor")
-def mentor_notification(data: RealtimeRequest):
-    transcript = " ".join([s.text for s in data.segments])
-    
-    if "what do you think" in transcript.lower():
-        return {
-            "session_id": data.session_id,
-            "notification": {
-                "prompt": "You are mentoring {{user_name}}. Based on {{user_facts}}, provide actionable advice in 100 words.",
-                "params": ["user_name", "user_facts"]
+        # Detect trigger phrases
+        if "what do you think" in transcript or "any advice" in transcript:
+            return {
+                "session_id": data.session_id,
+                "notification": {
+                    "prompt": """You are a helpful mentor for {{user_name}}.
+                    Based on their goals ({{user_facts}}) and the current discussion ({{user_context}}),
+                    provide specific, actionable advice in under 100 words.""",
+                    "params": ["user_name", "user_facts", "user_context"]
+                }
             }
-        }
-    return {"session_id": data.session_id}
-```
 
-### 2. Meeting Insight Generator
+        # No notification needed
+        return {"session_id": data.session_id}
+    ```
+  </Tab>
+  <Tab title="Node.js (Express)" icon="node-js">
+    ```javascript
+    const express = require('express');
+    const app = express();
+    app.use(express.json());
 
-```python
-@app.post("/insights")
-def meeting_insights(data: RealtimeRequest):
-    transcript = " ".join([s.text for s in data.segments])
-    
-    if "action item" in transcript.lower() or "follow up" in transcript.lower():
-        return {
-            "session_id": data.session_id,
-            "notification": {
-                "prompt": "Based on {{user_context}}, summarize key action items for {{user_name}} in 75 words.",
-                "params": ["user_name", "user_context"]
-            }
-        }
-    return {"session_id": data.session_id}
-```
+    app.post('/webhook', (req, res) => {
+      const { session_id, segments } = req.body;
 
-## Need Help? 🤝
+      // Combine segments into transcript
+      const transcript = segments
+        .map(s => s.text)
+        .join(' ')
+        .toLowerCase();
 
-- Check our [API Reference](https://docs.omi.me/doc/api)
-- Join our [Discord community](http://discord.omi.me)
-- Contact [support](https://docs.omi.me/doc/info/Support) 
+      // Detect trigger phrases
+      if (transcript.includes('what do you think') || transcript.includes('any advice')) {
+        return res.json({
+          session_id,
+          notification: {
+            prompt: `You are a helpful mentor for {{user_name}}.
+              Based on their goals ({{user_facts}}) and the discussion ({{user_context}}),
+              provide specific advice in under 100 words.`,
+            params: ['user_name', 'user_facts', 'user_context']
+          }
+        });
+      }
+
+      // No notification needed
+      res.json({ session_id });
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Testing
+
+<Steps>
+  <Step title="Enable Developer Mode" icon="code">
+    Open Omi app → Settings → Developer Mode
+  </Step>
+  <Step title="Install Your App" icon="download">
+    Install your app in Developer Mode and grant requested scopes
+  </Step>
+  <Step title="Set Webhook URL" icon="link">
+    Configure your webhook URL in Developer Settings
+  </Step>
+  <Step title="Trigger Notifications" icon="microphone">
+    Start a conversation and say trigger phrases (e.g., "what do you think?")
+  </Step>
+  <Step title="Verify" icon="check">
+    Notification should appear within 30 seconds
+  </Step>
+</Steps>
+
+<Note>
+**Rate Limit:** 1 proactive notification per user per app every 30 seconds.
+</Note>
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Rate Limiting" icon="gauge">
+    - Implement delays between notifications
+    - Avoid duplicate messages
+    - Group related notifications
+  </Card>
+  <Card title="Content Quality" icon="pen">
+    - Keep messages concise and clear
+    - Include relevant context
+    - Use appropriate urgency levels
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    - Implement retry with exponential backoff
+    - Log errors for debugging
+    - Monitor delivery status
+  </Card>
+  <Card title="Security" icon="shield">
+    - Store credentials securely
+    - Validate user IDs before sending
+    - Use HTTPS for all endpoints
+  </Card>
+</CardGroup>
+
+---
+
+## Troubleshooting
+
+### Error Codes
+
+| Code | Meaning | Solution |
+|------|---------|----------|
+| 401 | Unauthorized | Verify API credentials and Bearer token format |
+| 404 | User not found | Check that user ID exists and has your app installed |
+| 429 | Rate limited | Implement rate limiting with exponential backoff |
+| 500 | Server error | Retry with backoff, check Omi status page |
+
+<AccordionGroup>
+  <Accordion title="Direct Notifications Not Sending" icon="circle-question">
+    **Check these:**
+    - API credentials are correct
+    - User ID is valid
+    - Bearer token is properly formatted
+    - Request includes required headers
+  </Accordion>
+  <Accordion title="Proactive Notifications Not Appearing" icon="circle-question">
+    **Check these:**
+    - App has `proactive_notification` capability enabled
+    - User has installed your app
+    - User has granted requested scopes
+    - Webhook is returning proper response format
+    - Prompt is at least 5 characters
+  </Accordion>
+  <Accordion title="Notifications Not Contextual" icon="circle-question">
+    **Solutions:**
+    - Request additional scopes in app configuration
+    - Include more template variables in your prompt
+    - Make prompts more specific about using the context
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+    Build webhook-based integrations
+  </Card>
+  <Card title="OAuth Setup" icon="key" href="/doc/developer/apps/Oauth">
+    Add authentication to your apps
+  </Card>
+  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+    Add custom tools to Omi chat
+  </Card>
+  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+    Publish your app to the store
+  </Card>
+</CardGroup>
