@@ -35,7 +35,7 @@ flowchart TD
     end
 
     subgraph API["API Endpoints"]
-        WS["/listen<br/>WebSocket"]
+        WS["/v4/listen<br/>WebSocket"]
         Conv["/v1/conversations<br/>REST"]
         Chat["/v2/messages<br/>REST"]
     end
@@ -55,7 +55,8 @@ flowchart TD
     subgraph Storage["Data Storage"]
         FS[("Firestore<br/>Conversations & Memories")]
         Pine[("Pinecone<br/>Vector Embeddings")]
-        Redis[("Redis<br/>Cache")]
+        Redis[("Redis<br/>Cache & Metadata")]
+        GCS[("Google Cloud Storage<br/>Binary Files")]
     end
 
     App --> WS
@@ -72,9 +73,11 @@ flowchart TD
 
     PC --> FS
     PC --> Pine
+    PC --> GCS
     LG --> FS
     LG --> Pine
     LG --> Redis
+    Trans --> GCS
 ```
 
 ## Quick Reference
@@ -96,7 +99,7 @@ flowchart TD
     High-speed caching for profiles and preferences
   </Card>
   <Card title="Transcription" icon="microphone" href="#6-routerstranscribepy-the-real-time-transcription-engine">
-    Real-time speech-to-text with Deepgram
+    Real-time speech-to-text with multiple STT services
   </Card>
 </CardGroup>
 
@@ -119,7 +122,7 @@ Let's trace the journey of a typical interaction with Omi, focusing on how audio
     The user starts a recording session using the Omi app, capturing a conversation or their thoughts.
   </Step>
   <Step title="WebSocket Connection" icon="plug">
-    The Omi app establishes a real-time connection with the backend at the `/listen` endpoint in `routers/transcribe.py`.
+    The Omi app establishes a real-time connection with the backend at the `/v4/listen` endpoint in `routers/transcribe.py`.
   </Step>
   <Step title="Audio Streaming" icon="wave-pulse">
     The app streams audio data continuously through the WebSocket to the backend.
@@ -131,7 +134,7 @@ Let's trace the journey of a typical interaction with Omi, focusing on how audio
     Transcription results stream back through the backend to the app, displaying words as the user speaks.
   </Step>
   <Step title="Conversation Creation" icon="floppy-disk">
-    When recording ends, the app sends a POST request to `/v1/conversations` with the full transcript.
+    During the WebSocket connection, the backend creates an "in_progress" conversation stub in Firestore. As audio streams, transcript segments are continuously added to Firestore in real-time. When recording ends, the app sends a POST request to `/v1/conversations` with an empty body (`{}`). The backend retrieves the in-progress conversation from Firestore and processes it.
   </Step>
   <Step title="LLM Processing" icon="wand-magic-sparkles">
     The `process_conversation` function uses OpenAI to extract:
@@ -141,8 +144,10 @@ Let's trace the journey of a typical interaction with Omi, focusing on how audio
     - **Memories** - Facts about the user
   </Step>
   <Step title="Storage" icon="database">
-    - **Firestore**: Stores the full conversation document
+    - **Firestore**: Stores the full conversation document with transcript segments and metadata
     - **Pinecone**: Stores the vector embedding for semantic search
+    - **Redis**: Caches frequently accessed data (speech profile durations, enabled apps, user names) for performance
+    - **Google Cloud Storage**: Stores binary files (speech profile audio, conversation recordings, photos)
   </Step>
 </Steps>
 
@@ -210,8 +215,8 @@ class Conversation(BaseModel):
 
 ```mermaid
 stateDiagram-v2
-    [*] --> in_progress: Recording starts
-    in_progress --> processing: Recording ends
+    [*] --> in_progress: Recording starts<br/>(WebSocket connects)
+    in_progress --> processing: Recording ends<br/>(POST /v1/conversations<br/>or timeout)
     processing --> completed: Successfully processed
     processing --> failed: Error occurred
     completed --> [*]
@@ -223,6 +228,11 @@ stateDiagram-v2
         Embeddings generated
     end note
 ```
+
+**Processing Triggers:**
+- **Manual:** App sends `POST /v1/conversations` with empty body to trigger immediate processing
+- **Automatic:** Backend automatically processes conversations after a timeout period (`conversation_timeout` parameter, default 120 seconds of silence)
+- Both paths use the same `process_conversation()` function to extract structure, memories, and embeddings
 
 ### 2. `database/vector_db.py`: The Embedding Expert
 
@@ -251,7 +261,7 @@ This directory contains modules where the power of OpenAI's LLMs is harnessed fo
 
 - `clients.py`: LLM client configurations and embedding models
 - `chat.py`: Chat-related prompts and processing
-- `conversations.py`: Conversation analysis and structuring
+- `conversation_processing.py`: Conversation analysis and structuring
 
 **Key Functionalities:**
 
@@ -319,9 +329,9 @@ settings, and storing user speech profiles.
 
 **Data Stored and Retrieved from Redis:**
 
-- **User Speech Profiles:**
-    - **Storage:** When a user uploads a speech profile, the raw audio data, along with its duration, is stored in Redis.
-    - **Retrieval:** During real-time transcription or post-processing, the user's speech profile is retrieved from Redis to aid in speaker identification.
+- **User Speech Profile Metadata:**
+    - **Storage:** When a user uploads a speech profile, the audio file is stored in Google Cloud Storage, while the duration is cached in Redis for quick access.
+    - **Retrieval:** During real-time transcription or post-processing, the speech profile duration is retrieved from Redis cache, while the actual audio file is loaded from Google Cloud Storage when needed for speaker identification.
 - **Enabled Apps:**
     - **Storage:** A set of app IDs is stored for each user, representing the apps they have enabled.
     - **Retrieval:** When processing a conversation or handling a chat request, the backend checks Redis to see which apps are enabled for the user.
@@ -336,26 +346,30 @@ settings, and storing user speech profiles.
 
 | Function | Purpose |
 |----------|---------|
-| `store_user_speech_profile` | Store speech profile audio data |
-| `get_user_speech_profile` | Retrieve speech profile audio data |
-| `store_user_speech_profile_duration` | Store speech profile duration |
-| `get_user_speech_profile_duration` | Retrieve speech profile duration |
+| `set_speech_profile_duration` | Cache speech profile duration (audio stored in GCS) |
+| `get_speech_profile_duration` | Retrieve cached speech profile duration |
+| `set_user_has_soniox_speech_profile` | Mark that user has Soniox speech profile |
+| `get_user_has_soniox_speech_profile` | Check if user has Soniox speech profile |
 | `enable_app`, `disable_app` | Manage app enable/disable states |
 | `get_enabled_apps` | Get user's enabled apps |
 | `get_app_reviews` | Retrieve reviews for an app |
 | `cache_user_name`, `get_cached_user_name` | Cache and retrieve user names |
 
+<Note>
+**Storage Separation:** Redis is used for caching metadata (durations, flags, enabled apps) to improve performance. The actual speech profile audio files are stored in Google Cloud Storage via `utils/other/storage.py`. This separation ensures Redis remains fast and lightweight while GCS handles binary file storage.
+</Note>
+
 **Why Redis is Important:**
 
 - **Performance:** Caching data in Redis significantly improves the backend's speed, as frequently accessed data can be retrieved from memory very quickly.
-- **User Data Management:** Redis provides a flexible and efficient way to manage user-specific data, such as app preferences and speech profiles.
+- **User Data Management:** Redis provides a flexible and efficient way to manage user-specific metadata, such as app preferences, speech profile durations, and enabled apps.
 - **Real-time Features:** The low-latency nature of Redis makes it ideal for supporting real-time features like live transcription and instant app interactions.
-- **Scalability:** As the number of users grows, Redis helps maintain performance by reducing the load on primary databases.
+- **Scalability:** As the number of users grows, Redis helps maintain performance by reducing the load on primary databases (Firestore) and storage systems (GCS).
 
 ### 6. `routers/transcribe.py`: The Real-Time Transcription Engine
 
 This module is the powerhouse behind Omi's real-time transcription capabilities, allowing the app to convert spoken audio into text as the user is speaking. It leverages WebSockets for bidirectional
-communication with the Omi app and Deepgram's speech-to-text API for accurate and efficient transcription.
+communication with the Omi app and multiple STT services (Deepgram, Soniox, Speechmatics) for accurate and efficient transcription.
 
 #### 1. WebSocket Communication
 
@@ -363,18 +377,30 @@ communication with the Omi app and Deepgram's speech-to-text API for accurate an
 WebSocket connections require proper authentication. The `uid` parameter must be a valid Firebase user ID, and connections without proper auth will be rejected.
 </Warning>
 
-- **`/listen` Endpoint:** The Omi app initiates a WebSocket connection with the backend at the `/listen` endpoint, which is defined in the `websocket_endpoint` function of `routers/transcribe.py`.
+- **`/v4/listen` Endpoint:** The Omi app initiates a WebSocket connection with the backend at the `/v4/listen` endpoint, which is defined in the `websocket_endpoint` function of `routers/transcribe.py`.
 - **Bidirectional Communication:** WebSockets enable a two-way communication channel, allowing:
     - The Omi app to stream audio data to the backend continuously.
     - The backend to send back transcribed text segments as they become available from Deepgram.
 - **Real-Time Feedback:** This constant back-and-forth ensures that users see their words being transcribed in real-time, creating a more interactive and engaging experience.
 
-#### 2. Deepgram Integration
+#### 2. STT Service Integration
 
-- **`process_audio_dg` Function:** The `process_audio_dg` function (found in `utils/stt/streaming.py`) manages the interaction with Deepgram.
-- **Deepgram API:** The audio chunks streamed from the Omi app are sent to the Deepgram API for transcription. Deepgram's sophisticated speech recognition models process the audio and return text
-  results.
-- **Options Configuration:** The `process_audio_dg` function configures various Deepgram options:
+Omi supports multiple Speech-to-Text (STT) services with automatic selection based on language support:
+
+- **Deepgram** (Nova-2, Nova-3 models) - Primary service for most languages
+- **Soniox** (stt-rt-preview model) - Used for specific language combinations
+- **Speechmatics** - Additional fallback option
+
+The backend automatically selects the appropriate STT service using `get_stt_service_for_language()` in `utils/stt/streaming.py`, which considers language support and the configured service priority order (set via `STT_SERVICE_MODELS` environment variable).
+
+**Processing Functions:**
+- **`process_audio_dg()`** - Manages interaction with Deepgram API (found in `utils/stt/streaming.py`)
+- **`process_audio_soniox()`** - Manages interaction with Soniox API
+- **`process_audio_speechmatics()`** - Manages interaction with Speechmatics API
+
+The audio chunks streamed from the Omi app are sent to the selected STT service API for transcription. The service's speech recognition models process the audio and return text results in real-time.
+
+**Deepgram Options Configuration:** The `process_audio_dg` function configures various Deepgram options:
 
 <AccordionGroup>
   <Accordion title="punctuate" icon="period">
@@ -403,15 +429,15 @@ WebSocket connections require proper authentication. The `uid` parameter must be
 sequenceDiagram
     participant App as 📱 Omi App
     participant Backend as 🖥️ Backend
-    participant Deepgram as 🎧 Deepgram API
+    participant STT as 🎧 STT Service<br/>(Deepgram/Soniox/Speechmatics)
 
-    App->>Backend: Connect WebSocket /listen
+    App->>Backend: Connect WebSocket /v4/listen
     Backend-->>App: Connection accepted
 
     loop Real-time Transcription
         App->>Backend: Audio chunk (binary)
-        Backend->>Deepgram: Forward audio
-        Deepgram-->>Backend: Transcription result
+        Backend->>STT: Forward audio
+        STT-->>Backend: Transcription result
         Backend-->>App: Text segment + speaker
         Note right of App: Display words<br/>as user speaks
     end
@@ -422,22 +448,20 @@ sequenceDiagram
 
 The numbered breakdown of this flow:
 
-1. **App Streams Audio:** The Omi app captures audio from the user's device and continuously sends chunks of audio data through the WebSocket to the backend's `/listen` endpoint.
-2. **Backend Receives and Forwards:** The backend's `websocket_endpoint` function receives the audio chunks and immediately forwards them to Deepgram using the `process_audio_dg` function.
-3. **Deepgram Processes:** Deepgram's speech recognition models transcribe the audio data in real-time.
-4. **Results Sent Back:** Deepgram sends the transcribed text segments back to the backend as they become available.
-5. **Backend Relays to App:** The backend immediately sends these transcription results back to the Omi app over the WebSocket connection.
-6. **App Displays Transcript:** The Omi app updates the user interface with the newly transcribed text, providing instant feedback.
+1. **App Streams Audio:** The Omi app captures audio from the user's device and continuously sends chunks of audio data through the WebSocket to the backend's `/v4/listen` endpoint.
+2. **Backend Receives and Selects STT Service:** The backend's `websocket_endpoint` function receives the audio chunks and selects the appropriate STT service (Deepgram, Soniox, or Speechmatics) based on the language using `get_stt_service_for_language()`.
+3. **Backend Forwards to STT:** The backend immediately forwards audio chunks to the selected STT service using the corresponding processing function (`process_audio_dg`, `process_audio_soniox`, or `process_audio_speechmatics`).
+4. **STT Processes:** The STT service's speech recognition models transcribe the audio data in real-time.
+5. **Results Sent Back:** The STT service sends the transcribed text segments back to the backend as they become available.
+6. **Backend Relays to App:** The backend immediately sends these transcription results back to the Omi app over the WebSocket connection.
+7. **App Displays Transcript:** The Omi app updates the user interface with the newly transcribed text, providing instant feedback.
 
 #### 4. Key Considerations
 
-- **Speaker Identification:** The code uses Deepgram's speaker diarization feature to identify different speakers in the audio. This information is included in the transcription results, allowing the
-  app to display who said what.
-- **User Speech Profile Integration:** If a user has uploaded a speech profile, the backend can use this information (retrieved from Redis or Google Cloud Storage) to improve the accuracy of speaker
-  identification.
-- **Latency Management:** Real-time transcription requires careful attention to latency to ensure a seamless user experience. The `no_delay` option in Deepgram and the efficient handling of data in
-  the backend are essential for minimizing delays.
-- **Error Handling:** The code includes error handling mechanisms to gracefully handle any issues that may occur during the WebSocket connection or Deepgram transcription process.
+- **Speaker Identification:** The code uses the STT service's speaker diarization feature (available in Deepgram, Soniox, and Speechmatics) to identify different speakers in the audio. This information is included in the transcription results, allowing the app to display who said what.
+- **User Speech Profile Integration:** If a user has uploaded a speech profile, the backend can use this information (duration cached in Redis, audio file stored in Google Cloud Storage) to improve the accuracy of speaker identification.
+- **Latency Management:** Real-time transcription requires careful attention to latency to ensure a seamless user experience. The `no_delay` option in Deepgram and the efficient handling of data in the backend are essential for minimizing delays.
+- **Error Handling:** The code includes error handling mechanisms to gracefully handle any issues that may occur during the WebSocket connection or STT service transcription process.
 
 #### 5. Example Code Snippet (Simplified):
 
@@ -449,12 +473,14 @@ from fastapi import APIRouter, WebSocket
 router = APIRouter()
 
 
-@router.websocket("/listen")
+@router.websocket("/v4/listen")
 async def websocket_endpoint(websocket: WebSocket, uid: str, language: str = 'en', ...):
     await websocket.accept()  # Accept the WebSocket connection
 
-    # Start Deepgram transcription
+    # Start STT transcription (service selected automatically based on language)
     transcript_socket = await process_audio_dg(uid, websocket, language, ...)
+    # Note: Could also be process_audio_soniox() or process_audio_speechmatics()
+    # depending on language support
 
     # Receive and process audio chunks from the app
     async for data in websocket.iter_bytes():
