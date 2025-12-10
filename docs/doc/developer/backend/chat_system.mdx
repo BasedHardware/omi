@@ -7,78 +7,120 @@ description: "A comprehensive technical deep dive into how Omi's intelligent cha
 
 Omi's chat system is a sophisticated **agentic AI pipeline** that enables users to have intelligent conversations about their recorded memories, calendar events, health data, and more. This document provides a complete technical understanding of how questions flow through the system.
 
-The system:
-- **Classifies** user questions to determine if context is needed
-- **Routes** to the appropriate handler (simple chat, agentic, or persona)
-- **Autonomously decides** which tools to call via a LangGraph ReAct agent
-- **Retrieves context** from 22+ integrated data sources
-- **Generates responses** with proper citations to source conversations
-- **Streams** thinking indicators and response tokens in real-time
+<CardGroup cols={3}>
+  <Card title="Classifies" icon="filter">
+    Determines if context is needed
+  </Card>
+  <Card title="Routes" icon="route">
+    Simple, Agentic, or Persona path
+  </Card>
+  <Card title="Tools" icon="wrench">
+    22+ integrated data sources
+  </Card>
+  <Card title="Retrieves" icon="magnifying-glass">
+    Vector search & metadata filters
+  </Card>
+  <Card title="Cites" icon="link">
+    Links to source conversations
+  </Card>
+  <Card title="Streams" icon="tower-broadcast">
+    Real-time thinking & response
+  </Card>
+</CardGroup>
 
 ## System Architecture Diagram
 
-```
-User Question → Flutter App → FastAPI Backend → LangGraph Router
-                                                      ↓
-                              ┌────────────────────────┼────────────────────────┐
-                              ↓                        ↓                        ↓
-                     No Context Path          Agentic Path            Persona Path
-                     (Simple responses)       (Tool-powered)          (Character-based)
-                              ↓                        ↓                        ↓
-                        Direct LLM              Tool Calls               Persona LLM
-                         Response              (22+ tools)               Response
-                              ↓                        ↓                        ↓
-                              └────────────────────────┴────────────────────────┘
-                                                      ↓
-                                            Streaming Response
-                                         (with citations & links)
+```mermaid
+flowchart TD
+    subgraph Client["📱 Flutter App"]
+        Q[User Question]
+    end
+
+    subgraph Backend["🖥️ FastAPI Backend"]
+        Router{LangGraph<br/>Router}
+    end
+
+    Q --> Router
+
+    Router -->|Simple| NC[No Context Path]
+    Router -->|Context Needed| A[Agentic Path]
+    Router -->|Persona App| P[Persona Path]
+
+    NC --> LLM1[Direct LLM<br/>Response]
+    A --> Tools[Tool Calls<br/>22+ tools]
+    Tools --> LLM2[LLM with<br/>Context]
+    P --> LLM3[Persona LLM<br/>Response]
+
+    LLM1 --> Stream[Streaming Response]
+    LLM2 --> Stream
+    LLM3 --> Stream
+
+    Stream --> |with citations| Q
 ```
 
 ## The Three Routing Paths
 
-### Path 1: No Context Conversation
+<Tabs>
+  <Tab title="No Context" icon="comment">
+    ### Path 1: No Context Conversation
 
-**When triggered:** Simple greetings, general advice, brainstorming questions
+    **When triggered:** Simple greetings, general advice, brainstorming questions
 
-**Classification criteria** (from `requires_context()` function):
-- Greetings: "Hi", "Hello", "How are you?"
-- General knowledge: "What's the capital of France?"
-- Advice without personal context: "Tips for productivity"
+    **Classification criteria** (from `requires_context()` function):
+    - Greetings: "Hi", "Hello", "How are you?"
+    - General knowledge: "What's the capital of France?"
+    - Advice without personal context: "Tips for productivity"
 
-**Processing:**
-```python
-# Location: backend/utils/retrieval/graph.py
-def no_context_conversation(state: ChatState, config: RunnableConfig):
-    # Direct LLM call without tool access
-    # Fast response, no memory retrieval
-```
+    **Processing:**
+    ```python
+    # Location: backend/utils/retrieval/graph.py
+    def no_context_conversation(state: ChatState, config: RunnableConfig):
+        # Direct LLM call without tool access
+        # Fast response, no memory retrieval
+    ```
 
-### Path 2: Agentic Context-Dependent Conversation
+    <Tip>
+    This path provides the fastest responses since no external data retrieval is needed.
+    </Tip>
+  </Tab>
+  <Tab title="Agentic" icon="robot">
+    ### Path 2: Agentic Context-Dependent Conversation
 
-**When triggered:** Questions requiring personal data, temporal queries, integration lookups
+    **When triggered:** Questions requiring personal data, temporal queries, integration lookups
 
-**Classification criteria:**
-- References to "my", "I", personal data
-- Temporal references: "yesterday", "last week", "this morning"
-- Questions about conversations, memories, calendar, health
-- Requests involving connected services
+    **Classification criteria:**
+    - References to "my", "I", personal data
+    - Temporal references: "yesterday", "last week", "this morning"
+    - Questions about conversations, memories, calendar, health
+    - Requests involving connected services
 
-**Processing:**
-```python
-# Location: backend/utils/retrieval/agentic.py
-# LangGraph ReAct agent with full tool access
-# LLM autonomously decides which tools to call
-# Can make multiple tool calls to gather comprehensive context
-```
+    **Processing:**
+    ```python
+    # Location: backend/utils/retrieval/agentic.py
+    # LangGraph ReAct agent with full tool access
+    # LLM autonomously decides which tools to call
+    # Can make multiple tool calls to gather comprehensive context
+    ```
 
-### Path 3: Persona Question
+    <Info>
+    This is the most powerful path - the LLM can call 22+ tools to gather comprehensive context before answering.
+    </Info>
+  </Tab>
+  <Tab title="Persona" icon="mask">
+    ### Path 3: Persona Question
 
-**When triggered:** Questions directed at persona-based apps (e.g., "Ask Einstein")
+    **When triggered:** Questions directed at persona-based apps (e.g., "Ask Einstein")
 
-**Processing:**
-- Uses the app's configured `persona_prompt`
-- Character-consistent responses
-- May have limited tool access based on app configuration
+    **Processing:**
+    - Uses the app's configured `persona_prompt`
+    - Character-consistent responses
+    - May have limited tool access based on app configuration
+
+    <Note>
+    Persona apps can customize which tools are available, allowing for focused conversational experiences.
+    </Note>
+  </Tab>
+</Tabs>
 
 ## Classification Logic
 
@@ -104,11 +146,23 @@ def requires_context(messages: list) -> bool:
 
 The LangGraph ReAct agent follows this cycle:
 
-1. **Receive question** with system prompt containing tool descriptions
-2. **Decide which tool(s)** to call based on question intent
-3. **Execute tool calls** and receive results
-4. **Synthesize response** or make additional tool calls
-5. **Generate final answer** with citations
+<Steps>
+  <Step title="Receive Question" icon="inbox">
+    System prompt provides tool descriptions, user's timezone, and citation instructions
+  </Step>
+  <Step title="Decide Tools" icon="brain">
+    LLM autonomously decides which tool(s) to call based on question intent
+  </Step>
+  <Step title="Execute Tools" icon="play">
+    Tool calls are executed and results returned to the agent
+  </Step>
+  <Step title="Synthesize or Continue" icon="arrows-rotate">
+    Agent synthesizes response OR makes additional tool calls if more context needed
+  </Step>
+  <Step title="Generate Answer" icon="message">
+    Final answer generated with proper `[1][2]` citations linking to source conversations
+  </Step>
+</Steps>
 
 ### Available Tools (22+)
 
@@ -116,58 +170,72 @@ The LangGraph ReAct agent follows this cycle:
 Tools are loaded dynamically based on user's enabled integrations and installed apps.
 </Info>
 
-#### Conversation & Memory Tools
+<AccordionGroup>
+  <Accordion title="Conversation & Memory Tools" icon="comments">
+    Core tools for retrieving user's conversations and extracted memories.
 
-| Tool | Purpose | Key Parameters |
-|------|---------|----------------|
-| `get_conversations_tool` | Retrieve by date range | `start_date`, `end_date`, `limit`, `include_transcript` |
-| `vector_search_conversations_tool` | Semantic search | `query`, `start_date`, `end_date`, `limit` |
-| `search_conversations_tool` | Full-text keyword search | `query`, `limit`, `offset` |
-| `get_memories_tool` | Personal facts about user | `limit`, `offset` |
+    | Tool | Purpose | Key Parameters |
+    |------|---------|----------------|
+    | `get_conversations_tool` | Retrieve by date range | `start_date`, `end_date`, `limit`, `include_transcript` |
+    | `vector_search_conversations_tool` | Semantic search | `query`, `start_date`, `end_date`, `limit` |
+    | `search_conversations_tool` | Full-text keyword search | `query`, `limit`, `offset` |
+    | `get_memories_tool` | Personal facts about user | `limit`, `offset` |
+  </Accordion>
 
-#### Action Item Tools
+  <Accordion title="Action Item Tools" icon="check-circle">
+    Manage tasks and to-dos extracted from conversations.
 
-| Tool | Purpose |
-|------|---------|
-| `get_action_items_tool` | Retrieve pending tasks |
-| `create_action_item_tool` | Create new task |
-| `update_action_item_tool` | Mark complete/update |
+    | Tool | Purpose |
+    |------|---------|
+    | `get_action_items_tool` | Retrieve pending tasks |
+    | `create_action_item_tool` | Create new task |
+    | `update_action_item_tool` | Mark complete/update |
+  </Accordion>
 
-#### Calendar Tools (Google Calendar)
+  <Accordion title="Calendar Tools (Google Calendar)" icon="calendar">
+    Full CRUD operations on user's Google Calendar.
 
-| Tool | Purpose |
-|------|---------|
-| `get_calendar_events_tool` | Fetch events by date/person |
-| `create_calendar_event_tool` | Create meetings with attendees |
-| `update_calendar_event_tool` | Modify existing events |
-| `delete_calendar_event_tool` | Cancel meetings |
+    | Tool | Purpose |
+    |------|---------|
+    | `get_calendar_events_tool` | Fetch events by date/person |
+    | `create_calendar_event_tool` | Create meetings with attendees |
+    | `update_calendar_event_tool` | Modify existing events |
+    | `delete_calendar_event_tool` | Cancel meetings |
+  </Accordion>
 
-#### Integration Tools
+  <Accordion title="Integration Tools" icon="plug">
+    Connect to external services for richer context.
 
-| Tool | Service | Purpose |
-|------|---------|---------|
-| `get_gmail_messages_tool` | Gmail | Search emails |
-| `get_whoop_sleep_tool` | Whoop | Sleep data |
-| `get_whoop_recovery_tool` | Whoop | Recovery scores |
-| `get_whoop_workout_tool` | Whoop | Workout history |
-| `search_notion_pages_tool` | Notion | Search workspace |
-| `get_twitter_tweets_tool` | Twitter/X | Recent tweets |
-| `get_github_pull_requests_tool` | GitHub | Open PRs |
-| `get_github_issues_tool` | GitHub | Open issues |
-| `perplexity_search_tool` | Perplexity | Web search |
+    | Tool | Service | Purpose |
+    |------|---------|---------|
+    | `get_gmail_messages_tool` | Gmail | Search emails |
+    | `get_whoop_sleep_tool` | Whoop | Sleep data |
+    | `get_whoop_recovery_tool` | Whoop | Recovery scores |
+    | `get_whoop_workout_tool` | Whoop | Workout history |
+    | `search_notion_pages_tool` | Notion | Search workspace |
+    | `get_twitter_tweets_tool` | Twitter/X | Recent tweets |
+    | `get_github_pull_requests_tool` | GitHub | Open PRs |
+    | `get_github_issues_tool` | GitHub | Open issues |
+    | `perplexity_search_tool` | Perplexity | Web search |
+  </Accordion>
 
-#### Dynamic App Tools
+  <Accordion title="Dynamic App Tools" icon="puzzle-piece">
+    Third-party apps can define custom tools that become available when users enable them.
 
-Third-party apps can define custom tools:
+    ```python
+    # Location: backend/utils/retrieval/tools/app_tools.py
+    def load_app_tools(uid: str) -> List[Callable]:
+        """
+        Loads tools from user's enabled apps.
+        Each app can define chat_tools in its configuration.
+        """
+    ```
 
-```python
-# Location: backend/utils/retrieval/tools/app_tools.py
-def load_app_tools(uid: str) -> List[Callable]:
-    """
-    Loads tools from user's enabled apps.
-    Each app can define chat_tools in its configuration.
-    """
-```
+    <Tip>
+    See [Chat Tools for Apps](/doc/developer/apps/ChatTools) to learn how to build custom tools.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
 
 ### Safety Guards
 
@@ -178,6 +246,24 @@ def load_app_tools(uid: str) -> List[Callable]:
 ```
 
 ## Vector Search Deep Dive
+
+```mermaid
+sequenceDiagram
+    participant Agent as 🤖 LLM Agent
+    participant Tool as 🔧 Vector Search Tool
+    participant Embed as 📊 OpenAI Embeddings
+    participant Pine as 🌲 Pinecone
+    participant Fire as 🔥 Firestore
+
+    Agent->>Tool: vector_search_conversations_tool(query, dates)
+    Tool->>Embed: embed_query("John project discussion")
+    Embed-->>Tool: [0.012, -0.034, 0.056, ...] (3,072 dims)
+    Tool->>Pine: query(vector, uid filter, date range)
+    Pine-->>Tool: [conv_id_456, conv_id_789] ranked by similarity
+    Tool->>Fire: get_conversations_by_id(ids)
+    Fire-->>Tool: Full conversation data
+    Tool-->>Agent: Formatted context with citations
+```
 
 ### Configuration
 
@@ -392,37 +478,53 @@ The Flutter app parses these to show:
 
 **User asks:** "What did I discuss with John yesterday about the project?"
 
-```
-1. CLASSIFICATION
-   └─ requires_context() → TRUE (temporal + person + topic reference)
-   └─ Route to: agentic_context_dependent_conversation
+<Steps>
+  <Step title="Classification" icon="filter">
+    `requires_context()` → **TRUE** (temporal + person + topic reference)
 
-2. AGENT DECIDES TOOLS
-   └─ System prompt provides: current datetime, tool descriptions
-   └─ Agent thinks: "Need conversations from yesterday about project with John"
-   └─ Agent calls: vector_search_conversations_tool
-      - query: "John project discussion"
-      - start_date: "2024-01-19T00:00:00-08:00"
-      - end_date: "2024-01-19T23:59:59-08:00"
+    Route to: `agentic_context_dependent_conversation`
+  </Step>
+  <Step title="Agent Decides Tools" icon="brain">
+    System prompt provides: current datetime, tool descriptions
 
-3. TOOL EXECUTION
-   └─ Embed query → [0.012, -0.034, 0.056, ...]
-   └─ Query Pinecone with filters
-   └─ Fetch full conversations from Firestore
-   └─ Format for LLM context
+    Agent thinks: *"Need conversations from yesterday about project with John"*
 
-4. RESPONSE GENERATION
-   └─ LLM synthesizes answer with citations
-   └─ "Yesterday you discussed the Q1 roadmap with John[1]..."
+    Agent calls: `vector_search_conversations_tool`
+    - `query`: "John project discussion"
+    - `start_date`: "2024-01-19T00:00:00-08:00"
+    - `end_date`: "2024-01-19T23:59:59-08:00"
+  </Step>
+  <Step title="Tool Execution" icon="gear">
+    1. Embed query → `[0.012, -0.034, 0.056, ...]`
+    2. Query Pinecone with uid filter + date range
+    3. Fetch full conversations from Firestore
+    4. Format for LLM context
+  </Step>
+  <Step title="Response Generation" icon="pen">
+    LLM synthesizes answer with citations:
 
-5. POST-PROCESSING
-   └─ Extract citations → memories_id: ["conv_456", "conv_789"]
-   └─ Save message to Firestore
-   └─ Stream final response with linked memories
-```
+    *"Yesterday you discussed the Q1 roadmap with John[1]. He mentioned the frontend refactoring is ahead of schedule[1][2]..."*
+  </Step>
+  <Step title="Post-Processing" icon="wand-magic-sparkles">
+    1. Extract citations → `memories_id: ["conv_456", "conv_789"]`
+    2. Save message to Firestore
+    3. Stream final response with linked conversation cards
+  </Step>
+</Steps>
 
 ## Related Documentation
 
-- [Chat Tools for Apps](/doc/developer/apps/ChatTools) - Building custom chat tools
-- [Memory Embeddings](/doc/developer/backend/memory_embeddings) - Embedding details
-- [Backend Deep Dive](/doc/developer/backend/backend_deepdive) - General architecture
+<CardGroup cols={2}>
+  <Card title="Chat Tools for Apps" icon="puzzle-piece" href="/doc/developer/apps/ChatTools">
+    Learn how to build custom chat tools for your Omi apps
+  </Card>
+  <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
+    How conversations and memories are stored
+  </Card>
+  <Card title="Backend Deep Dive" icon="server" href="/doc/developer/backend/backend_deepdive">
+    General backend architecture overview
+  </Card>
+  <Card title="Real-time Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+    WebSocket transcription and STT providers
+  </Card>
+</CardGroup>

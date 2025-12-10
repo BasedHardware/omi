@@ -7,96 +7,123 @@ description: "Learn how to get the best results from Omi chat. Discover promptin
 
 When you ask Omi a question, it goes through an intelligent routing system that determines the best way to answer:
 
+```mermaid
+flowchart LR
+    Q[Your Question] --> R{Router}
+    R -->|Simple| NC[Fast Response]
+    R -->|Context Needed| A[22+ Tools]
+    R -->|Persona App| P[Character Response]
+```
+
 <Info>
 Understanding these paths helps you frame questions that get the richest, most relevant answers.
 </Info>
 
-### Simple Chat Path
-**For:** Greetings, general advice, brainstorming
+<Tabs>
+  <Tab title="Simple Chat" icon="comment">
+    **For:** Greetings, general advice, brainstorming
 
-Questions like "Hi!", "What's a good book to read?", or "Tips for productivity" get fast, direct responses without searching your memories.
+    Questions like "Hi!", "What's a good book to read?", or "Tips for productivity" get fast, direct responses without searching your memories.
 
-### Agentic Path (Context-Rich)
-**For:** Personal data, temporal queries, integration lookups
+    **Examples:**
+    - "Hello!"
+    - "What's a good productivity tip?"
+    - "Help me brainstorm ideas for..."
+  </Tab>
+  <Tab title="Agentic (Context-Rich)" icon="robot">
+    **For:** Personal data, temporal queries, integration lookups
 
-Questions like "What did I discuss yesterday?", "Show my calendar", or "What are my goals?" trigger the full agentic system with access to 22+ tools that search your conversations, memories, calendar, and connected services.
+    Questions like "What did I discuss yesterday?", "Show my calendar", or "What are my goals?" trigger the full agentic system with access to 22+ tools.
 
-### Persona Path
-**For:** Character-based apps
+    **Examples:**
+    - "What did I discuss yesterday?"
+    - "Show my calendar for tomorrow"
+    - "What are my goals?"
+  </Tab>
+  <Tab title="Persona" icon="mask">
+    **For:** Character-based apps
 
-If you're chatting with a persona app (like "Ask Einstein"), responses come from that character's perspective.
+    If you're chatting with a persona app (like "Ask Einstein"), responses come from that character's perspective.
+
+    **Examples:**
+    - Asking Einstein about physics
+    - Getting advice from a custom coach persona
+  </Tab>
+</Tabs>
 
 ## Prompting Strategies
 
-### 1. Be Specific with Time
+<AccordionGroup>
+  <Accordion title="Be Specific with Time" icon="clock">
+    Omi excels at temporal queries. The system converts relative time references to precise date ranges.
 
-Omi excels at temporal queries. The system converts relative time references to precise date ranges.
+    <Tip>
+    Use natural time expressions - the system understands them perfectly.
+    </Tip>
 
-<Tip>
-Use natural time expressions - the system understands them perfectly.
-</Tip>
+    **Great examples:**
+    - "What did I discuss yesterday?"
+    - "Summarize my last 3 days"
+    - "What happened this morning?"
+    - "Conversations from last week"
+    - "What did I talk about on Monday?"
 
-**Great examples:**
-- "What did I discuss yesterday?"
-- "Summarize my last 3 days"
-- "What happened this morning?"
-- "Conversations from last week"
-- "What did I talk about on Monday?"
+    **Less effective:**
+    - Vague timeframes without anchors ("a while ago")
+    - Very broad ranges ("everything from this year")
+  </Accordion>
 
-**Less effective:**
-- Vague timeframes without anchors ("a while ago")
-- Very broad ranges ("everything from this year")
+  <Accordion title="Use Natural Language for Topics" icon="magnifying-glass">
+    Omi uses **semantic search** - it finds conversations by meaning, not just keywords. Ask naturally!
 
-### 2. Use Natural Language for Topics
+    **Great examples:**
+    - "What have I discussed about my health?"
+    - "Conversations about career growth"
+    - "Times I talked about feeling stressed"
+    - "Discussions involving my manager"
+    - "What have I said about the project launch?"
 
-Omi uses **semantic search** - it finds conversations by meaning, not just keywords. Ask naturally!
+    **Why it works:** The system embeds your question and finds conversations with similar meaning, even if they use different words.
+  </Accordion>
 
-**Great examples:**
-- "What have I discussed about my health?"
-- "Conversations about career growth"
-- "Times I talked about feeling stressed"
-- "Discussions involving my manager"
-- "What have I said about the project launch?"
+  <Accordion title="Ask About Yourself" icon="user">
+    Omi builds a knowledge base of facts about you across all conversations. Tap into it!
 
-**Why it works:** The system embeds your question and finds conversations with similar meaning, even if they use different words.
+    **Great examples:**
+    - "What do you know about me?"
+    - "What are my goals?"
+    - "Who do I talk to most?"
+    - "What are my preferences?"
+    - "What hobbies have I mentioned?"
 
-### 3. Ask About Yourself
+    **Why it works:** This triggers the memories system, which stores structured facts extracted from your conversations.
+  </Accordion>
 
-Omi builds a knowledge base of facts about you across all conversations. Tap into it!
+  <Accordion title="Leverage Your Integrations" icon="plug">
+    If you've connected services, ask about them directly.
 
-**Great examples:**
-- "What do you know about me?"
-- "What are my goals?"
-- "Who do I talk to most?"
-- "What are my preferences?"
-- "What hobbies have I mentioned?"
-
-**Why it works:** This triggers the memories system, which stores structured facts extracted from your conversations.
-
-### 4. Leverage Your Integrations
-
-If you've connected services, ask about them directly.
-
-**Google Calendar:**
-- "What meetings do I have today?"
-- "When is my next meeting with Sarah?"
-- "Schedule a meeting with John at 3 PM tomorrow"
-
-**Gmail:**
-- "Show my recent emails about the project"
-- "Emails from John this week"
-
-**Whoop (Health):**
-- "How was my sleep last night?"
-- "What's my recovery score today?"
-- "Show my workouts this week"
-
-**GitHub:**
-- "My open pull requests"
-- "Issues assigned to me"
-
-**Notion:**
-- "Search my notes about product roadmap"
+    <CardGroup cols={2}>
+      <Card title="Google Calendar" icon="calendar">
+        - "What meetings do I have today?"
+        - "When is my next meeting with Sarah?"
+        - "Schedule a meeting with John at 3 PM tomorrow"
+      </Card>
+      <Card title="Gmail" icon="envelope">
+        - "Show my recent emails about the project"
+        - "Emails from John this week"
+      </Card>
+      <Card title="Whoop (Health)" icon="heart-pulse">
+        - "How was my sleep last night?"
+        - "What's my recovery score today?"
+        - "Show my workouts this week"
+      </Card>
+      <Card title="GitHub" icon="github">
+        - "My open pull requests"
+        - "Issues assigned to me"
+      </Card>
+    </CardGroup>
+  </Accordion>
+</AccordionGroup>
 
 ## Example Questions by Category
 
@@ -116,38 +143,41 @@ If you've connected services, ask about them directly.
 These advanced strategies are based on how the system is designed internally.
 </Tip>
 
-### 1. Combine Time + Topic
-Narrow results by specifying both when and what:
-- "What did I discuss about the project **last week**?"
-- "Conversations about health **this month**"
-- "What did John say **yesterday**?"
-
-### 2. Ask Follow-ups
-The system remembers your last 10 messages. Build on previous answers:
-- First: "What did I discuss yesterday?"
-- Follow-up: "Tell me more about the second one"
-- Follow-up: "What action items came from that?"
-
-### 3. Be Direct
-Skip pleasantries when you need information:
-- **Better:** "My tasks for today"
-- **Slower:** "Hey, could you maybe show me what I need to do today?"
-
-### 4. Use Relative Dates
-The system handles relative dates better than absolute ones:
-- **Better:** "yesterday", "last 3 days", "this morning"
-- **Works but slower:** "January 15th, 2024"
-
-### 5. Request Summaries
-Trigger comprehensive retrieval with summary requests:
-- "Summarize my week"
-- "Give me an overview of my conversations yesterday"
-- "What were the key themes from last month?"
-
-### 6. Ask for Specific Counts
-When you want thorough results:
-- "Show me my last 10 conversations"
-- "What are my top 5 priorities?"
+<CardGroup cols={2}>
+  <Card title="Combine Time + Topic" icon="filter">
+    Narrow results by specifying both when and what:
+    - "What did I discuss about the project **last week**?"
+    - "Conversations about health **this month**"
+    - "What did John say **yesterday**?"
+  </Card>
+  <Card title="Ask Follow-ups" icon="reply">
+    The system remembers your last 10 messages:
+    - First: "What did I discuss yesterday?"
+    - Follow-up: "Tell me more about the second one"
+    - Follow-up: "What action items came from that?"
+  </Card>
+  <Card title="Be Direct" icon="bolt">
+    Skip pleasantries when you need information:
+    - **Better:** "My tasks for today"
+    - **Slower:** "Hey, could you maybe show me..."
+  </Card>
+  <Card title="Use Relative Dates" icon="calendar-day">
+    Relative dates work better than absolute:
+    - **Better:** "yesterday", "last 3 days", "this morning"
+    - **Slower:** "January 15th, 2024"
+  </Card>
+  <Card title="Request Summaries" icon="list">
+    Trigger comprehensive retrieval:
+    - "Summarize my week"
+    - "Overview of yesterday's conversations"
+    - "Key themes from last month"
+  </Card>
+  <Card title="Ask for Specific Counts" icon="hashtag">
+    When you want thorough results:
+    - "Show me my last 10 conversations"
+    - "What are my top 5 priorities?"
+  </Card>
+</CardGroup>
 
 ## What NOT to Ask
 
@@ -165,41 +195,54 @@ Some question patterns don't work well due to system design.
 
 ## Integration-Specific Tips
 
-### Google Calendar
-Best practices for calendar queries:
+<Tabs>
+  <Tab title="Google Calendar" icon="calendar">
+    Best practices for calendar queries:
 
-- **Check schedule:** "What meetings do I have today?" or "Am I free at 3 PM?"
-- **Find meetings:** "When is my next meeting with [name]?"
-- **Create events:** "Schedule a meeting with John tomorrow at 2 PM about project review"
-- **Modify events:** "Move my 3 PM meeting to 4 PM"
+    | Action | Example Query |
+    |--------|---------------|
+    | Check schedule | "What meetings do I have today?" or "Am I free at 3 PM?" |
+    | Find meetings | "When is my next meeting with [name]?" |
+    | Create events | "Schedule a meeting with John tomorrow at 2 PM about project review" |
+    | Modify events | "Move my 3 PM meeting to 4 PM" |
+  </Tab>
+  <Tab title="Gmail" icon="envelope">
+    Best practices for email queries:
 
-### Gmail
-Best practices for email queries:
+    | Action | Example Query |
+    |--------|---------------|
+    | Search by sender | "Emails from John this week" |
+    | Search by topic | "Recent emails about the contract" |
+    | Combine filters | "Emails from Sarah about the project in the last 3 days" |
+  </Tab>
+  <Tab title="Whoop" icon="heart-pulse">
+    Best practices for health queries:
 
-- **Search by sender:** "Emails from John this week"
-- **Search by topic:** "Recent emails about the contract"
-- **Combine filters:** "Emails from Sarah about the project in the last 3 days"
+    | Data Type | Example Query |
+    |-----------|---------------|
+    | Sleep | "How was my sleep last night?" or "Sleep quality this week" |
+    | Recovery | "What's my recovery score today?" |
+    | Workouts | "Show my workouts this week" or "How much strain yesterday?" |
+    | Trends | "How has my sleep been this month?" |
+  </Tab>
+  <Tab title="GitHub" icon="github">
+    Best practices for development queries:
 
-### Whoop (Health & Fitness)
-Best practices for health queries:
+    | Action | Example Query |
+    |--------|---------------|
+    | PRs | "My open pull requests" or "PRs I need to review" |
+    | Issues | "Issues assigned to me" or "Open issues in [repo]" |
+    | Create | "Create an issue for the login bug in [repo]" |
+  </Tab>
+  <Tab title="Notion" icon="book">
+    Best practices for Notion queries:
 
-- **Sleep:** "How was my sleep last night?" or "Sleep quality this week"
-- **Recovery:** "What's my recovery score today?"
-- **Workouts:** "Show my workouts this week" or "How much strain yesterday?"
-- **Trends:** "How has my sleep been this month?"
-
-### GitHub
-Best practices for development queries:
-
-- **PRs:** "My open pull requests" or "PRs I need to review"
-- **Issues:** "Issues assigned to me" or "Open issues in [repo]"
-- **Create:** "Create an issue for the login bug in [repo]"
-
-### Notion
-Best practices for Notion queries:
-
-- **Search:** "Search my notes about [topic]"
-- **Find pages:** "Find my page about project roadmap"
+    | Action | Example Query |
+    |--------|---------------|
+    | Search | "Search my notes about [topic]" |
+    | Find pages | "Find my page about product roadmap" |
+  </Tab>
+</Tabs>
 
 ## Understanding Citations
 
@@ -234,5 +277,17 @@ All three:      "What did [name] and I discuss about [topic] [time period]?"
 
 ## Related Documentation
 
-- [Chat System Architecture](/doc/developer/backend/chat_system) - Technical deep dive
-- [Building Chat Tools](/doc/developer/apps/ChatTools) - Create custom tools for apps
+<CardGroup cols={2}>
+  <Card title="Chat System Architecture" icon="server" href="/doc/developer/backend/chat_system">
+    Technical deep dive into how the chat system works
+  </Card>
+  <Card title="Building Chat Tools" icon="puzzle-piece" href="/doc/developer/apps/ChatTools">
+    Create custom tools for your Omi apps
+  </Card>
+  <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
+    How your conversations and memories are stored
+  </Card>
+  <Card title="Real-time Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+    How live transcription works under the hood
+  </Card>
+</CardGroup>

@@ -7,33 +7,39 @@ description: 'This document outlines how Omi stores conversation data and extrac
 
 Omi uses a **dual-collection architecture** for storing user data:
 
-1. **Conversations**: Primary storage for recorded interactions (transcripts, audio, structured summaries)
-2. **Memories**: Secondary storage for extracted facts/learnings FROM conversations
+<CardGroup cols={2}>
+  <Card title="Conversations" icon="comments">
+    **Primary storage** for recorded interactions - transcripts, audio, structured summaries
+  </Card>
+  <Card title="Memories" icon="brain">
+    **Secondary storage** for extracted facts/learnings FROM conversations
+  </Card>
+</CardGroup>
 
 This separation allows for efficient retrieval of both full conversation context and quick access to key facts about the user.
 
 ## Architecture Diagram
 
-```
-User Recording → Audio Stream → Transcription (Deepgram)
-                                        ↓
-                              POST /v1/conversations
-                                        ↓
-                            process_conversation()
-                                        ↓
-                    ┌───────────────────┼───────────────────┐
-                    ↓                   ↓                   ↓
-           _get_structured()    _extract_memories()  _save_action_items()
-           (title, overview,    (facts → memories    (standalone collection)
-            action_items,        collection)
-            events)                    ↓
-                    ↓           save_memories()
-                    ↓                   ↓
-           upsert_conversation()  Firestore: memories/
-                    ↓
-           Firestore: conversations/
-                    ↓
-           Pinecone: Vector embedding
+```mermaid
+flowchart TD
+    subgraph Recording["📱 Recording"]
+        R[User Recording] --> AS[Audio Stream]
+        AS --> T[Transcription<br/>Deepgram]
+    end
+
+    T --> POST[POST /v1/conversations]
+    POST --> PC[process_conversation]
+
+    PC --> GS[_get_structured<br/>title, overview,<br/>action_items, events]
+    PC --> EM[_extract_memories<br/>facts → memories]
+    PC --> SAI[_save_action_items<br/>standalone collection]
+
+    GS --> UC[upsert_conversation]
+    EM --> SM[save_memories]
+
+    UC --> FS[(Firestore:<br/>conversations/)]
+    SM --> FSM[(Firestore:<br/>memories/)]
+    UC --> Pine[(Pinecone:<br/>vectors)]
 ```
 
 ## Firestore Structure
@@ -93,11 +99,23 @@ users/
 
 ### Processing Flow
 
-1. **API Request**: The app sends a POST request to `/v1/conversations` with transcript data
-2. **Processing**: `process_conversation()` in `utils/conversations/process_conversation.py` handles the logic
-3. **Structure Extraction**: LLM extracts title, overview, action items, and events
-4. **Storage**: `upsert_conversation()` in `database/conversations.py` saves to Firestore
-5. **Vector Embedding**: Conversation is embedded and stored in Pinecone for semantic search
+<Steps>
+  <Step title="API Request" icon="paper-plane">
+    The app sends a POST request to `/v1/conversations` with transcript data
+  </Step>
+  <Step title="Processing" icon="gear">
+    `process_conversation()` in `utils/conversations/process_conversation.py` handles the logic
+  </Step>
+  <Step title="Structure Extraction" icon="wand-magic-sparkles">
+    LLM extracts title, overview, action items, and events from the transcript
+  </Step>
+  <Step title="Storage" icon="database">
+    `upsert_conversation()` in `database/conversations.py` saves to Firestore
+  </Step>
+  <Step title="Vector Embedding" icon="magnifying-glass">
+    Conversation is embedded and stored in Pinecone for semantic search
+  </Step>
+</Steps>
 
 ### Conversation Model Fields
 
@@ -182,9 +200,18 @@ Memories are **facts about the user** extracted from conversations. They represe
 ### Memory Extraction Process
 
 During `process_conversation()`, the system:
-1. Analyzes the conversation transcript
-2. Extracts facts that are worth remembering about the user
-3. Stores them in the `memories` collection with a link back to the source conversation
+
+<Steps>
+  <Step title="Analyze Transcript" icon="magnifying-glass-chart">
+    Reviews the conversation transcript for personal information
+  </Step>
+  <Step title="Extract Facts" icon="lightbulb">
+    Identifies facts worth remembering about the user (~15 words max)
+  </Step>
+  <Step title="Store with Link" icon="link">
+    Saves to `memories` collection with a link back to the source conversation
+  </Step>
+</Steps>
 
 ### Memory Model Fields
 
@@ -210,11 +237,17 @@ During `process_conversation()`, the system:
 
 ### Memory Categories
 
-| Category | Description | Examples |
-|----------|-------------|----------|
-| `interesting` | Notable facts about the user | Hobbies, opinions, stories |
-| `system` | Preferences and patterns | Work habits, sleep schedule |
-| `manual` | User-created memories | Explicitly added facts |
+<CardGroup cols={3}>
+  <Card title="Interesting" icon="star">
+    Notable facts about the user: hobbies, opinions, stories
+  </Card>
+  <Card title="System" icon="gear">
+    Preferences and patterns: work habits, sleep schedule
+  </Card>
+  <Card title="Manual" icon="pen">
+    User-created memories: explicitly added facts
+  </Card>
+</CardGroup>
 
 <Note>
 Legacy categories (`core`, `hobbies`, `lifestyle`, `interests`, `habits`, `work`, `skills`, `learnings`, `other`) are automatically mapped to the new primary categories for backward compatibility.
@@ -235,18 +268,30 @@ The system follows these guidelines when extracting memories:
 
 Both conversations and memories support encryption for sensitive data.
 
-### Data Protection Levels
+<Tabs>
+  <Tab title="Standard" icon="unlock">
+    ### Standard Protection Level
 
-| Level | Description |
-|-------|-------------|
-| `standard` | No encryption, stored as plaintext |
-| `enhanced` | AES encryption for sensitive fields |
+    No encryption, stored as plaintext. This is the default for most users.
 
-### Encrypted Fields
+    - Fastest read/write performance
+    - Data visible in Firestore console
+    - Suitable for general use
+  </Tab>
+  <Tab title="Enhanced" icon="lock">
+    ### Enhanced Protection Level
 
-**Conversations**: `transcript_segments` (the actual transcript text)
+    AES encryption for sensitive fields. Provides additional security for sensitive conversations.
 
-**Memories**: `content` (the memory text)
+    **Encrypted Fields:**
+    - **Conversations**: `transcript_segments` (the actual transcript text)
+    - **Memories**: `content` (the memory text)
+
+    <Warning>
+    Enhanced encryption adds processing overhead to read/write operations.
+    </Warning>
+  </Tab>
+</Tabs>
 
 ### Implementation
 
@@ -346,6 +391,17 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
 
 ## Related Documentation
 
-- [Chat System Architecture](/doc/developer/backend/chat_system) - How conversations are retrieved for chat
-- [Memory Embeddings](/doc/developer/backend/memory_embeddings) - Vector embedding details
-- [Backend Deep Dive](/doc/developer/backend/backend_deepdive) - General architecture overview
+<CardGroup cols={2}>
+  <Card title="Chat System Architecture" icon="comments" href="/doc/developer/backend/chat_system">
+    How conversations are retrieved for chat using LangGraph
+  </Card>
+  <Card title="Real-time Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+    WebSocket-based real-time speech-to-text
+  </Card>
+  <Card title="Backend Deep Dive" icon="server" href="/doc/developer/backend/backend_deepdive">
+    General backend architecture overview
+  </Card>
+  <Card title="Backend Setup" icon="gear" href="/doc/developer/backend/Backend_Setup">
+    Environment setup and configuration
+  </Card>
+</CardGroup>
