@@ -41,9 +41,14 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
     body: '',
   );
   if (response == null) return [];
-  debugPrint('getMemories response: ${response.body}');
-  List<dynamic> memories = json.decode(response.body);
-  return memories.map((memory) => Memory.fromJson(memory)).toList();
+  if (response.statusCode == 200) {
+    debugPrint('getMemories response: ${response.body}');
+    var decoded = json.decode(response.body);
+    if (decoded is List) {
+      return decoded.map((e) => Memory.fromJson(e)).toList();
+    }
+  }
+  return [];
 }
 
 Future<bool> deleteMemoryServer(String memoryId) async {
