@@ -1178,6 +1178,18 @@ async def _listen(
                 message = await websocket.receive()
                 last_activity_time = time.time()
 
+                # Handle client disconnect
+                if message.get("type") == "websocket.disconnect":
+                    close_code = message.get("code", 1000)
+                    close_reason = {
+                        1000: "normal_closure",
+                        1001: "going_away_os_or_background",
+                        1006: "abnormal_closure",
+                        1011: "server_error",
+                    }.get(close_code, "unknown")
+                    print(f"Client disconnected: code={close_code} reason={close_reason}", uid, session_id)
+                    break
+
                 if message.get("bytes") is not None:
 
                     data = message.get("bytes")
@@ -1304,7 +1316,7 @@ async def _listen(
                         print(f"Received non-json text message: {message.get('text')}", uid, session_id)
 
         except WebSocketDisconnect:
-            print("WebSocket disconnected", uid, session_id)
+            print("WebSocket disconnected (exception)", uid, session_id)
         except Exception as e:
             print(f'Could not process data: error {e}', uid, session_id)
             websocket_close_code = 1011

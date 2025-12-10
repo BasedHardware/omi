@@ -26,6 +26,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
@@ -119,6 +120,14 @@ class CaptureProvider extends ChangeNotifier
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+
+    DebugLogManager.logEvent('app_lifecycle_changed', {
+      'state': state.name,
+      'recording_state': recordingState.name,
+      'has_device': _recordingDevice != null,
+      'socket_connected': _socket?.state == SocketServiceState.connected,
+    });
+
     if (state == AppLifecycleState.resumed) {
       _handleAppResumed();
     }

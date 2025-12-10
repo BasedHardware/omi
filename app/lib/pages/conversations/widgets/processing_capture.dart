@@ -398,19 +398,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
           ),
           const SizedBox(height: 4),
-          // Show transcript below controls during recording
-          if (provider.segments.isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: 12, bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _AutoScrollingText(
-                text: provider.segments.map((segment) => segment.text).join(' '),
-              ),
-            ),
-          ],
-          // Show photos widget if there are photos
-          if (provider.photos.isNotEmpty) ...[
+          if (provider.photos.isNotEmpty || provider.segments.isNotEmpty) ...[
             const SizedBox(height: 8),
             const LiteCaptureWidget(),
           ],
@@ -425,78 +413,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           // Show content when there are segments/photos
           if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ...[
             const SizedBox(height: 24),
-            if (provider.segments.isNotEmpty) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _AutoScrollingText(
-                  text: provider.segments.map((segment) => segment.text).join(' '),
-                ),
-              ),
-            ],
-            // Show photos widget if there are photos
-            if (provider.photos.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const LiteCaptureWidget(),
-            ],
+            const LiteCaptureWidget(),
           ],
         ],
       );
     }
-  }
-}
-
-class _AutoScrollingText extends StatefulWidget {
-  final String text;
-
-  const _AutoScrollingText({required this.text});
-
-  @override
-  State<_AutoScrollingText> createState() => _AutoScrollingTextState();
-}
-
-class _AutoScrollingTextState extends State<_AutoScrollingText> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(_AutoScrollingText oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.text != oldWidget.text) {
-      // Auto scroll to the end when text changes
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      controller: _scrollController,
-      scrollDirection: Axis.horizontal,
-      child: Text(
-        widget.text,
-        style: const TextStyle(
-          color: Color(0xFF6A6B71),
-          fontSize: 16,
-          height: 1.4,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.visible,
-      ),
-    );
   }
 }
 
