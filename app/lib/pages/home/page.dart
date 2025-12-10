@@ -709,76 +709,68 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                 ),
               ),
-              // Chat Button - Only show on home page (index 0)
-              Consumer<HomeProvider>(
-                builder: (context, provider, child) {
-                  if (provider.selectedIndex == 0) {
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                        // Navigate to chat page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatPage(isPivotBottom: false),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        height: 36,
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.all(0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(17.5),
-                            border: Border.all(
-                              color: Colors.pink.withValues(alpha: 0.3),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.solidComment,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Chat',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  } else {
-                    return const SizedBox.shrink();
-                  }
+              // Chat Button - Shows on all pages
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  MixpanelManager().bottomNavigationTabClicked('Chat');
+                  // Navigate to chat page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChatPage(isPivotBottom: false),
+                    ),
+                  );
                 },
+                child: Container(
+                  height: 36,
+                  margin: const EdgeInsets.only(left: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                        Colors.purpleAccent.withValues(alpha: 0.2),
+                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                        Colors.purpleAccent.withValues(alpha: 0.2),
+                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Container(
+                    margin: const EdgeInsets.all(0.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(17.5),
+                      border: Border.all(
+                        color: Colors.pink.withValues(alpha: 0.3),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          FontAwesomeIcons.solidComment,
+                          size: 14,
+                          color: Colors.white70,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Chat',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
