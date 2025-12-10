@@ -28,10 +28,9 @@
               "doc/developer/backend/Backend_Setup",
               "doc/developer/backend/backend_deepdive",
               "doc/developer/backend/chat_system",
-              "doc/developer/backend/StoringMemory",
+              "doc/developer/backend/StoringConversations",
               "doc/developer/backend/transcription",
-              "doc/developer/backend/memory_embeddings",
-              "doc/developer/backend/postprocessing"
+              "doc/developer/backend/ConversationPostProcessing"
             ]
           },
           {
