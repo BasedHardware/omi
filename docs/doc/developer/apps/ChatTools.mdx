@@ -1,14 +1,25 @@
 ---
-title: Chat Tools
-description: "Learn how to add custom chat tools to your Omi app that extend Omi's capabilities in user conversations."
+title: "Chat Tools"
+description: "Add custom chat tools to your Omi app that extend Omi's capabilities in user conversations."
 ---
 
 ## Overview
 
 **Chat Tools** allow your app to provide custom functions that become available in Omi chat when users install your app. These tools enable the AI assistant to interact with your service directly through natural language conversations.
 
-For example, a Slack integration app might provide tools to:
+<CardGroup cols={3}>
+  <Card title="Custom Actions" icon="wand-magic-sparkles">
+    Define tools that perform actions on external services
+  </Card>
+  <Card title="Natural Language" icon="comments">
+    Users interact with tools through normal conversation
+  </Card>
+  <Card title="Automatic Discovery" icon="magnifying-glass">
+    Tools become available when users install your app
+  </Card>
+</CardGroup>
 
+**Example:** A Slack integration app might provide tools to:
 - Send messages to Slack channels
 - List available channels
 - Search messages in Slack
@@ -16,39 +27,69 @@ For example, a Slack integration app might provide tools to:
 When a user installs your app, these tools automatically become available in their Omi chat, allowing them to say things like "Send a message to #general saying hello" or "What Slack channels do I have?"
 
 <Info>
-  Chat Tools require your app to have the `external_integration` capability
-  enabled. They are not a separate capability, but rather a feature that works
-  with external integration apps.
+Chat Tools require your app to have the `external_integration` capability enabled. They are not a separate capability, but rather a feature that works with external integration apps.
 </Info>
+
+---
 
 ## How Chat Tools Work
 
-When a user chats with Omi and the AI decides to use your tool:
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant O as Omi AI
+    participant Y as Your Server
 
-1. Omi calls your tool's endpoint with a POST request
-2. The payload includes: `uid`, `app_id`, `tool_name`, plus any parameters the AI extracted from the conversation
-3. Your endpoint processes the request and returns a result
-4. Omi displays the result to the user
+    U->>O: "Send hello to #general"
+    O->>O: AI decides to use your tool
+    O->>Y: POST /api/send_message
+    Note over Y: {uid, app_id, tool_name, channel, message}
+    Y->>Y: Process request
+    Y-->>O: {result: "Message sent!"}
+    O-->>U: "Done! Message sent to #general"
+```
 
-## Part 1: Implementing Chat Tools in Your Code
+<Steps>
+  <Step title="User Chats with Omi">
+    User makes a request in natural language
+  </Step>
+  <Step title="AI Decides to Use Tool">
+    Omi's AI determines your tool is the best way to fulfill the request
+  </Step>
+  <Step title="Omi Calls Your Endpoint">
+    POST request with `uid`, `app_id`, `tool_name`, plus extracted parameters
+  </Step>
+  <Step title="Your Server Processes">
+    Execute the action and return a result
+  </Step>
+  <Step title="User Sees Result">
+    Omi displays your response to the user
+  </Step>
+</Steps>
+
+---
+
+## Part 1: Implementing Chat Tools
 
 ### Step 1: Create Tool Endpoints
 
-Your backend server needs to expose endpoints that Omi will call when tools are invoked. Each tool requires its own endpoint.
+Your backend server needs to expose endpoints that Omi will call when tools are invoked.
 
-#### Endpoint Requirements
+<AccordionGroup>
+  <Accordion title="Endpoint Requirements" icon="list-check">
+    Your endpoints should:
 
-Your endpoints should:
-
-- Accept POST requests with JSON payload (or GET with query parameters)
-- Receive these standard fields:
-  - `uid`: User ID
-  - `app_id`: Your app ID
-  - `tool_name`: Name of the tool being called
-  - Plus any tool-specific parameters
-- Return JSON with either:
-  - `result`: Success message (string)
-  - `error`: Error message (string)
+    - Accept POST requests with JSON payload (or GET with query parameters)
+    - Receive these standard fields:
+      - `uid`: User ID
+      - `app_id`: Your app ID
+      - `tool_name`: Name of the tool being called
+      - Plus any tool-specific parameters
+    - Return JSON with either:
+      - `result`: Success message (string)
+      - `error`: Error message (string)
+  </Accordion>
+</AccordionGroup>
 
 #### Example: Send Message Tool
 
@@ -184,9 +225,17 @@ def search_messages():
 
 If your tools require user authentication:
 
-1. **Store user tokens securely** - When users connect their accounts via OAuth, store their tokens in a secure database associated with their `uid`
-2. **Validate authentication** - Check if the user has connected their account before processing tool requests
-3. **Return helpful errors** - If authentication is missing, return a clear error message
+<CardGroup cols={3}>
+  <Card title="Store Tokens Securely" icon="lock">
+    Save OAuth tokens in a secure database associated with `uid`
+  </Card>
+  <Card title="Validate Authentication" icon="shield-check">
+    Check if user has connected their account before processing
+  </Card>
+  <Card title="Return Helpful Errors" icon="message">
+    If auth is missing, return a clear error message
+  </Card>
+</CardGroup>
 
 ```python
 def get_user_token(uid: str) -> Optional[str]:
@@ -212,7 +261,9 @@ def send_message():
 
 ### Step 3: Error Handling Best Practices
 
-Always return helpful error messages:
+<Tip>
+Always return helpful error messages that guide users on how to fix the issue.
+</Tip>
 
 ```python
 # Good error messages
@@ -225,21 +276,30 @@ return jsonify({'error': 'Channel not found. Please check the channel name.'}), 
 # ✅ Good: return jsonify({'error': 'Service temporarily unavailable. Please try again later.'}), 500
 ```
 
+---
+
 ## Part 2: Adding Chat Tools in Omi App Store
 
 Chat tools are defined via a **manifest endpoint** hosted on your server. When you create or update your app in the Omi App Store, Omi will automatically fetch the tool definitions from your manifest URL.
 
-**Benefits:**
-
-- Single source of truth for tool definitions
-- Easy to update tools by modifying your manifest (just re-save the app in Omi to refresh)
-- Full control over tool parameters and schemas
-- Version control friendly
-- No need to manually configure each tool in the UI
+<CardGroup cols={2}>
+  <Card title="Single Source of Truth" icon="database">
+    Tool definitions live on your server
+  </Card>
+  <Card title="Easy Updates" icon="rotate">
+    Modify your manifest and re-save the app to refresh
+  </Card>
+  <Card title="Full Control" icon="sliders">
+    Define parameters with JSON Schema
+  </Card>
+  <Card title="Version Control" icon="code-branch">
+    Track changes in your codebase
+  </Card>
+</CardGroup>
 
 ### Step 1: Create the Manifest File
 
-Create a JSON file at `/.well-known/omi-tools.json` on your server (or any URL you prefer):
+Create a JSON file at `/.well-known/omi-tools.json` on your server:
 
 ```json
 {
@@ -300,38 +360,43 @@ Make sure your manifest is accessible via HTTPS. Common locations:
 
 ### Step 3: Add Manifest URL in Omi App Store
 
-1. Open the Omi mobile app
-2. Navigate to Apps → Create App (or edit an existing app)
-3. Select External Integration capability
-4. In the **Chat Tools Manifest URL** field, enter your manifest URL:
-   ```
-   https://your-app.com/.well-known/omi-tools.json
-   ```
-5. Submit your app
-
-Omi will automatically fetch your tool definitions when the app is created or updated.
+<Steps>
+  <Step title="Open Omi App">
+    Navigate to Apps → Create App (or edit an existing app)
+  </Step>
+  <Step title="Select Capability">
+    Choose External Integration capability
+  </Step>
+  <Step title="Enter Manifest URL">
+    In the **Chat Tools Manifest URL** field, enter:
+    ```
+    https://your-app.com/.well-known/omi-tools.json
+    ```
+  </Step>
+  <Step title="Submit">
+    Omi will automatically fetch your tool definitions
+  </Step>
+</Steps>
 
 <Note>
-  **Endpoint URLs in Manifest**: You can use relative paths (e.g.,
-  `/api/send_message`) in your manifest. Omi will automatically resolve them
-  using your `App Home URL` as the base URL.
+**Endpoint URLs in Manifest**: You can use relative paths (e.g., `/api/send_message`) in your manifest. Omi will automatically resolve them using your `App Home URL` as the base URL.
 </Note>
 
-### Manifest Schema Reference
+---
 
-Each tool in the manifest should have these fields:
+## Manifest Schema Reference
 
-| Field            | Type    | Required | Description                                                            |
-| ---------------- | ------- | -------- | ---------------------------------------------------------------------- |
-| `name`           | string  | ✅       | Unique tool identifier (e.g., `send_slack_message`)                    |
-| `description`    | string  | ✅       | Detailed description for the AI to understand when/how to use the tool |
-| `endpoint`       | string  | ✅       | URL endpoint (can be relative or absolute)                             |
-| `method`         | string  | ❌       | HTTP method (default: `POST`)                                          |
-| `parameters`     | object  | ❌       | JSON Schema defining tool parameters (see below)                       |
-| `auth_required`  | boolean | ❌       | Whether user auth is required (default: `true`)                        |
-| `status_message` | string  | ❌       | Message shown to user when tool is called                              |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Unique tool identifier (e.g., `send_slack_message`) |
+| `description` | string | Yes | Detailed description for the AI to understand when/how to use the tool |
+| `endpoint` | string | Yes | URL endpoint (can be relative or absolute) |
+| `method` | string | No | HTTP method (default: `POST`) |
+| `parameters` | object | No | JSON Schema defining tool parameters |
+| `auth_required` | boolean | No | Whether user auth is required (default: `true`) |
+| `status_message` | string | No | Message shown to user when tool is called |
 
-**Parameters Schema:**
+### Parameters Schema
 
 ```json
 {
@@ -393,99 +458,62 @@ async def get_omi_tools_manifest():
     }
 ```
 
-### Tool Definition Fields Explained
+---
 
-#### Tool Name
+## Tool Definition Best Practices
 
-Use descriptive, action-oriented names:
+<AccordionGroup>
+  <Accordion title="Tool Names" icon="tag">
+    Use descriptive, action-oriented names:
 
-- ✅ `send_slack_message`
-- ✅ `list_slack_channels`
-- ✅ `search_slack_messages`
-- ❌ `slack1`
-- ❌ `do_stuff`
+    | Good | Bad |
+    |------|-----|
+    | `send_slack_message` | `slack1` |
+    | `list_slack_channels` | `do_stuff` |
+    | `search_slack_messages` | `msg` |
+  </Accordion>
+  <Accordion title="Descriptions" icon="file-lines">
+    Write detailed descriptions that help the AI understand:
 
-#### Description
+    - **When to use**: "Use this when the user wants to..."
+    - **Required parameters**: List what's needed
+    - **What it does**: Clear explanation of the action
 
-Write detailed descriptions that help the AI understand:
+    **Example:**
+    ```
+    Send a message to a Slack channel. Use this when the user wants to
+    send a message, post an update, or notify a channel in Slack.
+    Required parameters: channel (e.g., '#general') and message (the text to send).
+    ```
+  </Accordion>
+  <Accordion title="HTTP Methods" icon="code">
+    Choose the appropriate method:
 
-- **When to use the tool**: "Use this when the user wants to..."
-- **What parameters are required**: List required vs optional parameters
-- **What the tool does**: Clear explanation of the action
+    | Method | Use For |
+    |--------|---------|
+    | `POST` | Creating resources or sending data (most common) |
+    | `GET` | Retrieving data (parameters as query params) |
+    | `PUT/PATCH` | Updating resources |
+    | `DELETE` | Deleting resources |
+  </Accordion>
+  <Accordion title="Status Messages" icon="spinner">
+    Provide custom messages shown during tool execution:
 
-**Example:**
+    - "Searching Slack..."
+    - "Sending message..."
+    - "Creating calendar event..."
 
-```
-Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack. Required parameters: channel (e.g., '#general' or channel name) and message (the text to send).
-```
+    If not provided, Omi generates a default based on the tool name.
+  </Accordion>
+</AccordionGroup>
 
-#### Endpoint URL
-
-Your publicly accessible HTTPS endpoint that handles tool invocations:
-
-- Must be accessible via HTTPS
-- Should handle the HTTP method you specify
-- Example: `https://your-server.com/api/send_message`
-
-#### HTTP Method
-
-Choose the appropriate HTTP method:
-
-- **POST**: For creating resources or sending data (most common)
-- **GET**: For retrieving data (parameters sent as query params)
-- **PUT/PATCH**: For updating resources
-- **DELETE**: For deleting resources
-
-#### Auth Required
-
-Check this box if your tool requires user authentication. When checked, Omi will ensure the user has connected their account before calling the tool.
-
-#### Status Message (Optional)
-
-A custom message shown to users when your tool is being called. This provides better UX by showing what's happening:
-
-- Example: "Searching Slack", "Sending message", "Creating calendar event"
-- If not provided, Omi will generate a default message based on the tool name
-
-### Example: Complete Tool Configuration
-
-Here's an example of how to configure three tools for a Slack integration:
-
-**Tool 1: Send Message**
-
-- **Name**: `send_slack_message`
-- **Description**: `Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack. Required parameters: channel (e.g., '#general' or channel name) and message (the text to send).`
-- **Endpoint**: `https://your-server.com/api/send_message`
-- **Method**: POST
-- **Auth Required**: ✅ Yes
-- **Status Message**: `Sending message to Slack`
-
-**Tool 2: List Channels**
-
-- **Name**: `list_slack_channels`
-- **Description**: `List all available Slack channels in the workspace. Use this when the user asks about available channels, wants to see what channels exist, or needs to choose a channel to send a message to.`
-- **Endpoint**: `https://your-server.com/api/list_channels`
-- **Method**: POST
-- **Auth Required**: ✅ Yes
-- **Status Message**: `Checking Slack channels`
-
-**Tool 3: Search Messages**
-
-- **Name**: `search_slack_messages`
-- **Description**: `Search for messages in Slack. Use this when the user wants to find specific messages, look up past conversations, or search for information in Slack. Required parameter: query (search terms). Optional parameter: channel (to limit search to a specific channel).`
-- **Endpoint**: `https://your-server.com/api/search_messages`
-- **Method**: POST
-- **Auth Required**: ✅ Yes
-- **Status Message**: `Searching Slack`
+---
 
 ## Request and Response Format
 
 ### Request Format
 
-Your endpoints will receive requests with this structure:
-
 **POST Request:**
-
 ```json
 {
   "uid": "user_firebase_id",
@@ -497,86 +525,63 @@ Your endpoints will receive requests with this structure:
 ```
 
 **GET Request:**
-
 ```
 GET /api/search?uid=user_id&app_id=app_id&tool_name=search_slack_messages&query=meeting
 ```
 
 ### Response Format
 
-**Success Response:**
+<Tabs>
+  <Tab title="Success" icon="check">
+    ```json
+    {
+      "result": "Successfully sent message to #general"
+    }
+    ```
+    HTTP Status: `200`
+  </Tab>
+  <Tab title="Error" icon="xmark">
+    ```json
+    {
+      "error": "Slack not connected. Please connect your Slack account."
+    }
+    ```
+    HTTP Status: `400`, `401`, or `500`
+  </Tab>
+</Tabs>
 
-```json
-{
-  "result": "Successfully sent message to #general"
-}
-```
-
-**Error Response:**
-
-```json
-{
-  "error": "Slack not connected. Please connect your Slack account."
-}
-```
-
-**HTTP Status Codes:**
-
-- `200`: Success (with `result` field)
-- `400`: Bad request (with `error` field)
-- `401`: Unauthorized (with `error` field)
-- `500`: Server error (with `error` field)
+---
 
 ## Best Practices
 
-### 1. Tool Descriptions
+<CardGroup cols={2}>
+  <Card title="Clear Responses" icon="message">
+    Keep responses concise but informative
 
-Write clear, detailed descriptions that help the AI understand when to use your tool:
+    - ✅ "Successfully sent message to #general"
+    - ❌ "OK"
+  </Card>
+  <Card title="Helpful Errors" icon="circle-exclamation">
+    Guide users on how to fix issues
 
-- ✅ **Good**: "Send a message to a Slack channel. Use this when the user wants to send a message, post an update, or notify a channel in Slack. Required parameters: channel (e.g., '#general' or channel name) and message (the text to send)."
-- ❌ **Bad**: "Sends messages"
+    - ✅ "Slack not connected. Please connect your account."
+    - ❌ "Error 401"
+  </Card>
+  <Card title="Secure Auth" icon="lock">
+    Store tokens encrypted and implement token refresh for long sessions
+  </Card>
+  <Card title="Rate Limiting" icon="gauge-high">
+    Protect your endpoints from abuse
+  </Card>
+</CardGroup>
 
-### 2. Parameter Naming
-
-Use consistent, clear parameter names that match common patterns:
-
-- For search: `query`
-- For messages: `message`
-- For channels: `channel`
-- For IDs: `id` or `item_id`
-
-### 3. Error Messages
-
-Provide helpful, user-friendly error messages:
-
-- ✅ **Good**: "Slack not connected. Please connect your Slack account."
-- ❌ **Bad**: "Error 401"
-
-### 4. Response Format
-
-Keep responses concise but informative:
-
-- ✅ **Good**: "Successfully sent message to #general"
-- ❌ **Bad**: "OK"
-- ✅ **Good**: "Found 5 messages:\n- Message 1\n- Message 2"
-- ❌ **Bad**: `{"data": [{"id": 1, "text": "..."}]}` (too technical)
-
-### 5. Authentication
-
-- Always validate user authentication for tools that require it
-- Store tokens securely (encrypted, in a secure database)
-- Implement token refresh for long-lived sessions
-- Return clear errors when authentication is missing
-
-### 6. Rate Limiting
-
-Implement rate limiting on your endpoints to prevent abuse:
+### Rate Limiting Example
 
 ```python
 from functools import wraps
 from flask import request, jsonify
+import time
 
-# Simple rate limiting example
 request_counts = {}
 
 def rate_limit(max_requests=100, window=60):
@@ -608,70 +613,92 @@ def send_message():
     # ...
 ```
 
+---
+
 ## Testing Your Tools
 
-### 1. Test Endpoints Directly
+<Steps>
+  <Step title="Test Endpoints Directly">
+    Use curl or Postman before adding to your app:
 
-Test your endpoints with curl or Postman before adding them to your app:
+    ```bash
+    curl -X POST https://your-server.com/api/send_message \
+      -H "Content-Type: application/json" \
+      -d '{
+        "uid": "test_user_id",
+        "app_id": "slack-integration",
+        "tool_name": "send_slack_message",
+        "channel": "#general",
+        "message": "Test message"
+      }'
+    ```
+  </Step>
+  <Step title="Create the App">
+    Add your tool definitions in the Omi App Store
+  </Step>
+  <Step title="Install the App">
+    Install it in your test account
+  </Step>
+  <Step title="Connect Your Account">
+    If auth is required, click the connect button in app settings
+  </Step>
+  <Step title="Test in Chat">
+    Try using the tools naturally:
+    - "Send a message to #general saying hello"
+    - "What Slack channels do I have?"
+    - "Search Slack for messages about the project"
+  </Step>
+</Steps>
 
-```bash
-# Test send_message endpoint
-curl -X POST https://your-server.com/api/send_message \
-  -H "Content-Type: application/json" \
-  -d '{
-    "uid": "test_user_id",
-    "app_id": "slack-integration",
-    "tool_name": "send_slack_message",
-    "channel": "#general",
-    "message": "Test message"
-  }'
-```
-
-### 2. Test in Omi
-
-1. **Create the app** with your tool definitions in the Omi App Store
-2. **Install the app** in your test account
-3. **Connect your account** (if auth is required) - Click the connect button in app settings
-4. **Try using the tools** in Omi chat:
-   - "Send a message to #general saying hello"
-   - "What Slack channels do I have?"
-   - "Search Slack for messages about the project"
+---
 
 ## Troubleshooting
 
-### Tool Not Appearing in Chat
+<AccordionGroup>
+  <Accordion title="Tool Not Appearing in Chat" icon="eye-slash">
+    - Verify the app is installed and enabled (`enabled: true`)
+    - Check that `chat_tools` array is properly formatted
+    - Ensure endpoints are accessible and return proper responses
+    - Verify the app has `external_integration` capability
+  </Accordion>
+  <Accordion title="Tool Calls Failing" icon="circle-xmark">
+    - Check endpoint logs for errors
+    - Verify authentication is working
+    - Ensure response format matches specification
+    - Test endpoints directly with curl/Postman
+    - Check that required parameters are being sent
+  </Accordion>
+  <Accordion title="AI Not Using Your Tool" icon="robot">
+    - Improve tool description to be more specific about when to use it
+    - Add examples in the description
+    - Ensure tool name is descriptive
+    - Make sure the description clearly states when the tool should be used
+  </Accordion>
+</AccordionGroup>
 
-- Verify the app is installed and enabled (`enabled: true`)
-- Check that `chat_tools` array is properly formatted
-- Ensure endpoints are accessible and return proper responses
-- Verify the app has `external_integration` capability
-
-### Tool Calls Failing
-
-- Check endpoint logs for errors
-- Verify authentication is working
-- Ensure response format matches specification
-- Test endpoints directly with curl/Postman
-- Check that required parameters are being sent
-
-### AI Not Using Your Tool
-
-- Improve tool description to be more specific about when to use it
-- Add examples in the description
-- Ensure tool name is descriptive
-- Make sure the description clearly states when the tool should be used
+---
 
 ## Complete Example
 
-For a complete working example, see the [Slack Integration Example](/doc/developer/apps/examples/Slack) which demonstrates:
+<Card title="Slack Integration Example" icon="slack" href="/doc/developer/apps/examples/Slack">
+  See a complete working example that demonstrates OAuth authentication, multiple chat tools, handling invocations, and error handling
+</Card>
 
-- Setting up OAuth authentication
-- Creating multiple chat tools
-- Handling tool invocations
-- Error handling and user feedback
+---
 
-## Next Steps
+## Related Documentation
 
-- Read the [Integration Apps Guide](/doc/developer/apps/Integrations) for more details on external integrations
-- Check out [OAuth Guide](/doc/developer/apps/Oauth) for authentication setup
-- See [Submitting Apps](/doc/developer/apps/Submitting) for publishing your app
+<CardGroup cols={2}>
+  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+    Learn about external integrations
+  </Card>
+  <Card title="OAuth Guide" icon="key" href="/doc/developer/apps/Oauth">
+    Set up authentication for your app
+  </Card>
+  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+    Publish your app to the store
+  </Card>
+  <Card title="Notifications" icon="bell" href="/doc/developer/apps/Notifications">
+    Send push notifications to users
+  </Card>
+</CardGroup>
