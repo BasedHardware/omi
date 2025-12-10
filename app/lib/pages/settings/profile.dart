@@ -307,7 +307,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Import Data',
+                  title: 'Import/Export Data',
                   icon: const FaIcon(FontAwesomeIcons.fileImport, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const ImportHistoryPage());

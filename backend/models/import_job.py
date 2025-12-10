@@ -14,6 +14,7 @@ class ImportJobStatus(str, Enum):
 
 class ImportSourceType(str, Enum):
     limitless = 'limitless'
+    omi = 'omi'
 
 
 class ImportJob(BaseModel):

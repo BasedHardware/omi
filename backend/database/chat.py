@@ -285,6 +285,29 @@ def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional
         return {"message": str(e)}
 
 
+def delete_messages_by_source(uid: str, source: str, batch_size: int = 450) -> int:
+    user_ref = db.collection('users').document(uid)
+    messages_ref = user_ref.collection('messages')
+    query = messages_ref.where(filter=FieldFilter('source', '==', source))
+    
+    total_deleted = 0
+    while True:
+        docs = list(query.limit(batch_size).stream())
+        if not docs:
+            break
+        
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+        batch.commit()
+        total_deleted += len(docs)
+        
+        if len(docs) < batch_size:
+            break
+    
+    return total_deleted
+
+
 def add_multi_files(uid: str, files_data: list):
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
