@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -21,6 +22,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'markdown_message_widget.dart';
@@ -333,6 +335,7 @@ class DaySummaryWidget extends StatelessWidget {
                 ],
               )
             : daySummaryMessagesList(messageText),
+        if (messageText.isNotEmpty && !showTypingIndicator) MessageActionBar(messageText: messageText),
       ],
     );
   }
@@ -562,19 +565,15 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         //     : const SizedBox.shrink(),
         widget.messageText.isEmpty
             ? const SizedBox.shrink()
-            : Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
+            : Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: getMarkdownWidget(context, widget.messageText),
               ),
+        if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
+          MessageActionBar(
+            messageText: widget.messageText,
+            setMessageNps: widget.setMessageNps,
+          ),
       ],
     );
   }
@@ -756,6 +755,11 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     ],
                   )
                 : getMarkdownWidget(context, widget.messageText),
+        if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
+          MessageActionBar(
+            messageText: widget.messageText,
+            setMessageNps: widget.setMessageNps,
+          ),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
@@ -864,6 +868,117 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     } catch (e) {
       return text;
     }
+  }
+}
+
+class MessageActionBar extends StatefulWidget {
+  final String messageText;
+  final Function(int)? setMessageNps;
+  final int? currentNps;
+
+  const MessageActionBar({
+    super.key,
+    required this.messageText,
+    this.setMessageNps,
+    this.currentNps,
+  });
+
+  @override
+  State<MessageActionBar> createState() => _MessageActionBarState();
+}
+
+class _MessageActionBarState extends State<MessageActionBar> {
+  int? _selectedNps;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedNps = widget.currentNps;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, left: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Copy button
+          _buildActionButton(
+            icon: FontAwesomeIcons.copy,
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await Clipboard.setData(ClipboardData(text: widget.messageText));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Message copied to clipboard',
+                      style: TextStyle(color: Colors.white, fontSize: 12.0),
+                    ),
+                    duration: Duration(milliseconds: 1500),
+                  ),
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 20),
+          // Thumbs up button
+          _buildActionButton(
+            icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
+            isSelected: _selectedNps == 1,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _selectedNps = _selectedNps == 1 ? null : 1;
+              });
+              widget.setMessageNps?.call(_selectedNps ?? 0);
+            },
+          ),
+          const SizedBox(width: 20),
+          // Thumbs down button
+          _buildActionButton(
+            icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
+            isSelected: _selectedNps == -1,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _selectedNps = _selectedNps == -1 ? null : -1;
+              });
+              widget.setMessageNps?.call(_selectedNps ?? 0);
+            },
+          ),
+          const SizedBox(width: 20),
+          // Share button
+          _buildActionButton(
+            icon: FontAwesomeIcons.shareNodes,
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await Share.share(widget.messageText);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isSelected = false,
+  }) {
+    return InkWell(
+      splashColor: Colors.transparent,
+      focusColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      onTap: onTap,
+      child: FaIcon(
+        icon,
+        color: isSelected ? Colors.white : Colors.grey.shade600,
+        size: 16,
+      ),
+    );
   }
 }
 

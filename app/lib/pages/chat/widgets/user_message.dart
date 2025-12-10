@@ -43,7 +43,7 @@ class HumanMessage extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Text(
                   message.text.decodeString,
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
                 ),
               ),
             ],
