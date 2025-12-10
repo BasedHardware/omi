@@ -8,158 +8,285 @@ description: "Welcome to the Omi backend! This document provides a comprehensive
 Omi is a multimodal AI assistant designed to understand and interact with users in a way that's both intelligent and human-centered. The backend plays a crucial role in this by:
 
 - **Processing and analyzing data:** Converting audio to text, extracting meaning, and creating structured information from user interactions.
-- **Storing and managing memories:** Building a rich knowledge base of user experiences that Omi can draw upon to provide context and insights.
-- **Facilitating intelligent conversations:** Understanding user requests, retrieving relevant information, and generating personalized responses.
+- **Storing conversations and extracting memories:** Building a rich knowledge base of user conversations and extracted facts that Omi can draw upon to provide context and insights.
+- **Facilitating intelligent chat:** Understanding user requests, retrieving relevant conversations, and generating personalized responses using an agentic AI system.
 - **Integrating with external services:** Extending Omi's capabilities and connecting it to other tools and platforms.
 
 This deep dive will walk you through the **core elements** of Omi's backend, providing a clear roadmap for developers and enthusiasts alike to understand its inner workings.
 
+<Tabs>
+  <Tab title="Quick Start" icon="rocket">
+    Jump to the [Quick Reference](#quick-reference) table to find what you need fast.
+  </Tab>
+  <Tab title="Full Deep Dive" icon="book">
+    Read through the complete documentation below to understand the architecture.
+  </Tab>
+  <Tab title="Visual Guides" icon="diagram-project">
+    See the [System Architecture](#system-architecture) flowchart and other diagrams throughout.
+  </Tab>
+</Tabs>
+
 ## System Architecture
 
-![Backend Detailed Overview](/images/docs/developer/images/backend.png)
+```mermaid
+flowchart TD
+    subgraph Client
+        App["🔵 Omi App<br/>(Flutter)"]
+    end
 
-You can click on the image to view it in full size and zoom in for more detail.
+    subgraph API["API Endpoints"]
+        WS["/listen<br/>WebSocket"]
+        Conv["/v1/conversations<br/>REST"]
+        Chat["/v2/messages<br/>REST"]
+    end
 
-## The Flow of Information: From User Interaction to Memory 🌊
+    subgraph Routers
+        Trans["routers/transcribe.py"]
+        ConvR["routers/conversations.py"]
+        ChatR["routers/chat.py"]
+    end
 
-Let's trace the journey of a typical interaction with Omi, focusing on how audio recordings are transformed into lasting memories:
+    subgraph Processing
+        DG["Deepgram API<br/>Speech-to-Text"]
+        PC["process_conversation()"]
+        LG["LangGraph<br/>Agentic System"]
+    end
 
-### A. User Initiates a Recording 🎤
+    subgraph Storage["Data Storage"]
+        FS[("Firestore<br/>Conversations & Memories")]
+        Pine[("Pinecone<br/>Vector Embeddings")]
+        Redis[("Redis<br/>Cache")]
+    end
 
-1. **Recording Audio:** The user starts a recording session using the Omi app, capturing a conversation or their thoughts.
+    App --> WS
+    App --> Conv
+    App --> Chat
 
-### B. Real-Time Transcription with Deepgram 🎧
+    WS --> Trans
+    Conv --> ConvR
+    Chat --> ChatR
 
-2. **WebSocket Connection:** The Omi app establishes a real-time connection with the backend using WebSockets (at the `/listen` endpoint in `routers/transcribe.py`).
-3. **Streaming Audio:** The app streams audio data continuously through the WebSocket to the backend.
-4. **Deepgram Processing:** The backend forwards the audio data to the Deepgram API for real-time speech-to-text conversion.
-5. **Transcription Results:** As Deepgram transcribes the audio, it sends results back to the backend.
-6. **Live Feedback:** The backend relays these transcription results back to the Omi app, allowing for live transcription display as the user is speaking.
+    Trans --> DG
+    ConvR --> PC
+    ChatR --> LG
 
-### C. Creating a Lasting Memory 💾
+    PC --> FS
+    PC --> Pine
+    LG --> FS
+    LG --> Pine
+    LG --> Redis
+```
 
-7. **API Request to `/v1/memories`:** When the conversation session ends, the Omi app sends a POST request to the `/v1/memories` endpoint in `routers/memories.py`.
-8. **Data Formatting:** The request includes information about the start and end time of the recording, the language, optional geolocation data, and the transcribed text segments from Deepgram.
-9. **Memory Creation (`routers/memories.py`):** The `create_memory` function in this file receives the request and performs basic validation on the data.
-10. **Processing the Memory (`utils/memories/process_memory.py`):**
-    - The `create_memory` function delegates the core memory processing logic to the `process_memory` function. This function is where the real magic happens!
-    - **Structure Extraction:** OpenAI's powerful large language model (LLM) is used to analyze the transcript and extract key information, creating a structured representation of the memory. This
-      includes:
-        - `title`: A short, descriptive title.
-        - `overview`: A concise summary of the main points.
-        - `category`: A relevant category to organize memories (work, personal, etc.).
-        - `action_items`: Any tasks or to-dos mentioned.
-        - `events`: Events that might need to be added to a calendar.
-    - **Embedding Generation:** The LLM is also used to create a vector embedding of the memory, capturing its semantic meaning for later retrieval.
-    - **App Execution:** If the user has enabled any apps, relevant apps are run to enrich the memory with additional insights, external actions, or other context-specific information.
-    - **Storage in Firestore:** The fully processed memory, including the transcript, structured data, app results, and other metadata, is stored in Firebase Firestore (a NoSQL database) for
-      persistence.
-    - **Embedding Storage in Pinecone:** The memory embedding is sent to Pinecone, a vector database, to enable fast and efficient similarity searches later.
+## Quick Reference
 
-### D. Enhancing the Memory (Optional)
+<CardGroup cols={3}>
+  <Card title="Conversations DB" icon="comments" href="#1-databaseconversationspy-the-conversation-guardian">
+    Firestore CRUD operations for storing and retrieving conversations
+  </Card>
+  <Card title="Vector Search" icon="magnifying-glass" href="#2-databasevector_dbpy-the-embedding-expert">
+    Pinecone embeddings for semantic similarity search
+  </Card>
+  <Card title="LLM Processing" icon="brain" href="#3-utilsllm-directory-the-ai-maestro">
+    OpenAI integrations for structure extraction and chat
+  </Card>
+  <Card title="Cloud Storage" icon="cloud" href="#4-utilsotherstoragepy-the-cloud-storage-manager">
+    Google Cloud Storage for audio files
+  </Card>
+  <Card title="Redis Cache" icon="bolt" href="#5-databaseredis_dbpy-the-data-speedster">
+    High-speed caching for profiles and preferences
+  </Card>
+  <Card title="Transcription" icon="microphone" href="#6-routerstranscribepy-the-real-time-transcription-engine">
+    Real-time speech-to-text with Deepgram
+  </Card>
+</CardGroup>
 
-11. **Post-Processing:** The user can optionally trigger post-processing of the memory to improve the quality of the transcript. This involves:
-    - Sending the audio to a more accurate transcription service (like WhisperX through a FAL.ai function).
-    - Updating the memory in Firestore with the new transcript.
-    - Re-generating the embedding to reflect the updated content.
+| Need to... | Go to |
+|------------|-------|
+| Store a conversation | `database/conversations.py` |
+| Query similar conversations | `database/vector_db.py` |
+| Process LLM calls | `utils/llm/` directory |
+| Handle real-time audio | `routers/transcribe.py` |
+| Manage caching | `database/redis_db.py` |
+| Understand chat system | [Chat System Architecture](/doc/developer/backend/chat_system) |
+| Learn data models | [Storing Conversations](/doc/developer/backend/StoringConversations) |
+
+## The Flow of Information: From User Interaction to Conversation 🌊
+
+Let's trace the journey of a typical interaction with Omi, focusing on how audio recordings are transformed into stored conversations:
+
+<Steps>
+  <Step title="User Initiates Recording" icon="microphone">
+    The user starts a recording session using the Omi app, capturing a conversation or their thoughts.
+  </Step>
+  <Step title="WebSocket Connection" icon="plug">
+    The Omi app establishes a real-time connection with the backend at the `/listen` endpoint in `routers/transcribe.py`.
+  </Step>
+  <Step title="Audio Streaming" icon="wave-pulse">
+    The app streams audio data continuously through the WebSocket to the backend.
+  </Step>
+  <Step title="Deepgram Processing" icon="ear-listen">
+    The backend forwards audio to Deepgram API for real-time speech-to-text conversion.
+  </Step>
+  <Step title="Live Feedback" icon="comment-dots">
+    Transcription results stream back through the backend to the app, displaying words as the user speaks.
+  </Step>
+  <Step title="Conversation Creation" icon="floppy-disk">
+    When recording ends, the app sends a POST request to `/v1/conversations` with the full transcript.
+  </Step>
+  <Step title="LLM Processing" icon="wand-magic-sparkles">
+    The `process_conversation` function uses OpenAI to extract:
+    - **Title & Overview** - Summarizes the conversation
+    - **Action Items** - Tasks and to-dos mentioned
+    - **Events** - Calendar-worthy moments
+    - **Memories** - Facts about the user
+  </Step>
+  <Step title="Storage" icon="database">
+    - **Firestore**: Stores the full conversation document
+    - **Pinecone**: Stores the vector embedding for semantic search
+  </Step>
+</Steps>
+
+### What Gets Extracted
+
+| Field | Description |
+|-------|-------------|
+| `title` | A short, descriptive title |
+| `overview` | Concise summary of main points |
+| `category` | Work, personal, etc. |
+| `action_items` | Tasks or to-dos mentioned |
+| `events` | Calendar-worthy events |
+| `memories` | Facts about the user (stored separately) |
+
+<Tip>
+Use the Quick Reference table above to jump directly to the component you need. Each section below includes key functions and usage patterns.
+</Tip>
 
 ## The Core Components: A Closer Look 🔎
 
 Now that you understand the general flow, let's dive deeper into the key modules and services that power Omi's backend.
 
-### 1. `database/memories.py`: The Memory Guardian 🛡️
+### 1. `database/conversations.py`: The Conversation Guardian 🛡️
 
-This module is responsible for managing the interaction with Firebase Firestore, Omi's main database for storing memories and related data.
+This module is responsible for managing the interaction with Firebase Firestore, Omi's main database for storing conversations and related data.
 
 **Key Functions:**
 
-- `upsert_memory`: Creates or updates a memory document in Firestore, ensuring efficient storage and handling of updates.
-- `get_memory`: Retrieves a specific memory by its ID.
-- `get_memories`: Fetches a list of memories for a user, allowing for filtering, pagination, and optional inclusion of discarded memories.
-- **OpenGlass Functions:** Handles the storage and retrieval of photos associated with memories created through OpenGlass.
-- **Post-Processing Functions:** Manages the storage of data related to transcript post-processing (status, model used, alternative transcription segments).
+- `upsert_conversation`: Creates or updates a conversation document in Firestore, ensuring efficient storage and handling of updates.
+- `get_conversation`: Retrieves a specific conversation by its ID.
+- `get_conversations`: Fetches a list of conversations for a user, allowing for filtering, pagination, and optional inclusion of discarded conversations.
+- **Photo Functions:** Handles the storage and retrieval of photos associated with conversations.
 
 **Firestore Structure:**
 
-Each memory is stored as a document in Firestore with the following fields:
+Each conversation is stored as a document in Firestore with the following fields:
 
 ```python
-class Memory(BaseModel):
+class Conversation(BaseModel):
     id: str  # Unique ID
     created_at: datetime  # Creation timestamp
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
 
-    source: Optional[MemorySource]
+    source: Optional[ConversationSource]  # omi, phone, desktop, openglass, etc.
     language: Optional[str]
+    status: ConversationStatus  # in_progress, processing, completed, failed
 
-    structured: Structured  # Contains extracted title, overview, action items, etc. 
+    structured: Structured  # Contains extracted title, overview, action items, etc.
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation]
-    photos: List[MemoryPhoto]
+    photos: List[ConversationPhoto]
 
     apps_results: List[AppResult]
     external_data: Optional[Dict]
-    postprocessing: Optional[MemoryPostProcessing]
 
     discarded: bool
-    deleted: bool 
+    deleted: bool
+    visibility: str  # private, shared, public
+
+    # See StoringConversations.mdx for complete field reference
+```
+
+#### Conversation Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> in_progress: Recording starts
+    in_progress --> processing: Recording ends
+    processing --> completed: Successfully processed
+    processing --> failed: Error occurred
+    completed --> [*]
+    failed --> processing: Retry
+
+    note right of processing
+        LLM extracts structure
+        Memories extracted
+        Embeddings generated
+    end note
 ```
 
 ### 2. `database/vector_db.py`: The Embedding Expert 🌲
 
-This module manages the interaction with Pinecone, a vector database used to store and query memory embeddings.
+This module manages the interaction with Pinecone, a vector database used to store and query conversation embeddings.
 
 **Key Functions:**
 
-- `upsert_vector`: Adds or updates a memory embedding in Pinecone.
+- `upsert_vector`: Adds or updates a conversation embedding in Pinecone.
 - `upsert_vectors`: Efficiently adds or updates multiple embeddings.
-- `query_vectors`: Performs similarity search to find memories relevant to a user query.
-- `delete_vector`: Removes a memory embedding.
+- `query_vectors`: Performs similarity search to find conversations relevant to a user query.
+- `delete_vector`: Removes a conversation embedding.
 
 **Pinecone's Role:**
 
 Pinecone's specialized vector search capabilities are essential for:
 
-- **Contextual Retrieval:** Finding memories that are semantically related to a user's request, even if they don't share exact keywords.
-- **Efficient Search:** Quickly retrieving relevant memories from a large collection.
-- **Scalability:** Handling the growing number of memory embeddings as the user creates more memories.
+- **Contextual Retrieval:** Finding conversations that are semantically related to a user's request, even if they don't share exact keywords.
+- **Efficient Search:** Quickly retrieving relevant conversations from a large collection.
+- **Scalability:** Handling the growing number of conversation embeddings as the user creates more conversations.
 
-### 3. `utils/llm.py`: The AI Maestro 🧠
+### 3. `utils/llm/` Directory: The AI Maestro 🧠
 
-This module is where the power of OpenAI's LLMs is harnessed for a wide range of tasks. It's the core of Omi's intelligence!
+This directory contains modules where the power of OpenAI's LLMs is harnessed for a wide range of tasks. It's the core of Omi's intelligence!
+
+**Key Files:**
+
+- `clients.py`: LLM client configurations and embedding models
+- `chat.py`: Chat-related prompts and processing
+- `conversations.py`: Conversation analysis and structuring
 
 **Key Functionalities:**
 
-- **Memory Processing:**
+- **Conversation Processing:**
     - Determines if a conversation should be discarded.
     - Extracts structured information from transcripts (title, overview, categories, etc.).
-    - Runs apps on memory data.
-    - Handles post-processing of transcripts to improve accuracy.
-- **OpenGlass and External Integration Processing:**
+    - Runs apps on conversation data.
+- **External Integration Processing:**
     - Creates structured summaries from photos and descriptions (OpenGlass).
-    - Processes data from external sources (like ScreenPipe) to generate memories.
+    - Processes data from external sources to generate conversations.
 - **Chat and Retrieval:**
     - Generates initial chat messages.
     - Analyzes chat conversations to determine if context is needed.
     - Extracts relevant topics and dates from chat history.
-    - Retrieves and summarizes relevant memory content for chat responses.
+    - Retrieves and summarizes relevant conversation content for chat responses.
 - **Emotional Processing:**
     - Analyzes conversation transcripts for user emotions.
     - Generates emotionally aware responses based on context and user facts.
-- **Fact Extraction:** Identifies and extracts new facts about the user from conversation transcripts.
+- **Fact Extraction:** Identifies and extracts new facts (memories) about the user from conversation transcripts.
 
 **OpenAI Integration:**
 
-- `llm.py` leverages OpenAI's `ChatOpenAI` model (specifically `gpt-4o` in the code, but you can use other models) for language understanding, generation, and reasoning.
-- It uses OpenAI's `OpenAIEmbeddings` model to generate vector embeddings for memories and user queries.
+- The LLM modules leverage OpenAI's models (GPT-4o and others) for language understanding, generation, and reasoning.
+- `text-embedding-3-large` is used to generate vector embeddings for conversations and user queries.
 
-**Why `llm.py` is Essential:**
+**Why this is Essential:**
 
-- **The Brain of Omi:** This module enables Omi's core AI capabilities, including natural language understanding, content generation, and context-aware interactions.
-- **Memory Enhancement:** It enriches raw data by extracting meaning and creating structured information.
-- **Personalized Responses:** It helps Omi provide responses that are tailored to individual users, incorporating their unique facts, memories, and even emotional states.
+- **The Brain of Omi:** These modules enable Omi's core AI capabilities, including natural language understanding, content generation, and context-aware interactions.
+- **Conversation Enhancement:** They enrich raw data by extracting meaning and creating structured information.
+- **Personalized Responses:** They help Omi provide responses tailored to individual users, incorporating their unique facts, conversations, and emotional states.
 - **Extensibility:** The app system and integration with external services make Omi highly versatile.
+
+<Info>
+For detailed chat system architecture including LangGraph routing and the agentic tool system, see [Chat System Architecture](/doc/developer/backend/chat_system).
+</Info>
 
 ### 4. `utils/other/storage.py`: The Cloud Storage Manager ☁️
 
@@ -183,6 +310,10 @@ This module handles interactions with Google Cloud Storage (GCS), specifically f
 
 ### 5. `database/redis_db.py`: The Data Speedster 🚀
 
+<Note>
+Redis is optional for local development. The backend will work without it, but features like speech profiles and app preferences caching will be disabled.
+</Note>
+
 Redis is an in-memory data store known for its speed and efficiency. The `database/redis_db.py` module handles Omi's interactions with Redis, which is primarily used for caching, managing user
 settings, and storing user speech profiles.
 
@@ -193,7 +324,7 @@ settings, and storing user speech profiles.
     - **Retrieval:** During real-time transcription or post-processing, the user's speech profile is retrieved from Redis to aid in speaker identification.
 - **Enabled Apps:**
     - **Storage:** A set of app IDs is stored for each user, representing the apps they have enabled.
-    - **Retrieval:** When processing a memory or handling a chat request, the backend checks Redis to see which apps are enabled for the user.
+    - **Retrieval:** When processing a conversation or handling a chat request, the backend checks Redis to see which apps are enabled for the user.
 - **App Reviews:**
     - **Storage:** Reviews for each app (score, review text, date) are stored in Redis, organized by app ID and user ID.
     - **Retrieval:** When displaying app information, the backend retrieves reviews from Redis.
@@ -203,12 +334,18 @@ settings, and storing user speech profiles.
 
 **Key Functions:**
 
-- `store_user_speech_profile`, `get_user_speech_profile`: For storing and retrieving speech profiles.
-- `store_user_speech_profile_duration`, `get_user_speech_profile_duration`: For managing speech profile durations.
-- `enable_app`, `disable_app`, `get_enabled_apps`: For handling app enable/disable states.
-- `get_app_reviews`: Retrieves reviews for a app.
-- `cache_user_name`, `get_cached_user_name`: For caching user names.
-  **Why Redis is Important:**
+| Function | Purpose |
+|----------|---------|
+| `store_user_speech_profile` | Store speech profile audio data |
+| `get_user_speech_profile` | Retrieve speech profile audio data |
+| `store_user_speech_profile_duration` | Store speech profile duration |
+| `get_user_speech_profile_duration` | Retrieve speech profile duration |
+| `enable_app`, `disable_app` | Manage app enable/disable states |
+| `get_enabled_apps` | Get user's enabled apps |
+| `get_app_reviews` | Retrieve reviews for an app |
+| `cache_user_name`, `get_cached_user_name` | Cache and retrieve user names |
+
+**Why Redis is Important:**
 
 - **Performance:** Caching data in Redis significantly improves the backend's speed, as frequently accessed data can be retrieved from memory very quickly.
 - **User Data Management:** Redis provides a flexible and efficient way to manage user-specific data, such as app preferences and speech profiles.
@@ -222,6 +359,10 @@ communication with the Omi app and Deepgram's speech-to-text API for accurate an
 
 #### 1. WebSocket Communication: The Lifeline of Real-Time Interactions 🔌
 
+<Warning>
+WebSocket connections require proper authentication. The `uid` parameter must be a valid Firebase user ID, and connections without proper auth will be rejected.
+</Warning>
+
 - **`/listen` Endpoint:** The Omi app initiates a WebSocket connection with the backend at the `/listen` endpoint, which is defined in the `websocket_endpoint` function of `routers/transcribe.py`.
 - **Bidirectional Communication:** WebSockets enable a two-way communication channel, allowing:
     - The Omi app to stream audio data to the backend continuously.
@@ -233,15 +374,53 @@ communication with the Omi app and Deepgram's speech-to-text API for accurate an
 - **`process_audio_dg` Function:** The `process_audio_dg` function (found in `utils/stt/streaming.py`) manages the interaction with Deepgram.
 - **Deepgram API:** The audio chunks streamed from the Omi app are sent to the Deepgram API for transcription. Deepgram's sophisticated speech recognition models process the audio and return text
   results.
-- **Options Configuration:** The `process_audio_dg` function configures various Deepgram options, including:
-    - `punctuate`: Automatically adds punctuation to the transcribed text.
-    - `no_delay`: Minimizes latency for real-time feedback.
-    - `language`: Sets the language for transcription.
-    - `interim_results`: (Set to `False` in the code) Controls whether to send interim (partial) transcription results or only final results.
-    - `diarize`: Enables speaker diarization (identifying different speakers in the audio).
-    - `encoding`, `sample_rate`: Sets audio encoding and sample rate for compatibility with Deepgram.
+- **Options Configuration:** The `process_audio_dg` function configures various Deepgram options:
+
+<AccordionGroup>
+  <Accordion title="punctuate" icon="period">
+    Automatically adds punctuation to transcribed text for readability. Essential for creating natural-looking transcripts.
+  </Accordion>
+  <Accordion title="no_delay" icon="bolt">
+    Minimizes latency for real-time feedback. This is essential for live transcription where users expect to see words appear as they speak.
+  </Accordion>
+  <Accordion title="language" icon="globe">
+    Sets the language for transcription (e.g., 'en', 'es', 'fr'). The user can specify their preferred language when starting a recording.
+  </Accordion>
+  <Accordion title="interim_results" icon="spinner">
+    Controls whether to send interim (partial) transcription results or only final results. Set to `False` in production for cleaner output.
+  </Accordion>
+  <Accordion title="diarize" icon="users">
+    Enables speaker diarization - identifying different speakers in the audio. Critical for multi-person conversations to attribute text to the correct speaker.
+  </Accordion>
+  <Accordion title="encoding & sample_rate" icon="sliders">
+    Audio format settings for Deepgram compatibility. These must match the audio format being sent from the app.
+  </Accordion>
+</AccordionGroup>
 
 #### 3. Transcription Flow: A Step-by-Step Breakdown 🌊
+
+```mermaid
+sequenceDiagram
+    participant App as 📱 Omi App
+    participant Backend as 🖥️ Backend
+    participant Deepgram as 🎧 Deepgram API
+
+    App->>Backend: Connect WebSocket /listen
+    Backend-->>App: Connection accepted
+
+    loop Real-time Transcription
+        App->>Backend: Audio chunk (binary)
+        Backend->>Deepgram: Forward audio
+        Deepgram-->>Backend: Transcription result
+        Backend-->>App: Text segment + speaker
+        Note right of App: Display words<br/>as user speaks
+    end
+
+    App->>Backend: Close connection
+    Backend-->>App: Session ended
+```
+
+The numbered breakdown of this flow:
 
 1. **App Streams Audio:** The Omi app captures audio from the user's device and continuously sends chunks of audio data through the WebSocket to the backend's `/listen` endpoint.
 2. **Backend Receives and Forwards:** The backend's `websocket_endpoint` function receives the audio chunks and immediately forwards them to Deepgram using the `process_audio_dg` function.
@@ -287,7 +466,48 @@ async def websocket_endpoint(websocket: WebSocket, uid: str, language: str = 'en
 ## Other Important Components 🧩
 
 - **`routers/transcribe.py`:** Manages real-time audio transcription using Deepgram, sending the transcribed text back to the Omi app for display.
-- **`routers/workflow.py`, `routers/screenpipe.py`:** Define API endpoints for external integrations to trigger memory creation.
+- **`routers/workflow.py`:** Defines API endpoints for external integrations to trigger conversation creation.
+- **`routers/chat.py`:** Handles the AI chat system with LangGraph routing and agentic tool calling.
+
+## Related Documentation
+
+For more detailed information on specific subsystems:
+
+```mermaid
+mindmap
+  root((Backend Deep Dive))
+    Conversations
+      StoringConversations.mdx
+      Data Models
+      Firestore Structure
+    Chat System
+      chat_system.mdx
+      LangGraph
+      Agentic Tools
+    Transcription
+      transcription.mdx
+      Deepgram
+      WebSockets
+    Setup
+      Backend_Setup.mdx
+      Environment
+      Dependencies
+```
+
+<CardGroup cols={2}>
+  <Card title="Storing Conversations & Memories" icon="database" href="/doc/developer/backend/StoringConversations">
+    Complete data model and storage architecture for conversations and extracted memories
+  </Card>
+  <Card title="Chat System Architecture" icon="comments" href="/doc/developer/backend/chat_system">
+    LangGraph routing, agentic tools, and vector search deep dive
+  </Card>
+  <Card title="Transcription Details" icon="microphone" href="/doc/developer/backend/transcription">
+    Detailed transcription pipeline and Deepgram configuration
+  </Card>
+  <Card title="Backend Setup" icon="gear" href="/doc/developer/backend/Backend_Setup">
+    Environment setup, dependencies, and local development guide
+  </Card>
+</CardGroup>
 
 We hope this deep dive into the Omi backend has provided valuable insights into its architecture, codebase, and the powerful technologies that drive its intelligent and human-centered interactions.
 
