@@ -17,6 +17,7 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  bool showShortConversations = false; // conversations < 2 minutes
   DateTime? selectedDate;
 
   String previousQuery = '';
@@ -162,6 +163,11 @@ class ConversationProvider extends ChangeNotifier {
     MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
   }
 
+  void toggleShortConversations() {
+    showShortConversations = !showShortConversations;
+    groupConversationsByDate();
+  }
+
   void setLoadingConversations(bool value) {
     isLoadingConversations = value;
     notifyListeners();
@@ -273,6 +279,14 @@ class ConversationProvider extends ChangeNotifier {
       } else {
         // When not showing discarded conversations, only show non-discarded ones
         if (convo.discarded) {
+          return false;
+        }
+      }
+
+      // Filter out short conversations (< 2 minutes) unless explicitly showing them
+      if (!showShortConversations) {
+        final durationSeconds = convo.getDurationInSeconds();
+        if (durationSeconds < 60) {
           return false;
         }
       }
@@ -432,7 +446,8 @@ class ConversationProvider extends ChangeNotifier {
     var memDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
     if (groupedConversations.containsKey(memDate)) {
       var convoEffectiveDate = conversation.startedAt ?? conversation.createdAt;
-      idx = groupedConversations[memDate]!.indexWhere((element) => (element.startedAt ?? element.createdAt).isBefore(convoEffectiveDate));
+      idx = groupedConversations[memDate]!
+          .indexWhere((element) => (element.startedAt ?? element.createdAt).isBefore(convoEffectiveDate));
       if (idx == -1) {
         groupedConversations[memDate]!.insert(0, conversation);
         idx = 0;
