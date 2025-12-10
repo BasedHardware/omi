@@ -1,0 +1,238 @@
+---
+title: "Chat Tips & Best Practices"
+description: "Learn how to get the best results from Omi chat. Discover prompting strategies, example questions, and tips based on how the system works internally."
+---
+
+## How Your Questions Get Processed
+
+When you ask Omi a question, it goes through an intelligent routing system that determines the best way to answer:
+
+<Info>
+Understanding these paths helps you frame questions that get the richest, most relevant answers.
+</Info>
+
+### Simple Chat Path
+**For:** Greetings, general advice, brainstorming
+
+Questions like "Hi!", "What's a good book to read?", or "Tips for productivity" get fast, direct responses without searching your memories.
+
+### Agentic Path (Context-Rich)
+**For:** Personal data, temporal queries, integration lookups
+
+Questions like "What did I discuss yesterday?", "Show my calendar", or "What are my goals?" trigger the full agentic system with access to 22+ tools that search your conversations, memories, calendar, and connected services.
+
+### Persona Path
+**For:** Character-based apps
+
+If you're chatting with a persona app (like "Ask Einstein"), responses come from that character's perspective.
+
+## Prompting Strategies
+
+### 1. Be Specific with Time
+
+Omi excels at temporal queries. The system converts relative time references to precise date ranges.
+
+<Tip>
+Use natural time expressions - the system understands them perfectly.
+</Tip>
+
+**Great examples:**
+- "What did I discuss yesterday?"
+- "Summarize my last 3 days"
+- "What happened this morning?"
+- "Conversations from last week"
+- "What did I talk about on Monday?"
+
+**Less effective:**
+- Vague timeframes without anchors ("a while ago")
+- Very broad ranges ("everything from this year")
+
+### 2. Use Natural Language for Topics
+
+Omi uses **semantic search** - it finds conversations by meaning, not just keywords. Ask naturally!
+
+**Great examples:**
+- "What have I discussed about my health?"
+- "Conversations about career growth"
+- "Times I talked about feeling stressed"
+- "Discussions involving my manager"
+- "What have I said about the project launch?"
+
+**Why it works:** The system embeds your question and finds conversations with similar meaning, even if they use different words.
+
+### 3. Ask About Yourself
+
+Omi builds a knowledge base of facts about you across all conversations. Tap into it!
+
+**Great examples:**
+- "What do you know about me?"
+- "What are my goals?"
+- "Who do I talk to most?"
+- "What are my preferences?"
+- "What hobbies have I mentioned?"
+
+**Why it works:** This triggers the memories system, which stores structured facts extracted from your conversations.
+
+### 4. Leverage Your Integrations
+
+If you've connected services, ask about them directly.
+
+**Google Calendar:**
+- "What meetings do I have today?"
+- "When is my next meeting with Sarah?"
+- "Schedule a meeting with John at 3 PM tomorrow"
+
+**Gmail:**
+- "Show my recent emails about the project"
+- "Emails from John this week"
+
+**Whoop (Health):**
+- "How was my sleep last night?"
+- "What's my recovery score today?"
+- "Show my workouts this week"
+
+**GitHub:**
+- "My open pull requests"
+- "Issues assigned to me"
+
+**Notion:**
+- "Search my notes about product roadmap"
+
+## Example Questions by Category
+
+| Category | Great Questions | Why They Work |
+|----------|-----------------|---------------|
+| **Time-Based** | "What did I do yesterday?", "Summarize my week" | Clear time bounds trigger precise date filtering |
+| **Topic Search** | "What have I said about AI?", "My health discussions" | Semantic search finds conceptually related conversations |
+| **People** | "Conversations with John", "What did Sarah mention?" | People filter in search + vector similarity |
+| **Action Items** | "What tasks do I have?", "What do I need to do?" | Direct access to action item system |
+| **Personal Facts** | "What's my favorite food?", "Where do I work?" | Memory retrieval of stored facts |
+| **Analysis** | "How productive was I this month?", "Patterns in my week" | Multi-tool orchestration for comprehensive answers |
+| **Calendar** | "My meetings tomorrow", "When am I free this week?" | Calendar integration for schedule awareness |
+
+## Pro Tips
+
+<Tip>
+These advanced strategies are based on how the system is designed internally.
+</Tip>
+
+### 1. Combine Time + Topic
+Narrow results by specifying both when and what:
+- "What did I discuss about the project **last week**?"
+- "Conversations about health **this month**"
+- "What did John say **yesterday**?"
+
+### 2. Ask Follow-ups
+The system remembers your last 10 messages. Build on previous answers:
+- First: "What did I discuss yesterday?"
+- Follow-up: "Tell me more about the second one"
+- Follow-up: "What action items came from that?"
+
+### 3. Be Direct
+Skip pleasantries when you need information:
+- **Better:** "My tasks for today"
+- **Slower:** "Hey, could you maybe show me what I need to do today?"
+
+### 4. Use Relative Dates
+The system handles relative dates better than absolute ones:
+- **Better:** "yesterday", "last 3 days", "this morning"
+- **Works but slower:** "January 15th, 2024"
+
+### 5. Request Summaries
+Trigger comprehensive retrieval with summary requests:
+- "Summarize my week"
+- "Give me an overview of my conversations yesterday"
+- "What were the key themes from last month?"
+
+### 6. Ask for Specific Counts
+When you want thorough results:
+- "Show me my last 10 conversations"
+- "What are my top 5 priorities?"
+
+## What NOT to Ask
+
+<Warning>
+Some question patterns don't work well due to system design.
+</Warning>
+
+| Avoid | Why | Better Alternative |
+|-------|-----|---------------------|
+| "Tell me everything" | Too broad, hits context limits | "Summarize my last week" |
+| "Search all my data" | No specific intent to optimize for | "What topics do I discuss most?" |
+| Extremely old queries | Vectors may not exist for old conversations | Focus on recent conversations |
+| Breaking persona character | Confuses persona apps | Stay in character with persona apps |
+| Questions about other users | Privacy boundaries | Focus on your own data |
+
+## Integration-Specific Tips
+
+### Google Calendar
+Best practices for calendar queries:
+
+- **Check schedule:** "What meetings do I have today?" or "Am I free at 3 PM?"
+- **Find meetings:** "When is my next meeting with [name]?"
+- **Create events:** "Schedule a meeting with John tomorrow at 2 PM about project review"
+- **Modify events:** "Move my 3 PM meeting to 4 PM"
+
+### Gmail
+Best practices for email queries:
+
+- **Search by sender:** "Emails from John this week"
+- **Search by topic:** "Recent emails about the contract"
+- **Combine filters:** "Emails from Sarah about the project in the last 3 days"
+
+### Whoop (Health & Fitness)
+Best practices for health queries:
+
+- **Sleep:** "How was my sleep last night?" or "Sleep quality this week"
+- **Recovery:** "What's my recovery score today?"
+- **Workouts:** "Show my workouts this week" or "How much strain yesterday?"
+- **Trends:** "How has my sleep been this month?"
+
+### GitHub
+Best practices for development queries:
+
+- **PRs:** "My open pull requests" or "PRs I need to review"
+- **Issues:** "Issues assigned to me" or "Open issues in [repo]"
+- **Create:** "Create an issue for the login bug in [repo]"
+
+### Notion
+Best practices for Notion queries:
+
+- **Search:** "Search my notes about [topic]"
+- **Find pages:** "Find my page about project roadmap"
+
+## Understanding Citations
+
+When Omi answers questions using your conversations, it includes numbered citations like `[1]` and `[2]`. These link to the source conversations.
+
+- **Tap citations** in the app to view the full conversation
+- **Multiple citations** mean information came from multiple conversations
+- **No citations** means the answer came from general knowledge or your stored memories (facts about you)
+
+## Quick Reference Card
+
+### Best Question Patterns:
+
+```
+Time-based:    "What did I [verb] [time period]?"
+Topic-based:   "What have I discussed about [topic]?"
+Person-based:  "Conversations with [name]" or "What did [name] say?"
+Action items:  "What tasks do I have?" or "My to-dos"
+Personal:      "What do you know about my [aspect]?"
+Calendar:      "My meetings [time period]"
+Summary:       "Summarize my [time period]"
+```
+
+### Power Combinations:
+
+```
+Time + Topic:   "What did I discuss about [topic] [time period]?"
+Time + Person:  "Conversations with [name] [time period]"
+Topic + Person: "What did [name] say about [topic]?"
+All three:      "What did [name] and I discuss about [topic] [time period]?"
+```
+
+## Related Documentation
+
+- [Chat System Architecture](/doc/developer/backend/chat_system) - Technical deep dive
+- [Building Chat Tools](/doc/developer/apps/ChatTools) - Create custom tools for apps
