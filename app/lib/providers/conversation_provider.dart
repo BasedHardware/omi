@@ -380,13 +380,17 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  (DateTime?, DateTime?) _getDateFilterRange() {
+    if (selectedDate == null) return (null, null);
+    final date = selectedDate!;
+    return (
+      DateTime(date.year, date.month, date.day, 0, 0, 0),
+      DateTime(date.year, date.month, date.day, 23, 59, 59),
+    );
+  }
+
   Future _getConversationsFromServer() async {
-    DateTime? startDate;
-    DateTime? endDate;
-    if (selectedDate != null) {
-      startDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
-      endDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
-    }
+    final (startDate, endDate) = _getDateFilterRange();
 
     return await getConversations(
       includeDiscarded: showDiscardedConversations,
@@ -408,12 +412,7 @@ class ConversationProvider extends ChangeNotifier {
     setLoadingConversations(true);
 
     // Date filter if selected
-    DateTime? startDate;
-    DateTime? endDate;
-    if (selectedDate != null) {
-      startDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 0, 0, 0);
-      endDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day, 23, 59, 59);
-    }
+    final (startDate, endDate) = _getDateFilterRange();
 
     var newConversations = await getConversations(
       offset: conversations.length,
