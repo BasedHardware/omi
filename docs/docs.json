@@ -29,8 +29,7 @@
               "doc/developer/backend/backend_deepdive",
               "doc/developer/backend/chat_system",
               "doc/developer/backend/StoringConversations",
-              "doc/developer/backend/transcription",
-              "doc/developer/backend/ConversationPostProcessing"
+              "doc/developer/backend/transcription"
             ]
           },
           {
