@@ -1,103 +1,272 @@
 ---
-title: "Introduction"
-description: "As a developer, you can create an app for Omi, letting other people to use your apps and earn."
+title: "Building Apps for Omi"
+description: "Create apps that extend Omi's capabilities - from custom AI personalities to real-time integrations. Publish to the app store and earn from your creations."
 ---
 
-## Quick Start
+## What Are Omi Apps?
 
-Download omi App
+Omi apps are modular extensions that augment the core functionality of the Omi platform. They can modify AI behavior, analyze conversations, and connect with external services.
 
-<div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-  <a href="https://play.google.com/store/apps/details?id=com.friend.ios" target="_blank">
-    <img src='https://upload.wikimedia.org/wikipedia/commons/7/78/Google_Play_Store_badge_EN.svg' alt='Get it on Google Play' noZoom height="50px" width="180px"/>
-  </a>
-  <a href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163" target="_blank">
-    <img src='https://upload.wikimedia.org/wikipedia/commons/3/3c/Download_on_the_App_Store_Badge.svg' alt="Download on the App Store" noZoom height="50px" width="180px"/>
-  </a>
-</div>
+```mermaid
+flowchart LR
+    subgraph Device["📱 Omi Device"]
+        Audio[Audio Stream]
+    end
 
+    subgraph Backend["🖥️ Omi Backend"]
+        Trans[Transcription]
+        Mem[Memory Creation]
+        Chat[Chat System]
+    end
 
+    subgraph Apps["🧩 Your App"]
+        RT[Real-time Webhook]
+        MT[Memory Trigger]
+        CT[Chat Tools]
+        PP[Prompts]
+    end
 
-Create webhook using [webhook.site](https://webhook.site) and copy this url 
+    Audio --> Trans
+    Trans -->|Live transcript| RT
+    Trans --> Mem
+    Mem -->|On save| MT
+    Chat -->|Tool calls| CT
+    PP -->|Customize| Chat
+```
 
-<img src="https://github.com/user-attachments/assets/083a6ec4-4694-4c7a-843a-4a1a0c254453" width="500"/>
+<CardGroup cols={2}>
+  <Card title="Customize AI Behavior" icon="wand-magic-sparkles">
+    Create custom AI personalities, alter conversation styles, or add specialized knowledge
+  </Card>
+  <Card title="Real-time Processing" icon="bolt">
+    Process live transcripts as conversations happen
+  </Card>
+  <Card title="External Integrations" icon="plug">
+    Connect Omi to Slack, Notion, GitHub, and any external service
+  </Card>
+  <Card title="Earn Revenue" icon="coins">
+    Publish to the app store and monetize your creations
+  </Card>
+</CardGroup>
 
-In omi App, select "connect omi device" and then:
+---
 
-| Explore => Create an App | Select Capability | Paste Webhook URL | Install App |
-|-------------------------|-------------------|-------------------|--------------|
-| <img src="https://github.com/user-attachments/assets/31809b81-7de2-4381-b5fc-5c9714972211" width="200"/> | <img src="https://github.com/user-attachments/assets/59cfbe8e-7e3b-437f-81f7-25eb50ccdd7d" width="200"/> | <img src="https://github.com/user-attachments/assets/3d864ee8-555f-4ded-b4db-87ff78128323" width="200"/> | <img src="https://github.com/user-attachments/assets/58cf6da6-e245-415e-92e7-dc1f46583cfc" width="200"/> |
+## Prompt-Based Apps
 
-Start speaking, you'll see Real-time transcript on [webhook.site ](https://webhook.site)
+Customize how Omi thinks and responds - **no server required!**
 
-If you don't see "explore", select "connect device" in onboarding or in settings
+<CardGroup cols={2}>
+  <Card title="Chat Prompts" icon="comment" href="/doc/developer/apps/PromptBased">
+    Alter Omi's conversational style and knowledge base. Create expert personas, custom assistants, or specialized advisors.
 
-## What Are OMI Apps?
+    **Example:** Make Omi communicate like a fitness coach or financial advisor
+  </Card>
+  <Card title="Memory Prompts" icon="brain" href="/doc/developer/apps/PromptBased">
+    Customize how conversations are analyzed and summarized. Extract specific information based on your criteria.
 
-OMI apps are modular extensions that augment the core functionality of the app. They can modify app's
-behavior, analyze conversations, and connect with external services.
+    **Example:** Extract action items, key decisions, or meeting notes
+  </Card>
+</CardGroup>
 
-Apps enable:
+<Tip>
+Prompt-based apps are the easiest to create - just define your prompt and you're done!
+</Tip>
 
-- Customized AI personalities and knowledge bases
-- Extraction of specific information from conversations
-- Task automation and integration with third-party services
-- Real-time conversation analysis and insights
+---
 
-[//]: # (With apps, OMI can be transformed into specialized tools such as:)
+## Integration Apps
 
-[//]: # (- A personal productivity coach that extracts action items and updates task management systems)
+Connect Omi to external services with webhooks and APIs.
 
-[//]: # (- An expert in any field, providing specialized knowledge and advice)
+<CardGroup cols={2}>
+  <Card title="Memory Triggers" icon="bell" href="/doc/developer/apps/Integrations">
+    Run your code when a memory is created. Perfect for syncing to external tools.
 
-[//]: # (- A real-time language translator and cultural advisor)
+    **Example:** Post conversation summaries to Slack or update a CRM
+  </Card>
+  <Card title="Real-time Transcript" icon="bolt" href="/doc/developer/apps/Integrations">
+    Process live audio transcripts as they happen. Enable real-time reactions.
 
-[//]: # (- A personal CRM that analyzes conversations and maintains relationship histories)
+    **Example:** Trigger smart home actions or live coaching feedback
+  </Card>
+  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+    Add custom tools that users can invoke in Omi chat.
 
-[//]: # (- A health and fitness tracker that interprets discussions about diet and exercise)
+    **Example:** "Send a message to #general in Slack" or "Create a GitHub issue"
+  </Card>
+  <Card title="Audio Streaming" icon="microphone" href="/doc/developer/apps/AudioStreaming">
+    Process raw audio bytes for custom STT, VAD, or audio analysis.
 
-Apps allow developers to tap into OMI's conversational abilities and combine them with external data and services,
-opening up a world of possibilities for AI-enhanced applications.
+    **Example:** Custom speech recognition or audio feature extraction
+  </Card>
+</CardGroup>
 
-## App Types
+<Info>
+Integration apps require a server endpoint (webhook) to receive data from Omi.
+</Info>
 
-### 1. Prompt-Based Apps: Customizing AI Behavior
+---
 
-These apps modify how OMI processes and responds to information:
+## Quick Start: Build Your First App in 5 Minutes
 
-| Type                  | Description                                                                          | Example                                                                                                | Example Video                                                                                            |
-|-----------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
-| **💬 Chat Prompts**   | Alter OMI's conversational style and knowledge base.                              | Create a app that makes OMI communicate like a specific expert or professional in a given field. | [![Chat app](https://img.youtube.com/vi/k1XhccNDT94/0.jpg)](https://youtube.com/shorts/k1XhccNDT94)   |
-| **🧠 Memory Prompts** | Analyze conversations and extract specific information based on predefined criteria. | Use for summarization, key point extraction, or identifying action items from discussions.             | [![Memory app](https://img.youtube.com/vi/Y3ehX_ueQmE/0.jpg)](https://youtube.com/shorts/Y3ehX_ueQmE) |
+Test the integration flow without writing any server code.
 
-### 2. Integration Apps: Connecting OMI to External Systems
+<Steps>
+  <Step title="Create a Test Webhook" icon="link">
+    Go to [webhook.site](https://webhook.site) and copy your unique URL.
 
-These apps allow OMI to interact with external services and process data in real-time:
+    <Frame>
+      <img src="https://github.com/user-attachments/assets/083a6ec4-4694-4c7a-843a-4a1a0c254453" alt="Copy webhook URL" />
+    </Frame>
+  </Step>
+  <Step title="Download the Omi App" icon="mobile">
+    Get the app from the [App Store](https://apps.apple.com/us/app/friend-ai-wearable/id6502156163) or [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios).
+  </Step>
+  <Step title="Create Your App" icon="plus">
+    In the Omi app: **Explore → Create an App**
 
-| App Type                                                             | Description                                    | Use Cases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Example Video                                                                                                    |
-|-------------------------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| **👷 Memory Creation Triggers**                                         | Activated when OMI creates a new memory     | - Update project management tools with conversation summaries<br />- Create a personalized social platform that matches you with like-minded individuals based on your conversations and interests<br />- Generate a comprehensive knowledge graph of your interests, experiences, and relationships over time                                                                                                                                                                                                                | [![Memory trigger app](https://img.youtube.com/vi/Yv7gP3GZ0ME/0.jpg)](https://youtube.com/shorts/Yv7gP3GZ0ME) |
-| **🏎️ Real-Time Transcript Processors** | Process conversation transcripts as they occur | - Live conversation coaching, providing feedback on communication skills and suggesting improvements in real-time<br />- Handling trigger phrases like "Hey Omi, remind me to..." to set reminders or "Hey Omi, add to cart..." to update your shopping lists<br />- Performing real-time web searches or fact-checking during conversations<br />- Analyzing emotional states and providing supportive responses or suggestions<br />- Integrating with smart home systems to control devices based on conversational cues | [![Memory trigger app](https://img.youtube.com/vi/h4ojO3WzkxQ/0.jpg)](https://youtube.com/shorts/h4ojO3WzkxQ) |
-| **🔄 Integration Actions** | Perform actions within the OMI ecosystem | - Create memories from external data sources<br />- Generate memories from emails, messages, or social media posts<br />- Import conversation transcripts from other platforms<br />- Schedule periodic memory creation for journaling or logging<br />- Sync data between OMI and external services | [Learn more](https://docs.omi.me/doc/developer/apps/IntegrationActions) |
-|**Real-time Audio Streaming**|Processes raw audio real-time|[Read more here](https://docs.omi.me/doc/developer/AudioStreaming)|||||
+    <Note>
+    If you don't see "Explore", go to Settings and select "Connect Device" first.
+    </Note>
+  </Step>
+  <Step title="Configure & Install" icon="gear">
+    1. Select a capability (e.g., "Real-time Transcript")
+    2. Paste your webhook.site URL
+    3. Install the app
+  </Step>
+  <Step title="Test It!" icon="play">
+    Start speaking - watch real-time data appear on webhook.site!
+  </Step>
+</Steps>
 
-## Potential Applications and Examples
-- [Hey, omi](https://h.omi.me/apps/hey-omi-01JCZJQWAZ1J6PYNDW4S15Y5JD) (ask question and get answer via notification, real-time). See Code [here](https://github.com/BasedHardware/omi/blob/main/plugins/example/notifications/hey_omi.py)
-- [Omi mentor](https://h.omi.me/apps/omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1) - proactive AI mentor. [Code example here](https://github.com/BasedHardware/omi/blob/main/plugins/example/notifications/mentor/main.py) 
-- [Zapier integration](https://h.omi.me/apps/zapier). See [Code example](https://github.com/BasedHardware/omi/tree/main/plugins/example/zapier) 
-- [GitHub](https://h.omi.me/apps/01K7BHKJR79KQQW7ZZGZX7GCGD). [Code example](https://github.com/aaravgarg/omi-github-app)
-- [Twitter](https://h.omi.me/apps/01K7B7QX29YBPWCX6S536WYZFC). [Code example](https://github.com/aaravgarg/omi-twitter-app)
-- [Slack](https://h.omi.me/apps/01K7GFKJ2JJVYH7868HW81GY7X). [Code example](https://github.com/BasedHardware/omi-slack-app)
-- [RingCentral](https://h.omi.me/apps/01K7TCGJE6HQA7HS8S87R7585J). [Code example](https://github.com/BasedHardware/omi-ringcentral-app)
+---
 
-## Getting Started
+## Example Apps
 
-To contribute your app to the OMI community, follow these steps based on the type of app you want to create:
+Learn from real apps built by the community.
 
-1. Read our [Prompt-Based App Guide](https://docs.omi.me/doc/developer/apps/PromptBased/) or check
-   our [Integration App Guide](https://docs.omi.me/doc/developer/apps/Integrations/) to
-   understand the process. For apps that perform actions in OMI, see our [Integration Actions Guide](https://docs.omi.me/doc/developer/apps/IntegrationActions/).
-2. Develop and test your app following the guidelines provided.
-3. [Submit your app](https://x.com/kodjima33/status/1854725658485965061) via the Omi mobile app.
+<CardGroup cols={2}>
+  <Card title="Hey Omi" icon="bell" href="https://h.omi.me/apps/hey-omi-01JCZJQWAZ1J6PYNDW4S15Y5JD">
+    Ask questions and get answers via notification in real-time.
 
-We're excited to see how you'll expand OMI's capabilities. Happy developing!
+    [View Source Code →](https://github.com/BasedHardware/omi/blob/main/plugins/example/notifications/hey_omi.py)
+  </Card>
+  <Card title="Omi Mentor" icon="graduation-cap" href="https://h.omi.me/apps/omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1">
+    Proactive AI mentor that provides guidance during conversations.
+
+    [View Source Code →](https://github.com/BasedHardware/omi/blob/main/plugins/example/notifications/mentor/main.py)
+  </Card>
+  <Card title="Slack Integration" icon="hashtag" href="https://h.omi.me/apps/01K7GFKJ2JJVYH7868HW81GY7X">
+    Post conversation summaries and memories to Slack channels.
+
+    [View Source Code →](https://github.com/BasedHardware/omi-slack-app)
+  </Card>
+  <Card title="Zapier" icon="zap" href="https://h.omi.me/apps/zapier">
+    Connect Omi to 5000+ apps through Zapier automations.
+
+    [View Source Code →](https://github.com/BasedHardware/omi/tree/main/plugins/example/zapier)
+  </Card>
+  <Card title="GitHub" icon="github" href="https://h.omi.me/apps/01K7BHKJR79KQQW7ZZGZX7GCGD">
+    Create issues and manage PRs from your conversations.
+
+    [View Source Code →](https://github.com/aaravgarg/omi-github-app)
+  </Card>
+  <Card title="RingCentral" icon="phone" href="https://h.omi.me/apps/01K7TCGJE6HQA7HS8S87R7585J">
+    Integrate Omi with RingCentral communications.
+
+    [View Source Code →](https://github.com/BasedHardware/omi-ringcentral-app)
+  </Card>
+</CardGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Prompt Apps Guide" icon="wand-magic-sparkles" href="/doc/developer/apps/PromptBased">
+    Create apps that customize AI personality and memory processing - no server required
+  </Card>
+  <Card title="Integration Guide" icon="plug" href="/doc/developer/apps/Integrations">
+    Build webhooks for memory triggers and real-time transcript processing
+  </Card>
+  <Card title="Chat Tools Guide" icon="wrench" href="/doc/developer/apps/ChatTools">
+    Add custom tools that users can invoke in Omi conversations
+  </Card>
+</CardGroup>
+
+<CardGroup cols={2}>
+  <Card title="Audio Streaming" icon="microphone" href="/doc/developer/apps/AudioStreaming">
+    Process raw audio bytes for custom STT or audio analysis
+  </Card>
+  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+    Publish your app to the Omi app store
+  </Card>
+</CardGroup>
+
+---
+
+## Video Tutorials
+
+<AccordionGroup>
+  <Accordion title="Memory Creation Triggers" icon="bell">
+    Learn how to build apps that trigger when Omi creates a new memory.
+
+    <iframe
+      width="560"
+      height="315"
+      src="https://www.youtube.com/embed/OOjWeGhuLeY?si=6Ya1GwqL4GSlq3mi"
+      title="Memory Creation Triggers Tutorial"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
+  </Accordion>
+  <Accordion title="Real-time Transcript Processing" icon="bolt">
+    Build apps that process live transcripts as conversations happen.
+
+    <iframe
+      width="560"
+      height="315"
+      src="https://www.youtube.com/embed/86D4v3n1o48?si=tQl-s9jikupjix0c"
+      title="Real-time Transcript Processing Tutorial"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
+  </Accordion>
+  <Accordion title="Running FastAPI Locally" icon="server">
+    Set up a local development server without cloud deployment.
+
+    <iframe
+      width="560"
+      height="315"
+      src="https://www.youtube.com/embed/bMU6fTLysRY?si=3cvXEsWAUwKEnjHn"
+      title="Running FastAPI Locally Tutorial"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="OAuth Setup" icon="key" href="/doc/developer/apps/Oauth">
+    Add authentication flows to your integration apps
+  </Card>
+  <Card title="Notifications" icon="bell" href="/doc/developer/apps/Notifications">
+    Send push notifications to users from your app
+  </Card>
+  <Card title="Integration Actions" icon="arrow-right-arrow-left" href="/doc/developer/apps/IntegrationActions">
+    Create memories and trigger actions from external sources
+  </Card>
+  <Card title="Chat System Architecture" icon="diagram-project" href="/doc/developer/backend/chat_system">
+    Understand how the chat system works under the hood
+  </Card>
+</CardGroup>
