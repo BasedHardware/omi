@@ -16,18 +16,21 @@ Omi supports two types of notifications you can send to users:
   </Card>
 </CardGroup>
 
+### Direct Flow
+
 ```mermaid
 flowchart LR
-    subgraph Direct["Direct Notifications"]
-        A[Your Server] -->|POST /notification| O[Omi API]
-        O -->|Push| U1[User]
-    end
+    A[Your Server] -->|POST /notification| O[Omi API]
+    O -->|Push| U[User]
+```
 
-    subgraph Proactive["Proactive Notifications"]
-        T[Real-time Transcript] -->|Webhook| W[Your Server]
-        W -->|Prompt Template| O2[Omi API]
-        O2 -->|AI Generated| U2[User]
-    end
+### Proactive Flow
+
+```mermaid
+flowchart LR
+    T[Real-time Transcript] -->|Webhook| W[Your Server]
+    W -->|Prompt Template| O[Omi API]
+    O -->|AI Generated| U[User]
 ```
 
 ---
