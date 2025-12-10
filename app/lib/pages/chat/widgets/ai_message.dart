@@ -130,21 +130,21 @@ String? _getIntegrationLogoPath(String thinkingText) {
 IconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
-    return Icons.psychology;
+    return FontAwesomeIcons.brain;
   } else if (text.contains('searching the web') || text.contains('searching web')) {
-    return Icons.search;
+    return FontAwesomeIcons.magnifyingGlass;
   } else if (text.contains('conversations')) {
-    return Icons.chat;
+    return FontAwesomeIcons.comments;
   } else if (text.contains('memories')) {
-    return Icons.memory;
+    return FontAwesomeIcons.lightbulb;
   } else if (text.contains('action item')) {
-    return Icons.checklist;
+    return FontAwesomeIcons.listCheck;
   } else if (text.contains('product info')) {
-    return Icons.info;
+    return FontAwesomeIcons.circleInfo;
   } else if (text.contains('search')) {
-    return Icons.search;
+    return FontAwesomeIcons.magnifyingGlass;
   }
-  return Icons.psychology; // Default brain icon
+  return FontAwesomeIcons.brain; // Default brain icon
 }
 
 /// Build the thinking icon widget - either an integration logo or a fallback icon
@@ -158,7 +158,7 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Icon(
+        errorBuilder: (context, error, stackTrace) => FaIcon(
           _getThinkingIcon(thinkingText),
           size: size,
           color: color,
@@ -166,7 +166,7 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
       ),
     );
   }
-  return Icon(
+  return FaIcon(
     _getThinkingIcon(thinkingText),
     size: size,
     color: color,
