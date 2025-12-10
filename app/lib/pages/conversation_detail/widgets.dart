@@ -1032,7 +1032,13 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       onTap: () async {
                         if (loadingShareSummary) return;
                         changeLoadingShareSummary(true);
-                        String content = widget.conversation.structured.toString().replaceAll('  ', '').trim();
+                        // Use app-generated summary if available, otherwise fall back to structured summary
+                        String content = (widget.conversation.appResults.isNotEmpty &&
+                                    widget.conversation.appResults[0].content.trim().isNotEmpty
+                                ? widget.conversation.appResults[0].content.trim()
+                                : widget.conversation.structured.toString())
+                            .replaceAll('  ', '')
+                            .trim();
                         final RenderBox? box = _shareSummaryKey.currentContext?.findRenderObject() as RenderBox?;
                         if (box != null) {
                           final Offset position = box.localToGlobal(Offset.zero);
@@ -1067,7 +1073,11 @@ class _GetShareOptionsState extends State<GetShareOptions> {
                       leading: const Icon(Icons.file_copy),
                       onTap: () => _copyContent(
                         context,
-                        widget.conversation.structured.toString(),
+                        // Use app-generated summary if available, otherwise fall back to structured summary
+                        widget.conversation.appResults.isNotEmpty &&
+                                widget.conversation.appResults[0].content.trim().isNotEmpty
+                            ? widget.conversation.appResults[0].content.trim()
+                            : widget.conversation.structured.toString(),
                       ),
                     )
             ],
