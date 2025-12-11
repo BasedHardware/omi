@@ -12,11 +12,11 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 enum IntegrationApp {
-  googleCalendar,
   whoop,
   notion,
   twitter,
   github,
+  googleCalendar,
 }
 
 extension IntegrationAppExtension on IntegrationApp {
