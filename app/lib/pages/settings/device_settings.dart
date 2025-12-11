@@ -338,7 +338,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurple.withOpacity(0.3) : Colors.black.withOpacity(0.3),
+          color: isSelected ? Colors.deepPurple.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(8),
           border: isSelected ? Border.all(color: Colors.deepPurple, width: 1) : null,
         ),
