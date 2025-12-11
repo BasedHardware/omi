@@ -73,6 +73,7 @@ class WalStats {
   final int totalFiles;
   final int phoneFiles;
   final int sdcardFiles;
+  final int limitlessFiles;
   final int phoneSize; // in bytes
   final int sdcardSize; // in bytes
   final int syncedFiles;
@@ -82,6 +83,7 @@ class WalStats {
     required this.totalFiles,
     required this.phoneFiles,
     required this.sdcardFiles,
+    required this.limitlessFiles,
     required this.phoneSize,
     required this.sdcardSize,
     required this.syncedFiles,
@@ -871,96 +873,114 @@ class FlashPageWalSync implements IWalSync {
 
       // Accumulate frames for chunking
       List<List<int>> allFrames = [];
-      int extractionCount = 0;
       int totalPages = wal.storageTotalBytes - wal.storageOffset + 1;
-      bool allUploadsSuccessful = true;
       int chunkIndex = 0;
+      int chunksUploaded = 0;
+      bool allUploadsSuccessful = true;
 
-      // Queue chunks for sequential upload
-      List<Map<String, dynamic>> pendingChunks = [];
-
-      // Use a timer to periodically extract frames from buffer
-      Completer<void> syncComplete = Completer<void>();
       int emptyExtractions = 0;
       const maxEmptyExtractions = 60; // 30 seconds of no data = done
       const int framesPerChunk = 2000; // ~2 minutes of audio per chunk
 
-      Timer extractionTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      // Use async loop instead of Timer for cleaner async flow with uploads
+      bool syncComplete = false;
+      final startTime = DateTime.now();
+      const maxDuration = Duration(minutes: 5);
+      int totalFramesExtracted = 0;
+
+      while (!syncComplete) {
+        // Check timeout
+        if (DateTime.now().difference(startTime) > maxDuration) {
+          debugPrint("FlashPageSync: Sync timeout after 5 minutes");
+          break;
+        }
+
+        // Extract frames from buffer
         final frames = limitlessConnection.extractFramesFromBuffer() as List<List<int>>;
 
         if (frames.isNotEmpty) {
           allFrames.addAll(frames);
+          totalFramesExtracted += frames.length;
           emptyExtractions = 0;
-          extractionCount++;
-
           debugPrint("FlashPageSync: Extracted ${frames.length} frames (total: ${allFrames.length})");
 
+          // Update extraction progress (0-50% of chunk progress allocated to extraction)
+          // Each chunk of 2000 frames contributes to progress
+          final framesInCurrentChunk = allFrames.length;
+          final chunkExtractionProgress = (framesInCurrentChunk / framesPerChunk).clamp(0.0, 1.0);
+          final estimatedTotalChunks = (totalPages / 20).ceil().clamp(1, 100);
+          final baseProgress = chunksUploaded / estimatedTotalChunks;
+          final extractionBonus = (chunkExtractionProgress * 0.5) / estimatedTotalChunks;
+          progress?.onWalSyncedProgress((baseProgress + extractionBonus).clamp(0.0, 0.95));
+
+          // Upload immediately when we have enough frames
           if (allFrames.length >= framesPerChunk) {
             final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
-            // Queue for upload with unique index
-            pendingChunks.add({
-              'frames': List<List<int>>.from(allFrames),
-              'timestamp': chunkTimestamp,
-              'index': chunkIndex++,
-            });
+
+            // Upload this chunk immediately
+            final success = await _flushChunk(
+              List<List<int>>.from(allFrames),
+              chunkTimestamp,
+              wal,
+              resp,
+              chunkIndex++,
+            );
+
+            if (success) {
+              chunksUploaded++;
+              debugPrint("FlashPageSync: Chunk $chunkIndex uploaded successfully");
+            } else {
+              allUploadsSuccessful = false;
+              debugPrint("FlashPageSync: Chunk $chunkIndex upload failed");
+            }
+
+            // Clear frames and update timestamp for next chunk
             allFrames.clear();
             limitlessConnection.resetFlashPageTimestamp();
             fileTimestampMs = chunkTimestamp + 120000; // 2 minutes
+
+            // Update progress based on chunks uploaded
+            final uploadProgress = (chunksUploaded / estimatedTotalChunks).clamp(0.0, 0.95);
+            progress?.onWalSyncedProgress(uploadProgress);
           }
         } else {
           emptyExtractions++;
         }
 
-        double estimatedProgress = (extractionCount / (totalPages * 0.5)).clamp(0.0, 0.95);
-        progress?.onWalSyncedProgress(estimatedProgress);
-
+        // Check if done (no data for 30 seconds)
         if (emptyExtractions >= maxEmptyExtractions) {
           debugPrint("FlashPageSync: No more data received, completing sync");
-          timer.cancel();
-          if (!syncComplete.isCompleted) {
-            syncComplete.complete();
-          }
+          syncComplete = true;
         }
-      });
 
-      await syncComplete.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          debugPrint("FlashPageSync: Sync timeout after 5 minutes");
-        },
-      );
-
-      extractionTimer.cancel();
-
-      // Add remaining frames to queue
-      if (allFrames.isNotEmpty) {
-        final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
-        pendingChunks.add({
-          'frames': List<List<int>>.from(allFrames),
-          'timestamp': chunkTimestamp,
-          'index': chunkIndex++,
-        });
-      }
-
-      // Upload chunks sequentially to avoid race conditions and 429 errors
-      debugPrint("FlashPageSync: Uploading ${pendingChunks.length} chunks sequentially");
-      for (final chunk in pendingChunks) {
-        final success = await _flushChunk(
-          chunk['frames'] as List<List<int>>,
-          chunk['timestamp'] as int,
-          wal,
-          resp,
-          chunk['index'] as int,
-        );
-        if (!success) allUploadsSuccessful = false;
-        // Small delay between uploads to avoid rate limiting
+        // Small delay before next extraction
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
+      // Upload any remaining frames
+      if (allFrames.isNotEmpty) {
+        debugPrint("FlashPageSync: Uploading final chunk with ${allFrames.length} frames");
+        final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
+        final success = await _flushChunk(
+          allFrames,
+          chunkTimestamp,
+          wal,
+          resp,
+          chunkIndex++,
+        );
+        if (success) {
+          chunksUploaded++;
+        } else {
+          allUploadsSuccessful = false;
+        }
+      }
+
       // Only acknowledge if ALL uploads succeeded - prevents data loss
-      if (allUploadsSuccessful) {
+      if (allUploadsSuccessful && chunksUploaded > 0) {
         await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
         debugPrint("FlashPageSync: Acknowledged up to page ${wal.storageTotalBytes}");
+      } else if (chunksUploaded == 0) {
+        debugPrint("FlashPageSync: No chunks uploaded - nothing to acknowledge");
       } else {
         debugPrint("FlashPageSync: Some uploads failed - NOT acknowledging to preserve data on pendant");
       }
@@ -968,7 +988,7 @@ class FlashPageWalSync implements IWalSync {
       // Switch back to real-time mode
       await limitlessConnection.enableRealTimeMode();
 
-      debugPrint("FlashPageSync: Completed sync. ${pendingChunks.length} chunks, allSuccessful=$allUploadsSuccessful");
+      debugPrint("FlashPageSync: Completed sync. $chunksUploaded chunks uploaded, allSuccessful=$allUploadsSuccessful");
       progress?.onWalSyncedProgress(1.0);
     } catch (e) {
       debugPrint("FlashPageSync: Error during sync: $e");
@@ -1534,6 +1554,7 @@ class WalSyncs implements IWalSync {
     final allWals = await getAllWals();
     int phoneFiles = 0;
     int sdcardFiles = 0;
+    int limitlessFiles = 0;
     int phoneSize = 0;
     int sdcardSize = 0;
     int syncedFiles = 0;
@@ -1543,6 +1564,8 @@ class WalSyncs implements IWalSync {
       if (wal.storage == WalStorage.sdcard) {
         sdcardFiles++;
         sdcardSize += _estimateWalSize(wal);
+      } else if (wal.storage == WalStorage.flashPage) {
+        limitlessFiles++;
       } else {
         phoneFiles++;
         phoneSize += _estimateWalSize(wal);
@@ -1559,6 +1582,7 @@ class WalSyncs implements IWalSync {
       totalFiles: allWals.length,
       phoneFiles: phoneFiles,
       sdcardFiles: sdcardFiles,
+      limitlessFiles: limitlessFiles,
       phoneSize: phoneSize,
       sdcardSize: sdcardSize,
       syncedFiles: syncedFiles,

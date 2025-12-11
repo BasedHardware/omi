@@ -333,7 +333,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
   }
 
-  /// Switch back to real-time streaming mode
+  /// Switch to real-time streaming mode
   Future<void> enableRealTimeMode() async {
     if (!_isInitialized) return;
 
