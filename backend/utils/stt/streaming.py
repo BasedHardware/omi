@@ -264,6 +264,7 @@ async def process_audio_dg(
     channels: int,
     preseconds: int = 0,
     model: str = 'nova-2-general',
+    keywords: List[str] = None,
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -315,7 +316,7 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model)
+    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model, keywords)
 
 
 # Calculate backoff with jitter
@@ -326,12 +327,19 @@ def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
 
 
 def connect_to_deepgram_with_backoff(
-    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3
+    on_message,
+    on_error,
+    language: str,
+    sample_rate: int,
+    channels: int,
+    model: str,
+    keywords: List[str] = None,
+    retries=3,
 ):
     print("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
         try:
-            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model)
+            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model, keywords)
         except Exception as error:
             print(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -343,7 +351,9 @@ def connect_to_deepgram_with_backoff(
     raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str):
+def connect_to_deepgram(
+    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, keywords: List[str] = None
+):
     try:
         dg_connection = deepgram.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
@@ -373,7 +383,7 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
         dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
         dg_connection.on(LiveTranscriptionEvents.Close, on_close)
         dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
-        options = LiveOptions(
+        live_options_kwargs = dict(
             punctuate=True,
             no_delay=True,
             endpointing=300,
@@ -389,6 +399,19 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             sample_rate=sample_rate,
             encoding='linear16',
         )
+
+        # # WARN: Deepgram-sdk v5 is required
+        # # Add vocabulary boost if provided
+        # # Nova-3 uses 'keyterm', Nova-2 uses 'keywords'
+        # if keywords and len(keywords) > 0:
+        #     if model.startswith('nova-3'):
+        #         # Nova-3 uses keyterm parameter (up to 100 terms)
+        #         live_options_kwargs['keyterm'] = keywords
+        #     else:
+        #         # Nova-2 and other models use keywords parameter
+        #         live_options_kwargs['keywords'] = keywords
+
+        options = LiveOptions(**live_options_kwargs)
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
         return dg_connection
