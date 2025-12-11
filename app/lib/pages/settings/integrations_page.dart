@@ -104,7 +104,12 @@ extension IntegrationAppExtension on IntegrationApp {
   }
 
   bool get isAvailable {
-    return true; // All integrations are available
+  //  return true; // All integrations are available
+    return this != IntegrationApp.googleCalendar;
+  }
+
+  String get comingSoonText {
+    return 'Coming Soon';
   }
 }
 

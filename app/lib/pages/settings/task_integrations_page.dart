@@ -125,7 +125,6 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
     return this == TaskIntegrationApp.appleReminders ||
         this == TaskIntegrationApp.todoist ||
         this == TaskIntegrationApp.asana ||
-        this == TaskIntegrationApp.googleTasks ||
         this == TaskIntegrationApp.clickup;
   }
 
