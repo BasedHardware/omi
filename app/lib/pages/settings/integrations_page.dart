@@ -503,13 +503,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: !isAvailable ? Colors.grey.withValues(alpha: 0.3) : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Text(
-                  'Connect',
+                child: Text(
+                  !isAvailable ? 'Coming Soon' : 'Connect',
                   style: TextStyle(
-                    color: Colors.black,
+                    color: !isAvailable ? Colors.grey : Colors.black,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
