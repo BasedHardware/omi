@@ -223,7 +223,7 @@ class _SearchWidgetState extends State<SearchWidget> {
             builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
               return Container(
                 decoration: BoxDecoration(
-                  color: convoProvider.showStarredOnly ? Colors.amber.withOpacity(0.5) : const Color(0xFF1F1F25),
+                  color: convoProvider.showStarredOnly ? Colors.amber.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
                   borderRadius: const BorderRadius.all(Radius.circular(16)),
                 ),
                 child: IconButton(
