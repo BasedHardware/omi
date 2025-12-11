@@ -156,6 +156,9 @@ class DeviceUtils {
       if (upperName.contains('FIELDY') || upperName.contains('COMPASS')) {
         return Assets.images.fieldy.path;
       }
+      if (upperName.contains('LIMITLESS')) {
+        return Assets.images.limitless.path;
+      }
     }
 
     // Default
