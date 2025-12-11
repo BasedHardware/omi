@@ -287,6 +287,18 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     return get_popular_apps()
 
 
+@router.get('/v1/apps/admin/all', tags=['v1'])
+def get_all_apps_admin(secret_key: str = Header(...)):
+    """Get all apps (approved and unapproved) for admin management."""
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    from database.apps import get_public_approved_apps_db
+    approved_apps = get_public_approved_apps_db()
+    unapproved_apps = get_unapproved_public_apps_db()
+    all_apps = approved_apps + unapproved_apps
+    return all_apps
+
+
 @router.post('/v1/apps', tags=['v1'])
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = json.loads(app_data)
