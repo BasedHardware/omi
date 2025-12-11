@@ -689,13 +689,14 @@ class FlashPageWalSync implements IWalSync {
 
   Future<void> _acknowledgeProcessedData(String deviceId, int upToIndex) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) return;
-
-    try {
-      final dynamic limitlessConnection = connection;
-      await limitlessConnection.acknowledgeProcessedData(upToIndex);
-    } catch (e) {
-      debugPrint('FlashPageSync: Could not acknowledge processed data: $e');
+    if (connection is LimitlessDeviceConnection) {
+      try {
+        await connection.acknowledgeProcessedData(upToIndex);
+      } catch (e) {
+        debugPrint('FlashPageSync: Could not acknowledge processed data: $e');
+      }
+    } else if (connection != null) {
+      debugPrint('FlashPageSync: Could not acknowledge processed data, connection is not a LimitlessDeviceConnection.');
     }
   }
 
