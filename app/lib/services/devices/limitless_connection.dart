@@ -333,6 +333,19 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
   }
 
+  /// Switch back to real-time streaming mode
+  Future<void> enableRealTimeMode() async {
+    if (!_isInitialized) return;
+
+    try {
+      _isBatchMode = false;
+      final cmd = _encodeEnableDataStream(enable: true);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+    } catch (e) {
+      debugPrint('Limitless: Error enabling real-time mode: $e');
+    }
+  }
+
   Stream<Map<String, dynamic>> getFlashPageStream() {
     return _flashPageController.stream;
   }
