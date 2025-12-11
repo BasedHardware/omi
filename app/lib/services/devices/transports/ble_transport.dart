@@ -13,7 +13,6 @@ class BleTransport extends DeviceTransport {
   final StreamController<DeviceTransportState> _connectionStateController;
   final Map<String, StreamController<List<int>>> _streamControllers = {};
   final Map<String, StreamSubscription> _characteristicSubscriptions = {};
-  Future<void> _writeQueue = Future.value();
 
   List<BluetoothService> _services = [];
   DeviceTransportState _state = DeviceTransportState.disconnected;
@@ -188,48 +187,12 @@ class BleTransport extends DeviceTransport {
       throw Exception('Characteristic not found: $serviceUuid:$characteristicUuid');
     }
 
-    final task = _writeQueue.then((_) async {
-      int retries = 0;
-      while (true) {
-        if (_state != DeviceTransportState.connected || !_bleDevice.isConnected) {
-          debugPrint('Skipping write: Device is disconnected');
-          return;
-        }
-
-        try {
-          await characteristic
-              .write(
-                data,
-                withoutResponse: characteristic.properties.writeWithoutResponse,
-                allowLongWrite: true,
-              )
-              .timeout(const Duration(seconds: 2));
-          return;
-        } catch (e) {
-          if (_isDisconnectionError(e)) {
-            debugPrint('Device Disconnected');
-            return;
-          }
-
-          if (!_bleDevice.isConnected) {
-            return;
-          }
-
-          final retryable = _isRetryable(e);
-          if (!retryable || retries >= 3) {
-            debugPrint('BLE write failed (stop retry) $serviceUuid:$characteristicUuid → $e');
-            rethrow;
-          }
-
-          final delay = 80 * (1 << retries);
-          await Future.delayed(Duration(milliseconds: delay));
-          retries++;
-        }
-      }
-    });
-
-    _writeQueue = task.catchError((_) {});
-    await task;
+    try {
+      await characteristic.write(data);
+    } catch (e) {
+      debugPrint('BLE Transport: Failed to write characteristic: $e');
+      rethrow;
+    }
   }
 
   Future<BluetoothCharacteristic?> _getCharacteristic(String serviceUuid, String characteristicUuid) async {
@@ -244,28 +207,6 @@ class BleTransport extends DeviceTransport {
     return service.characteristics.firstWhereOrNull(
       (characteristic) => characteristic.uuid.str128.toLowerCase() == characteristicUuid.toLowerCase(),
     );
-  }
-
-  bool _isDisconnectionError(Object e) {
-    final msg = e.toString().toLowerCase();
-    final is133 = RegExp(r'\b133\b').hasMatch(msg);
-
-    return is133 ||
-        msg.contains("gatt_error") ||
-        msg.contains("unknown_ble_error") ||
-        msg.contains("device is disconnected") ||
-        msg.contains("the device is disconnected");
-  }
-
-  bool _isRetryable(Object e) {
-    if (e is FlutterBluePlusException) {
-      final desc = (e.description ?? "").toLowerCase();
-      if (e.code == 201 || desc.contains("busy")) return true;
-      return false;
-    }
-
-    final msg = e.toString().toLowerCase();
-    return msg.contains("busy") || RegExp(r'\b201\b').hasMatch(msg);
   }
 
   @override
