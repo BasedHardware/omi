@@ -16,6 +16,7 @@ const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
 const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
+const framesPerFlashPage = 8; // Average number of Opus frames per flash page
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(double percentage); // 0..1
@@ -766,7 +767,7 @@ class FlashPageWalSync implements IWalSync {
         fileNum: _currentSession,
         device: _device!.id,
         deviceModel: deviceModel,
-        totalFrames: pageCount * 8,
+        totalFrames: pageCount * framesPerFlashPage,
         syncedFrameOffset: 0,
       ));
     }
@@ -917,7 +918,7 @@ class FlashPageWalSync implements IWalSync {
 
           // Progress based on completed chunks
           // Cap extraction phase at 0.5 (50%), uploads take it to 100%
-          final extractionProgress = (totalFramesExtracted / (totalPages * 10)).clamp(0.0, 0.5);
+          final extractionProgress = (totalFramesExtracted / (totalPages * framesPerFlashPage)).clamp(0.0, 0.5);
           final uploadProgress = chunksStarted > 0 ? (chunksCompleted / chunksStarted) * 0.5 : 0.0;
           final currentProgress = (extractionProgress + uploadProgress).clamp(0.0, 0.95);
 
