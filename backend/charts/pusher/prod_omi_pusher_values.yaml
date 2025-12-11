@@ -7,11 +7,11 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: gcr.io/based-hardware/backend
+  repository: gcr.io/based-hardware/pusher
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -54,22 +54,26 @@ service:
   # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
   type: ClusterIP
   # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  backendConfig: prod-pusher-backend-config
   port: 8080
   annotations:
-    cloud.google.com/neg: '{"exposed_ports": {"8080":{"name": "prod-pusher-neg"}}}'
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "prod-pusher-backend-config"}'  # Link to BackendConfig
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
-  enabled: false
+  enabled: true
   className: ""
-  annotations: {}
-    # kubernetes.io/ingress.class: nginx
-    # kubernetes.io/tls-acme: "true"
+  annotations:
+    kubernetes.io/ingress.class: "gce-internal"
+    kubernetes.io/ingress.regional-static-ip-name: "prod-pusher-ilb-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
   hosts:
-    - host: chart-example.local
+    - host: pusher.omi.me
       paths:
         - path: /
-          pathType: ImplementationSpecific
+          pathType: Prefix
+
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
@@ -77,7 +81,7 @@ ingress:
 
 env:
   - name: BUCKET_SPEECH_PROFILES
-    value: "speech-profiles"
+    value: "profiles"
   - name: GITHUB_TOKEN
     valueFrom:
       secretKeyRef:
@@ -104,9 +108,9 @@ env:
         name: prod-omi-backend-secrets
         key: SONIOX_API_KEY
   - name: HOSTED_VAD_API_URL
-    value: "http://172.16.128.101:8080/v1/vad"
+    value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://172.16.128.101:8080/v1/speaker-identification"
+    value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -155,119 +159,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: HOSTED_PUSHER_API_URL
-    value: "http://internal-alb.pusher-ep-prod.il7.us-central1.lb.based-hardware.internal"
-  - name: BUCKET_PLUGINS_LOGOS
-    value: "omi_plugins"
-  - name: LANGCHAIN_TRACING_V2
-    value: "false"
-  - name: LANGCHAIN_ENDPOINT
-    value: "https://api.smith.langchain.com"
-  - name: LANGCHAIN_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: LANGCHAIN_API_KEY
-  - name: LANGCHAIN_PROJECT
-    value: "production"
-  - name: DD_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DD_API_KEY
-  - name: DD_SITE
-    value: "us5.datadoghq.com"
-  - name: DD_TRACE_ENABLED
-    value: "true"
-  - name: DD_TRACE_PROPAGATION_STYLE
-    value: "datadog"
-  - name: DD_TRACE_SAMPLE_RATE
-    value: "1"
-  - name: DD_LOGS_ENABLED
-    value: "false"
-  - name: DD_SERVICE
-    value: "pusher"
-  - name: DD_ENV
-    value: "prod"
-  - name: DD_VERSION
-    value: "1"
-  - name: STRIPE_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: STRIPE_API_KEY
-  - name: STRIPE_WEBHOOK_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: STRIPE_WEBHOOK_SECRET
-  - name: MARKETPLACE_APP_REVIEWERS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: MARKETPLACE_APP_REVIEWERS
-  - name: TYPESENSE_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: TYPESENSE_HOST
-  - name: TYPESENSE_HOST_PORT
-    value: "443"
-  - name: TYPESENSE_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: TYPESENSE_API_KEY
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
-  - name: RAPID_API_HOST
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: RAPID_API_HOST
-  - name: RAPID_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: RAPID_API_KEY
-  - name: OPENROUTER_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: OPENROUTER_API_KEY
-  - name: GOOGLE_CLOUD_PROJECT
-    value: "based-hardware"
-  - name: CONVERSATION_SUMMARIZED_APP_IDS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: CONVERSATION_SUMMARIZED_APP_IDS
-  - name: STT_SERVICE_MODELS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: STT_SERVICE_MODELS
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
-  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "1200"
-  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-    value: "0"
-  - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
-    value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
-  - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
-    value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
-  - name: SUBSCRIPTION_LAUNCH_DATE
-    value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
 
@@ -305,8 +201,8 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 32
-  maxReplicas: 60
+  minReplicas: 50
+  maxReplicas: 100
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600
@@ -318,16 +214,14 @@ autoscaling:
       stabilizationWindowSeconds: 0
       policies:
       - type: Percent
-        value: 100
+        value: 20
         periodSeconds: 1
       - type: Pods
         value: 10
         periodSeconds: 1
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
-  # targetMemoryUtilizationPercentage: 70
-  requestsPerPod: 8
-  failedResponseCode: 10
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 60
 
 # Additional volumes on the output Deployment definition.
 volumes: []

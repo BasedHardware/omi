@@ -80,40 +80,28 @@ ingress:
   #      - chart-example.local
 
 env:
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
-  - name: FAL_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: FAL_KEY
-  - name: OPENAI_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: OPENAI_API_KEY
-  - name: GOOGLE_MAPS_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_MAPS_API_KEY
+  - name: BUCKET_SPEECH_PROFILES
+    value: "speech-profiles-dev"
   - name: GITHUB_TOKEN
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GITHUB_TOKEN
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENAI_API_KEY
+  - name: FAL_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: FAL_KEY
   - name: SONIOX_API_KEY
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: SONIOX_API_KEY
-  - name: BUCKET_SPEECH_PROFILES
-    value: "speech-profiles-dev"
-  - name: BUCKET_TEMPORAL_SYNC_LOCAL
-    value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL
     value: "http://34.172.155.20:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
@@ -142,6 +130,16 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
+  - name: GOOGLE_MAPS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GOOGLE_MAPS_API_KEY
   - name: WORKFLOW_API_KEY
     valueFrom:
       secretKeyRef:
@@ -149,57 +147,13 @@ env:
         key: WORKFLOW_API_KEY
   - name: NO_SOCKET_TIMEOUT
     value: "true"
-  - name: HOSTED_PUSHER_API_URL
-    value: "http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal"
-  - name: BUCKET_PLUGINS_LOGOS
-    value: "plugin_resources"
+  - name: BUCKET_TEMPORAL_SYNC_LOCAL
+    value: "syncing-local-development"
   - name: GOOGLE_APPLICATION_CREDENTIALS
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: LANGCHAIN_TRACING_V2
-    value: "false"
-  - name: LANGCHAIN_ENDPOINT
-    value: "https://api.smith.langchain.com"
-  - name: LANGCHAIN_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: LANGCHAIN_API_KEY
-  - name: LANGCHAIN_PROJECT
-    value: "development"
-  - name: STRIPE_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: STRIPE_API_KEY
-  - name: STRIPE_WEBHOOK_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: STRIPE_WEBHOOK_SECRET
-  - name: MARKETPLACE_APP_REVIEWERS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: MARKETPLACE_APP_REVIEWERS
-  - name: TYPESENSE_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TYPESENSE_HOST
-  - name: TYPESENSE_HOST_PORT
-    value: "443"
-  - name: TYPESENSE_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: TYPESENSE_API_KEY
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omiapi.com"
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
