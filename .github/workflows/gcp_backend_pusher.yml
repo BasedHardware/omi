@@ -59,14 +59,9 @@ jobs:
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
 
       - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./backend/pusher/Dockerfile
-          push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+        run: |
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
       # - name: Deploy to Cloud Run
       #   id: deploy
