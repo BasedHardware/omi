@@ -416,8 +416,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           color: provider.conversation.starred
-                              ? Colors.amber.withOpacity(0.3)
-                              : Colors.grey.withOpacity(0.3),
+                              ? Colors.amber.withValues(alpha: 0.3)
+                              : Colors.grey.withValues(alpha: 0.3),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
