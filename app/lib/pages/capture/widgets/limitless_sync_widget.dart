@@ -47,10 +47,10 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                     size: 22,
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Sync your recordings',
-                      style: TextStyle(
+                      isSyncing ? 'Syncing your recordings' : 'Sync your recordings',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                       ),

@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:path_provider/path_provider.dart';
