@@ -270,7 +270,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> createActionItem({
+  Future<ActionItemWithMetadata?> createActionItem({
     required String description,
     DateTime? dueAt,
     String? conversationId,
@@ -303,18 +303,18 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[index] = newItem;
           notifyListeners();
         }
-        return true;
+        return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
         notifyListeners();
         debugPrint('Failed to create action item on server');
-        return false;
+        return null;
       }
     } catch (e) {
       _actionItems.removeWhere((item) => item.id == optimisticItem.id);
       notifyListeners();
       debugPrint('Error creating action item: $e');
-      return false;
+      return null;
     }
   }
 

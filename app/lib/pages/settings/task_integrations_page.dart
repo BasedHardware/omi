@@ -10,15 +10,16 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
 enum TaskIntegrationApp {
   appleReminders,
-  googleTasks,
   todoist,
   clickup,
   asana,
+  googleTasks,
   trello,
   monday,
 }
@@ -120,11 +121,10 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
   }
 
   bool get isAvailable {
-    // Apple Reminders, Todoist, Asana, Google Tasks, and ClickUp are available
+    // Apple Reminders, Todoist, Asana, and ClickUp are available
     return this == TaskIntegrationApp.appleReminders ||
         this == TaskIntegrationApp.todoist ||
         this == TaskIntegrationApp.asana ||
-        this == TaskIntegrationApp.googleTasks ||
         this == TaskIntegrationApp.clickup;
   }
 
@@ -141,7 +141,6 @@ class TaskIntegrationsPage extends StatefulWidget {
 }
 
 class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with WidgetsBindingObserver {
-
   @override
   void initState() {
     super.initState();
@@ -182,24 +181,28 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   void _openSelectedAppSettings() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
     if (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
+      MixpanelManager().taskIntegrationSettingsOpened(appName: 'asana');
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const AsanaSettingsPage(),
         ),
       );
     } else if (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
+      MixpanelManager().taskIntegrationSettingsOpened(appName: 'clickup');
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const ClickUpSettingsPage(),
         ),
       );
     } else if (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
+      MixpanelManager().taskIntegrationSettingsOpened(appName: 'todoist');
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const TodoistSettingsPage(),
         ),
       );
     } else if (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
+      MixpanelManager().taskIntegrationSettingsOpened(appName: 'google_tasks');
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const GoogleTasksSettingsPage(),
@@ -235,6 +238,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             // Provider will refresh when user returns to this page
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
+            // Track authentication failure
+            MixpanelManager().taskIntegrationAuthFailed(
+              appName: 'todoist',
+            );
+
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -269,6 +277,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
+            // Track authentication failure
+            MixpanelManager().taskIntegrationAuthFailed(
+              appName: 'asana',
+            );
+
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -303,6 +316,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
+            // Track authentication failure
+            MixpanelManager().taskIntegrationAuthFailed(
+              appName: 'google_tasks',
+            );
+
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -337,6 +355,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             await context.read<TaskIntegrationProvider>().setSelectedApp(app);
             debugPrint('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
           } else {
+            // Track authentication failure
+            MixpanelManager().taskIntegrationAuthFailed(
+              appName: 'clickup',
+            );
+
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -595,25 +618,25 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                 ),
               )
             else
-              // Radio button for connected services
-              if (isSelected)
-                const FaIcon(
-                  FontAwesomeIcons.solidCircleCheck,
-                  color: Colors.green,
-                  size: 24,
-                )
-              else
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF3C3C43),
-                      width: 2,
-                    ),
+            // Radio button for connected services
+            if (isSelected)
+              const FaIcon(
+                FontAwesomeIcons.solidCircleCheck,
+                color: Colors.green,
+                size: 24,
+              )
+            else
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFF3C3C43),
+                    width: 2,
                   ),
                 ),
+              ),
           ],
         ),
       ),

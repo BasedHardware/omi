@@ -8,6 +8,8 @@ import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 
+from utils.apps import fetch_app_chat_tools_from_manifest
+
 from database.apps import (
     change_app_approval_status,
     get_unapproved_public_apps_db,
@@ -46,6 +48,8 @@ from database.redis_db import (
     get_conversation_summary_app_ids,
     add_conversation_summary_app_id,
     remove_conversation_summary_app_id,
+    get_apps_installs_count,
+    get_apps_reviews,
 )
 from utils.apps import (
     get_available_apps,
@@ -67,13 +71,16 @@ from utils.apps import (
     increment_username,
     generate_api_key,
     get_popular_apps,
-    filter_apps_by_category,
-    sort_apps_by_installs,
     paginate_apps,
     build_pagination_metadata,
-    group_apps_by_category,
-    build_category_groups_response,
+    get_capabilities_list,
     normalize_app_numeric_fields,
+    filter_apps_by_capability,
+    sort_apps_by_installs,
+    group_apps_by_capability,
+    build_capability_groups_response,
+    group_capability_apps_by_category,
+    build_capability_category_groups_response,
 )
 
 from database.memories import migrate_memories
@@ -97,20 +104,20 @@ def _get_categories():
     return [
         {'title': 'Popular', 'id': 'popular'},
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
-        {'title': 'Personality Emulation', 'id': 'personality-emulation'},
-        {'title': 'Health and Wellness', 'id': 'health-and-wellness'},
-        {'title': 'Education and Learning', 'id': 'education-and-learning'},
-        {'title': 'Communication Improvement', 'id': 'communication-improvement'},
-        {'title': 'Emotional and Mental Support', 'id': 'emotional-and-mental-support'},
-        {'title': 'Productivity and Organization', 'id': 'productivity-and-organization'},
-        {'title': 'Entertainment and Fun', 'id': 'entertainment-and-fun'},
+        {'title': 'Personality Clone', 'id': 'personality-emulation'},
+        {'title': 'Health', 'id': 'health-and-wellness'},
+        {'title': 'Education', 'id': 'education-and-learning'},
+        {'title': 'Communication', 'id': 'communication-improvement'},
+        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
         {'title': 'Financial', 'id': 'financial'},
-        {'title': 'Travel and Exploration', 'id': 'travel-and-exploration'},
-        {'title': 'Safety and Security', 'id': 'safety-and-security'},
-        {'title': 'Shopping and Commerce', 'id': 'shopping-and-commerce'},
-        {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
-        {'title': 'News and Information', 'id': 'news-and-information'},
-        {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
+        {'title': 'Travel', 'id': 'travel-and-exploration'},
+        {'title': 'Safety', 'id': 'safety-and-security'},
+        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
+        {'title': 'Social', 'id': 'social-and-relationships'},
+        {'title': 'News', 'id': 'news-and-information'},
+        {'title': 'Utilities', 'id': 'utilities-and-tools'},
         {'title': 'Other', 'id': 'other'},
     ]
 
@@ -127,25 +134,26 @@ def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: boo
 
 @router.get('/v2/apps', tags=['v2'])
 def get_apps_v2(
-    category: str | None = Query(default=None, description='Filter by category id'),
+    capability: str | None = Query(default=None, description='Filter by capability id'),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
     include_reviews: bool = Query(default=False),
 ):
-    """Public omi apps, paginated. If category is provided, returns a flat
-    list for that category. If not, returns groups by category (each limited).
+    """Public omi apps, paginated by capability groups.
 
     Notes:
     - Uses approved public apps only (no private/tester apps).
-    - Groups include pagination hints so the client can fetch more via category filter.
+    - Groups: Popular, Integrations, Chat Assistants, Summary Apps, Realtime Notifications.
+    - Popular section is shown first.
+    - Always excludes persona type apps.
     """
 
-    categories = _get_categories()
+    capabilities = get_capabilities_list()
 
-    if category:
-        cache_key = f"apps:category:{category}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+    if capability:
+        cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
     else:
-        cache_key = f"apps:groups:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+        cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
 
     cached = get_generic_cache(cache_key)
     if cached:
@@ -157,36 +165,87 @@ def get_apps_v2(
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
 
-    # Category-specific response
-    if category:
-        filtered_apps = filter_apps_by_category(approved_apps, category)
+    # Capability-specific response
+    if capability:
+        filtered_apps = filter_apps_by_capability(approved_apps, capability)
         sorted_apps = sort_apps_by_installs(filtered_apps)
         page = paginate_apps(sorted_apps, offset, limit)
 
         res = {
             'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
-            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, category),
-            'category': {
-                'id': category,
+            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, capability),
+            'capability': {
+                'id': capability,
                 'title': next(
-                    (c['title'] for c in categories if c['id'] == category), category.title().replace('-', ' ')
+                    (c['title'] for c in capabilities if c['id'] == capability), capability.title().replace('_', ' ')
                 ),
             },
         }
         set_generic_cache(cache_key, res, ttl=60 * 10)
         return res
 
-    # Grouped response
-    grouped_apps = group_apps_by_category(approved_apps, categories)
-    groups = build_category_groups_response(grouped_apps, categories, offset, limit)
+    # Grouped response by capability
+    grouped_apps = group_apps_by_capability(approved_apps, capabilities)
+    groups = build_capability_groups_response(grouped_apps, capabilities, offset, limit)
 
     res = {
         'groups': groups,
         'meta': {
-            'categories': categories,
+            'capabilities': capabilities,
             'groupCount': len(groups),
             'limit': limit,
             'offset': offset,
+        },
+    }
+    set_generic_cache(cache_key, res, ttl=60 * 10)
+    return res
+
+
+@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
+def get_capability_apps_grouped_by_category(
+    capability_id: str,
+    include_reviews: bool = Query(default=True),
+):
+    """Get all apps for a specific capability, grouped by master category.
+
+    Returns apps grouped into master categories like:
+    - For chat: Personality Clones, Productivity & Lifestyle, Social & Entertainment
+    - For others: Productivity & Tools, Personal & Lifestyle, Social & Entertainment
+    """
+
+    cache_key = f"apps:capability:{capability_id}:grouped:reviews={int(include_reviews)}"
+
+    cached = get_generic_cache(cache_key)
+    if cached:
+        return cached
+
+    capabilities = get_capabilities_list()
+
+    # Fetch and filter approved public apps
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
+    # Always exclude persona type apps
+    approved_apps = [a for a in approved_apps if not a.is_a_persona()]
+
+    # Filter apps by capability
+    filtered_apps = filter_apps_by_capability(approved_apps, capability_id)
+
+    # Group filtered apps by master category
+    grouped_apps = group_capability_apps_by_category(filtered_apps, capability_id)
+    groups = build_capability_category_groups_response(grouped_apps, capability_id)
+
+    res = {
+        'groups': groups,
+        'capability': {
+            'id': capability_id,
+            'title': next(
+                (c['title'] for c in capabilities if c['id'] == capability_id),
+                capability_id.title().replace('_', ' '),
+            ),
+        },
+        'meta': {
+            'totalApps': len(filtered_apps),
+            'groupCount': len(groups),
         },
     }
     set_generic_cache(cache_key, res, ttl=60 * 10)
@@ -228,11 +287,23 @@ def search_apps(
 
     user_enabled = set(get_enabled_apps(uid))
 
+    app_ids = [app['id'] for app in apps_data]
+    apps_installs = get_apps_installs_count(app_ids)
+    apps_reviews = get_apps_reviews(app_ids)
+
     apps = []
 
     for app_dict in apps_data:
         app_dict['enabled'] = app_dict['id'] in user_enabled
         app_dict['rejected'] = app_dict.get('approved') is False
+        app_dict['installs'] = apps_installs.get(app_dict['id'], 0)
+
+        # Calculate average from reviews
+        reviews = apps_reviews.get(app_dict['id'], {})
+        sorted_reviews = list(reviews.values())
+        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
+        app_dict['rating_avg'] = rating_avg
+        app_dict['rating_count'] = len(sorted_reviews)
 
         apps.append(App(**app_dict))
 
@@ -257,9 +328,14 @@ def search_apps(
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
     elif sort == 'name_desc':
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower(), reverse=True)
+    elif sort == 'installs_desc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
     else:
-        # Default: sort by name
-        filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
+        # sort by installs when searching, otherwise by name
+        if q and q.strip():
+            filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
+        else:
+            filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
 
     # Paginate results
     total = len(filtered_apps)
@@ -360,10 +436,23 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Ensure chat_tools are included even if empty
+    # Build app dict
     app_dict = app.model_dump(exclude_unset=True)
-    if 'chat_tools' in data:
-        app_dict['chat_tools'] = data['chat_tools']
+
+    # Fetch chat tools from manifest URL (only way to add chat tools)
+    if external_integration := data.get('external_integration'):
+        manifest_url = external_integration.get('chat_tools_manifest_url')
+        if manifest_url:
+            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
+            if fetched_tools:
+                # Resolve relative endpoints to absolute URLs
+                base_url = external_integration.get('app_home_url', '').rstrip('/')
+                if base_url:
+                    for tool in fetched_tools:
+                        endpoint = tool.get('endpoint', '')
+                        if endpoint.startswith('/') and not endpoint.startswith('//'):
+                            tool['endpoint'] = f"{base_url}{endpoint}"
+                app_dict['chat_tools'] = fetched_tools
 
     add_app_to_db(app_dict)
 
@@ -582,10 +671,23 @@ def update_app(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Ensure chat_tools are included if provided
+    # Build update dict
     update_dict = update_app.model_dump(exclude_unset=True)
-    if 'chat_tools' in data:
-        update_dict['chat_tools'] = data['chat_tools']
+
+    # Fetch chat tools from manifest URL (only way to add/update chat tools)
+    if external_integration := data.get('external_integration'):
+        manifest_url = external_integration.get('chat_tools_manifest_url')
+        if manifest_url:
+            fetched_tools = fetch_app_chat_tools_from_manifest(manifest_url)
+            if fetched_tools:
+                # Resolve relative endpoints to absolute URLs
+                base_url = external_integration.get('app_home_url', '').rstrip('/')
+                if base_url:
+                    for tool in fetched_tools:
+                        endpoint = tool.get('endpoint', '')
+                        if endpoint.startswith('/') and not endpoint.startswith('//'):
+                            tool['endpoint'] = f"{base_url}{endpoint}"
+                update_dict['chat_tools'] = fetched_tools
 
     update_app_in_db(update_dict)
 
@@ -649,20 +751,20 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 def get_app_categories():
     return [
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
-        {'title': 'Personality Emulation', 'id': 'personality-emulation'},
-        {'title': 'Health and Wellness', 'id': 'health-and-wellness'},
-        {'title': 'Education and Learning', 'id': 'education-and-learning'},
-        {'title': 'Communication Improvement', 'id': 'communication-improvement'},
-        {'title': 'Emotional and Mental Support', 'id': 'emotional-and-mental-support'},
-        {'title': 'Productivity and Organization', 'id': 'productivity-and-organization'},
-        {'title': 'Entertainment and Fun', 'id': 'entertainment-and-fun'},
+        {'title': 'Personality Clone', 'id': 'personality-emulation'},
+        {'title': 'Health', 'id': 'health-and-wellness'},
+        {'title': 'Education', 'id': 'education-and-learning'},
+        {'title': 'Communication', 'id': 'communication-improvement'},
+        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
         {'title': 'Financial', 'id': 'financial'},
-        {'title': 'Travel and Exploration', 'id': 'travel-and-exploration'},
-        {'title': 'Safety and Security', 'id': 'safety-and-security'},
-        {'title': 'Shopping and Commerce', 'id': 'shopping-and-commerce'},
-        {'title': 'Social and Relationships', 'id': 'social-and-relationships'},
-        {'title': 'News and Information', 'id': 'news-and-information'},
-        {'title': 'Utilities and Tools', 'id': 'utilities-and-tools'},
+        {'title': 'Travel', 'id': 'travel-and-exploration'},
+        {'title': 'Safety', 'id': 'safety-and-security'},
+        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
+        {'title': 'Social', 'id': 'social-and-relationships'},
+        {'title': 'News', 'id': 'news-and-information'},
+        {'title': 'Utilities', 'id': 'utilities-and-tools'},
         {'title': 'Other', 'id': 'other'},
     ]
 
@@ -895,6 +997,149 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
     return {
         'description': desc,
     }
+
+
+# ******************************************************
+# ****************** AI APP GENERATOR ******************
+# ******************************************************
+
+
+@router.get('/v1/app/generate-prompts', tags=['v1'])
+async def generate_sample_prompts_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate sample app prompts for the AI app generator.
+    Uses a fast model to generate creative suggestions.
+    """
+    from utils.llm.clients import llm_mini
+    import json
+
+    system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
+1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
+2. Chat assistant based apps - AI personas or assistants users can chat with
+
+Generate exactly 3 conversation-based and 2 chat-based app ideas.
+
+Examples:
+- Conversation based: "Mind map generator from my conversations", "Jokes and funny moments extractor", "Meeting action items tracker"
+- Chat based: "Elon Musk personality clone", "Strict accountability mentor", "Socratic philosophy tutor"
+
+Return ONLY a JSON array of 5 strings, each being a short app description (max 50 characters).
+Format: ["idea 1", "idea 2", "idea 3", "idea 4", "idea 5"]
+
+First 3 should be conversation-based, last 2 should be chat-based.
+Be creative, fun, and varied. No generic ideas."""
+
+    try:
+        response = await llm_mini.ainvoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "Generate 5 creative app ideas now"},
+            ]
+        )
+
+        content = response.content.strip()
+
+        # Parse JSON from response
+        if content.startswith("```"):
+            lines = content.split("\n")
+            content = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+
+        prompts = json.loads(content)
+
+        if isinstance(prompts, list) and len(prompts) >= 5:
+            return {"prompts": prompts[:5]}
+        else:
+            # Fallback
+            return {
+                "prompts": [
+                    "Mind map generator from conversations",
+                    "Jokes and funny moments extractor",
+                    "Key decisions and commitments tracker",
+                    "Elon Musk startup advisor clone",
+                    "Strict accountability coach",
+                ]
+            }
+    except Exception as e:
+        print(f"Error generating prompts: {e}")
+        return {
+            "prompts": [
+                "Mind map generator from conversations",
+                "Jokes and funny moments extractor",
+                "Key decisions and commitments tracker",
+                "Elon Musk startup advisor clone",
+                "Strict accountability coach",
+            ]
+        }
+
+
+@router.post('/v1/app/generate', tags=['v1'])
+async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate an app configuration from a natural language prompt.
+    This is an experimental feature that uses AI to create app configurations.
+    """
+    from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
+
+    prompt = data.get('prompt', '').strip()
+    if not prompt:
+        raise HTTPException(status_code=422, detail='Prompt is required')
+
+    if len(prompt) < 10:
+        raise HTTPException(status_code=422, detail='Prompt is too short. Please provide more details.')
+
+    if len(prompt) > 2000:
+        raise HTTPException(status_code=422, detail='Prompt is too long. Please keep it under 2000 characters.')
+
+    try:
+        # Generate app configuration using LLM
+        generated_app = await generate_app_from_prompt(prompt)
+
+        return {
+            'status': 'ok',
+            'app': {
+                'name': generated_app.name,
+                'description': generated_app.description,
+                'category': generated_app.category,
+                'capabilities': generated_app.capabilities,
+                'chat_prompt': generated_app.chat_prompt,
+                'memory_prompt': generated_app.memory_prompt,
+            },
+        }
+    except Exception as e:
+        print(f"Error generating app: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
+
+
+@router.post('/v1/app/generate-icon', tags=['v1'])
+async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate an app icon using AI (DALL-E).
+    Returns the icon as a base64 encoded PNG image.
+    """
+    from utils.llm.app_generator import generate_app_icon
+    import base64
+
+    app_name = data.get('name', '').strip()
+    app_description = data.get('description', '').strip()
+    category = data.get('category', 'other').strip()
+
+    if not app_name:
+        raise HTTPException(status_code=422, detail='App name is required')
+
+    if not app_description:
+        raise HTTPException(status_code=422, detail='App description is required')
+
+    try:
+        # Generate icon using DALL-E
+        icon_bytes = await generate_app_icon(app_name, app_description, category)
+
+        # Return as base64
+        icon_base64 = base64.b64encode(icon_bytes).decode('utf-8')
+
+        return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
+    except Exception as e:
+        print(f"Error generating icon: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to generate icon: {str(e)}')
 
 
 # ******************************************************

@@ -32,27 +32,14 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
-class ProcessConversationRequest(BaseModel):
-    calendar_meeting_context: Optional[CalendarMeetingContext] = None
-
-
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
-def process_in_progress_conversation(
-    request: ProcessConversationRequest = None, uid: str = Depends(auth.get_current_user_uid)
-):
+def process_in_progress_conversation(uid: str = Depends(auth.get_current_user_uid)):
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
     redis_db.remove_in_progress_conversation_id(uid)
 
     conversation = Conversation(**conversation)
-
-    # Inject calendar context if provided
-    if request and request.calendar_meeting_context:
-        if not conversation.external_data:
-            conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
-
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
     messages = trigger_external_integrations(uid, conversation)
@@ -92,18 +79,23 @@ def get_conversations(
     offset: int = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     print('get_conversations', uid, limit, offset, statuses)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
+
     conversations = conversations_db.get_conversations(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
         statuses=statuses.split(",") if len(statuses) > 0 else [],
+        start_date=start_date,
+        end_date=end_date,
     )
 
     for conv in conversations:

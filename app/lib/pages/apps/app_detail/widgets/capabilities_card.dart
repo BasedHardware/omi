@@ -12,33 +12,22 @@ class CapabilitiesCard extends StatelessWidget {
       case 'chat':
         return FontAwesomeIcons.solidComment;
       case 'memories':
-        return FontAwesomeIcons.solidLightbulb;
+        return FontAwesomeIcons.solidFileLines;
       case 'external_integration':
         return FontAwesomeIcons.puzzlePiece;
       case 'persona':
         return FontAwesomeIcons.userAstronaut;
       case 'proactive_notification':
         return FontAwesomeIcons.solidBell;
+      case 'push_to_talk':
+        return FontAwesomeIcons.walkieTalkie;
       default:
         return FontAwesomeIcons.cubes;
     }
   }
 
   Color _getCapabilityColor(String id) {
-    switch (id) {
-      case 'chat':
-        return const Color(0xFF00D4FF); // Bright Cyan
-      case 'memories':
-        return const Color(0xFFFBBF24); // Bright Amber
-      case 'external_integration':
-        return const Color(0xFF34D399); // Bright Emerald
-      case 'persona':
-        return const Color(0xFFF472B6); // Bright Pink
-      case 'proactive_notification':
-        return const Color(0xFFFF6B6B); // Bright Coral
-      default:
-        return const Color(0xFF9CA3AF); // Light Gray
-    }
+    return Colors.grey;
   }
 
   @override
@@ -76,9 +65,8 @@ class CapabilitiesCard extends StatelessWidget {
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withOpacity(0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -90,7 +78,7 @@ class CapabilitiesCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      capability.title,
+                      capability.id == 'memories' ? 'Summary' : capability.title,
                       style: TextStyle(
                         color: color,
                         fontSize: 13,

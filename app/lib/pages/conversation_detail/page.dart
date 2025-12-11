@@ -228,7 +228,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        _copyContent(context, provider.conversation.structured.toString());
+        // Use app-generated summary if available, otherwise fall back to structured summary
+        final conversation = provider.conversation;
+        final summaryContent =
+            conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
+                ? conversation.appResults[0].content.trim()
+                : conversation.structured.toString();
+        _copyContent(context, summaryContent);
         break;
       // case 'export_transcript':
       //   showShareBottomSheet(context, provider.conversation, (fn) {});
@@ -1079,6 +1085,7 @@ class TranscriptWidgets extends StatelessWidget {
                             }
 
                             MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+
                             for (final segmentId in segmentIds) {
                               final segmentIndex =
                                   provider.conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);

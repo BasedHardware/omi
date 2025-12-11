@@ -6,9 +6,12 @@ import websockets
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
 
-async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3):
+async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3, is_active: callable = None):
     print("connect_to_trigger_pusher", uid)
     for attempt in range(retries):
+        if is_active is not None and not is_active():
+            print("Session ended, aborting Pusher retry", uid)
+            return None
         try:
             return await _connect_to_trigger_pusher(uid, sample_rate)
         except Exception as error:

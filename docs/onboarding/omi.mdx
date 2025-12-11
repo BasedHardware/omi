@@ -4,105 +4,171 @@ description: "Get started with your Omi device"
 sidebarTitle: "Omi Setup"
 ---
 
-# Get Started with Omi
+<img src="/omi-without-rope.png" alt="Omi Device" style={{maxWidth: '250px'}} />
 
-<img src="/omi-without-rope.png" alt="Omi Device" width="300" />
+## Quick Setup
 
-Follow these steps to set up your Omi device:
+<Steps>
+  <Step title="Charge Your Device" icon="battery-full">
+    Make sure your Omi device is charged. When you switch it on, there should be a light indicator.
 
-## Step 1: Charge Your Device
+    - Turn on the device using the button in the center
+    - Look for the LED light to confirm it's powered on
+  </Step>
+  <Step title="Download the Omi App" icon="mobile">
+    Download the official Omi app from your device's app store:
 
-Make sure your Omi device is charged. When you switch it on, there should be a light indicator.
+    <CardGroup cols={2}>
+      <Card title="App Store" icon="apple" href="https://apps.apple.com/fi/app/omi-ai-smart-meeting-notes/id6502156163">
+        Download for iOS
+      </Card>
+      <Card title="Play Store" icon="google-play" href="https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US&pli=1">
+        Download for Android
+      </Card>
+    </CardGroup>
 
-- Turn on the device using the button in the center
-- Look for the LED light to confirm it's powered on
+    <Tip>
+    You can also search for "**Omi AI**" in your app store.
+    </Tip>
+  </Step>
+  <Step title="Pair Your Device" icon="bluetooth">
+    1. Open the Omi app after downloading
+    2. Follow the in-app instructions to pair your device
+    3. Wait for the Bluetooth connection to establish
+  </Step>
+  <Step title="Test Transcription" icon="microphone">
+    After pairing, test that transcription is working:
 
-## Step 2: Download the Omi App
+    - Speak near your Omi device
+    - You should see transcriptions appear in the app
+    - If you don't see transcriptions immediately, wait 30+ seconds
 
-Download the official Omi app from your device's app store:
+    <Frame>
+      <img src="/images/IMG_5DCB13BE239B-1.jpeg" alt="Transcription Example" style={{maxWidth: '300px'}} />
+    </Frame>
+  </Step>
+</Steps>
 
-- **iOS**: [Download from App Store](https://apps.apple.com/fi/app/omi-ai-smart-meeting-notes/id6502156163)
-- **Android**: [Download from Google Play](https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US&pli=1)
-
-You can also search for "**Omi AI**" in your respective app store.
-
-## Step 3: Pair Your Device
-
-1. Open the Omi app after downloading
-2. Follow the in-app instructions to pair your device
-3. Wait for the Bluetooth connection to establish
-
-## Step 4: Test Transcription
-
-After pairing, test that transcription is working:
-
-- Speak near your Omi device
-- You should see transcriptions appear in the app
-- If you don't see transcriptions immediately, wait 30+ seconds
-
-<img src="/images/IMG_5DCB13BE239B-1.jpeg" alt="Transcription Example" width="300" />
+---
 
 ## Button Controls
 
-### Single Press
-- **Turn On/Off**: Single press to power the device on or off
+<CardGroup cols={2}>
+  <Card title="Single Press" icon="hand-pointer">
+    **Turn On/Off**
 
-### Long Press (Voice Questions)
-- **Press and hold** the button until you feel a vibration
-- **Keep pressed down** and ask your question
-- **Release the button** when you're done speaking
-- **Get your answer** in the Omi chat or as a notification on your phone
+    Single press to power the device on or off
+  </Card>
+  <Card title="Long Press" icon="hand">
+    **Voice Questions**
+
+    1. Press and hold until you feel a vibration
+    2. Keep pressed and ask your question
+    3. Release when you're done speaking
+    4. Get your answer in Omi chat or as a notification
+  </Card>
+</CardGroup>
+
+---
 
 ## Light Indicators
 
 Understanding your Omi's status through LED colors:
 
-- 🔴 **Red**: Device is turned on but disconnected from your phone
-- 🔵 **Blue**: Device is turned on and connected to your phone  
-- 🟠 **Orange**: Device is charging and disconnected from your phone
-- 🔵 **Teal**: Device is charging and connected to your phone
+| Color | Status |
+|-------|--------|
+| 🔴 **Red** | Device is on but disconnected from your phone |
+| 🔵 **Blue** | Device is on and connected to your phone |
+| 🟠 **Orange** | Device is charging and disconnected |
+| 🔵 **Teal** | Device is charging and connected |
 
-## Important: App Usage
+---
 
-**DO NOT KILL THE APP:** Once you've activated the app, it should work in the background. You can minimize the app but if you force-close it, it will stop transcribing and disconnect from your device.
+## Important: Keep the App Running
 
-<img src="/images/IMG_1D88FF7716F5-1.jpeg" alt="Background App" width="150" />
+<Warning>
+**Do not kill the app!** Once activated, Omi works in the background. You can minimize the app, but if you force-close it (remove the process), transcription will stop and the device will disconnect.
+</Warning>
 
-## Features Available
+---
 
-- 🎙️ **Live Transcription**
-- 🧠 **Conversation Memory**  
-- 📡 **Offline Transcription**
-- 🌐 **App Marketplace**
-- 🗣️ **Speaker Diarization**
+## Features
+
+<CardGroup cols={3}>
+  <Card title="Live Transcription" icon="microphone">
+    Real-time speech-to-text
+  </Card>
+  <Card title="Conversation Memory" icon="brain">
+    AI-powered recall
+  </Card>
+  <Card title="Offline Mode" icon="wifi-slash">
+    Works without internet
+  </Card>
+  <Card title="App Marketplace" icon="store">
+    Extend with apps
+  </Card>
+  <Card title="Speaker ID" icon="users">
+    Identifies who's speaking
+  </Card>
+  <Card title="Voice Questions" icon="comments">
+    Ask questions hands-free
+  </Card>
+</CardGroup>
+
+---
 
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="No light or transcription appearing">
-    If you don't see any light or transcription, your device might need firmware installation. [Flash the firmware here](https://docs.omi.me/get_started/Flash_device/)
-    
+  <Accordion title="No light or transcription appearing" icon="circle-question">
+    If you don't see any light or transcription:
+
+    1. Your device might need firmware - [install it here](/doc/get_started/Flash_device)
+    2. Make sure the device is charged
+    3. Try turning it off and on again
+
     If the issue persists, ask in [Discord](http://discord.omi.me) or contact [help@omi.me](mailto:help@omi.me)
   </Accordion>
-  <Accordion title="Device won't pair">
+  <Accordion title="Device won't pair" icon="bluetooth">
     - Make sure Bluetooth is enabled on your phone
     - Try restarting both your phone and the Omi device
     - Ensure the device is charged and powered on
+    - Move closer to the device during pairing
   </Accordion>
-  <Accordion title="Transcription is delayed">
+  <Accordion title="Transcription is delayed" icon="clock">
     - Wait up to 60 seconds for initial transcription
     - Check your internet connection
     - Make sure you're speaking clearly near the device
+    - Try moving the device closer to your mouth
+  </Accordion>
+  <Accordion title="Battery draining quickly" icon="battery-quarter">
+    - Ensure the device is running the latest firmware
+    - Check if there are connection issues causing reconnection loops
+    - Contact support if battery life is significantly reduced
   </Accordion>
 </AccordionGroup>
 
+---
+
 ## Need Help?
 
-1. Join our [Discord community](http://discord.omi.me) for support
-2. Visit our [help center](https://intercom.help/omi-37041f50f654/en)
-3. Contact us at [help@omi.me](mailto:help@omi.me)
-4. Check out the [developer docs](https://docs.omi.me/doc/developer/apps/Introduction) to build apps
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="http://discord.omi.me">
+    Get help from the community and team
+  </Card>
+  <Card title="Help Center" icon="circle-question" href="https://intercom.help/omi-37041f50f654/en">
+    Browse FAQs and support articles
+  </Card>
+  <Card title="Build Apps" icon="code" href="/doc/developer/apps/Introduction">
+    Create your own Omi integrations
+  </Card>
+  <Card title="Email Support" icon="envelope" href="mailto:help@omi.me">
+    Contact help@omi.me
+  </Card>
+</CardGroup>
 
 ---
 
-[← Back to device selection](/getstartedwithomi) 
+<Card title="← Back to device selection" icon="arrow-left" href="/getstartedwithomi">
+  Choose a different device
+</Card>

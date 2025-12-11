@@ -129,11 +129,11 @@ class UsageProvider with ChangeNotifier {
   // Payment-related methods
   Future<void> loadAvailablePlans() async {
     if (_isLoadingPlans) return;
-    
+
     _isLoadingPlans = true;
     _error = null;
     notifyListeners();
-    
+
     try {
       final response = await getAvailablePlans();
       if (response != null) {
@@ -152,11 +152,11 @@ class UsageProvider with ChangeNotifier {
 
   Future<bool> cancelUserSubscription() async {
     if (_isPaymentLoading) return false;
-    
+
     _isPaymentLoading = true;
     _error = null;
     notifyListeners();
-    
+
     try {
       final success = await cancelSubscription();
       if (success) {
@@ -176,11 +176,11 @@ class UsageProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId}) async {
     if (_isPaymentLoading) return null;
-    
+
     _isPaymentLoading = true;
     _error = null;
     notifyListeners();
-    
+
     try {
       final result = await upgradeSubscription(priceId: priceId);
       if (result != null) {
@@ -198,19 +198,39 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, String>?> createUserCheckoutSession({required String priceId}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId}) async {
     if (_isPaymentLoading) return null;
-    
+
     _isPaymentLoading = true;
     _error = null;
     notifyListeners();
-    
+
     try {
       final sessionData = await createCheckoutSession(priceId: priceId);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';
       debugPrint('Error creating checkout session: $e');
+      return null;
+    } finally {
+      _isPaymentLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<Map<String, String>?> openCustomerPortal() async {
+    if (_isPaymentLoading) return null;
+
+    _isPaymentLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final sessionData = await createCustomerPortalSession();
+      return sessionData;
+    } catch (e) {
+      _error = 'Failed to open customer portal. Please try again.';
+      debugPrint('Error opening customer portal: $e');
       return null;
     } finally {
       _isPaymentLoading = false;

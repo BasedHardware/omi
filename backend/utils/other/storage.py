@@ -26,6 +26,7 @@ syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
+desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 
 
 # *******************************************
@@ -481,3 +482,26 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> dict:
         else:
             dictFiles[name] = f'https://storage.googleapis.com/{chat_files_bucket}/{uid}/{name}'
     return dictFiles
+
+
+# **************************************************
+# ************* DESKTOP UPDATES ********************
+# **************************************************
+
+
+def get_desktop_update_signed_url(blob_path: str, expiration_hours: int = 1) -> str:
+    """
+    Generate a signed URL for a desktop update file (ZIP).
+
+    Args:
+        blob_path: Path to the blob in GCS (e.g., "1.0.78+474-macos/1.0.78+474-macos.zip")
+        expiration_hours: Hours until the URL expires (default: 1 hour)
+
+    Returns:
+        Signed URL valid for the specified duration
+    """
+    bucket = storage_client.bucket(desktop_updates_bucket)
+    blob = bucket.blob(blob_path)
+
+    # Use existing _get_signed_url helper with caching
+    return _get_signed_url(blob, expiration_hours * 60)

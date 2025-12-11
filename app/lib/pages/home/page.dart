@@ -19,7 +19,6 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
-import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -455,10 +454,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   alignment: Alignment.bottomCenter,
                                   child: Container(
                                     width: double.infinity,
-                                    height: 80,
-                                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                                    height: 100,
+                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                                     decoration: const BoxDecoration(
-                                      color: Color.fromARGB(255, 15, 15, 15),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        stops: [0.0, 0.30, 1.0],
+                                        colors: [
+                                          Colors.transparent,
+                                          Color.fromARGB(255, 15, 15, 15),
+                                          Color.fromARGB(255, 15, 15, 15),
+                                        ],
+                                      ),
                                     ),
                                     child: Row(
                                       children: [
@@ -477,28 +485,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.house,
-                                                      color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Home',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 0
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.house,
+                                                  color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -519,28 +510,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.listCheck,
-                                                      color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Tasks',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 1
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.listCheck,
+                                                  color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -563,28 +537,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.brain,
-                                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Memories',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 2
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.brain,
+                                                  color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -605,28 +562,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.puzzlePiece,
-                                                      color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Apps',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 3
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.puzzlePiece,
+                                                  color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -741,48 +681,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFB8860B).withValues(alpha: 0.5),
-                      Color(0xFFCD853F).withValues(alpha: 0.5),
-                      Color(0xFFB8860B).withValues(alpha: 0.5),
-                    ],
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.amber.withOpacity(0.15),
-                      blurRadius: 6,
-                      spreadRadius: 0.5,
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    FontAwesomeIcons.gift,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Referral Program');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ReferralPage(),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 36,
-                height: 36,
                 decoration: const BoxDecoration(
                   color: Color(0xFF1F1F25),
                   shape: BoxShape.circle,
@@ -811,76 +709,68 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                 ),
               ),
-              // Chat Button - Only show on home page (index 0)
-              Consumer<HomeProvider>(
-                builder: (context, provider, child) {
-                  if (provider.selectedIndex == 0) {
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                        // Navigate to chat page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatPage(isPivotBottom: false),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        height: 36,
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.all(0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(17.5),
-                            border: Border.all(
-                              color: Colors.pink.withValues(alpha: 0.3),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.solidComment,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Chat',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  } else {
-                    return const SizedBox.shrink();
-                  }
+              // Chat Button - Shows on all pages
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  MixpanelManager().bottomNavigationTabClicked('Chat');
+                  // Navigate to chat page
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChatPage(isPivotBottom: false),
+                    ),
+                  );
                 },
+                child: Container(
+                  height: 36,
+                  margin: const EdgeInsets.only(left: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                        Colors.purpleAccent.withValues(alpha: 0.2),
+                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                        Colors.purpleAccent.withValues(alpha: 0.2),
+                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Container(
+                    margin: const EdgeInsets.all(0.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(17.5),
+                      border: Border.all(
+                        color: Colors.pink.withValues(alpha: 0.3),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          FontAwesomeIcons.solidComment,
+                          size: 14,
+                          color: Colors.white70,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          'Chat',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

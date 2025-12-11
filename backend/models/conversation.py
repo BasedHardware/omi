@@ -212,29 +212,6 @@ class Geolocation(BaseModel):
     location_type: Optional[str] = None
 
 
-class MeetingParticipant(BaseModel):
-    """Represents a participant in a calendar meeting"""
-
-    name: Optional[str] = Field(default=None, description="Participant's display name")
-    email: Optional[str] = Field(default=None, description="Participant's email address")
-
-
-class CalendarMeetingContext(BaseModel):
-    """Calendar meeting metadata to provide context for conversation processing"""
-
-    calendar_event_id: str = Field(description="System calendar event ID")
-    title: str = Field(description="Meeting title from calendar")
-    participants: List[MeetingParticipant] = Field(default_factory=list, description="List of meeting participants")
-    platform: Optional[str] = Field(default=None, description="Meeting platform (Zoom, Teams, Google Meet, etc.)")
-    meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
-    start_time: datetime = Field(description="Meeting start time")
-    duration_minutes: int = Field(description="Meeting duration in minutes")
-    notes: Optional[str] = Field(default=None, description="Meeting notes/description from calendar")
-    calendar_source: Optional[str] = Field(
-        default='system_calendar', description="Calendar source (system_calendar, google, outlook, etc.)"
-    )
-
-
 class ConversationSource(str, Enum):
     friend = 'friend'
     omi = 'omi'
@@ -251,6 +228,7 @@ class ConversationSource(str, Enum):
     workflow = 'workflow'
     sdcard = 'sdcard'
     external_integration = 'external_integration'
+    limitless = 'limitless'
 
 
 class ConversationVisibility(str, Enum):
@@ -412,23 +390,20 @@ class Conversation(BaseModel):
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
     def as_dict_cleaned_dates(self):
+        def convert_datetime_to_iso(obj):
+            """Recursively convert datetime objects to ISO format strings"""
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            elif isinstance(obj, dict):
+                return {key: convert_datetime_to_iso(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_datetime_to_iso(item) for item in obj]
+            else:
+                return obj
+
         conversation_dict = self.dict()
-        conversation_dict['structured']['events'] = [
-            {**event, 'start': event['start'].isoformat()} for event in conversation_dict['structured']['events']
-        ]
-
-        if 'external_data' in conversation_dict and conversation_dict['external_data']:
-            conversation_dict['external_data']['started_at'] = conversation_dict['started_at'].isoformat()
-            conversation_dict['external_data']['finished_at'] = conversation_dict['finished_at'].isoformat()
-
-        conversation_dict['created_at'] = conversation_dict['created_at'].isoformat()
-        conversation_dict['started_at'] = (
-            conversation_dict['started_at'].isoformat() if conversation_dict['started_at'] else None
-        )
-        conversation_dict['finished_at'] = (
-            conversation_dict['finished_at'].isoformat() if conversation_dict['finished_at'] else None
-        )
-
+        # Convert all datetime objects recursively
+        conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict
 
 
@@ -444,7 +419,6 @@ class CreateConversation(BaseModel):
     language: Optional[str] = None
 
     processing_conversation_id: Optional[str] = None
-    calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None) -> str:
         return TranscriptSegment.segments_as_string(

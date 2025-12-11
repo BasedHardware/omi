@@ -1,59 +1,312 @@
 ---
 title: "Real-Time Audio Streaming"
-titleHidden: true
+description: "Stream raw audio bytes from your Omi device to any backend for custom speech processing, VAD, or audio analysis."
 ---
 
-# Streaming Real-Time Audio From Device to Anywhere
+## Overview
 
-Omi allows you to stream audio bytes from your DevKit1 or DevKit2 directly to your backend or any other service, enabling you to perform various analyses and store the data. You can also define how frequently you want to receive the audio bytes.
+Omi allows you to stream audio bytes from your DevKit directly to your backend or any external service. This enables custom audio processing like:
 
-## Step 1: Create an Endpoint
+<CardGroup cols={2}>
+  <Card title="Custom Speech Recognition" icon="microphone">
+    Use your own ASR models instead of Omi's default transcription
+  </Card>
+  <Card title="Voice Activity Detection" icon="waveform-lines">
+    Implement custom VAD logic for specialized use cases
+  </Card>
+  <Card title="Audio Analysis" icon="chart-line">
+    Extract features, spectrograms, or embeddings in real-time
+  </Card>
+  <Card title="Cloud Storage" icon="cloud-arrow-up">
+    Store raw audio for later processing or compliance
+  </Card>
+</CardGroup>
 
-Create an endpoint (webhook) that can receive and process the data sent by our backend. Our backend will make a POST request to your webhook with sample_rate and uid as query parameters. The request from our backend will look like this:
+```mermaid
+flowchart LR
+    subgraph Device["Omi Device"]
+        M[Microphone] --> A[Audio Buffer]
+    end
 
-`POST /your-endpoint?sample_rate=16000&uid=user123`
+    A -->|Every X seconds| B[Omi Backend]
+    B -->|POST octet-stream| W[Your Webhook]
+    W --> P[Your Processing]
+```
 
-The data sent is of type octet-stream, which is essentially a stream of bytes. You can either create your own endpoint or use the example provided below. Once it's ready and deployed, proceed to the next step.
+---
 
-Note: The sample rate refers to the audio samples captured per second. DevKit1 (v1.0.4 and above) and DevKit2 record audio at a sample rate of 16,000 Hz, while DevKit1 with v1.0.2 records at a sample rate of 8,000 Hz. The uid represents the unique ID assigned to the user in our system.
+## Technical Specifications
 
-## Step 2: Add the Endpoint to Developer Settings
-1. Open the Omi App on your device.
-2. Go to Settings and click on Developer Mode.
-3. Scroll down until you see Realtime audio bytes, and set your endpoint there.
-4. In the Every x seconds field, define how frequently you want to receive the bytes. For example, if you set it to 10 seconds, you will receive the audio bytes every 10 seconds.
+| Specification | Value |
+|---------------|-------|
+| **HTTP Method** | POST |
+| **Content-Type** | `application/octet-stream` |
+| **Audio Format** | Raw PCM16 (16-bit signed, little-endian) |
+| **Bytes per Sample** | 2 |
+| **Sample Rate** | 16,000 Hz (DevKit1 v1.0.4+, DevKit2) or 8,000 Hz (DevKit1 v1.0.2) |
+| **Channels** | Mono (1 channel) |
 
-That's it! You should now see audio bytes arriving at your webhook. The audio bytes are raw, but you can save them as audio files by adding a WAV header to the accumulated bytes.
+<Note>
+The sample rate is passed as a query parameter so your endpoint can handle different device versions.
+</Note>
 
-Check out the example below to see how you can save the audio bytes as audio files in Google Cloud Storage using the audio streaming feature.
+---
 
-## Example: Saving Audio Bytes as Audio Files in Google Cloud Storage
-Step 1: Create a Google Cloud Storage bucket and set the appropriate permissions. You can follow the steps mentioned [here](https://docs.omi.me/doc/developer/savingaudio) up to step 5.
+## Setup Guide
 
-Step 2: Fork the example repository from [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming).
+<Steps>
+  <Step title="Create Your Endpoint" icon="server">
+    Create a webhook that accepts POST requests with binary audio data.
 
-Step 3: Clone the repository to your local machine.
+    **Request format:**
+    ```
+    POST /your-endpoint?sample_rate=16000&uid=user123
+    Content-Type: application/octet-stream
+    Body: [raw PCM16 audio bytes]
+    ```
 
-Step 4: Deploy it to any of your preferred cloud providers like GCP, AWS, DigitalOcean, or run it locally (you can use Ngrok for local testing). The repository includes a Dockerfile for easy deployment.
+    Your endpoint should:
+    - Accept `application/octet-stream` content type
+    - Read `sample_rate` and `uid` from query parameters
+    - Process the raw bytes (buffer, save, or analyze)
+    - Return 200 OK quickly to avoid timeouts
+  </Step>
+  <Step title="Configure in Omi App" icon="mobile">
+    1. Open the Omi App
+    2. Go to **Settings** → **Developer Mode**
+    3. Scroll to **Realtime audio bytes**
+    4. Enter your webhook URL
+    5. Set the **Every x seconds** field (e.g., `10` for 10-second chunks)
+  </Step>
+  <Step title="Test Your Integration" icon="flask">
+    Start speaking while wearing your Omi device. Audio bytes should arrive at your webhook at the configured interval.
 
-Step 5: While deploying, ensure the following environment variables are set:
-- `GOOGLE_APPLICATION_CREDENTIALS_JSON`: Your GCP credentials, encoded in base64.
-- `GCS_BUCKET_NAME`: The name of your GCP storage bucket.
+    <Tip>
+    Use [webhook.site](https://webhook.site) to verify data is arriving before implementing your processing logic.
+    </Tip>
+  </Step>
+</Steps>
 
-Step 6: Once the deployment is complete, set the endpoint in the Developer Settings of the Omi App under Realtime audio bytes. The endpoint should be the URL where you deployed the example + `/audio`.
+---
 
-Step 7: You should now see audio files being saved in your GCP bucket every x seconds, where x is the value you set in the `Every x seconds` field.
+## Working with Audio Bytes
 
-## Contributing 🤝
+### Converting to WAV
 
-We welcome contributions from the open source community! Whether it's improving documentation, adding new features, or reporting bugs, your input is valuable. Check out our [Contribution Guide](https://docs.omi.me/developer/Contribution/) for more information.
+The received bytes are raw PCM16 audio. To create a playable WAV file, prepend a WAV header:
 
-## Support 🆘
+```python
+import struct
+import wave
+import io
 
-If you're stuck, have questions, or just want to chat about Omi:
+def create_wav(audio_bytes: bytes, sample_rate: int) -> bytes:
+    """Convert raw PCM16 bytes to WAV format."""
+    buffer = io.BytesIO()
 
-- **GitHub Issues: 🐛** For bug reports and feature requests
-- **Community Forum: 💬** Join our [community forum](http://discord.omi.me) for discussions and questions
-- **Documentation: 📚** Check out our [full documentation](https://docs.omi.me/) for in-depth guides
+    with wave.open(buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)  # Mono
+        wav_file.setsampwidth(2)  # 16-bit = 2 bytes
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_bytes)
 
-Happy coding! 💻 If you have any questions or need further assistance, don't hesitate to reach out to our community.
+    buffer.seek(0)
+    return buffer.read()
+```
+
+### Accumulating Chunks
+
+If you need continuous audio (not chunked), accumulate bytes across requests:
+
+```python
+from collections import defaultdict
+
+# Store audio by session
+audio_buffers = defaultdict(bytes)
+
+@app.post("/audio")
+async def receive_audio(request: Request, uid: str, sample_rate: int):
+    audio_bytes = await request.body()
+
+    # Accumulate audio for this user
+    audio_buffers[uid] += audio_bytes
+
+    # Process when you have enough audio (e.g., 60 seconds)
+    if len(audio_buffers[uid]) >= sample_rate * 2 * 60:  # 2 bytes per sample
+        process_audio(audio_buffers[uid], sample_rate)
+        audio_buffers[uid] = bytes()
+
+    return {"status": "ok"}
+```
+
+---
+
+## Example: Save to Google Cloud Storage
+
+A complete example that saves audio files to Google Cloud Storage.
+
+<Steps>
+  <Step title="Create GCS Bucket" icon="bucket">
+    Follow the [Saving Audio Guide](/doc/developer/savingaudio) steps 1-5 to create a bucket with proper permissions.
+  </Step>
+  <Step title="Fork the Example Repository" icon="code-fork">
+    Fork [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming)
+  </Step>
+  <Step title="Clone and Deploy" icon="cloud-arrow-up">
+    Clone the repository and deploy to your preferred cloud provider (GCP, AWS, DigitalOcean) or run locally with ngrok.
+
+    The repository includes a Dockerfile for easy deployment.
+  </Step>
+  <Step title="Set Environment Variables" icon="key">
+    Configure these environment variables during deployment:
+
+    | Variable | Description |
+    |----------|-------------|
+    | `GOOGLE_APPLICATION_CREDENTIALS_JSON` | GCP service account credentials (base64 encoded) |
+    | `GCS_BUCKET_NAME` | Your GCS bucket name |
+  </Step>
+  <Step title="Configure Omi App" icon="mobile">
+    Set the endpoint in Developer Settings → Realtime audio bytes:
+    ```
+    https://your-deployment-url.com/audio
+    ```
+  </Step>
+  <Step title="Verify" icon="check">
+    Audio files should now appear in your GCS bucket every X seconds (based on your configured interval).
+  </Step>
+</Steps>
+
+---
+
+## Processing Ideas
+
+<AccordionGroup>
+  <Accordion title="Custom Speech Recognition" icon="microphone">
+    Feed audio to your own ASR models for specialized vocabulary or languages:
+
+    ```python
+    import whisper
+
+    model = whisper.load_model("base")
+
+    @app.post("/audio")
+    async def transcribe(request: Request, sample_rate: int):
+        audio_bytes = await request.body()
+        wav_data = create_wav(audio_bytes, sample_rate)
+
+        # Save temporarily and transcribe
+        with tempfile.NamedTemporaryFile(suffix=".wav") as f:
+            f.write(wav_data)
+            f.flush()
+            result = model.transcribe(f.name)
+
+        return {"text": result["text"]}
+    ```
+  </Accordion>
+  <Accordion title="Voice Activity Detection" icon="waveform-lines">
+    Detect speech vs. silence for custom endpointing:
+
+    ```python
+    import webrtcvad
+
+    vad = webrtcvad.Vad(3)  # Aggressiveness 0-3
+
+    def detect_speech(audio_bytes: bytes, sample_rate: int) -> bool:
+        # webrtcvad needs 10, 20, or 30ms frames
+        frame_duration = 30  # ms
+        frame_size = int(sample_rate * frame_duration / 1000) * 2
+
+        speech_frames = 0
+        total_frames = 0
+
+        for i in range(0, len(audio_bytes), frame_size):
+            frame = audio_bytes[i:i + frame_size]
+            if len(frame) == frame_size:
+                if vad.is_speech(frame, sample_rate):
+                    speech_frames += 1
+                total_frames += 1
+
+        return speech_frames / total_frames > 0.5 if total_frames else False
+    ```
+  </Accordion>
+  <Accordion title="Audio Embeddings" icon="diagram-project">
+    Extract embeddings for speaker identification or audio similarity:
+
+    ```python
+    from speechbrain.pretrained import EncoderClassifier
+
+    classifier = EncoderClassifier.from_hparams(
+        source="speechbrain/spkrec-ecapa-voxceleb"
+    )
+
+    def get_embedding(wav_path: str):
+        return classifier.encode_batch(
+            classifier.load_audio(wav_path)
+        )
+    ```
+  </Accordion>
+  <Accordion title="Real-time Sentiment" icon="face-smile">
+    Analyze emotional tone from audio features:
+
+    ```python
+    import librosa
+    import numpy as np
+
+    def extract_features(audio_bytes: bytes, sample_rate: int):
+        # Convert bytes to numpy array
+        audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+        audio = audio / 32768.0  # Normalize
+
+        # Extract features
+        mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=13)
+        energy = librosa.feature.rms(y=audio)
+
+        return {
+            "mfcc_mean": mfccs.mean(axis=1).tolist(),
+            "energy_mean": float(energy.mean()),
+        }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Respond Quickly" icon="bolt">
+    Return 200 OK immediately, process async. Slow responses may cause timeouts.
+  </Card>
+  <Card title="Handle Missing Data" icon="triangle-exclamation">
+    Network issues may cause gaps. Design your processing to handle incomplete audio.
+  </Card>
+  <Card title="Buffer Appropriately" icon="layer-group">
+    Choose chunk interval based on your use case. Larger chunks = fewer requests but higher latency.
+  </Card>
+  <Card title="Monitor Usage" icon="chart-line">
+    Audio streaming generates significant data. Monitor storage and bandwidth costs.
+  </Card>
+</CardGroup>
+
+<Warning>
+Audio data is sensitive. Ensure your endpoint is secured with HTTPS and implement appropriate access controls.
+</Warning>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+    Overview of webhook-based integrations
+  </Card>
+  <Card title="Saving Audio" icon="floppy-disk" href="/doc/developer/savingaudio">
+    Guide to storing audio in cloud storage
+  </Card>
+  <Card title="Real-time Transcription" icon="closed-captioning" href="/doc/developer/backend/transcription">
+    How Omi's built-in transcription works
+  </Card>
+  <Card title="Apps Introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+    Overview of all Omi app types
+  </Card>
+</CardGroup>

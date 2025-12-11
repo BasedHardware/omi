@@ -14,8 +14,8 @@
         "group": "Get Started",
         "pages": [
           "doc/get_started/introduction",
-           "getstartedwithomi"
-          
+          "getstartedwithomi",
+          "doc/get_started/chat_tips"
         ]
       },
       {
@@ -27,10 +27,9 @@
             "pages": [
               "doc/developer/backend/Backend_Setup",
               "doc/developer/backend/backend_deepdive",
-              "doc/developer/backend/StoringMemory",
-              "doc/developer/backend/transcription",
-              "doc/developer/backend/memory_embeddings",
-              "doc/developer/backend/postprocessing"
+              "doc/developer/backend/chat_system",
+              "doc/developer/backend/StoringConversations",
+              "doc/developer/backend/transcription"
             ]
           },
           {
