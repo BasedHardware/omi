@@ -678,7 +678,7 @@ class FlashPageWalSync implements IWalSync {
     if (connection == null) return null;
 
     try {
-      final dynamic limitlessConnection = connection;
+      final limitlessConnection = connection as LimitlessDeviceConnection;
       return await limitlessConnection.getStorageStatus();
     } catch (e) {
       debugPrint('FlashPageSync: Not a Limitless device or getStorageStatus not available: $e');
