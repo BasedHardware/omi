@@ -197,11 +197,17 @@ class BleTransport extends DeviceTransport {
         }
 
         try {
+          // Long writes (data > MTU-3) require withResponse on iOS/Android
+          // Use writeWithoutResponse only if data fits in a single packet and characteristic supports it
+          final mtuThreshold = _bleDevice.mtuNow - 3;
+          final needsLongWrite = data.length > mtuThreshold;
+          final useWithoutResponse = !needsLongWrite && characteristic.properties.writeWithoutResponse;
+
           await characteristic
               .write(
                 data,
-                withoutResponse: characteristic.properties.writeWithoutResponse,
-                allowLongWrite: true,
+                withoutResponse: useWithoutResponse,
+                allowLongWrite: needsLongWrite,
               )
               .timeout(const Duration(seconds: 2));
           return;
