@@ -876,12 +876,21 @@ class FlashPageWalSync implements IWalSync {
       List<List<int>> allFrames = [];
       int totalPages = wal.storageTotalBytes - wal.storageOffset + 1;
       int chunkIndex = 0;
-      int chunksUploaded = 0;
-      bool allUploadsSuccessful = true;
+      int chunksStarted = 0;
+      int chunksCompleted = 0;
+      int chunksSucceeded = 0; // Track successful uploads for incremental ACK
+      bool hadFailure = false; // Stop ACKing after first failure
+      int lastAckedPage = wal.storageOffset - 1; // Track last acknowledged page
 
       int emptyExtractions = 0;
       const maxEmptyExtractions = 60; // 30 seconds of no data = done
-      const int framesPerChunk = 2000; // ~2 minutes of audio per chunk
+      const int framesPerChunk = 2000; // ~40 seconds of audio per chunk
+
+      // Track pending uploads for parallel processing
+      List<Future<bool>> pendingUploads = [];
+
+      // Track maximum progress seen
+      double maxProgressSeen = 0.0;
 
       // Use async loop instead of Timer for cleaner async flow with uploads
       bool syncComplete = false;
@@ -905,44 +914,81 @@ class FlashPageWalSync implements IWalSync {
           emptyExtractions = 0;
           debugPrint("FlashPageSync: Extracted ${frames.length} frames (total: ${allFrames.length})");
 
-          // Update extraction progress (0-50% of chunk progress allocated to extraction)
-          // Each chunk of 2000 frames contributes to progress
-          final framesInCurrentChunk = allFrames.length;
-          final chunkExtractionProgress = (framesInCurrentChunk / framesPerChunk).clamp(0.0, 1.0);
-          final estimatedTotalChunks = (totalPages / 20).ceil().clamp(1, 100);
-          final baseProgress = chunksUploaded / estimatedTotalChunks;
-          final extractionBonus = (chunkExtractionProgress * 0.5) / estimatedTotalChunks;
-          progress?.onWalSyncedProgress((baseProgress + extractionBonus).clamp(0.0, 0.95));
+          // Progress based on completed chunks
+          // Cap extraction phase at 0.5 (50%), uploads take it to 100%
+          final extractionProgress = (totalFramesExtracted / (totalPages * 10)).clamp(0.0, 0.5);
+          final uploadProgress = chunksStarted > 0 ? (chunksCompleted / chunksStarted) * 0.5 : 0.0;
+          final currentProgress = (extractionProgress + uploadProgress).clamp(0.0, 0.95);
 
-          // Upload immediately when we have enough frames
+          if (currentProgress > maxProgressSeen) {
+            maxProgressSeen = currentProgress;
+            progress?.onWalSyncedProgress(maxProgressSeen);
+          }
+
+          // Start upload when we have enough frames
           if (allFrames.length >= framesPerChunk) {
-            final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
+            const maxConcurrentUploads = 2;
+            final inFlightCount = chunksStarted - chunksCompleted;
+            if (inFlightCount >= maxConcurrentUploads) {
+              // Wait a bit for some uploads to complete
+              await Future.delayed(const Duration(seconds: 2));
+            }
 
-            // Upload this chunk immediately
-            final success = await _flushChunk(
-              List<List<int>>.from(allFrames),
+            final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
+            final currentChunkIndex = chunkIndex++;
+            chunksStarted++;
+
+            // Start upload in background
+            final framesToUpload = List<List<int>>.from(allFrames);
+            final uploadFuture = _flushChunk(
+              framesToUpload,
               chunkTimestamp,
               wal,
               resp,
-              chunkIndex++,
-            );
+              currentChunkIndex,
+            ).then((success) async {
+              chunksCompleted++;
+              if (success) {
+                chunksSucceeded++;
+                debugPrint(
+                    "FlashPageSync: Chunk $currentChunkIndex uploaded successfully ($chunksCompleted/$chunksStarted)");
 
-            if (success) {
-              chunksUploaded++;
-              debugPrint("FlashPageSync: Chunk $chunkIndex uploaded successfully");
-            } else {
-              allUploadsSuccessful = false;
-              debugPrint("FlashPageSync: Chunk $chunkIndex upload failed");
-            }
+                // Send incremental ACK if no failures yet
+                if (!hadFailure) {
+                  // Estimate which page this chunk covers
+                  final pagesPerChunk = (totalPages / chunksStarted).ceil();
+                  final ackUpToPage = (wal.storageOffset + (chunksSucceeded * pagesPerChunk))
+                      .clamp(wal.storageOffset, wal.storageTotalBytes);
+
+                  if (ackUpToPage > lastAckedPage) {
+                    try {
+                      await limitlessConnection.acknowledgeProcessedData(ackUpToPage);
+                      lastAckedPage = ackUpToPage;
+                      debugPrint("FlashPageSync: Incremental ACK sent for pages up to $ackUpToPage");
+                    } catch (e) {
+                      debugPrint("FlashPageSync: Failed to send incremental ACK: $e");
+                    }
+                  }
+                }
+              } else {
+                hadFailure = true;
+              }
+
+              final uploadPortion = (chunksCompleted / chunksStarted) * 0.5;
+              final currentProgress = (0.5 + uploadPortion).clamp(0.0, 0.95);
+              if (currentProgress > maxProgressSeen) {
+                maxProgressSeen = currentProgress;
+                progress?.onWalSyncedProgress(maxProgressSeen);
+              }
+              return success;
+            });
+
+            pendingUploads.add(uploadFuture);
 
             // Clear frames and update timestamp for next chunk
             allFrames.clear();
             limitlessConnection.resetFlashPageTimestamp();
-            fileTimestampMs = chunkTimestamp + 120000; // 2 minutes
-
-            // Update progress based on chunks uploaded
-            final uploadProgress = (chunksUploaded / estimatedTotalChunks).clamp(0.0, 0.95);
-            progress?.onWalSyncedProgress(uploadProgress);
+            fileTimestampMs = chunkTimestamp + 40000; // 40 seconds (2000 frames)
           }
         } else {
           emptyExtractions++;
@@ -958,10 +1004,11 @@ class FlashPageWalSync implements IWalSync {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // Upload any remaining frames
+      // Upload any remaining frames (as a final synchronous upload)
       if (allFrames.isNotEmpty) {
         debugPrint("FlashPageSync: Uploading final chunk with ${allFrames.length} frames");
         final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
+        chunksStarted++;
         final success = await _flushChunk(
           allFrames,
           chunkTimestamp,
@@ -970,26 +1017,46 @@ class FlashPageWalSync implements IWalSync {
           chunkIndex++,
         );
         if (success) {
-          chunksUploaded++;
+          chunksSucceeded++;
+          chunksCompleted++;
+          // Send final incremental ACK for remaining pages
+          if (!hadFailure && lastAckedPage < wal.storageTotalBytes) {
+            try {
+              await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
+              lastAckedPage = wal.storageTotalBytes;
+              debugPrint("FlashPageSync: Final chunk ACK sent for pages up to ${wal.storageTotalBytes}");
+            } catch (e) {
+              debugPrint("FlashPageSync: Failed to send final chunk ACK: $e");
+            }
+          }
         } else {
-          allUploadsSuccessful = false;
+          hadFailure = true;
+          chunksCompleted++;
         }
       }
 
-      // Only acknowledge if ALL uploads succeeded - prevents data loss
-      if (allUploadsSuccessful && chunksUploaded > 0) {
-        await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
-        debugPrint("FlashPageSync: Acknowledged up to page ${wal.storageTotalBytes}");
-      } else if (chunksUploaded == 0) {
-        debugPrint("FlashPageSync: No chunks uploaded - nothing to acknowledge");
-      } else {
-        debugPrint("FlashPageSync: Some uploads failed - NOT acknowledging to preserve data on pendant");
+      // Wait for all pending uploads to complete
+      if (pendingUploads.isNotEmpty) {
+        debugPrint("FlashPageSync: Waiting for ${pendingUploads.length} pending uploads to complete...");
+        await Future.wait(pendingUploads);
+        debugPrint("FlashPageSync: All uploads completed");
+      }
+
+      // Send final ACK for any remaining pages if no failures
+      if (!hadFailure && lastAckedPage < wal.storageTotalBytes && chunksSucceeded > 0) {
+        try {
+          await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
+          debugPrint("FlashPageSync: Final ACK sent for pages up to ${wal.storageTotalBytes}");
+        } catch (e) {
+          debugPrint("FlashPageSync: Failed to send final ACK: $e");
+        }
       }
 
       // Switch back to real-time mode
       await limitlessConnection.enableRealTimeMode();
 
-      debugPrint("FlashPageSync: Completed sync. $chunksUploaded chunks uploaded, allSuccessful=$allUploadsSuccessful");
+      debugPrint(
+          "FlashPageSync: Completed sync. $chunksSucceeded/$chunksCompleted chunks succeeded, lastAckedPage=$lastAckedPage");
       progress?.onWalSyncedProgress(1.0);
     } catch (e) {
       debugPrint("FlashPageSync: Error during sync: $e");
