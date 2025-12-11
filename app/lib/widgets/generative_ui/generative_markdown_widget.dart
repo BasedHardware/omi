@@ -8,6 +8,9 @@ import 'widgets/rich_list_widget.dart';
 import 'widgets/bar_chart_widget.dart';
 import 'widgets/pie_chart_widget.dart';
 import 'widgets/accordion_widget.dart';
+import 'widgets/story_briefing_card.dart';
+import 'widgets/highlight_widget.dart';
+import 'widgets/study_card.dart';
 import 'widgets/in_app_browser.dart';
 
 /// Main widget that renders markdown content with embedded generative UI components
@@ -58,6 +61,12 @@ class GenerativeMarkdownWidget extends StatelessWidget {
       return _buildChartWidget(segment.data);
     } else if (segment is AccordionSegment) {
       return GenerativeAccordionWidget(data: segment.data);
+    } else if (segment is StoryBriefingSegment) {
+      return StoryBriefingCard(data: segment.data);
+    } else if (segment is HighlightSegment) {
+      return HighlightWidget(data: segment.data);
+    } else if (segment is StudySegment) {
+      return StudyCard(data: segment.data);
     }
     return const SizedBox.shrink();
   }
@@ -78,6 +87,13 @@ class GenerativeMarkdownWidget extends StatelessWidget {
     // Preprocess markdown to ensure proper spacing around headings and horizontal rules
     // This fixes issues where text directly before/after --- becomes a setext heading
     var processedContent = markdownContent;
+
+    // Convert <highlight> tags to bold markdown (** **) so they render inline
+    // This preserves the text while giving it visual emphasis
+    processedContent = processedContent.replaceAllMapped(
+      RegExp(r'<highlight(?:\s+color="[^"]*")?>([^<]*)</highlight>', caseSensitive: false),
+      (match) => '**${match.group(1)}**',
+    );
 
     // Add blank line BEFORE horizontal rules if not present (prevents setext headings)
     // This is critical: text followed directly by --- becomes an H2 heading!

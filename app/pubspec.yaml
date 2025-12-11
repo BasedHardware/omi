@@ -93,6 +93,7 @@ dependencies:
   upgrader: 11.4.0
   crypto: ^3.0.3
   flutter_markdown: ^0.7.7
+  markdown: ^7.2.2
   flutter_background_service: 5.1.0
   flutter_background_service_android: 6.3.0
   flutter_background_service_platform_interface: 5.1.2
