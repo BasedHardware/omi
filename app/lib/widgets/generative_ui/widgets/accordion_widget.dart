@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/accordion_data.dart';
-import '../markdown_style.dart';
+import '../generative_markdown_widget.dart';
 
 /// Widget for rendering expandable accordion sections from LLM-generated data
 class GenerativeAccordionWidget extends StatefulWidget {
@@ -140,18 +139,9 @@ class _AccordionItem extends StatelessWidget {
           firstChild: const SizedBox(width: double.infinity, height: 0),
           secondChild: Padding(
             padding: const EdgeInsets.fromLTRB(26, 0, 4, 12),
-            child: MarkdownBody(
-              data: item.content,
-              shrinkWrap: true,
+            child: GenerativeMarkdownWidget(
+              content: item.content,
               selectable: false,
-              styleSheet: MarkdownStyleHelper.getStyleSheet(context).copyWith(
-                p: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-                pPadding: EdgeInsets.zero,
-              ),
             ),
           ),
           crossFadeState: isExpanded
