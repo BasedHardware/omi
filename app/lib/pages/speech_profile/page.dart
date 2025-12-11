@@ -230,13 +230,19 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
             ),
             body: Stack(
               children: [
-                const Align(
+                Align(
                   alignment: Alignment.topCenter,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
                     child: Column(
                       children: [
-                        DeviceAnimationWidget(animatedBackground: true),
+                        DeviceAnimationWidget(
+                          animatedBackground: true,
+                          deviceType: provider.device?.type,
+                          deviceName: provider.device?.name,
+                          modelNumber: provider.device?.modelNumber,
+                          isConnected: provider.device != null,
+                        ),
                       ],
                     ),
                   ),
