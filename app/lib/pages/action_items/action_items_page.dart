@@ -212,7 +212,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                     ),
                                     elevation: 0,
                                     side: BorderSide(
-                                      color: Colors.deepPurpleAccent.withOpacity(0.2), // Match banner border
+                                      color: Colors.deepPurpleAccent.withValues(alpha: 0.2), // Match banner border
                                       width: 1,
                                     ),
                                   ),
