@@ -4,11 +4,11 @@ const DYNAMIC_CACHE = 'dynamic-v2';
 const OFFLINE_PAGE = '/offline.html';
 
 const STATIC_ASSETS = [
-  '/main.html',
-  '/login.html',
-  '/overview.html',
-  '/privacy.html',
-  '/offline.html',
+  '/brain/main.html',
+  '/brain/login.html',
+  '/brain/overview.html',
+  '/brain/privacy.html',
+  '/brain/offline.html',
   '/style.css',
   '/script.js',
   '/logo.jpg',
