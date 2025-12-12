@@ -2,7 +2,9 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/http/api/privacy.dart';
+import 'package:omi/backend/http/api/users.dart' as users_api;
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
@@ -28,6 +30,20 @@ class UserProvider with ChangeNotifier {
   DateTime? _startTime;
 
   Geolocation? _lastKnownLocation;
+
+  // Transcription preferences
+  bool _singleLanguageMode = false;
+  List<String> _transcriptionVocabulary = [];
+
+  // Loading states for transcription settings
+  bool _isUpdatingSingleLanguageMode = false;
+  bool _isUpdatingVocabulary = false;
+
+  // Transcription preferences getters
+  bool get singleLanguageMode => _singleLanguageMode;
+  List<String> get transcriptionVocabulary => _transcriptionVocabulary;
+  bool get isUpdatingSingleLanguageMode => _isUpdatingSingleLanguageMode;
+  bool get isUpdatingVocabulary => _isUpdatingVocabulary;
 
   String get dataProtectionLevel => _dataProtectionLevel;
   bool get isLoading => _isLoading;
@@ -80,7 +96,11 @@ class UserProvider with ChangeNotifier {
 
   Future<void> initialize() async {
     _isLoading = true;
+
+    // Preload from SharedPreferences for instant UI
+    _preloadFromCache();
     notifyListeners();
+
     try {
       final userProfile = await PrivacyApi.getUserProfile();
       _dataProtectionLevel = userProfile['data_protection_level'] ?? 'standard';
@@ -90,6 +110,9 @@ class UserProvider with ChangeNotifier {
 
       // Load training data opt-in status
       await _loadTrainingDataOptIn();
+
+      // Load transcription preferences (will sync with API and update cache)
+      await _loadTranscriptionPreferences();
 
       final migrationStatus = userProfile['migration_status'];
       if (migrationStatus != null && migrationStatus['status'] == 'in_progress') {
@@ -106,12 +129,39 @@ class UserProvider with ChangeNotifier {
     }
   }
 
+  void _preloadFromCache() {
+    final prefs = SharedPreferencesUtil();
+    _singleLanguageMode = prefs.cachedSingleLanguageMode;
+    _transcriptionVocabulary = prefs.cachedTranscriptionVocabulary;
+  }
+
+  void _syncToCache() {
+    final prefs = SharedPreferencesUtil();
+    prefs.cachedSingleLanguageMode = _singleLanguageMode;
+    prefs.cachedTranscriptionVocabulary = _transcriptionVocabulary;
+  }
+
   Future<void> _loadPrivateCloudSyncStatus() async {
     try {
       _privateCloudSyncEnabled = await getPrivateCloudSyncEnabled();
     } catch (e) {
       Logger.error('Failed to load private cloud sync status: $e');
       _privateCloudSyncEnabled = false;
+    }
+  }
+
+  Future<void> _loadTranscriptionPreferences() async {
+    try {
+      final prefs = await getTranscriptionPreferences();
+      if (prefs != null) {
+        _singleLanguageMode = prefs['single_language_mode'] ?? false;
+        _transcriptionVocabulary = List<String>.from(prefs['vocabulary'] ?? []);
+        _syncToCache();
+        notifyListeners();
+      }
+    } catch (e) {
+      Logger.error('Failed to load transcription preferences: $e');
+      // Keep cached values on error, don't reset
     }
   }
 
@@ -139,6 +189,65 @@ class UserProvider with ChangeNotifier {
       Logger.error('Failed to opt-in for training data: $e\n$stackTrace');
       rethrow;
     }
+  }
+
+  Future<bool> setSingleLanguageMode(bool value) async {
+    if (_isUpdatingSingleLanguageMode) return false;
+
+    _isUpdatingSingleLanguageMode = true;
+    notifyListeners();
+
+    try {
+      final success = await setTranscriptionPreferences(singleLanguageMode: value);
+      if (success) {
+        _singleLanguageMode = value;
+        _syncToCache();
+      }
+      return success;
+    } catch (e, stackTrace) {
+      Logger.error('Failed to set single language mode: $e\n$stackTrace');
+      return false;
+    } finally {
+      _isUpdatingSingleLanguageMode = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateTranscriptionVocabulary(List<String> vocabulary) async {
+    if (_isUpdatingVocabulary) return false;
+
+    _isUpdatingVocabulary = true;
+    notifyListeners();
+
+    try {
+      final success = await setTranscriptionPreferences(vocabulary: vocabulary);
+      if (success) {
+        _transcriptionVocabulary = vocabulary;
+        _syncToCache();
+      }
+      return success;
+    } catch (e, stackTrace) {
+      Logger.error('Failed to update transcription vocabulary: $e\n$stackTrace');
+      return false;
+    } finally {
+      _isUpdatingVocabulary = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> addVocabularyWords(List<String> words) async {
+    if (words.isEmpty) return false;
+    final trimingWords = words.map((w) => w.trim()).where((w) => !_transcriptionVocabulary.contains(w));
+    if (trimingWords.isEmpty) {
+      return false;
+    }
+    final newVocabulary = [..._transcriptionVocabulary, ...trimingWords];
+    return updateTranscriptionVocabulary(newVocabulary);
+  }
+
+  Future<bool> removeVocabularyWord(String word) async {
+    final newVocabulary = _transcriptionVocabulary.where((w) => w != word).toList();
+    return updateTranscriptionVocabulary(newVocabulary);
   }
 
   Future<void> setPrivateCloudSync(bool value) async {
