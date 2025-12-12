@@ -156,7 +156,7 @@ env:
         name: prod-omi-backend-secrets
         key: GOOGLE_APPLICATION_CREDENTIALS
   - name: HOSTED_PUSHER_API_URL
-    value: "http://internal-alb.pusher-ep-prod.il7.us-central1.lb.based-hardware.internal"
+    value: "http://pusher.omi.me"
   - name: BUCKET_PLUGINS_LOGOS
     value: "omi_plugins"
   - name: LANGCHAIN_TRACING_V2
