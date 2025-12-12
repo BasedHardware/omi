@@ -540,7 +540,7 @@
                     if (result.isConfirmed) {
                         setCookie('acceptedPrivacy', 'true');
                     } else if (result.isDenied) {
-                        document.href = 'https://google.com';
+                        window.location.href = 'https://google.com';
                     }
                 });
             }
