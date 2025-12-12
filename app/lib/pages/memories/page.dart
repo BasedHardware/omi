@@ -233,21 +233,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            floatingActionButton: Padding(
-              padding: const EdgeInsets.only(bottom: 60.0),
-              child: FloatingActionButton(
-                heroTag: 'memories_fab',
-                onPressed: () {
-                  showMemoryDialog(context, provider);
-                  MixpanelManager().memoriesPageCreateMemoryBtn();
-                },
-                backgroundColor: Colors.deepPurpleAccent,
-                child: const Icon(
-                  Icons.add,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+            // floatingActionButton: Removed
+
             body: RefreshIndicator(
               onRefresh: () async {
                 HapticFeedback.mediumImpact();
@@ -385,6 +372,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   );
                                 }),
                                 const SizedBox(width: 8),
+
                                 SizedBox(
                                   width: 44,
                                   height: 44,
@@ -488,6 +476,26 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       ),
                                     ),
                                     child: const Icon(FontAwesomeIcons.sliders, size: 16),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      showMemoryDialog(context, provider);
+                                      MixpanelManager().memoriesPageCreateMemoryBtn();
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppStyles.backgroundSecondary,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.zero,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: const Icon(Icons.add, size: 24),
                                   ),
                                 ),
                               ],
