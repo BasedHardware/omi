@@ -194,21 +194,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header with Add Button
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Action Items',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                              const Expanded(child: TaskIntegrationsBanner()),
+                              const SizedBox(width: 8),
                               SizedBox(
-                                width: 44,
-                                height: 44,
+                                width: 54,
+                                height: 54,
                                 child: ElevatedButton(
                                   onPressed: _showCreateActionItemSheet,
                                   style: ElevatedButton.styleFrom(
@@ -216,7 +208,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                     foregroundColor: Colors.white,
                                     padding: EdgeInsets.zero,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(16), // Match banner radius
+                                    ),
+                                    elevation: 0,
+                                    side: BorderSide(
+                                      color: Colors.deepPurpleAccent.withOpacity(0.2), // Match banner border
+                                      width: 1,
                                     ),
                                   ),
                                   child: const Icon(Icons.add, size: 24),
@@ -225,8 +222,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             ],
                           ),
                           const SizedBox(height: 16),
-                          // Task Integrations Banner
-                          const TaskIntegrationsBanner(),
 
                           // Segmented Control - Full width like action items
                           Container(
