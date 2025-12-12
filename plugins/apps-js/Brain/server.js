@@ -128,6 +128,21 @@ app.post("/api/auth/logout", (req, res) => {
     });
 });
 
+app.post("/api/auth/key", requireAuth, (req, res) => {
+    const { key } = req.body;
+    if (!key) {
+        return res.status(400).json({ error: 'Key is required' });
+    }
+    req.session.brainKey = key;
+    req.session.save((err) => {
+        if (err) {
+            console.error('Session save error:', err);
+            return res.status(500).json({ error: 'Failed to save key' });
+        }
+        res.json({ success: true });
+    });
+});
+
 app.get('/api/profile', requireAuth, async (req, res) => {
     try {
         const uid = req.uid;
@@ -272,7 +287,12 @@ app.delete('/api/node/:nodeId', requireAuth, async (req, res) => {
 
 app.post('/api/chat', requireAuth, validateTextInput, async (req, res) => {
     try {
-        const { message, context, key } = req.body;
+        const { message, context } = req.body;
+        const key = req.session.brainKey;
+
+        if (!key) {
+            return res.status(401).json({ error: 'Encryption key missing in session' });
+        }
 
         if (!message || typeof message !== 'string') {
             return res.status(400).json({ error: 'Message is required' });

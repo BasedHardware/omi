@@ -166,6 +166,7 @@
             color: rgba(255, 255, 255, 0.3);
             font-size: 12px;
         }
+
         .copy-btn {
             padding: 8px 16px;
             border-radius: 6px;
@@ -182,34 +183,34 @@
             min-width: 80px;
             justify-content: center;
         }
-        
+
         .copy-btn:hover {
             background: rgba(0, 255, 170, 0.25);
             transform: translateY(-1px);
             box-shadow: 0 2px 8px rgba(0, 255, 170, 0.2);
         }
-        
+
         .copy-btn:active {
             transform: translateY(0);
         }
-        
+
         .copy-btn.copied {
             background: rgba(40, 200, 40, 0.15);
             border-color: rgba(40, 200, 40, 0.3);
             color: #28c828;
         }
-        
+
         .copy-btn.copied:hover {
             background: rgba(40, 200, 40, 0.25);
         }
-        
+
         .code-container {
             display: flex;
             gap: 10px;
             align-items: center;
             margin: 10px 0;
         }
-        
+
         .code-input {
             flex: 1;
             padding: 12px;
@@ -221,7 +222,7 @@
             font-size: 13px;
             text-align: center;
         }
-        
+
         .warning-text {
             margin-top: 15px;
             padding: 15px;
@@ -425,7 +426,7 @@
                         Swal.showValidationMessage('Code is required');
                         return false;
                     }
-                    
+
                     const key = value.trim();
                     try {
                         const res = await fetch('/brain/api/code-check', { credentials: 'include' });
@@ -444,7 +445,7 @@
                     }
                 }
             });
-            
+
             if (result.isConfirmed && result.value) {
                 return result.value;
             } else {
@@ -564,19 +565,19 @@
                                         codeInput.select();
                                         document.execCommand('copy');
                                     }
-                                    
+
                                     // Visual feedback
                                     copyBtn.classList.add('copied');
                                     copyIcon.textContent = '✅';
                                     copyText.textContent = 'Copied!';
-                                    
+
                                     // Reset after 2 seconds
                                     setTimeout(() => {
                                         copyBtn.classList.remove('copied');
                                         copyIcon.textContent = '📋';
                                         copyText.textContent = 'Copy';
                                     }, 2000);
-                                    
+
                                 } catch (err) {
                                     console.error('Copy failed:', err);
                                     // Show manual copy instruction
@@ -592,13 +593,22 @@
                 document.cookie = `brainKey=${key}; max-age=315360000; path=/; SameSite=Strict`;
                 localStorage.setItem('brainKey', key);
                 localStorage.setItem('uid', uid);
+
+                // Securely store key in session
+                await fetch('/brain/api/auth/key', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ key })
+                });
+
                 window.location.href = '/brain/';
             } catch (error) {
                 await Swal.fire('Error', error.message, 'error');
             }
         }
     </script>
-    
+
 </body>
 
 </html>

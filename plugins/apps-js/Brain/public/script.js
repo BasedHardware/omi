@@ -204,16 +204,16 @@ function createNodeObject(node) {
         const minScale = 0.3;  // Minimum scale when very close
         const maxScale = 2.0;  // Maximum scale when far away
         const scaleRange = 800; // Distance range for scaling
-        
+
         // Dynamic scale factor based on distance
         let dynamicScale = Math.min(maxScale, Math.max(minScale, distance / scaleRange));
-        
+
         // Add pulse effect to the dynamic scale
         const pulseEffect = Math.sin(Date.now() * sphere.userData.pulseSpeed + sphere.userData.pulsePhase) * 0.08;
         const finalScale = (sphere.userData.baseScale * dynamicScale) + pulseEffect;
-        
+
         sphere.scale.set(finalScale, finalScale, finalScale);
-        
+
         // Also scale the label based on distance for readability
         if (sphere.children[1]) { // Label is typically the second child
             const labelScale = Math.max(0.5, Math.min(2.0, distance / 300));
@@ -865,19 +865,19 @@ window.loadMemoryGraph = loadMemoryGraph;
 function setupAutoExpandingTextarea() {
     const chatInput = document.getElementById('chat-input');
     if (!chatInput) return;
-    
+
     // Auto-expand on input
-    chatInput.addEventListener('input', function() {
+    chatInput.addEventListener('input', function () {
         // Reset height to auto to get the correct scrollHeight
         this.style.height = 'auto';
-        
+
         // Set height based on content, with min and max limits
         const newHeight = Math.min(Math.max(this.scrollHeight, 45), 120);
         this.style.height = newHeight + 'px';
     });
-    
+
     // Reset height after sending message
-    chatInput.addEventListener('keydown', function(e) {
+    chatInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             setTimeout(() => {
                 this.style.height = '45px';
@@ -902,7 +902,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     initScene();
     animate();
-    
+
     // Initialize auto-expanding textarea
     setupAutoExpandingTextarea();
 
@@ -1036,10 +1036,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     nodes: Array.from(nodes.values()),
                     relationships
                 };
-                const key = localStorage.getItem('brainKey');
                 const response = await apiCall('/brain/api/chat', {
                     method: 'POST',
-                    body: JSON.stringify({ message, context, key })
+                    body: JSON.stringify({ message, context })
                 });
                 if (response) {
                     const data = await response.json();
@@ -1224,7 +1223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const isActive = uiContainer.classList.toggle('active');
             newMenuOverlay.classList.toggle('active');
             newMobileToggle.classList.toggle('active');
-            
+
             // Update aria attributes for accessibility
             newMobileToggle.setAttribute('aria-expanded', isActive);
             newMobileToggle.setAttribute('aria-label', isActive ? 'Close menu' : 'Open menu');
