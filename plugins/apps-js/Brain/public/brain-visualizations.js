@@ -780,7 +780,7 @@ class BrainVisualizationManager {
     // ===== Data Loading =====
     async loadMemoryData() {
         try {
-            const response = await fetch('/api/memory-graph', {
+            const response = await fetch('/brain/api/memory-graph', {
                 credentials: 'include'
             });
             
