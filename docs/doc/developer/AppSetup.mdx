@@ -288,6 +288,31 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     - Verify SHA1/SHA256 keys are added to Firebase
     - Check bundle IDs match your Firebase configuration
   </Accordion>
+  <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
+    **Error Message:**
+    ```
+    error: Unable to flip between RX and RW memory protection on pages
+    ```
+
+    **Cause:**
+    This error occurs because iOS security restrictions prevent the Dart VM from changing memory protection during JIT compilation in Debug mode on physical devices.
+
+    **Solutions:**
+
+    1. **Use iOS Simulator (Recommended for Development):**
+       - In Xcode, select an iOS Simulator (e.g., "iPhone 16 Pro") instead of your physical device
+       - The simulator doesn't have this restriction, so Debug mode works normally
+       - Or run: `flutter run --flavor dev` (it will use a simulator if available)
+
+    2. **Use Release/Profile Mode for Physical Devices:**
+       - If you need to test on a physical device, build in Release or Profile mode:
+         ```bash
+         flutter run --release --flavor dev
+         ```
+       - Or in Xcode, select "Release" or "Profile" scheme instead of "Debug"
+
+    **Note:** This is a known Flutter/iOS limitation. Debug mode with JIT compilation requires memory protection changes that iOS blocks on physical devices for security reasons.
+  </Accordion>
 </AccordionGroup>
 
 ---
