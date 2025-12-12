@@ -233,8 +233,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
-            // floatingActionButton: Removed
-
             body: RefreshIndicator(
               onRefresh: () async {
                 HapticFeedback.mediumImpact();
