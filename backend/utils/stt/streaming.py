@@ -185,7 +185,8 @@ def get_stt_service_for_language(language: str):
     for m in stt_service_models:
         # Soniox
         if m == 'soniox-stt-rt':
-            if language in soniox_multi_languages:
+            check_lang = 'pt' if language == 'pt-BR' else language
+            if check_lang in soniox_multi_languages:
                 return STTService.soniox, 'multi', 'stt-rt-preview'
         # DeepGram Nova-3
         elif m == 'dg-nova-3':
@@ -425,7 +426,7 @@ async def process_audio_soniox(
         'sample_rate': sample_rate,
         'num_channels': 1,
         'enable_speaker_tags': True,
-        'language_hints': language_hints,
+        'language_hints': [l if l != 'pt-BR' else 'pt' for l in language_hints],
     }
 
     # Add speaker identification if available
@@ -576,6 +577,10 @@ async def process_audio_soniox(
 async def process_audio_speechmatics(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
+
+        # Speechmatics doesn't support pt-BR
+    if language == 'pt-BR':
+        language = 'pt'
 
     request = {
         "message": "StartRecognition",
