@@ -359,10 +359,6 @@ def connect_to_deepgram_with_backoff(
 
 
 def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
-    # `keyterm` is only supported for English.
-    if options.language != 'en':
-        return options
-
     if options.model in ['nova-3']:
         options.keyterm = keywords
         return options
@@ -419,8 +415,10 @@ def connect_to_deepgram(
             sample_rate=sample_rate,
             encoding='linear16',
         )
-        if len(keywords) > 0:
-            options = _dg_keywords_set(options, keywords)
+
+        # WARN: Current omi dg self-hosted does not support keywords
+        # if len(keywords) > 0:
+        #     options = _dg_keywords_set(options, keywords)
 
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
