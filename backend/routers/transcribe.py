@@ -208,23 +208,16 @@ async def _listen(
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
 
-    # Convert 'auto' to 'multi' for consistency (unless single language mode)
-    if single_language_mode:
-        # Single language mode: keep exact language for higher accuracy
-        if language == 'auto':
-            # Get user's primary language or default to 'en'
-            user_primary_lang = user_db.get_user_language_preference(uid)
-            language = user_primary_lang if user_primary_lang else 'en'
-        # Keep language as-is (e.g., 'en', 'es', etc.)
-    else:
-        language = 'multi' if language == 'auto' else language
+    # Always include "Omi" as predefined vocabulary
+    vocabulary = list({"Omi"} | set(vocabulary))
+
+    # Convert 'auto' to 'multi' for consistency
+    language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, stt_language, stt_model = get_stt_service_for_language(language)
-
-    # Override stt_language if single language mode is enabled
-    if single_language_mode and stt_language == 'multi':
-        stt_language = language
+    stt_service, stt_language, stt_model = get_stt_service_for_language(
+        language, multi_lang_enabled=not single_language_mode
+    )
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
@@ -232,7 +225,6 @@ async def _listen(
     # Translation language (disabled in single language mode)
     translation_language = None
     if single_language_mode:
-        # Single language mode disables translation for higher accuracy
         translation_language = None
     elif stt_language == 'multi':
         if language == "multi":

@@ -30,7 +30,7 @@ class STTService(str, Enum):
 
 
 # Languages supported by Soniox
-soniox_supported_languages = [
+soniox_languages = [
     'multi',
     'en',
     'af',
@@ -93,10 +93,10 @@ soniox_supported_languages = [
     'vi',
     'cy',
 ]
-soniox_multi_languages = soniox_supported_languages
+soniox_multi_languages = soniox_languages
 
 # Languages supported by Deepgram, nova-2/nova-3 model
-deepgram_supported_languages = {
+deepgram_languages = {
     'multi',
     'bg',
     'ca',
@@ -175,27 +175,54 @@ deepgram_nova3_multi_languages = [
     "nl",
     "nl-BE",
 ]
+deepgram_nova3_languages = [
+    "multi",
+    "en",
+    "en-US",
+    "en-AU",
+    "en-GB",
+    "en-NZ",
+    "en-IN",
+    "es",
+    "es-419",
+    "fr",
+    "fr-CA",
+    "de",
+    "hi",
+    "ru",
+    "pt",
+    "pt-BR",
+    "pt-PT",
+    "ja",
+    "it",
+    "nl",
+    "nl-BE",
+]
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
-def get_stt_service_for_language(language: str):
+def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
     # Picking STT service and STT language by following the order
     for m in stt_service_models:
         # Soniox
         if m == 'soniox-stt-rt':
-            if language in soniox_multi_languages:
+            if multi_lang_enabled and language in soniox_multi_languages:
                 return STTService.soniox, 'multi', 'stt-rt-preview'
+            if language in soniox_languages:
+                return STTService.soniox, language, 'stt-rt-preview'
         # DeepGram Nova-3
         elif m == 'dg-nova-3':
-            if language in deepgram_nova3_multi_languages:
+            if multi_lang_enabled and language in deepgram_nova3_multi_languages:
                 return STTService.deepgram, 'multi', 'nova-3'
+            if language in deepgram_nova3_languages:
+                return STTService.deepgram, language, 'nova-3'
         # DeepGram Nova-2
         elif m == 'dg-nova-2':
-            if language in deepgram_nova2_multi_languages:
+            if multi_lang_enabled and language in deepgram_nova2_multi_languages:
                 return STTService.deepgram, 'multi', 'nova-2-general'
-            if language in deepgram_supported_languages:
+            if language in deepgram_languages:
                 return STTService.deepgram, language, 'nova-2-general'
 
     # Fallback to DeepGram Nova-2 en
