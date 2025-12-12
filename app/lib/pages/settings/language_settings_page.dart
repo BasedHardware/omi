@@ -202,7 +202,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Auto Language Detection & Translation',
+                  'Language Detection & Translation',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
