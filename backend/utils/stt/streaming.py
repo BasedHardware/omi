@@ -175,29 +175,9 @@ deepgram_nova3_multi_languages = [
     "nl",
     "nl-BE",
 ]
-deepgram_nova3_languages = [
-    "multi",
-    "en",
-    "en-US",
-    "en-AU",
-    "en-GB",
-    "en-NZ",
-    "en-IN",
-    "es",
-    "es-419",
-    "fr",
-    "fr-CA",
-    "de",
-    "hi",
-    "ru",
-    "pt",
-    "pt-BR",
-    "pt-PT",
-    "ja",
-    "it",
-    "nl",
-    "nl-BE",
-]
+
+# WARN: Current omi dg self-hosted does not support single languages
+deepgram_nova3_languages: List[str] = []
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
