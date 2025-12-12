@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <title>Brain - Your secondary Brain</title>
+    <link rel="icon" type="image/png" href="logo.jpg">
+    <meta name="description" content="Brain - Your second personal brain">
+    <meta property="og:title" content="Brain">
+    <meta property="og:description" content="Visualize and manage your secondary brain">
+    <meta property="og:image" content="logo.jpg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+    <script src="https://unpkg.com/three-spritetext"></script>
+</head>
+
+<body>
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+    </div>
+
+    <!-- Menu overlay for mobile -->
+    <div id="menu-overlay" class="menu-overlay"></div>
+
+    <!-- Mobile UI Toggle -->
+    <button id="mobile-toggle">☰</button>
+
+    <div id="ui-container">
+        <div id="input-panel">
+            <div class="header">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" data-tab="chat">
+                        <span class="icon">💭</span>
+                        Chat
+                    </button>
+                    <button class="tab-btn" data-tab="upload">
+                        <span class="icon">📝</span>
+                        Upload
+                    </button>
+                    <button class="tab-btn" data-tab="search">
+                        <span class="icon">🔍</span>
+                        Search
+                    </button>
+                    <button class="tab-btn" data-tab="profile">
+                        <span class="icon">👤</span>
+                        Profile
+                    </button>
+                </div>
+            </div>
+
+            <div id="chat-tab" class="tab-content active">
+                <div id="chat-messages"></div>
+                <div id="chat-input-area">
+                    <textarea id="chat-input" placeholder="Ask about the memories..."></textarea>
+                    <button id="chat-send">
+                        <span class="icon">📤</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="upload-tab" class="tab-content">
+                <div class="upload-container">
+                    <div class="upload-header">
+                        <h3>Add New Memories</h3>
+                        <p>Upload text to process into your memory graph</p>
+                    </div>
+                    <div class="upload-area">
+                        <div class="upload-tab-content active" id="text-tab">
+                            <textarea id="text-upload"
+                                placeholder="Paste your text here to add new memories..."></textarea>
+                            <button id="process-text" class="action-button primary">
+                                <span class="icon">🔄</span> Process Text
+                            </button>
+                        </div>
+                    </div>
+                    <div id="upload-status"></div>
+                </div>
+            </div>
+
+            <div id="search-tab" class="tab-content">
+                <div id="search-box">
+                    <input type="text" id="search-input" placeholder="Search memories...">
+                    <button id="search-btn">
+                        <span class="icon">🔍</span>
+                    </button>
+                </div>
+                <div id="search-results"></div>
+            </div>
+
+            <div id="profile-tab" class="tab-content">
+                <div class="profile-section">
+                    <h2>Your Profile</h2>
+                    <div class="profile-info">
+                        <div class="info-item">
+                            <label>UID</label>
+                            <div id="profile-uid"></div>
+                        </div>
+                    </div>
+                    <div class="profile-actions">
+                        <button id="delete-data" onclick="showDeleteConfirmation()" class="action-button danger">
+                            <span class="icon">🗑️</span>
+                            Delete All My Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="network-container" class="glowing-container">
+        <!-- The brain visualization will render in this container -->
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Delete All Data</h2>
+                <button class="modal-close" onclick="hideDeleteConfirmation()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete all your data? This action cannot be undone.</p>
+                <p>This will delete:</p>
+                <ul>
+                    <li>All your memory nodes and connections</li>
+                    <li>Your chat history</li>
+                    <li>Your preferences and settings</li>
+                </ul>
+                <p>Your account will remain active, but empty.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="action-button" onclick="hideDeleteConfirmation()">Cancel</button>
+                <button class="action-button danger" onclick="deleteAllData()">Yes, Delete Everything</button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Webview detection
+        function isWebView() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            return userAgent.includes('wv') || // Android WebView
+                userAgent.includes('mobile') && /android|iphone|ipod|ipad/i.test(userAgent);
+        }
+
+        // Flag for webview environment
+        window.isRunningInWebView = isWebView();
+
+        if (window.isRunningInWebView) {
+            console.log("Running in WebView environment - applying special handling");
+
+            // Pre-initialize variables to prevent reference errors
+            window.scene = null;
+            window.camera = null;
+            window.renderer = null;
+            window.controls = null;
+
+            // Force layout recalculation on load for WebView
+            window.addEventListener('load', function () {
+                setTimeout(function () {
+                    window.dispatchEvent(new Event('resize'));
+                }, 500);
+            });
+        }
+    </script>
+    <style>
+        /* Search result styles */
+        .search-result {
+            background: rgba(15, 15, 25, 0.95);
+            border: 1px solid rgba(74, 158, 255, 0.2);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .search-result:hover {
+            border-color: rgba(74, 158, 255, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .result-type {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #4a9eff;
+            background: rgba(74, 158, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-right: 8px;
+        }
+
+        .result-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #fff;
+        }
+
+        .result-connections {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .connections-count {
+            margin-bottom: 4px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .connection {
+            padding: 2px 0;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .more-connections {
+            color: rgba(74, 158, 255, 0.8);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .no-connections {
+            color: rgba(255, 255, 255, 0.4);
+            font-style: italic;
+        }
+
+        /* Additional styles for the delete button and modal */
+        .action-button.danger {
+            background: rgba(255, 59, 48, 0.15);
+            border-color: rgba(255, 59, 48, 0.3);
+            color: #ff3b30;
+        }
+
+        /* Responsive tab buttons */
+        .tab-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tab-btn {
+            flex: 0 1 auto;
+            white-space: nowrap;
+            min-width: auto;
+            padding: 8px 12px;
+        }
+
+        @media (max-width: 480px) {
+            .tab-buttons {
+                gap: 4px;
+            }
+
+            .tab-btn {
+                padding: 6px 8px;
+                font-size: 13px;
+            }
+
+            .tab-btn .icon {
+                font-size: 14px;
+            }
+        }
+
+        .action-button.danger:hover {
+            background: rgba(255, 59, 48, 0.25);
+            border-color: rgba(255, 59, 48, 0.5);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content {
+            background: rgba(15, 15, 25, 0.95);
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 480px;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(0, 255, 170, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #ff3b30;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            padding: 8px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .modal-body {
+            padding: 24px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .modal-body p {
+            margin: 0 0 16px;
+        }
+
+        .modal-body ul {
+            margin: 0 0 16px;
+            padding-left: 24px;
+        }
+
+        .modal-body li {
+            margin-bottom: 8px;
+            color: rgba(255, 59, 48, 0.9);
+        }
+
+        .modal-footer {
+            padding: 20px 24px;
+            border-top: 1px solid rgba(0, 255, 170, 0.1);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        body.modal-open {
+            overflow: hidden;
+        }
+
+        /* Loading overlay styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.9);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0, 255, 170, 0.1);
+            border-top-color: #00ffaa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            color: #00ffaa;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+
+        /* Text upload section styles */
+        #upload-section {
+            background: rgba(15, 15, 25, 0.95);
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            border-radius: 12px;
+            margin: 16px;
+            overflow: hidden;
+        }
+
+        .upload-header {
+            padding: 16px;
+            border-bottom: 1px solid rgba(0, 255, 170, 0.1);
+        }
+
+        .upload-header h3 {
+            color: #00ffaa;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .upload-header p {
+            color: rgba(255, 255, 255, 0.7);
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .upload-area {
+            padding: 16px;
+        }
+
+        #text-upload {
+            width: 100%;
+            min-height: 100px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            border-radius: 8px;
+            color: #fff;
+            padding: 12px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            resize: vertical;
+            margin-bottom: 16px;
+            transition: all 0.2s ease;
+        }
+
+        #text-upload:focus {
+            outline: none;
+            border-color: rgba(0, 255, 170, 0.4);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        #process-text {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #process-text .icon {
+            font-size: 16px;
+        }
+
+        #process-text:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 768px) {
+            #upload-section {
+                margin: 12px;
+            }
+
+            .upload-header {
+                padding: 12px;
+            }
+
+            .upload-area {
+                padding: 12px;
+            }
+
+            #text-upload {
+                min-height: 80px;
+            }
+        }
+    </style>
+    <script>
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+        function setCookie(name, value) {
+            document.cookie = `${name}=${value}; path=/`;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const acceptedPrivacy = getCookie('acceptedPrivacy');
+            if (!acceptedPrivacy) {
+                Swal.fire({
+                    title: "Privacy Policy",
+                    text: "By using this service, you agree to our Privacy Policy. Please review the policy before continuing.",
+                    icon: "question",
+                    footer: '<a href="/privacy">View Privacy Policy</a>',
+                    showDenyButton: false,
+                    showCancelButton: false,
+                    confirmButtonText: "Save",
+                    denyButtonText: `Don't save`
+                }).then((result) => {
+                    /* Read more about isConfirmed, isDenied below */
+                    if (result.isConfirmed) {
+                        setCookie('acceptedPrivacy', 'true');
+                    } else if (result.isDenied) {
+                        document.href = 'https://google.com';
+                    }
+                });
+            }
+        });
+
+
+    </script>
+    <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="brain-visualizations.js"></script>
+    <script>
+        // Initialize advanced visualizations when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if we're on a page with network container
+            if (document.getElementById('network-container')) {
+                console.log('Brain Advanced Visualizations loaded');
+                
+                // Add view switch buttons if not in tab view
+                if (!document.querySelector('.tab-content')) {
+                    window.brainViz?.addViewControls();
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>

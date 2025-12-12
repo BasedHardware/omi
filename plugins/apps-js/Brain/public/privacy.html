@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brain - Privacy Policy</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        html,
+        body {
+            margin: 0 !important;
+            padding: 0 !important;
+            min-height: 100% !important;
+            height: auto !important;
+            overflow-y: auto !important;
+            overflow: auto !important;
+            background: linear-gradient(to bottom right, #0a0a0f, #1a1a2f) !important;
+            color: rgba(255, 255, 255, 0.9) !important;
+            font-family: 'Inter', sans-serif !important;
+        }
+
+        .back-link {
+            padding: 20px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 100;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 20px;
+            background: rgba(0, 255, 170, 0.15);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            border-radius: 10px;
+            color: #00ffaa;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .back-btn:hover {
+            background: rgba(0, 255, 170, 0.25);
+            border-color: rgba(0, 255, 170, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .privacy-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 80px auto 40px;
+            padding: 0 20px;
+            box-sizing: border-box;
+            min-height: calc(100vh - 120px);
+            display: block !important;
+            position: relative !important;
+            z-index: 10 !important;
+        }
+
+        .privacy-content {
+            background: rgba(15, 15, 25, 0.95);
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .privacy-content h1 {
+            color: #00ffaa;
+            margin: 0 0 24px;
+            font-size: 28px;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .privacy-content h2 {
+            color: #00ffaa;
+            margin: 32px 0 16px;
+            font-size: 20px;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+
+        .privacy-content h2:first-of-type {
+            margin-top: 24px;
+        }
+
+        .privacy-content p {
+            margin: 0 0 16px;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .privacy-content ul {
+            margin: 0 0 16px;
+            padding-left: 24px;
+        }
+
+        .privacy-content li {
+            margin-bottom: 12px;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+
+        .privacy-content strong {
+            color: #fff;
+        }
+
+        .last-updated {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 170, 0.2);
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 255, 170, 0.4);
+        }
+
+
+
+        @media (max-width: 768px) {
+            .privacy-container {
+                margin: 60px auto 20px;
+            }
+
+            .privacy-content {
+                padding: 30px 20px;
+            }
+
+            .privacy-content h1 {
+                font-size: 24px;
+            }
+
+            .privacy-content h2 {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="back-link">
+        <a href="/login.html" class="back-btn">
+            <span class="icon">←</span>
+            Back to Login
+        </a>
+    </div>
+    <div class="privacy-container">
+        <div class="privacy-content">
+            <h1>Brain Privacy Policy</h1>
+            <p class="last-updated">Last updated: 26/12/2024</p>
+
+            <h2>Introduction</h2>
+            <p>Welcome to Brain. We are committed to protecting your privacy and handling your data with transparency
+                and care.</p>
+
+            <h2>Information We Collect</h2>
+            <ul>
+                <li><strong>User Identifier (UID):</strong> A unique identifier used to associate your data within the
+                    system.</li>
+                <li><strong>Memory Data:</strong> Information you input into the system that forms your memory graph.
+                <li><strong>Statistics:</strong> Anonomous usage data to help us improve the service.</li>
+                </li>
+            </ul>
+
+            <h2>How We Use Your Information</h2>
+            <ul>
+                <li>To provide and maintain the Brain service</li>
+                <li>To create and manage your personal memory graph</li>
+                <li>To improve and optimize our service</li>
+            </ul>
+
+            <h2>Data Storage and Security</h2>
+            <p>Your data is stored and processed in the following ways:</p>
+            <ul>
+                <li><strong>Memory Graph Data:</strong> Stored in a PostgreSQL database with relationships and metadata
+                </li>
+                <li><strong>Chat History:</strong> Not permanently stored - only used during active sessions</li>
+                <li><strong>Local Storage:</strong> Some preferences and session data stored in your browser</li>
+            </ul>
+            <p>While we implement security measures like rate limiting and encryption, no method of electronic storage
+                is 100% secure.</p>
+
+
+            <h2>Data Retention and Deletion</h2>
+            <p>We retain your data for as long as your account is active. You can delete your data at any time through
+                the profile menu, which will permanently remove:</p>
+            <ul>
+                <li>All memory nodes and relationships</li>
+                <li>Your user profile and preferences</li>
+                <li>Discord linking information</li>
+                <li>Any locally stored data</li>
+            </ul>
+
+            <h2>Disclaimer of Responsibility</h2>
+            <p>Please note:</p>
+            <ul>
+                <li>We are not responsible for any decisions made based on information stored in or generated by the
+                    system</li>
+                <li>The accuracy and reliability of memory connections and AI-generated responses cannot be guaranteed
+                </li>
+                <li>We are not liable for any data breaches or unauthorized access despite our security measures</li>
+                <li>The service is provided "as is" without any warranties of any kind</li>
+                <li>Users are responsible for the accuracy and legality of the information they input</li>
+            </ul>
+
+            <h2>Changes to This Policy</h2>
+            <p>We may update this privacy policy from time to time without notice.</p>
+
+            <p class="last-updated" style="margin-top: 32px;">Last updated: 06/03/2025</p>
+        </div>
+    </div>
+</body>
+
+</html>

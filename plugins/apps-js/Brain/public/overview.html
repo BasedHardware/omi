@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Brain - Memory Overview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        #network-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(15, 15, 25, 0.9);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            color: #00ffaa;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .back-button:hover {
+            background: rgba(0, 255, 170, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .stats-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 15, 25, 0.9);
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            color: #fff;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            min-width: 200px;
+        }
+        
+        .stats-panel h3 {
+            margin: 0 0 10px 0;
+            color: #00ffaa;
+            font-size: 16px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .stat-value {
+            color: #00ffaa;
+            font-weight: 500;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 15, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .loading-content {
+            text-align: center;
+            color: #00ffaa;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 255, 170, 0.2);
+            border-top: 3px solid #00ffaa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p>Loading your memory network...</p>
+        </div>
+    </div>
+
+    <!-- Back Button -->
+    <a href="/" class="back-button">
+        <span>←</span>
+        <span>Back to Chat</span>
+    </a>
+
+    <!-- Stats Panel -->
+    <div id="stats-panel" class="stats-panel" style="display: none;">
+        <h3>Memory Stats</h3>
+        <div class="stat-item">
+            <span>Total Nodes:</span>
+            <span class="stat-value" id="total-nodes">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Connections:</span>
+            <span class="stat-value" id="total-connections">0</span>
+        </div>
+        <div class="stat-item">
+            <span>People:</span>
+            <span class="stat-value" id="people-count">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Places:</span>
+            <span class="stat-value" id="places-count">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Events:</span>
+            <span class="stat-value" id="events-count">0</span>
+        </div>
+        <div class="stat-item">
+            <span>Concepts:</span>
+            <span class="stat-value" id="concepts-count">0</span>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div id="network-container"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="script.js"></script>
+    <script src="brain-visualizations.js"></script>
+    <script>
+        // Initialize visualization on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('Overview page loaded');
+            
+            // Check for sample mode
+            const urlParams = new URLSearchParams(window.location.search);
+            const isSample = urlParams.get('sample') === 'true';
+            
+            // Initialize scene
+            if (typeof initScene === 'function') {
+                initScene();
+                
+                // Load memory graph
+                if (typeof loadMemoryGraph === 'function') {
+                    await loadMemoryGraph();
+                }
+                
+                // Hide loading overlay
+                setTimeout(() => {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    document.getElementById('stats-panel').style.display = 'block';
+                }, 1000);
+            }
+            
+            // Initialize advanced visualization features
+            if (window.brainViz) {
+                window.brainViz.addViewControls();
+                
+                // Update stats panel
+                const updateStats = (data) => {
+                    if (!data) return;
+                    
+                    const nodes = data.nodes || [];
+                    const connections = data.relationships || [];
+                    
+                    document.getElementById('total-nodes').textContent = nodes.length;
+                    document.getElementById('total-connections').textContent = connections.length;
+                    
+                    // Count by type
+                    const typeCounts = {
+                        person: 0,
+                        location: 0,
+                        event: 0,
+                        concept: 0
+                    };
+                    
+                    nodes.forEach(node => {
+                        if (typeCounts[node.type] !== undefined) {
+                            typeCounts[node.type]++;
+                        }
+                    });
+                    
+                    document.getElementById('people-count').textContent = typeCounts.person;
+                    document.getElementById('places-count').textContent = typeCounts.location;
+                    document.getElementById('events-count').textContent = typeCounts.event;
+                    document.getElementById('concepts-count').textContent = typeCounts.concept;
+                };
+                
+                // Fetch and update stats
+                fetch('/api/memory-graph' + (isSample ? '?sample=true' : ''), {
+                    credentials: 'include'
+                })
+                .then(res => res.json())
+                .then(data => updateStats(data))
+                .catch(err => console.error('Error loading stats:', err));
+            }
+            
+            // Keyboard shortcuts info
+            console.log(`
+                Keyboard Shortcuts:
+                Ctrl/Cmd + 1: Graph View
+                Ctrl/Cmd + 2: Heat Map View
+                Ctrl/Cmd + 3: Timeline View
+                Ctrl/Cmd + 4: Cluster View
+            `);
+        });
+    </script>
+</body>
+</html>
