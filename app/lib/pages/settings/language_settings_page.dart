@@ -15,9 +15,6 @@ class LanguageSettingsPage extends StatefulWidget {
 }
 
 class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
-  // Feature flag - set to true when vocabulary feature is ready
-  static const bool _enableVocabulary = false;
-
   final TextEditingController _vocabularyController = TextEditingController();
   bool _isUpdatingLanguage = false;
 
@@ -48,7 +45,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     );
   }
 
-  Widget _buildLanguageSelector(HomeProvider homeProvider) {
+  Widget _buildLanguageSelector(HomeProvider homeProvider, CaptureProvider captureProvider) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
             .firstWhere(
@@ -59,7 +56,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         : 'Not set';
 
     return GestureDetector(
-      onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider),
+      onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
@@ -95,7 +92,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     );
   }
 
-  void _showLanguageSelectionSheet(HomeProvider homeProvider) {
+  void _showLanguageSelectionSheet(HomeProvider homeProvider, CaptureProvider captureProvider) {
     final languages = homeProvider.availableLanguages;
     String currentLanguage = homeProvider.userPrimaryLanguage;
 
@@ -162,7 +159,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                                       _isUpdatingLanguage = true;
                                     });
                                     try {
-                                      await homeProvider.updateUserPrimaryLanguage(entry.value);
+                                      final success = await homeProvider.updateUserPrimaryLanguage(entry.value);
+                                      if (success) {
+                                        captureProvider.onRecordProfileSettingChanged();
+                                      }
                                     } finally {
                                       if (mounted) {
                                         setState(() {
@@ -187,7 +187,6 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
 
   Widget _buildMultiLanguageToggle(UserProvider userProvider) {
     final isUpdating = userProvider.isUpdatingSingleLanguageMode;
-    // Multi-language is ON when single_language_mode is OFF (inverted)
     final isMultiLanguageEnabled = !userProvider.singleLanguageMode;
 
     return Container(
@@ -203,7 +202,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Multi Language',
+                  'Auto Language Detection & Translation',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -212,7 +211,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  'Detect multiple languages & enable translation',
+                  'Detect 10+ languages and translate to your primary language',
                   style: TextStyle(
                     color: Color(0xFF6B6B6B),
                     fontSize: 13,
@@ -233,10 +232,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
           else
             GestureDetector(
               onTap: () async {
-                // Invert: Multi ON = single_language_mode OFF
                 final success = await userProvider.setSingleLanguageMode(isMultiLanguageEnabled);
                 if (success && context.mounted) {
-                  // Fire and forget - don't block UI
                   context.read<CaptureProvider>().onTranscriptionSettingsChanged();
                 }
               },
@@ -292,7 +289,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                       ),
                     ),
                     Text(
-                      '${userProvider.transcriptionVocabulary.length}/100',
+                      '${userProvider.transcriptionVocabulary.length}',
                       style: const TextStyle(
                         color: Color(0xFF6B6B6B),
                         fontSize: 13,
@@ -302,7 +299,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Add words to improve transcription accuracy',
+                  'Add names, jargon, or uncommon words for better recognition',
                   style: TextStyle(
                     color: Color(0xFF6B6B6B),
                     fontSize: 13,
@@ -317,7 +314,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                         enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
                         style: const TextStyle(color: Colors.white, fontSize: 15),
                         decoration: InputDecoration(
-                          hintText: 'e.g. omi, callie, nicky',
+                          hintText: 'Omi, Callie, OpenAI',
                           hintStyle: const TextStyle(color: Color(0xFF6B6B6B)),
                           filled: true,
                           fillColor: userProvider.isUpdatingVocabulary && !_isDeletingBatch
@@ -426,15 +423,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
 
     _vocabularyController.clear();
 
-    // Add words one by one (provider handles duplicates and limit)
-    bool anySuccess = false;
-    for (final word in words) {
-      final success = await userProvider.addVocabularyWord(word);
-      if (success) anySuccess = true;
-    }
-
-    if (anySuccess && context.mounted) {
-      // Fire and forget - don't block UI
+    final success = await userProvider.addVocabularyWords(words);
+    if (success && context.mounted) {
       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
     }
   }
@@ -498,8 +488,8 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: Consumer2<HomeProvider, UserProvider>(
-        builder: (context, homeProvider, userProvider, _) {
+      body: Consumer3<HomeProvider, UserProvider, CaptureProvider>(
+        builder: (context, homeProvider, userProvider, captureProvider, _) {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
@@ -507,15 +497,13 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
               children: [
                 const SizedBox(height: 24),
                 _buildSectionHeader('Primary Language'),
-                _buildLanguageSelector(homeProvider),
+                _buildLanguageSelector(homeProvider, captureProvider),
                 const SizedBox(height: 24),
                 _buildSectionHeader('Transcription'),
                 _buildMultiLanguageToggle(userProvider),
-                if (_enableVocabulary) ...[
-                  const SizedBox(height: 24),
-                  _buildSectionHeader('Vocabulary'),
-                  _buildVocabularySection(userProvider),
-                ],
+                const SizedBox(height: 24),
+                _buildSectionHeader('Vocabulary'),
+                _buildVocabularySection(userProvider),
                 const SizedBox(height: 32),
               ],
             ),

@@ -2,8 +2,8 @@ import asyncio
 import os
 import random
 import time
-from typing import List, Callable
 from enum import Enum
+from typing import Callable, List, Optional
 
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -202,7 +202,7 @@ def get_stt_service_for_language(language: str):
     return STTService.deepgram, 'en', 'nova-2-general'
 
 
-async def send_initial_file_path(file_path: str, transcript_socket_async_send, is_active: Callable = None):
+async def send_initial_file_path(file_path: str, transcript_socket_async_send, is_active: Optional[Callable] = None):
     print('send_initial_file_path')
     start = time.time()
     # Reading and sending in chunks
@@ -264,7 +264,7 @@ async def process_audio_dg(
     channels: int,
     preseconds: int = 0,
     model: str = 'nova-2-general',
-    keywords: List[str] = None,
+    keywords: List[str] = [],
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -333,7 +333,7 @@ def connect_to_deepgram_with_backoff(
     sample_rate: int,
     channels: int,
     model: str,
-    keywords: List[str] = None,
+    keywords: List[str] = [],
     retries=3,
 ):
     print("connect_to_deepgram_with_backoff")
@@ -351,8 +351,17 @@ def connect_to_deepgram_with_backoff(
     raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
+def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
+    if options.model in ['nova-3']:
+        options.keyterm = keywords
+        return options
+
+    options.keywords = keywords
+    return options
+
+
 def connect_to_deepgram(
-    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, keywords: List[str] = None
+    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, keywords: List[str] = []
 ):
     try:
         dg_connection = deepgram.listen.websocket.v("1")
@@ -383,7 +392,7 @@ def connect_to_deepgram(
         dg_connection.on(LiveTranscriptionEvents.UtteranceEnd, on_utterance_end)
         dg_connection.on(LiveTranscriptionEvents.Close, on_close)
         dg_connection.on(LiveTranscriptionEvents.Unhandled, on_unhandled)
-        live_options_kwargs = dict(
+        options = LiveOptions(
             punctuate=True,
             no_delay=True,
             endpointing=300,
@@ -399,19 +408,9 @@ def connect_to_deepgram(
             sample_rate=sample_rate,
             encoding='linear16',
         )
+        if len(keywords) > 0:
+            options = _dg_keywords_set(options, keywords)
 
-        # # WARN: Deepgram-sdk v5 is required
-        # # Add vocabulary boost if provided
-        # # Nova-3 uses 'keyterm', Nova-2 uses 'keywords'
-        # if keywords and len(keywords) > 0:
-        #     if model.startswith('nova-3'):
-        #         # Nova-3 uses keyterm parameter (up to 100 terms)
-        #         live_options_kwargs['keyterm'] = keywords
-        #     else:
-        #         # Nova-2 and other models use keywords parameter
-        #         live_options_kwargs['keywords'] = keywords
-
-        options = LiveOptions(**live_options_kwargs)
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
         return dg_connection

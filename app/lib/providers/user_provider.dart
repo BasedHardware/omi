@@ -235,12 +235,13 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> addVocabularyWord(String word) async {
-    if (word.trim().isEmpty) return false;
-    if (_transcriptionVocabulary.contains(word.trim())) return true;
-    if (_transcriptionVocabulary.length >= 100) return false;
-
-    final newVocabulary = [..._transcriptionVocabulary, word.trim()];
+  Future<bool> addVocabularyWords(List<String> words) async {
+    if (words.isEmpty) return false;
+    final trimingWords = words.map((w) => w.trim()).where((w) => !_transcriptionVocabulary.contains(w));
+    if (trimingWords.isEmpty) {
+      return false;
+    }
+    final newVocabulary = [..._transcriptionVocabulary, ...trimingWords];
     return updateTranscriptionVocabulary(newVocabulary);
   }
 
