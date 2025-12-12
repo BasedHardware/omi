@@ -139,7 +139,7 @@ Examples of DUPLICATES (DO NOT extract):
 - "Friend named John who is a designer" (existing) vs "Has a designer friend John" → DUPLICATE
 
 FORMAT REQUIREMENTS:
-• Maximum 15 words per memory (strict limit)
+• For plain text: Maximum 15 words per memory (strict limit)
 • Use clear, specific, direct language
 • NO vague references - read the full conversation to resolve what "it", "that", "this" refers to
 • Use actual names when you can identify them with confidence from conversation

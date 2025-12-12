@@ -19,6 +19,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 import 'package:omi/ui/molecules/omi_panel_header.dart';
+import 'package:omi/widgets/rich_content.dart';
 
 class DesktopConversationSummary extends StatelessWidget {
   final ServerConversation conversation;
@@ -257,7 +258,7 @@ class DesktopConversationSummary extends StatelessWidget {
             ),
           ] else ...[
             SelectionArea(
-              child: getMarkdownWidget(context, content),
+              child: RichContent(content: content),
             ),
             if (app != null) ...[
               const SizedBox(height: 12),
@@ -335,7 +336,7 @@ class DesktopConversationSummary extends StatelessWidget {
         ),
       ),
       child: SelectionArea(
-        child: getMarkdownWidget(context, content),
+        child: RichContent(content: content),
       ),
     );
   }
@@ -373,7 +374,7 @@ class DesktopConversationSummary extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SelectionArea(
-            child: getMarkdownWidget(context, result.content.decodeString),
+            child: RichContent(content: result.content.decodeString),
           ),
         ],
       ),
