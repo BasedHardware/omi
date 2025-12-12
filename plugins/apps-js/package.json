@@ -15,6 +15,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "axios": "^1.9.0",
+    "body-parser": "^2.2.1",
     "compression": "^1.8.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -22,6 +23,7 @@
     "dotenv": "^16.5.0",
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.0",
+    "express-session": "^1.18.2",
     "express-validator": "^7.2.1",
     "google-auth-library": "^9.15.1",
     "googleapis": "^133.0.0",
@@ -34,6 +36,7 @@
     "node-fetch-commonjs": "^3.3.2",
     "openai": "^4.28.0",
     "redis": "^4.7.1",
+    "sanitize-html": "^2.17.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

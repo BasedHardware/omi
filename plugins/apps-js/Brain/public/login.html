@@ -381,7 +381,7 @@
             </div>
             <button type="submit" class="login-btn">Login</button>
         </form>
-        <a href="/privacy.html" class="privacy-link">Privacy Policy</a>
+        <a href="/brain/privacy" class="privacy-link">Privacy Policy</a>
     </div>
     <div class="version">v1.0.0</div>
 
@@ -428,7 +428,7 @@
                     
                     const key = value.trim();
                     try {
-                        const res = await fetch('/api/code-check', { credentials: 'include' });
+                        const res = await fetch('/brain/api/code-check', { credentials: 'include' });
                         const { cipher } = await res.json();
                         if (cipher) {
                             const plain = await decryptText(cipher, key);
@@ -464,7 +464,7 @@
             const uid = document.getElementById('uid').value.trim();
 
             try {
-                const response = await fetch('/api/auth/login', {
+                const response = await fetch('/brain/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     credentials: 'include',
@@ -482,7 +482,7 @@
                     // Try to auto-validate stored key first
                     if (stored) {
                         try {
-                            const res = await fetch('/api/code-check', { credentials: 'include' });
+                            const res = await fetch('/brain/api/code-check', { credentials: 'include' });
                             const { cipher } = await res.json();
                             if (cipher) {
                                 const plain = await decryptText(cipher, stored);
@@ -515,7 +515,7 @@
                     localStorage.setItem('brainKey', key);
                     document.cookie = `brainKey=${key}; max-age=315360000; path=/; SameSite=Strict`;
                     const cipher = await encryptText('verify', key);
-                    await fetch('/api/code-check', {
+                    await fetch('/brain/api/code-check', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
@@ -592,7 +592,7 @@
                 document.cookie = `brainKey=${key}; max-age=315360000; path=/; SameSite=Strict`;
                 localStorage.setItem('brainKey', key);
                 localStorage.setItem('uid', uid);
-                window.location.href = '/';
+                window.location.href = '/brain/';
             } catch (error) {
                 await Swal.fire('Error', error.message, 'error');
             }

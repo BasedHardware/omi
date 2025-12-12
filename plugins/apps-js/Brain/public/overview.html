@@ -121,7 +121,7 @@
     </div>
 
     <!-- Back Button -->
-    <a href="/" class="back-button">
+    <a href="/brain/" class="back-button">
         <span>←</span>
         <span>Back to Chat</span>
     </a>
@@ -224,7 +224,7 @@
                 };
                 
                 // Fetch and update stats
-                fetch('/api/memory-graph' + (isSample ? '?sample=true' : ''), {
+                fetch('/brain/api/memory-graph' + (isSample ? '?sample=true' : ''), {
                     credentials: 'include'
                 })
                 .then(res => res.json())

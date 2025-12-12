@@ -11,39 +11,36 @@ const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const sanitizeHtml = require('sanitize-html');
 const { URL } = require('url');
+const path = require('path');
 
-const supabase = require('./src/config/supabase');
-const openai = require('./src/config/openai');
-const { handleDatabaseError, decryptText, resolveUid } = require('./src/utils/helpers');
+const supabase = require('../config/supabase');
+const openai = require('../config/openai');
+const { handleDatabaseError, decryptText, resolveUid } = require('../utils/helpers');
 
-const { requireAuth } = require('./src/middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const {
     validateUid,
     validateTextInput,
     validateNodeData,
     validateInput
-} = require('./src/middleware/validation');
+} = require('../middleware/validation');
 
 const {
     loadMemoryGraph,
     saveMemoryGraph,
     addSampleData,
     deleteAllUserData
-} = require('./src/services/memoryService');
+} = require('../services/memoryService');
 
 const {
     processChatWithGPT,
     processTextWithGPT
-} = require('./src/services/aiService');
+} = require('../services/aiService');
 
-const app = express();
-app.set('trust proxy', 1); // Trust Render's proxy for secure cookies
-const port = process.env.PORT || 3000;
+const router = express.Router();
 
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
-app.use(cookieParser());
-
+router.use(bodyParser.json({ limit: '10mb' }));
+router.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 const sessionConfig = {
     secret: process.env.SESSION_SECRET || 'brain-app-default-secret-please-change-in-production',
     resave: false,
@@ -60,26 +57,27 @@ if (process.env.SESSION_DOMAIN) {
     sessionConfig.cookie.domain = process.env.SESSION_DOMAIN;
 }
 
-app.use(session(sessionConfig));
-app.use(express.static(__dirname + '/public'));
+router.use(session(sessionConfig));
 
-app.get("/privacy", (req, res) => {
-    res.sendFile(__dirname + '/public/privacy.html');
+const publicPath = path.join(__dirname, '../../public');
+router.use(express.static(publicPath));
+
+router.get("/privacy", (req, res) => {
+    res.sendFile(path.join(publicPath, 'privacy.html'));
 });
 
-app.get("/overview", (req, res) => {
-    res.sendFile(__dirname + '/public/overview.html');
+router.get("/overview", (req, res) => {
+    res.sendFile(path.join(publicPath, 'overview.html'));
 });
 
-app.get("/", (req, res) => {
-    res.sendFile(__dirname + '/public/main.html');
+router.get("/", (req, res) => {
+    res.sendFile(path.join(publicPath, 'main.html'));
 });
 
-app.get("/login", (req, res) => {
-    res.sendFile(__dirname + '/public/login.html');
+router.get("/login", (req, res) => {
+    res.sendFile(path.join(publicPath, 'login.html'));
 });
-
-app.post("/api/auth/login", validateUid, async (req, res) => {
+router.post("/api/auth/login", validateUid, async (req, res) => {
     try {
         const uid = req.uid;
 
@@ -118,7 +116,7 @@ app.post("/api/auth/login", validateUid, async (req, res) => {
     }
 });
 
-app.post("/api/auth/logout", (req, res) => {
+router.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
         if (err) {
             return res.status(500).json({ error: 'Logout failed' });
@@ -128,7 +126,7 @@ app.post("/api/auth/logout", (req, res) => {
     });
 });
 
-app.get('/api/profile', requireAuth, async (req, res) => {
+router.get('/api/profile', requireAuth, async (req, res) => {
     try {
         const uid = req.uid;
         const { data: rows, error } = await supabase
@@ -169,7 +167,7 @@ app.get('/api/profile', requireAuth, async (req, res) => {
     }
 });
 
-app.get('/api/code-check', requireAuth, async (req, res) => {
+router.get('/api/code-check', requireAuth, async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('brain_users')
@@ -185,7 +183,7 @@ app.get('/api/code-check', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/code-check', requireAuth, async (req, res) => {
+router.post('/api/code-check', requireAuth, async (req, res) => {
     try {
         const { cipher } = req.body;
         await supabase
@@ -198,11 +196,11 @@ app.post('/api/code-check', requireAuth, async (req, res) => {
     }
 });
 
-app.get("/setup", async (req, res) => {
+router.get("/setup", async (req, res) => {
     res.json({ 'is_setup_completed': true });
 });
 
-app.put('/api/node/:nodeId', requireAuth, validateNodeData, async (req, res) => {
+router.put('/api/node/:nodeId', requireAuth, validateNodeData, async (req, res) => {
     try {
         const { nodeId } = req.params;
         const { name, type } = req.body;
@@ -235,7 +233,7 @@ app.put('/api/node/:nodeId', requireAuth, validateNodeData, async (req, res) => 
     }
 });
 
-app.delete('/api/node/:nodeId', requireAuth, async (req, res) => {
+router.delete('/api/node/:nodeId', requireAuth, async (req, res) => {
     const { nodeId } = req.params;
     const uid = req.uid;
 
@@ -270,7 +268,7 @@ app.delete('/api/node/:nodeId', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/chat', requireAuth, validateTextInput, async (req, res) => {
+router.post('/api/chat', requireAuth, validateTextInput, async (req, res) => {
     try {
         const { message, context, key } = req.body;
 
@@ -307,7 +305,7 @@ app.post('/api/chat', requireAuth, validateTextInput, async (req, res) => {
     }
 });
 
-app.get('/api/memory-graph', requireAuth, async (req, res) => {
+router.get('/api/memory-graph', requireAuth, async (req, res) => {
     try {
         const uid = req.uid;
         const sample = req.query.sample === 'true';
@@ -329,7 +327,7 @@ app.get('/api/memory-graph', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/memory-graph', requireAuth, async (req, res) => {
+router.post('/api/memory-graph', requireAuth, async (req, res) => {
     try {
         const uid = req.uid;
         const result = await saveMemoryGraph(uid, req.body);
@@ -340,7 +338,7 @@ app.post('/api/memory-graph', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/process-text', validateTextInput, async (req, res) => {
+router.post('/api/process-text', validateTextInput, async (req, res) => {
     try {
         const { transcript_segments } = req.body;
         const uid = resolveUid(req);
@@ -405,7 +403,7 @@ app.post('/api/process-text', validateTextInput, async (req, res) => {
     }
 });
 
-app.post('/api/delete-all-data', requireAuth, async (req, res) => {
+router.post('/api/delete-all-data', requireAuth, async (req, res) => {
     try {
         const uid = req.uid;
         await deleteAllUserData(uid);
@@ -424,7 +422,7 @@ app.post('/api/delete-all-data', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/generate-description', requireAuth, async (req, res) => {
+router.post('/api/generate-description', requireAuth, async (req, res) => {
     try {
         const { node, connections } = req.body;
 
@@ -473,7 +471,7 @@ Keep the description natural and engaging, focusing on the most meaningful conne
     }
 });
 
-app.post('/api/enrich-content', requireAuth, validateInput, async (req, res) => {
+router.post('/api/enrich-content', requireAuth, validateInput, async (req, res) => {
     try {
         const { query, type } = req.body;
 
@@ -572,16 +570,20 @@ app.post('/api/enrich-content', requireAuth, validateInput, async (req, res) => 
     }
 });
 
-app.use((req, res, next) => {
-    res.status(404).sendFile(__dirname + '/public/404.html');
+// Error fallback (router specific)
+router.use((req, res, next) => {
+    // If it's an API request, return JSON
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: 'Endpoint not found' });
+    }
+    // Otherwise serve 404 page
+    res.status(404).sendFile(path.join(publicPath, '404.html'));
 });
 
-app.use((err, req, res, next) => {
-    const result = handleDatabaseError(err, 'request handling');
-    console.error('Unhandled error:', result.error);
-    res.status(result.status).sendFile(__dirname + '/public/500.html');
+router.use((err, req, res, next) => {
+    // Check if handleDatabaseError is relevant or just log
+    console.error('Unhandled error in Brain router:', err);
+    res.status(500).sendFile(path.join(publicPath, '500.html'));
 });
 
-app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
-});
+module.exports = router;

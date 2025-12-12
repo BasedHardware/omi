@@ -9,7 +9,7 @@ async function getKey() {
         }
     }
     if (!keyB64) {
-        window.location.href = '/login.html';
+        window.location.href = '/brain/login';
         throw new Error('Missing Brain code');
     }
     const raw = Uint8Array.from(atob(keyB64), c => c.charCodeAt(0));
@@ -41,7 +41,7 @@ async function decryptText(payload) {
 async function checkAuth() {
     try {
         // Check if we have session-based authentication with the server
-        const response = await fetch('/api/profile', {
+        const response = await fetch('/brain/api/profile', {
             credentials: 'include'
         });
 
@@ -52,19 +52,19 @@ async function checkAuth() {
         }
 
         localStorage.removeItem('uid');
-        window.location.href = '/login.html';
+        window.location.href = '/brain/login';
         return null;
     } catch (error) {
         console.error('Auth check error:', error);
-        window.location.href = '/login.html';
+        window.location.href = '/brain/login';
         return null;
     }
 }
 
 function logout() {
-    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+    fetch('/brain/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => {
         localStorage.removeItem('uid');
-        window.location.href = '/login.html';
+        window.location.href = '/brain/login';
     });
 }
 
@@ -82,7 +82,7 @@ async function apiCall(endpoint, options = {}) {
         const response = await fetch(endpoint, { ...baseOptions, ...options });
         if (response.status === 401) {
             localStorage.removeItem('uid');
-            window.location.href = '/login.html';
+            window.location.href = '/brain/login';
             return null;
         }
         return response;
@@ -95,7 +95,7 @@ async function apiCall(endpoint, options = {}) {
 // Load profile data
 async function loadProfile() {
     try {
-        const response = await apiCall('/api/profile');
+        const response = await apiCall('/brain/api/profile');
         if (response) {
             const data = await response.json();
             document.getElementById('profile-uid').textContent = data.uid;
@@ -540,7 +540,7 @@ function selectNode(node) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
         // Generate node description
-        apiCall('/api/generate-description', {
+        apiCall('/brain/api/generate-description', {
             method: 'POST',
             body: JSON.stringify({
                 node: node.userData,
@@ -660,7 +660,7 @@ async function updateSelectedNode() {
     try {
         const encryptedName = await encryptText(newName);
         const encryptedType = await encryptText(newType);
-        const response = await apiCall(`/api/node/${selectedNode.userData.id}`, {
+        const response = await apiCall(`/brain/api/node/${selectedNode.userData.id}`, {
             method: 'PUT',
             body: JSON.stringify({
                 name: encryptedName,
@@ -701,7 +701,7 @@ async function deleteSelectedNode() {
     if (!selectedNode || !confirm('Are you sure you want to delete this node and all its relationships?')) return;
 
     try {
-        const response = await apiCall(`/api/node/${selectedNode.userData.id}`, {
+        const response = await apiCall(`/brain/api/node/${selectedNode.userData.id}`, {
             method: 'DELETE'
         });
 
@@ -752,7 +752,7 @@ async function deleteAllData() {
         deleteBtn.disabled = true;
         deleteBtn.innerHTML = '<span class="icon">⏳</span> Deleting...';
 
-        const response = await apiCall('/api/delete-all-data', {
+        const response = await apiCall('/brain/api/delete-all-data', {
             method: 'POST'
         });
 
@@ -773,7 +773,7 @@ async function deleteAllData() {
             // Clear local storage and redirect after a delay
             setTimeout(() => {
                 localStorage.clear();
-                window.location.href = '/login.html?deleted=true';
+                window.location.href = '/brain/login?deleted=true';
             }, 3000);
         } else {
             throw new Error('Failed to delete data');
@@ -830,7 +830,7 @@ function animate() {
 // Export loadMemoryGraph function for use in other pages
 async function loadMemoryGraph() {
     try {
-        const response = await apiCall('/api/memory-graph');
+        const response = await apiCall('/brain/api/memory-graph');
         if (response && response.ok) {
             const data = await response.json();
             if (data) {
@@ -931,7 +931,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             uploadStatus.classList.add('active');
 
             try {
-                const response = await apiCall(`/api/process-text`, {
+                const response = await apiCall(`/brain/api/process-text`, {
                     method: 'POST',
                     body: JSON.stringify({
                         transcript_segments: [{ speaker: 'User', text }]
@@ -961,7 +961,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             })))
                         };
 
-                        const persistResponse = await apiCall('/api/memory-graph', {
+                        const persistResponse = await apiCall('/brain/api/memory-graph', {
                             method: 'POST',
                             body: JSON.stringify(encryptedPayload)
                         });
@@ -1037,7 +1037,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     relationships
                 };
                 const key = localStorage.getItem('brainKey');
-                const response = await apiCall('/api/chat', {
+                const response = await apiCall('/brain/api/chat', {
                     method: 'POST',
                     body: JSON.stringify({ message, context, key })
                 });
