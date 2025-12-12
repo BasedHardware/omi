@@ -147,9 +147,10 @@ class Wal {
       this.storageOffset = 0,
       this.storageTotalBytes = 0,
       this.fileNum = 1,
-      this.data = const [],
+      List<List<int>>? data,
       this.totalFrames = 0,
       this.syncedFrameOffset = 0}) {
+    this.data = data ?? <List<int>>[];
     frameSize = codec.getFrameSize();
   }
 
