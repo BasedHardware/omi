@@ -379,6 +379,10 @@ def connect_to_deepgram_with_backoff(
 
 
 def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
+    # `keyterm` is only supported for English.
+    if options.language != 'en':
+        return options
+
     if options.model in ['nova-3']:
         options.keyterm = keywords
         return options
