@@ -742,7 +742,7 @@ function hideDeleteConfirmation() {
 }
 
 async function deleteAllData() {
-    const uid = checkAuth();
+    const uid = await checkAuth();
     if (!uid) return;
 
     try {
