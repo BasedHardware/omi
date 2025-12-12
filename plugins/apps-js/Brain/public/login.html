@@ -594,14 +594,6 @@
                 localStorage.setItem('brainKey', key);
                 localStorage.setItem('uid', uid);
 
-                // Securely store key in session
-                await fetch('/brain/api/auth/key', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ key })
-                });
-
                 window.location.href = '/brain/';
             } catch (error) {
                 await Swal.fire('Error', error.message, 'error');

@@ -128,20 +128,7 @@ app.post("/api/auth/logout", (req, res) => {
     });
 });
 
-app.post("/api/auth/key", requireAuth, (req, res) => {
-    const { key } = req.body;
-    if (!key) {
-        return res.status(400).json({ error: 'Key is required' });
-    }
-    req.session.brainKey = key;
-    req.session.save((err) => {
-        if (err) {
-            console.error('Session save error:', err);
-            return res.status(500).json({ error: 'Failed to save key' });
-        }
-        res.json({ success: true });
-    });
-});
+
 
 app.get('/api/profile', requireAuth, async (req, res) => {
     try {
@@ -288,38 +275,13 @@ app.delete('/api/node/:nodeId', requireAuth, async (req, res) => {
 app.post('/api/chat', requireAuth, validateTextInput, async (req, res) => {
     try {
         const { message, context } = req.body;
-        const key = req.session.brainKey;
-
-        if (!key) {
-            return res.status(401).json({ error: 'Encryption key missing in session' });
-        }
 
         if (!message || typeof message !== 'string') {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        let finalContext = context;
-
-        if (key) {
-            const memoryGraph = await loadMemoryGraph(req.uid);
-            const nodes = [];
-            for (const node of memoryGraph.nodes.values()) {
-                nodes.push({
-                    id: node.id,
-                    type: decryptText(node.type, key),
-                    name: decryptText(node.name, key),
-                    connections: node.connections
-                });
-            }
-            const relationships = memoryGraph.relationships.map(r => ({
-                source: r.source,
-                target: r.target,
-                action: decryptText(r.action, key)
-            }));
-            finalContext = { nodes, relationships };
-        }
-
-        const response = await processChatWithGPT(message, finalContext || { nodes: [], relationships: [] });
+        // Context should already be decrypted by client if encryption is used
+        const response = await processChatWithGPT(message, context || { nodes: [], relationships: [] });
         res.json({ response });
     } catch (error) {
         console.error('Error:', error);

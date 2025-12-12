@@ -1032,10 +1032,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             chatInput.value = '';
 
             try {
+                // Decrypt context on client-side
+                const decryptedNodes = await Promise.all(Array.from(nodes.values()).map(async node => ({
+                    id: node.id,
+                    type: await decryptText(node.userData.type),
+                    name: await decryptText(node.userData.title || node.userData.name),
+                    connections: node.userData.connections
+                })));
+
+                const decryptedRelationships = await Promise.all(relationships.map(async rel => ({
+                    source: rel.source,
+                    target: rel.target,
+                    action: await decryptText(rel.action)
+                })));
+
                 const context = {
-                    nodes: Array.from(nodes.values()),
-                    relationships
+                    nodes: decryptedNodes,
+                    relationships: decryptedRelationships
                 };
+
                 const response = await apiCall('/brain/api/chat', {
                     method: 'POST',
                     body: JSON.stringify({ message, context })
