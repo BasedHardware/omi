@@ -7,7 +7,7 @@ import 'widgets/action_item_tile_widget.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/task_integrations_banner.dart';
-
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -128,20 +128,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider, currentTabItems) : null,
-          floatingActionButton: provider.isSelectionMode
-              ? null
-              : Padding(
-                  padding: const EdgeInsets.only(bottom: 60.0),
-                  child: FloatingActionButton(
-                    heroTag: 'action_items_fab',
-                    onPressed: _showCreateActionItemSheet,
-                    backgroundColor: Colors.deepPurpleAccent,
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
           body: RefreshIndicator(
             onRefresh: () async {
               HapticFeedback.mediumImpact();
@@ -208,6 +194,37 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Header with Add Button
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Action Items',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: ElevatedButton(
+                                  onPressed: _showCreateActionItemSheet,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppStyles.backgroundSecondary,
+                                    foregroundColor: Colors.white,
+                                    padding: EdgeInsets.zero,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Icon(Icons.add, size: 24),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
                           // Task Integrations Banner
                           const TaskIntegrationsBanner(),
 
