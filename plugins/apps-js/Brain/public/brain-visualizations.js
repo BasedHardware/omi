@@ -717,7 +717,7 @@ class BrainVisualizationManager {
         // Re-initialize the original scene
         if (typeof initScene === 'function') {
             initScene();
-            loadMemoryGraph(this.uid);
+            loadMemoryGraph();
         }
     }
     
