@@ -40,6 +40,10 @@ spec:
       {{- if .Values.priorityClassName }}
       priorityClassName: "{{ .Values.priorityClassName }}"
       {{- end }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if .Values.dnsPolicy }}
       dnsPolicy: "{{ .Values.dnsPolicy }}"
       {{- end }}
@@ -86,7 +90,7 @@ spec:
           {{- else if eq .Values.cloudProvider "gce" }}
           {{- if .Values.autoscalingGroupsnamePrefix }}
             {{- range .Values.autoscalingGroupsnamePrefix }}
-            - --node-group-auto-discovery=mig:namePrefix={{ .name }},min={{ .minSize }},max={{ .maxSize }}
+            - --node-group-auto-discovery=mig:namePrefix={{ tpl .name $ }},min={{ .minSize }},max={{ .maxSize }}
             {{- end }}
           {{- end }}
           {{- if eq .Values.cloudProvider "oci" }}
@@ -144,9 +148,9 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
-          {{- if and (eq .Values.cloudProvider "aws") (ne .Values.awsRegion "") }}
+          {{- if and (eq .Values.cloudProvider "aws") (ne (tpl .Values.awsRegion $) "") }}
             - name: AWS_REGION
-              value: "{{ .Values.awsRegion }}"
+              value: "{{ tpl .Values.awsRegion $ }}"
             {{- if .Values.awsAccessKeyID }}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:

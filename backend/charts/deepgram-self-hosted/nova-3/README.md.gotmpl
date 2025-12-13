@@ -82,6 +82,60 @@ To configure a specific storage option, see the `engine.modelManager.volumes` [c
 
 For detailed instructions on setting up and configuring each storage option, refer to the [Deepgram self-hosted guides](https://developers.deepgram.com/docs/kubernetes) and the respective cloud provider's documentation.
 
+### Service Configuration
+
+The Deepgram Helm chart provides flexible service configuration options for exposing the API, Engine, and License Proxy services. By default, all services use `ClusterIP` type, which provides internal cluster access only.
+
+#### Service Types
+
+- **ClusterIP** (default): Exposes the service on a cluster-internal IP. This is the default and recommended option for most deployments.
+- **NodePort**: Exposes the service on each Node's IP at a static port. Useful for development or when you need direct node access.
+- **LoadBalancer**: Exposes the service externally using a cloud provider's load balancer. Recommended for production deployments requiring external access.
+
+#### Configuration Examples
+
+**API Service with LoadBalancer (with security restrictions):**
+```yaml
+api:
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    loadBalancerSourceRanges:
+      - "10.0.0.0/8"      # Allow access from private networks
+      - "192.168.1.0/24"  # Allow access from specific subnet
+    externalTrafficPolicy: "Local"  # Preserve source IP and reduce hops
+```
+
+**Engine Metrics Service with NodePort:**
+```yaml
+engine:
+  service:
+    type: NodePort
+```
+
+**License Proxy Service with LoadBalancer (restricted access):**
+```yaml
+licenseProxy:
+  service:
+    type: LoadBalancer
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    loadBalancerSourceRanges:
+      - "10.0.0.0/8"  # Only allow internal network access
+    externalTrafficPolicy: "Cluster"  # Allow traffic from any node
+```
+
+#### LoadBalancer Security Options
+
+When using `LoadBalancer` service type, you can configure additional security and performance options:
+
+- **`loadBalancerSourceRanges`**: Restrict access to specific IP CIDR ranges. This provides network-level security by only allowing traffic from specified IP ranges.
+- **`externalTrafficPolicy`**: Controls how external traffic is routed:
+  - `Cluster` (default): Traffic can be routed to any node in the cluster, then forwarded to the target pod
+  - `Local`: Traffic is only routed to nodes that have the target pod running, preserving source IP addresses
+
 ### Autoscaling
 
 Autoscaling your cluster's capacity to meet incoming traffic demands involves both node autoscaling and pod autoscaling. Node autoscaling for supported cloud providers is setup by default when using this Helm chart and creating your cluster with the [Deepgram self-hosted guides](https://developers.deepgram.com/docs/kubernetes). Pod autoscaling can be enabled via the `scaling.auto.enabled` configuration option in this chart.
