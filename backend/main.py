@@ -33,6 +33,7 @@ from routers import (
     developer,
     updates,
     imports,
+    diarization,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -79,6 +80,7 @@ app.include_router(payment.router)
 app.include_router(mcp.router)
 app.include_router(developer.router)
 app.include_router(imports.router)
+app.include_router(diarization.router)
 
 
 methods_timeout = {
