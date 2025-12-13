@@ -23,7 +23,6 @@ class TaskIntegrationsBanner extends StatelessWidget {
         );
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -90,7 +89,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
             // Message
             const Expanded(
               child: Text(
-                'Export tasks with one tap!',
+                'Export tasks',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 15,
