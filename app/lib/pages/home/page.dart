@@ -702,37 +702,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withOpacity(0.2)
                               : hasPending
-                                  ? Colors.orange.withOpacity(0.2)
+                                  ? Colors.orange.withOpacity(0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
-                          border: isSyncing ? Border.all(color: Colors.deepPurpleAccent, width: 1) : null,
                         ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Icon(
-                              isSyncing ? Icons.sync_rounded : Icons.cloud_sync_rounded,
-                              size: 18,
-                              color: isSyncing
-                                  ? Colors.deepPurpleAccent
-                                  : hasPending
-                                      ? Colors.orangeAccent
-                                      : Colors.white70,
-                            ),
-                            if (hasPending && !isSyncing)
-                              Positioned(
-                                right: 6,
-                                top: 6,
-                                child: Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.orangeAccent,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                          ],
+                        child: Icon(
+                          Icons.cloud_rounded,
+                          size: 18,
+                          color: isSyncing
+                              ? Colors.deepPurpleAccent
+                              : hasPending
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
                         ),
                       ),
                     );
