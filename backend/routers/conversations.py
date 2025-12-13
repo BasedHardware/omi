@@ -17,6 +17,8 @@ from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.retrieval.tools.calendar_tools import get_google_calendar_event, update_google_calendar_event
+from utils.retrieval.tools.google_utils import refresh_google_token
 
 router = APIRouter()
 
@@ -119,6 +121,97 @@ def patch_conversation_title(conversation_id: str, title: str, uid: str = Depend
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
+
+
+@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Unlink a calendar event from a conversation.
+    This removes the calendar_event field from the conversation.
+    """
+    _get_valid_conversation_by_id(uid, conversation_id)
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': None})
+    return {'status': 'Ok'}
+
+
+def _add_summary_to_calendar_event_with_token(
+    access_token: str,
+    event_id: str,
+    conversation_id: str,
+) -> dict:
+    """Helper function to add summary link to calendar event with given token."""
+    # Get existing event to preserve current description
+    existing_event = get_google_calendar_event(access_token, event_id)
+    current_description = existing_event.get('description', '') or ''
+
+    # Build the conversation link
+    conversation_link = f"https://h.omi.me/memories/{conversation_id}"
+
+    # Check if we already added the link (to avoid duplicates)
+    if conversation_link in current_description:
+        return {
+            'status': 'Ok',
+            'html_link': existing_event.get('htmlLink'),
+        }
+
+    # Append just the link
+    if current_description:
+        new_description = f"{current_description}\n\n{conversation_link}"
+    else:
+        new_description = conversation_link
+
+    # Update the calendar event
+    updated_event = update_google_calendar_event(
+        access_token=access_token,
+        event_id=event_id,
+        description=new_description,
+    )
+
+    return {
+        'status': 'Ok',
+        'html_link': updated_event.get('htmlLink'),
+    }
+
+
+@router.post("/v1/conversations/{conversation_id}/calendar-event/add-summary", tags=['conversations'])
+def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Add conversation summary to the linked calendar event description.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+
+    calendar_event = conversation.get('calendar_event')
+    if not calendar_event:
+        raise HTTPException(status_code=400, detail="No calendar event linked to this conversation")
+
+    event_id = calendar_event.get('event_id')
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Calendar event ID not found")
+
+    # Get Google Calendar access token
+    integration = users_db.get_integration(uid, 'google_calendar')
+    if not integration or not integration.get('connected'):
+        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+
+    access_token = integration.get('access_token')
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token found")
+
+    try:
+        return _add_summary_to_calendar_event_with_token(access_token, event_id, conversation_id)
+    except Exception as e:
+        error_msg = str(e)
+
+        # Try to refresh token if authentication failed
+        if "401" in error_msg or "Authentication" in error_msg.lower():
+            new_token = refresh_google_token(uid, integration)
+            if new_token:
+                try:
+                    return _add_summary_to_calendar_event_with_token(new_token, event_id, conversation_id)
+                except Exception as retry_error:
+                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+
+        raise HTTPException(status_code=500, detail=f"Failed to update calendar event: {error_msg}")
 
 
 @router.get(

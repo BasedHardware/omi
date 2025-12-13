@@ -87,6 +87,34 @@ Future<bool> deleteConversationServer(String conversationId) async {
   return response.statusCode == 204;
 }
 
+Future<bool> unlinkCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  return response.statusCode == 200;
+}
+
+/// Add conversation summary to the linked calendar event description.
+/// Returns the htmlLink to open the event if successful, null otherwise.
+Future<String?> addSummaryToCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event/add-summary',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    return data['html_link'] as String?;
+  }
+  return null;
+}
+
 Future<ServerConversation?> getConversationById(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',
