@@ -50,17 +50,22 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _initialize() async {
-    // Command 1: Time sync
-    final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
-    await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Command 1: Time sync
+      final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
+      await Future.delayed(const Duration(seconds: 1));
 
-    // Command 2: Enable data streaming
-    final dataStreamCmd = _encodeEnableDataStream();
-    await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
-    await Future.delayed(const Duration(seconds: 1));
+      // Command 2: Enable data streaming
+      final dataStreamCmd = _encodeEnableDataStream();
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+      await Future.delayed(const Duration(seconds: 1));
 
-    _isInitialized = true;
+      _isInitialized = true;
+    } catch (e) {
+      debugPrint('Limitless: Initialization failed: $e');
+      rethrow;
+    }
   }
 
   void _handleNotification(List<int> data) {
@@ -324,6 +329,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
+      // Clear buffer before switching modes to prevent cross-contamination
+      _rawDataBuffer.clear();
       _isBatchMode = true;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
@@ -333,17 +340,28 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
   }
 
-  /// Switch to real-time streaming mode
-  Future<void> enableRealTimeMode() async {
+  /// Disable batch mode and switch back to real-time streaming
+  Future<void> disableBatchMode() async {
     if (!_isInitialized) return;
 
     try {
-      _isBatchMode = false;
-      final cmd = _encodeEnableDataStream(enable: true);
+      // Clear buffer before switching modes to prevent batch data from being processed as real-time
+      _rawDataBuffer.clear();
+      _firstFlashPageTimestampMs = null;
+
+      // Send command to switch back to real-time mode
+      final cmd = _encodeDownloadFlashPages(batchMode: false, realTime: true);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+
+      _isBatchMode = false;
     } catch (e) {
-      debugPrint('Limitless: Error enabling real-time mode: $e');
+      _isBatchMode = false;
     }
+  }
+
+  /// Switch back to real-time mode
+  Future<void> enableRealTimeMode() async {
+    await disableBatchMode();
   }
 
   Stream<Map<String, dynamic>> getFlashPageStream() {
@@ -394,6 +412,38 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void resetFlashPageTimestamp() {
     _firstFlashPageTimestampMs = null;
+  }
+
+  /// Extract opus frames from buffer along with session marker info
+  /// Returns map with: opus_frames, timestamp_ms, did_start_session, did_stop_session, etc.
+  /// This combines frame extraction with session marker parsing
+  Map<String, dynamic>? extractFramesWithSessionInfo() {
+    if (_rawDataBuffer.isEmpty) return null;
+
+    // First try to parse session markers from the buffer before extraction
+    final sessionInfo = parseStorageBuffer(_rawDataBuffer);
+
+    // Now extract opus frames (this also modifies the buffer)
+    final frames = extractFramesFromBuffer();
+
+    if (frames.isEmpty) return null;
+
+    // Get timestamp
+    int? timestampMs = sessionInfo?['timestamp_ms'] as int?;
+    if (timestampMs == null || timestampMs < 1577836800000) {
+      timestampMs = _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch;
+    }
+
+    final result = {
+      'opus_frames': frames,
+      'timestamp_ms': timestampMs,
+      'did_start_session': sessionInfo?['did_start_session'] ?? false,
+      'did_stop_session': sessionInfo?['did_stop_session'] ?? false,
+      'did_start_recording': sessionInfo?['did_start_recording'] ?? false,
+      'did_stop_recording': sessionInfo?['did_stop_recording'] ?? false,
+    };
+
+    return result;
   }
 
   List<List<int>> extractOpusFramesFromPage(List<int> flashPageData) {
@@ -501,10 +551,6 @@ class LimitlessDeviceConnection extends DeviceConnection {
         } else {
           pos++;
         }
-      }
-
-      if (frames.isNotEmpty) {
-        debugPrint('Limitless: extractOpusFramesFromPage found ${frames.length} valid opus frames');
       }
     } catch (e) {
       debugPrint('Limitless: Error extracting opus frames from page: $e');

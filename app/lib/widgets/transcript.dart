@@ -632,9 +632,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             Text(
                                               SttProviderConfig.getDisplayName(data.sttProvider),
                                               style: TextStyle(
-                                                color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.5)
-                                                    : Colors.grey.shade500,
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                                 fontSize: 10,
                                                 fontStyle: FontStyle.italic,
                                               ),
@@ -760,7 +759,9 @@ class LiteTranscriptWidget extends StatelessWidget {
     if (segments.isEmpty) return null;
 
     var text = getLastTranscript(segments, maxCount: 70, includeTimestamps: false);
-    return text.replaceAll(RegExp(r"\s+|\n+"), " ");
+    text = text.replaceAll(RegExp(r"\s+|\n+"), " ");
+    // Add ellipsis at the start to indicate there's more content before
+    return '...$text';
   }
 
   @override
@@ -770,12 +771,18 @@ class LiteTranscriptWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Text(
-      processedText,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-      textAlign: TextAlign.right,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(7, 0, 8, 0),
+      child: Text(
+        processedText,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+              color: Colors.grey.shade300.withOpacity(0.6),
+              height: 1.3,
+            ),
+        textAlign: TextAlign.right,
+      ),
     );
   }
 }

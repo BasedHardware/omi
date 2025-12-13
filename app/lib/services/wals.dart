@@ -147,10 +147,9 @@ class Wal {
       this.storageOffset = 0,
       this.storageTotalBytes = 0,
       this.fileNum = 1,
-      List<List<int>>? data,
+      this.data = const [],
       this.totalFrames = 0,
       this.syncedFrameOffset = 0}) {
-    this.data = data ?? <List<int>>[];
     frameSize = codec.getFrameSize();
   }
 
@@ -661,6 +660,7 @@ class SDCardWalSync implements IWalSync {
 
 class FlashPageWalSync implements IWalSync {
   static const int pagesPerChunk = 25;
+  static const String _pendingFilesKey = 'flash_page_pending_uploads';
 
   List<Wal> _wals = const [];
   BtDevice? _device;
@@ -672,9 +672,96 @@ class FlashPageWalSync implements IWalSync {
   int _newestPage = 0;
   int _currentSession = 0;
 
+  // Track if we're currently uploading orphaned files
+  bool _isUploadingOrphans = false;
+  bool get isUploadingOrphans => _isUploadingOrphans;
+
   IWalSyncListener listener;
 
   FlashPageWalSync(this.listener);
+
+  /// Get list of pending upload files from SharedPreferences
+  List<String> _getPendingFiles() {
+    return SharedPreferencesUtil().getStringList(_pendingFilesKey);
+  }
+
+  /// Save pending upload files to SharedPreferences
+  void _savePendingFiles(List<String> files) {
+    SharedPreferencesUtil().saveStringList(_pendingFilesKey, files);
+  }
+
+  /// Add a file to pending uploads
+  void _addPendingFile(String filePath) {
+    final files = List<String>.from(_getPendingFiles());
+    if (!files.contains(filePath)) {
+      files.add(filePath);
+      _savePendingFiles(files);
+    }
+  }
+
+  /// Remove a file from pending uploads
+  void _removePendingFile(String filePath) {
+    final files = List<String>.from(_getPendingFiles());
+    files.remove(filePath);
+    _savePendingFiles(files);
+  }
+
+  /// Check for and upload any orphaned files from previous failed syncs
+  Future<SyncLocalFilesResponse> uploadOrphanedFiles() async {
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    if (_isUploadingOrphans) {
+      debugPrint("FlashPageSync: Already uploading orphaned files, skipping");
+      return resp;
+    }
+
+    final pendingFiles = _getPendingFiles();
+    if (pendingFiles.isEmpty) {
+      return resp;
+    }
+
+    _isUploadingOrphans = true;
+
+    // Sort by timestamp for chronological upload order
+    final sortedFiles = List<String>.from(pendingFiles);
+    sortedFiles.sort((a, b) {
+      final tsA = _extractTimestampFromFilename(a);
+      final tsB = _extractTimestampFromFilename(b);
+      return tsA.compareTo(tsB);
+    });
+
+    for (final filePath in sortedFiles) {
+      try {
+        final file = File(filePath);
+        if (await file.exists()) {
+          final partialResp = await syncLocalFiles([file]);
+
+          resp.newConversationIds
+              .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+          resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
+              .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+          await file.delete();
+          _removePendingFile(filePath);
+        } else {
+          // File doesn't exist, remove from pending
+          _removePendingFile(filePath);
+        }
+      } catch (e) {
+        debugPrint("FlashPageSync: Failed to upload orphaned file $filePath: $e");
+      }
+    }
+
+    _isUploadingOrphans = false;
+    listener.onWalUpdated();
+    return resp;
+  }
+
+  /// Check if there are orphaned files waiting to be uploaded
+  bool get hasOrphanedFiles => _getPendingFiles().isNotEmpty;
+
+  /// Get count of orphaned files
+  int get orphanedFilesCount => _getPendingFiles().length;
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -697,8 +784,6 @@ class FlashPageWalSync implements IWalSync {
       } catch (e) {
         debugPrint('FlashPageSync: Could not acknowledge processed data: $e');
       }
-    } else if (connection != null) {
-      debugPrint('FlashPageSync: Could not acknowledge processed data, connection is not a LimitlessDeviceConnection.');
     }
   }
 
@@ -707,11 +792,12 @@ class FlashPageWalSync implements IWalSync {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) return;
 
-    try {
-      final dynamic limitlessConnection = connection;
-      await limitlessConnection.enableRealTimeMode();
-    } catch (e) {
-      debugPrint('FlashPageSync: Could not enable real-time mode: $e');
+    if (connection is LimitlessDeviceConnection) {
+      try {
+        await connection.enableRealTimeMode();
+      } catch (e) {
+        debugPrint('FlashPageSync: Could not enable real-time mode: $e');
+      }
     }
   }
 
@@ -785,6 +871,11 @@ class FlashPageWalSync implements IWalSync {
   Future start() async {
     _wals = await _getMissingWals();
     listener.onWalUpdated();
+
+    // Check for and upload any orphaned files from previous sessions
+    if (hasOrphanedFiles) {
+      uploadOrphanedFiles();
+    }
   }
 
   @override
@@ -850,13 +941,10 @@ class FlashPageWalSync implements IWalSync {
   Future<SyncLocalFilesResponse?> _syncWal(Wal wal, IWalSyncProgressListener? progress) async {
     if (_device == null) return null;
 
-    debugPrint("FlashPageSync: Starting sync for ${wal.id}, pages ${wal.storageOffset} to ${wal.storageTotalBytes}");
-
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     String deviceId = _device!.id;
 
     try {
-      // Get connection
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection == null) {
         debugPrint("FlashPageSync: Could not get connection");
@@ -864,206 +952,191 @@ class FlashPageWalSync implements IWalSync {
       }
 
       final dynamic limitlessConnection = connection;
-
-      // Clear any existing data in buffer before starting batch mode
       limitlessConnection.clearBuffer();
-
-      // Use WAL timerStart as the file timestamp (estimated recording time)
-      int fileTimestampMs = wal.timerStart * 1000;
-
-      // Enable batch mode to start receiving flash pages
       await limitlessConnection.enableBatchMode();
-      debugPrint("FlashPageSync: Batch mode enabled, waiting for data...");
+      debugPrint("FlashPageSync: Batch mode enabled");
 
-      // Accumulate frames for chunking
-      List<List<int>> allFrames = [];
       int totalPages = wal.storageTotalBytes - wal.storageOffset + 1;
-      int chunkIndex = 0;
-      int chunksStarted = 0;
-      int chunksCompleted = 0;
-      int chunksSucceeded = 0; // Track successful uploads for incremental ACK
-      bool hadFailure = false; // Stop ACKing after first failure
-      int lastAckedPage = wal.storageOffset - 1; // Track last acknowledged page
-
       int emptyExtractions = 0;
       const maxEmptyExtractions = 60; // 30 seconds of no data = done
-      const int framesPerChunk = 2000; // ~40 seconds of audio per chunk
+      int pagesProcessed = 0; // Track pages for incremental ACK
 
-      // Track pending uploads for parallel processing
-      List<Future<bool>> pendingUploads = [];
+      // PHASE 1: Save all data from device to local files
+      const maxBatchDuration = Duration(seconds: 30);
+      List<List<int>> accumulatedFrames = [];
+      List<String> savedFiles = [];
+      int? batchMinTimestamp;
+      DateTime lastSaveTime = DateTime.now();
 
-      // Track maximum progress seen
-      double maxProgressSeen = 0.0;
-
-      // Use async loop instead of Timer for cleaner async flow with uploads
       bool syncComplete = false;
       final startTime = DateTime.now();
-      const maxDuration = Duration(minutes: 5);
-      int totalFramesExtracted = 0;
+      const maxDuration = Duration(minutes: 10);
 
       while (!syncComplete) {
-        // Check timeout
         if (DateTime.now().difference(startTime) > maxDuration) {
-          debugPrint("FlashPageSync: Sync timeout after 5 minutes");
+          debugPrint("FlashPageSync: Sync timeout after 10 minutes");
           break;
         }
 
-        // Extract frames from buffer
-        final frames = limitlessConnection.extractFramesFromBuffer() as List<List<int>>;
+        final pageData = limitlessConnection.extractFramesWithSessionInfo();
+        bool shouldSave = false;
 
-        if (frames.isNotEmpty) {
-          allFrames.addAll(frames);
-          totalFramesExtracted += frames.length;
+        // Frames to carry over after save (for session-start pages)
+        List<List<int>>? pendingFrames;
+        int? pendingTimestamp;
+
+        if (pageData != null) {
           emptyExtractions = 0;
-          debugPrint("FlashPageSync: Extracted ${frames.length} frames (total: ${allFrames.length})");
+          pagesProcessed++;
 
-          // Progress based on completed chunks
-          // Cap extraction phase at 0.5 (50%), uploads take it to 100%
-          final extractionProgress = (totalFramesExtracted / (totalPages * framesPerFlashPage)).clamp(0.0, 0.5);
-          final uploadProgress = chunksStarted > 0 ? (chunksCompleted / chunksStarted) * 0.5 : 0.0;
-          final currentProgress = (extractionProgress + uploadProgress).clamp(0.0, 0.95);
+          final opusFrames = pageData['opus_frames'] as List<List<int>>? ?? [];
+          final timestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+          final didStartSession =
+              (pageData['did_start_session'] as bool? ?? false) || (pageData['did_start_recording'] as bool? ?? false);
+          final didStopSession =
+              (pageData['did_stop_session'] as bool? ?? false) || (pageData['did_stop_recording'] as bool? ?? false);
 
-          if (currentProgress > maxProgressSeen) {
-            maxProgressSeen = currentProgress;
-            progress?.onWalSyncedProgress(maxProgressSeen);
-          }
-
-          // Start upload when we have enough frames
-          if (allFrames.length >= framesPerChunk) {
-            const maxConcurrentUploads = 2;
-            final inFlightCount = chunksStarted - chunksCompleted;
-            if (inFlightCount >= maxConcurrentUploads) {
-              // Wait a bit for some uploads to complete
-              await Future.delayed(const Duration(seconds: 2));
+          if (opusFrames.isNotEmpty) {
+            // If new timestamp is >2 min different, save current batch first
+            // This prevents mixing recordings from different sessions (e.g., yesterday + today)
+            const sessionGapThresholdMs = 120000;
+            if (batchMinTimestamp != null && accumulatedFrames.isNotEmpty) {
+              final gap = (timestampMs - batchMinTimestamp).abs();
+              if (gap > sessionGapThresholdMs) {
+                shouldSave = true;
+                pendingFrames = opusFrames;
+                pendingTimestamp = timestampMs;
+              }
             }
 
-            final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
-            final currentChunkIndex = chunkIndex++;
-            chunksStarted++;
+            // New session starting with existing frames - save first, carry over new frames
+            if (!shouldSave && didStartSession && accumulatedFrames.isNotEmpty) {
+              shouldSave = true;
+              pendingFrames = opusFrames;
+              pendingTimestamp = timestampMs;
+            }
 
-            // Start upload in background
-            final framesToUpload = List<List<int>>.from(allFrames);
-            final uploadFuture = _flushChunk(
-              framesToUpload,
-              chunkTimestamp,
-              wal,
-              resp,
-              currentChunkIndex,
-            ).then((success) async {
-              chunksCompleted++;
-              if (success) {
-                chunksSucceeded++;
-                debugPrint(
-                    "FlashPageSync: Chunk $currentChunkIndex uploaded successfully ($chunksCompleted/$chunksStarted)");
-
-                // Send incremental ACK if no failures yet
-                if (!hadFailure) {
-                  // Estimate which page this chunk covers
-                  final pagesPerChunk = (totalPages / chunksStarted).ceil();
-                  final ackUpToPage = (wal.storageOffset + (chunksSucceeded * pagesPerChunk))
-                      .clamp(wal.storageOffset, wal.storageTotalBytes);
-
-                  if (ackUpToPage > lastAckedPage) {
-                    try {
-                      await limitlessConnection.acknowledgeProcessedData(ackUpToPage);
-                      lastAckedPage = ackUpToPage;
-                      debugPrint("FlashPageSync: Incremental ACK sent for pages up to $ackUpToPage");
-                    } catch (e) {
-                      debugPrint("FlashPageSync: Failed to send incremental ACK: $e");
-                    }
-                  }
-                }
-              } else {
-                hadFailure = true;
+            // If not saving yet, accumulate frames normally
+            if (!shouldSave) {
+              if (batchMinTimestamp == null || timestampMs < batchMinTimestamp) {
+                batchMinTimestamp = timestampMs;
               }
+              accumulatedFrames.addAll(opusFrames);
+            }
 
-              final uploadPortion = (chunksCompleted / chunksStarted) * 0.5;
-              final currentProgress = (0.5 + uploadPortion).clamp(0.0, 0.95);
-              if (currentProgress > maxProgressSeen) {
-                maxProgressSeen = currentProgress;
-                progress?.onWalSyncedProgress(maxProgressSeen);
-              }
-              return success;
-            });
-
-            pendingUploads.add(uploadFuture);
-
-            // Clear frames and update timestamp for next chunk
-            allFrames.clear();
-            limitlessConnection.resetFlashPageTimestamp();
-            fileTimestampMs = chunkTimestamp + 40000; // 40 seconds (2000 frames)
+            if (didStopSession && accumulatedFrames.isNotEmpty) {
+              shouldSave = true;
+            }
           }
         } else {
           emptyExtractions++;
         }
 
-        // Check if done (no data for 30 seconds)
+        // If 30 seconds elapsed - save batch
+        if (!shouldSave && accumulatedFrames.isNotEmpty) {
+          if (DateTime.now().difference(lastSaveTime) >= maxBatchDuration) {
+            shouldSave = true;
+          }
+        }
+
+        // Save batch to local file
+        if (shouldSave && accumulatedFrames.isNotEmpty) {
+          final filePath = await _saveBatchToFile(
+            accumulatedFrames,
+            batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
+          );
+
+          if (filePath != null) {
+            savedFiles.add(filePath);
+            debugPrint(
+                "FlashPageSync: Saved batch #${savedFiles.length} to phone (${accumulatedFrames.length} frames, ts=$batchMinTimestamp)");
+            progress?.onWalSyncedProgress((savedFiles.length / (totalPages / 50)).clamp(0.0, 0.4));
+
+            // Send incremental ACK - device can clear pages up to this point
+            try {
+              final ackIndex = wal.storageOffset + pagesProcessed;
+              await limitlessConnection.acknowledgeProcessedData(ackIndex);
+              debugPrint("FlashPageSync: Incremental ACK sent for page $ackIndex");
+            } catch (e) {
+              debugPrint("FlashPageSync: Incremental ACK failed: $e");
+            }
+          }
+
+          accumulatedFrames.clear();
+          batchMinTimestamp = null;
+          lastSaveTime = DateTime.now();
+
+          // Carry over pending frames from new session/gap
+          if (pendingFrames != null && pendingFrames.isNotEmpty) {
+            accumulatedFrames.addAll(pendingFrames);
+            batchMinTimestamp = pendingTimestamp;
+          }
+        }
+
         if (emptyExtractions >= maxEmptyExtractions) {
-          debugPrint("FlashPageSync: No more data received, completing sync");
+          debugPrint("FlashPageSync: No more data from device");
           syncComplete = true;
         }
 
-        // Small delay before next extraction
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // Upload any remaining frames (as a final synchronous upload)
-      if (allFrames.isNotEmpty) {
-        debugPrint("FlashPageSync: Uploading final chunk with ${allFrames.length} frames");
-        final chunkTimestamp = limitlessConnection.getFirstFlashPageTimestampMs() ?? fileTimestampMs;
-        chunksStarted++;
-        final success = await _flushChunk(
-          allFrames,
-          chunkTimestamp,
-          wal,
-          resp,
-          chunkIndex++,
+      // Save remaining frames
+      if (accumulatedFrames.isNotEmpty) {
+        final filePath = await _saveBatchToFile(
+          accumulatedFrames,
+          batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
         );
-        if (success) {
-          chunksSucceeded++;
-          chunksCompleted++;
-          // Send final incremental ACK for remaining pages
-          if (!hadFailure && lastAckedPage < wal.storageTotalBytes) {
-            try {
-              await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
-              lastAckedPage = wal.storageTotalBytes;
-              debugPrint("FlashPageSync: Final chunk ACK sent for pages up to ${wal.storageTotalBytes}");
-            } catch (e) {
-              debugPrint("FlashPageSync: Failed to send final chunk ACK: $e");
-            }
+        if (filePath != null) {
+          savedFiles.add(filePath);
+
+          // Send final ACK for remaining pages
+          try {
+            await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
+          } catch (e) {
+            debugPrint("FlashPageSync: Final ACK failed: $e");
           }
-        } else {
-          hadFailure = true;
-          chunksCompleted++;
         }
       }
 
-      // Wait for all pending uploads to complete
-      if (pendingUploads.isNotEmpty) {
-        debugPrint("FlashPageSync: Waiting for ${pendingUploads.length} pending uploads to complete...");
-        await Future.wait(pendingUploads);
-        debugPrint("FlashPageSync: All uploads completed");
-      }
-
-      // Send final ACK for any remaining pages if no failures
-      if (!hadFailure && lastAckedPage < wal.storageTotalBytes && chunksSucceeded > 0) {
-        try {
-          await limitlessConnection.acknowledgeProcessedData(wal.storageTotalBytes);
-          debugPrint("FlashPageSync: Final ACK sent for pages up to ${wal.storageTotalBytes}");
-        } catch (e) {
-          debugPrint("FlashPageSync: Failed to send final ACK: $e");
-        }
-      }
-
-      // Switch back to real-time mode
       await limitlessConnection.enableRealTimeMode();
 
-      debugPrint(
-          "FlashPageSync: Completed sync. $chunksSucceeded/$chunksCompleted chunks succeeded, lastAckedPage=$lastAckedPage");
+      // Sort files by timestamp before upload
+      savedFiles.sort((a, b) {
+        final tsA = _extractTimestampFromFilename(a);
+        final tsB = _extractTimestampFromFilename(b);
+        return tsA.compareTo(tsB);
+      });
+
+      // Upload saved files to backend
+
+      for (int i = 0; i < savedFiles.length; i++) {
+        final filePath = savedFiles[i];
+        try {
+          final file = File(filePath);
+          if (await file.exists()) {
+            final partialResp = await syncLocalFiles([file]);
+
+            resp.newConversationIds
+                .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+            resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
+                .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+            await file.delete();
+            _removePendingFile(filePath);
+          }
+        } catch (e) {
+          debugPrint("FlashPageSync: Failed to upload file $filePath: $e");
+          // File stays in pending list for recovery on next app start
+        }
+
+        progress?.onWalSyncedProgress(0.4 + (0.6 * (i + 1) / savedFiles.length));
+      }
+
+      debugPrint("FlashPageSync: Completed. ${savedFiles.length} files synced");
       progress?.onWalSyncedProgress(1.0);
     } catch (e) {
-      debugPrint("FlashPageSync: Error during sync: $e");
-      // Try to switch back to real-time mode on error
+      debugPrint("FlashPageSync: Error: $e");
       try {
         await _enableRealTimeMode(deviceId);
       } catch (_) {}
@@ -1072,23 +1145,19 @@ class FlashPageWalSync implements IWalSync {
     return resp;
   }
 
-  /// Flush accumulated frames to a file and sync. Returns true if upload succeeded.
-  Future<bool> _flushChunk(
-      List<List<int>> frames, int timestampMs, Wal wal, SyncLocalFilesResponse resp, int chunkIndex) async {
-    if (frames.isEmpty) return true;
-
-    debugPrint("FlashPageSync: Flushing chunk $chunkIndex with ${frames.length} frames");
+  /// Save a batch of frames to a local file, returns file path or null on error
+  /// Also tracks the file in SharedPreferences for recovery if app crashes
+  Future<String?> _saveBatchToFile(List<List<int>> frames, int timestampMs) async {
+    if (frames.isEmpty) return null;
 
     try {
-      int timerStart = timestampMs ~/ 1000;
+      final random = DateTime.now().microsecondsSinceEpoch % 10000;
       final tempDir = await getApplicationDocumentsDirectory();
-      // Use chunkIndex in filename to avoid collisions, timestamp last for backend parsing
-      final fileName = 'audio_limitless_opus_16000_1_fs320_c${chunkIndex}_$timerStart.bin';
+      final fileName = 'audio_limitless_opus_16000_1_fs320_r${random}_$timestampMs.bin';
       final filePath = '${tempDir.path}/$fileName';
 
       final file = File(filePath);
       final sink = file.openWrite();
-
       for (final frame in frames) {
         sink.add([
           frame.length & 0xFF,
@@ -1098,25 +1167,32 @@ class FlashPageWalSync implements IWalSync {
         ]);
         sink.add(frame);
       }
-
       await sink.close();
-      debugPrint("FlashPageSync: Created file $fileName with ${frames.length} frames");
 
-      // Upload to backend
-      final partialResp = await syncLocalFiles([file]);
+      // Track file for recovery if app crashes before upload
+      _addPendingFile(filePath);
 
-      resp.newConversationIds
-          .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
-
-      await file.delete();
-      debugPrint("FlashPageSync: Uploaded and deleted temp file");
-      return true;
+      return filePath;
     } catch (e) {
-      debugPrint("FlashPageSync: Error flushing chunk: $e");
-      return false;
+      debugPrint("FlashPageSync: Save batch error: $e");
+      return null;
     }
+  }
+
+  /// Extract timestamp from filename for sorting
+  /// Filename format: audio_limitless_opus_16000_1_fs320_r{random}_{timestamp}.bin
+  int _extractTimestampFromFilename(String filePath) {
+    try {
+      final fileName = filePath.split('/').last;
+      final parts = fileName.split('_');
+      if (parts.isNotEmpty) {
+        final lastPart = parts.last.replaceAll('.bin', '');
+        return int.tryParse(lastPart) ?? 0;
+      }
+    } catch (e) {
+      debugPrint("FlashPageSync: Failed to extract timestamp from $filePath: $e");
+    }
+    return 0;
   }
 
   void setDevice(BtDevice? device) async {
