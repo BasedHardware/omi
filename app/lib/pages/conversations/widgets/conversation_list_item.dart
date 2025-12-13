@@ -73,7 +73,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
             return;
           }
-
           // Calculate time difference
           int hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
 
@@ -95,7 +94,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             );
           }
 
-          context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+          context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);
 
