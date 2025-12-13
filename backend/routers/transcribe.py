@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Callable
 
 import av
 import opuslib  # type: ignore
@@ -26,8 +26,14 @@ av.logging.set_level(av.logging.ERROR)
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
+from database.users import get_user_transcription_preferences
 from database import redis_db
-from database.redis_db import get_cached_user_geolocation
+from database.redis_db import (
+    get_cached_user_geolocation,
+    get_speech_profile_duration,
+    set_speech_profile_duration,
+    try_acquire_listen_lock,
+)
 from models.conversation import (
     Conversation,
     ConversationPhoto,
@@ -56,7 +62,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.other import endpoints as auth
-from utils.other.storage import get_profile_audio_if_exists
+from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
 from utils.speaker_identification import detect_speaker_from_text
@@ -198,18 +204,30 @@ async def _listen(
         lc3_chunk_size = 30  # 30 bytes per frame
         lc3_frame_duration_us = 10000  # 10ms = 10000 microseconds
 
+    # Fetch user transcription preferences
+    transcription_prefs = get_user_transcription_preferences(uid)
+    single_language_mode = transcription_prefs.get('single_language_mode', False)
+    vocabulary = transcription_prefs.get('vocabulary', [])
+
+    # Always include "Omi" as predefined vocabulary
+    vocabulary = list({"Omi"} | set(vocabulary))
+
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, stt_language, stt_model = get_stt_service_for_language(language)
+    stt_service, stt_language, stt_model = get_stt_service_for_language(
+        language, multi_lang_enabled=not single_language_mode
+    )
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
-    # Translation language
+    # Translation language (disabled in single language mode)
     translation_language = None
-    if stt_language == 'multi':
+    if single_language_mode:
+        translation_language = None
+    elif stt_language == 'multi':
         if language == "multi":
             user_language_preference = user_db.get_user_language_preference(uid)
             if user_language_preference:
@@ -290,7 +308,6 @@ async def _listen(
 
     async def _asend_message_event(msg: MessageEvent):
         nonlocal websocket_active
-        print(f"Message: type ${msg.event_type}", uid, session_id)
         if not websocket_active:
             return False
         try:
@@ -312,8 +329,9 @@ async def _listen(
 
     # Heart beat
     started_at = time.time()
-    inactivity_timeout_seconds = 30
+    inactivity_timeout_seconds = 90
     last_audio_received_time = None
+    last_activity_time = None
 
     # Send pong every 10s then handle it in the app \
     # since Starlette is not support pong automatically
@@ -333,7 +351,7 @@ async def _listen(
                     break
 
                 # Inactivity timeout
-                if last_audio_received_time and time.time() - last_audio_received_time > inactivity_timeout_seconds:
+                if last_activity_time and time.time() - last_activity_time > inactivity_timeout_seconds:
                     print(f"Session timeout due to inactivity ({inactivity_timeout_seconds}s)", uid, session_id)
                     websocket_close_code = 1001
                     websocket_active = False
@@ -365,6 +383,14 @@ async def _listen(
     # Create or get conversation ID early for audio chunk storage
     private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
 
+    # Conversation timeout (to process the conversation after x seconds of silence)
+    # Max: 4h, min 2m
+    conversation_creation_timeout = conversation_timeout
+    if conversation_creation_timeout == -1:
+        conversation_creation_timeout = 4 * 60 * 60
+    if conversation_creation_timeout < 120:
+        conversation_creation_timeout = 120
+
     # Stream transcript
     async def _create_conversation(conversation_data: dict):
         conversation = Conversation(**conversation_data)
@@ -390,21 +416,20 @@ async def _listen(
 
         _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=messages))
 
-    async def finalize_processing_conversations():
-        # handle edge case of conversation was actually processing? maybe later, doesn't hurt really anyway.
-        # also fix from getConversations endpoint?
+    async def cleanup_processing_conversations():
         processing = conversations_db.get_processing_conversations(uid)
         print('finalize_processing_conversations len(processing):', len(processing), uid, session_id)
         if not processing or len(processing) == 0:
             return
 
-        # sleep for 1 second to yeld the network for ws accepted.
-        await asyncio.sleep(1)
         for conversation in processing:
             await _create_conversation(conversation)
 
-    # Process processing conversations
-    asyncio.create_task(finalize_processing_conversations())
+    async def process_pending_conversations(timed_out_id: Optional[str]):
+        await asyncio.sleep(7.0)
+        if timed_out_id:
+            await _process_conversation(timed_out_id)
+        await cleanup_processing_conversations()
 
     # Send last completed conversation to client
     def send_last_conversation():
@@ -490,8 +515,8 @@ async def _listen(
 
         print(f"Created new stub conversation: {new_conversation_id}", uid, session_id)
 
-    async def _process_current_conversation(conversation_id: str):
-        print("_process_current_conversation", uid, session_id)
+    async def _process_conversation(conversation_id: str):
+        print("_process_conversation", uid, session_id)
         conversation = conversations_db.get_conversation(uid, conversation_id)
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
@@ -501,23 +526,11 @@ async def _listen(
                 print(f'Clean up the conversation {conversation_id}, reason: no content', uid, session_id)
                 conversations_db.delete_conversation(uid, conversation_id)
 
-        await _create_new_in_progress_conversation()
-
-    # Conversation timeout (to process the conversation after x seconds of silence)
-    # Max: 4h, min 2m
-    conversation_creation_timeout = conversation_timeout
-    if conversation_creation_timeout == -1:
-        conversation_creation_timeout = 4 * 60 * 60
-    if conversation_creation_timeout < 120:
-        conversation_creation_timeout = 120
-
     # Process existing conversations
-    def _prepare_in_progess_conversations():
+    async def _prepare_in_progess_conversations():
         nonlocal seconds_to_add
         nonlocal current_conversation_id
 
-        # Determine previous disconnected socket seconds to add for timestamp alignment
-        # Check if conversation has timed out
         if existing_conversation := retrieve_in_progress_conversation(uid):
             finished_at = datetime.fromisoformat(existing_conversation['finished_at'].isoformat())
             seconds_since_last_segment = (datetime.now(timezone.utc) - finished_at).total_seconds()
@@ -527,8 +540,8 @@ async def _listen(
                     uid,
                     session_id,
                 )
-                asyncio.create_task(_process_current_conversation(existing_conversation["id"]))
-                return
+                await _create_new_in_progress_conversation()
+                return existing_conversation["id"]
 
             # Continue with the existing conversation
             current_conversation_id = existing_conversation['id']
@@ -543,15 +556,16 @@ async def _listen(
                 uid,
                 session_id,
             )
-            return
+            return None
 
-        # Or create new
-        asyncio.create_task(_create_new_in_progress_conversation())
+        # else
+        await _create_new_in_progress_conversation()
+        return None
 
     _send_message_event(
         MessageServiceStatusEvent(status="in_progress_conversations_processing", status_text="Processing Conversations")
     )
-    _prepare_in_progess_conversations()
+    timed_out_conversation_id = await _prepare_in_progess_conversations()
 
     def _process_speaker_assigned_segments(transcript_segments: List[TranscriptSegment]):
         for segment in transcript_segments:
@@ -641,20 +655,23 @@ async def _listen(
                 speech_profile_processed = True
                 speech_profile_duration = 0
                 print(f"Custom STT mode enabled - using suggested transcripts from app", uid, session_id)
-                return
+                return None
 
-            file_path, speech_profile_duration = None, 0
+            speech_profile_duration = 0
             if (
                 (language == 'en' or language == 'auto')
                 and (codec == 'opus' or codec == 'pcm16')
                 and include_speech_profile
             ):
-                file_path = get_profile_audio_if_exists(uid)
-                if file_path:
-                    with av.open(file_path) as container:
-                        speech_profile_duration = (
-                            (float(container.duration) / av.time_base) + 5 if container.duration else 0
-                        )
+                # Fast path: Use cached duration from Redis
+                cached_duration = get_speech_profile_duration(uid)
+                if cached_duration is not None:
+                    speech_profile_duration = cached_duration
+                    print(f"Using cached speech profile duration: {speech_profile_duration}", uid, session_id)
+                elif get_user_has_speech_profile(uid):
+                    # Fallback: Profile exists but no cache, use estimate (will be corrected in background)
+                    speech_profile_duration = 30
+                    print(f"Using estimated speech profile duration: {speech_profile_duration}", uid, session_id)
                 else:
                     speech_profile_duration = 0
 
@@ -669,16 +686,17 @@ async def _listen(
                     1,
                     preseconds=speech_profile_duration,
                     model=stt_model,
+                    keywords=vocabulary if vocabulary else None,
                 )
                 if speech_profile_duration:
                     deepgram_socket2 = await process_audio_dg(
-                        stream_transcript, stt_language, sample_rate, 1, model=stt_model
+                        stream_transcript,
+                        stt_language,
+                        sample_rate,
+                        1,
+                        model=stt_model,
+                        keywords=vocabulary if vocabulary else None,
                     )
-
-                    async def deepgram_socket_send(data):
-                        return deepgram_socket.send(data)
-
-                    safe_create_task(send_initial_file_path(file_path, deepgram_socket_send))
 
             # SONIOX
             elif stt_service == STTService.soniox:
@@ -698,9 +716,7 @@ async def _listen(
                 )
 
                 # Create a second socket for initial speech profile if needed
-                print("speech_profile_duration", speech_profile_duration)
-                print("file_path", file_path)
-                if speech_profile_duration and file_path:
+                if speech_profile_duration:
                     soniox_socket2 = await process_audio_soniox(
                         stream_transcript,
                         sample_rate,
@@ -709,22 +725,61 @@ async def _listen(
                         language_hints=hints,
                     )
 
-                    safe_create_task(send_initial_file_path(file_path, soniox_socket.send))
-                    print('speech_profile soniox duration', speech_profile_duration, uid, session_id)
             # SPEECHMATICS
             elif stt_service == STTService.speechmatics:
                 speechmatics_socket = await process_audio_speechmatics(
                     stream_transcript, sample_rate, stt_language, preseconds=speech_profile_duration
                 )
-                if speech_profile_duration:
-                    safe_create_task(send_initial_file_path(file_path, speechmatics_socket.send))
-                    print('speech_profile speechmatics duration', speech_profile_duration, uid, session_id)
+
+            # Return background task to load and send speech profile
+            if speech_profile_duration > 0:
+                return _create_speech_profile_loader_task(lambda: websocket_active)
+            return None
 
         except Exception as e:
             print(f"Initial processing error: {e}", uid, session_id)
             websocket_close_code = 1011
             await websocket.close(code=websocket_close_code)
-            return
+            return None
+
+    def _create_speech_profile_loader_task(is_active: Callable):
+        """Create async task to load speech profile and send to STT in background."""
+
+        async def _process_speech_profile():
+            try:
+                # Check if we should stop before doing any work
+                if not is_active():
+                    return
+
+                # Download file in background thread (not blocking main flow)
+                file_path = await asyncio.to_thread(get_profile_audio_if_exists, uid)
+
+                if not file_path:
+                    print(f"Speech profile file not found for {uid}", session_id)
+                    return
+
+                # Only calculate and cache duration if not already cached
+                if get_speech_profile_duration(uid) is None:
+                    with av.open(file_path) as container:
+                        real_duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
+                    set_speech_profile_duration(uid, real_duration)
+                    print(f"Cached real speech profile duration: {real_duration}", uid, session_id)
+                # Send to appropriate STT socket
+                if stt_service == STTService.deepgram and deepgram_socket:
+
+                    async def deepgram_socket_send(data):
+                        return deepgram_socket.send(data)
+
+                    await send_initial_file_path(file_path, deepgram_socket_send, is_active)
+                elif stt_service == STTService.soniox and soniox_socket:
+                    await send_initial_file_path(file_path, soniox_socket.send, is_active)
+
+                elif stt_service == STTService.speechmatics and speechmatics_socket:
+                    await send_initial_file_path(file_path, speechmatics_socket.send, is_active)
+            except Exception as e:
+                print(f"Error loading speech profile in background: {e}", uid, session_id)
+
+        return asyncio.create_task(_process_speech_profile())
 
     # Pusher
     #
@@ -767,7 +822,7 @@ async def _listen(
                     pusher_connected = False
                 except Exception as e:
                     print(f"Pusher transcripts failed: {e}", uid, session_id)
-            if auto_reconnect and pusher_connected is False:
+            if auto_reconnect and pusher_connected is False and websocket_active:
                 await connect()
 
         async def transcript_consume():
@@ -827,7 +882,7 @@ async def _listen(
                     pusher_connected = False
                 except Exception as e:
                     print(f"Pusher audio_bytes failed: {e}", uid, session_id)
-            if auto_reconnect and pusher_connected is False:
+            if auto_reconnect and pusher_connected is False and websocket_active:
                 await connect()
 
         async def audio_bytes_consume():
@@ -867,7 +922,12 @@ async def _listen(
             nonlocal current_conversation_id
 
             try:
-                pusher_ws = await connect_to_trigger_pusher(uid, sample_rate, retries=5)
+                pusher_ws = await connect_to_trigger_pusher(
+                    uid, sample_rate, retries=5, is_active=lambda: websocket_active
+                )
+                if pusher_ws is None:
+                    # Session ended during connection attempt
+                    return
                 pusher_connected = True
             except Exception as e:
                 print(f"Exception in connect: {e}")
@@ -982,6 +1042,16 @@ async def _listen(
                 await _create_new_in_progress_conversation()
                 continue
 
+            # Check if conversation status is not in_progress
+            if conversation.get('status') != ConversationStatus.in_progress:
+                print(
+                    f"WARN: conversation {current_conversation_id} status is {conversation.get('status')}, not in_progress. Creating new conversation.",
+                    uid,
+                    session_id,
+                )
+                await _create_new_in_progress_conversation()
+                continue
+
             # Check if conversation should be processed
             finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
             seconds_since_last_update = (datetime.now(timezone.utc) - finished_at).total_seconds()
@@ -991,7 +1061,8 @@ async def _listen(
                     uid,
                     session_id,
                 )
-                await _process_current_conversation(current_conversation_id)
+                await _process_conversation(current_conversation_id)
+                await _create_new_in_progress_conversation()
 
     async def stream_transcript_process():
         nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
@@ -1156,14 +1227,28 @@ async def _listen(
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
     async def receive_data(dg_socket1, dg_socket2, soniox_socket, soniox_socket2, speechmatics_socket1):
-        nonlocal websocket_active, websocket_close_code, last_audio_received_time, current_conversation_id
+        nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speech_profile_processed, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
 
         timer_start = time.time()
         last_audio_received_time = timer_start
+        last_activity_time = timer_start
         try:
             while websocket_active:
                 message = await websocket.receive()
+                last_activity_time = time.time()
+
+                # Handle client disconnect
+                if message.get("type") == "websocket.disconnect":
+                    close_code = message.get("code", 1000)
+                    close_reason = {
+                        1000: "normal_closure",
+                        1001: "going_away_os_or_background",
+                        1006: "abnormal_closure",
+                        1011: "server_error",
+                    }.get(close_code, "unknown")
+                    print(f"Client disconnected: code={close_code} reason={close_reason}", uid, session_id)
+                    break
 
                 if message.get("bytes") is not None:
 
@@ -1291,7 +1376,7 @@ async def _listen(
                         print(f"Received non-json text message: {message.get('text')}", uid, session_id)
 
         except WebSocketDisconnect:
-            print("WebSocket disconnected", uid, session_id)
+            print("WebSocket disconnected (exception)", uid, session_id)
         except Exception as e:
             print(f'Could not process data: error {e}', uid, session_id)
             websocket_close_code = 1011
@@ -1301,9 +1386,11 @@ async def _listen(
     # Start
     #
     try:
-        # Init STT
+        # Init STT (fast - uses cached duration, file loads in background)
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
-        await _process_stt()
+        speech_profile_task = await _process_stt()
+        if speech_profile_task:
+            await speech_profile_task
 
         # Init pusher
         pusher_tasks = []
@@ -1331,6 +1418,7 @@ async def _listen(
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())
         lifecycle_manager_task = asyncio.create_task(conversation_lifecycle_manager())
+        pending_conversations_task = asyncio.create_task(process_pending_conversations(timed_out_conversation_id))
 
         _send_message_event(MessageServiceStatusEvent(status="ready"))
 
@@ -1340,7 +1428,9 @@ async def _listen(
             heartbeat_task,
             record_usage_task,
             lifecycle_manager_task,
+            pending_conversations_task,
         ] + pusher_tasks
+
         await asyncio.gather(*tasks)
 
     except Exception as e:

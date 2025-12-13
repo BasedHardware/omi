@@ -5,13 +5,15 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
-import 'package:omi/pages/settings/language_selection_dialog.dart';
+import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/privacy.dart';
+import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -240,18 +242,17 @@ class _ProfilePageState extends State<ProfilePage> {
                         ? homeProvider.availableLanguages.entries
                             .firstWhere(
                               (element) => element.value == homeProvider.userPrimaryLanguage,
+                              orElse: () => const MapEntry('Not set', ''),
                             )
                             .key
                         : 'Not set';
 
                     return _buildProfileItem(
-                      title: 'Primary Language',
+                      title: 'Language',
+                      subtitle: languageName,
                       icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
-                      onTap: () async {
-                        MixpanelManager().pageOpened('Profile Change Language');
-                        await LanguageSelectionDialog.show(context, isRequired: false, forceShow: true);
-                        await homeProvider.setupUserPrimaryLanguage();
-                        setState(() {});
+                      onTap: () {
+                        routeToPage(context, const LanguageSettingsPage());
                       },
                     );
                   },
@@ -302,6 +303,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     ConversationTimeoutDialog.show(context);
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Import Data',
+                  icon: const FaIcon(FontAwesomeIcons.fileImport, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const ImportHistoryPage());
                   },
                 ),
               ],

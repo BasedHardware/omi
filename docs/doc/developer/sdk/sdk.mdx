@@ -1,21 +1,88 @@
 ---
-title: "SDK"
+title: "SDK Overview"
+description: "Build on top of Omi with official SDKs for Python, Swift, and React Native"
 ---
 
 ## Omi SDKs
 
-The Omi SDKs make it easy to build on top of [omi AI wearable ](https://github.com/BasedHardware/omi)in different languages
+The Omi SDKs make it easy to build applications that connect directly to Omi devices. Connect via Bluetooth, stream audio, and get real-time transcription in your preferred language.
 
-![Promo Banner 2 Pn](/docs/docs/images/promo_banner_2.png)
+<img src="/docs/images/promo_banner_2.png" alt="Omi SDK Banner" />
 
-## Languages Supported:
+---
 
-- [Swift SDK](./swift)
-- [Python SDK](./python)
-- [React Native SDK](./ReactNative)
+## Available SDKs
 
-### How it works:
+<CardGroup cols={3}>
+  <Card title="Python SDK" icon="python" href="/doc/developer/sdk/python">
+    pip-installable SDK with Opus decoding and Deepgram transcription
+  </Card>
+  <Card title="Swift SDK" icon="swift" href="/doc/developer/sdk/swift">
+    Native iOS/macOS package with local Whisper transcription
+  </Card>
+  <Card title="React Native SDK" icon="react" href="/doc/developer/sdk/ReactNative">
+    Cross-platform mobile SDK with BLE support
+  </Card>
+</CardGroup>
 
-- connects to any omi device
-- transcription runs either localy or using Deepgram
-- no dependency on omi infrastructure
+---
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Direct Device Connection" icon="bluetooth">
+    Connect to any Omi device over Bluetooth Low Energy
+  </Card>
+  <Card title="Flexible Transcription" icon="microphone">
+    Run transcription locally (Whisper) or via cloud (Deepgram)
+  </Card>
+  <Card title="No Backend Required" icon="server">
+    No dependency on Omi infrastructure - build completely standalone apps
+  </Card>
+  <Card title="Open Source" icon="code-branch">
+    MIT licensed - use and modify freely
+  </Card>
+</CardGroup>
+
+---
+
+## Quick Comparison
+
+| Feature | Python | Swift | React Native |
+|---------|--------|-------|--------------|
+| Installation | `pip install omi-sdk` | Swift Package Manager | `npm install @omiai/omi-react-native` |
+| Transcription | Deepgram (cloud) | Whisper (local) | Deepgram (cloud) |
+| Platforms | macOS, Linux, Windows | iOS, macOS | iOS, Android |
+| Audio Codec | Opus | Opus | Opus, PCM |
+
+---
+
+## Getting Started
+
+<Steps>
+  <Step title="Choose Your SDK">
+    Pick the SDK that matches your development environment and use case.
+  </Step>
+  <Step title="Install Dependencies">
+    Follow the installation guide for your chosen SDK.
+  </Step>
+  <Step title="Scan for Devices">
+    Use the SDK's scan function to find nearby Omi devices.
+  </Step>
+  <Step title="Connect & Stream">
+    Connect to a device and start receiving audio or transcription data.
+  </Step>
+</Steps>
+
+---
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/BasedHardware/omi">
+    Browse source code and report issues
+  </Card>
+  <Card title="Discord Community" icon="discord" href="http://discord.omi.me">
+    Get help from the community
+  </Card>
+</CardGroup>

@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -59,19 +60,21 @@ class AppMetadataWidget extends StatelessWidget {
                     width: MediaQuery.of(context).size.width * 0.28,
                     height: MediaQuery.of(context).size.width * 0.28,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30.0),
+                      borderRadius: BorderRadius.circular(18.0),
                       border: Border.all(color: Color(0xFF35343B), width: 2.0),
                     ),
                     child: imageFile != null || imageUrl != null
                         ? (imageUrl == null
                             ? ClipRRect(
-                                borderRadius: BorderRadius.circular(30.0),
+                                borderRadius: BorderRadius.circular(18.0),
                                 child: Image.file(imageFile!, fit: BoxFit.cover))
                             : ClipRRect(
-                                borderRadius: BorderRadius.circular(30.0),
+                                borderRadius: BorderRadius.circular(18.0),
                                 child: CachedNetworkImage(imageUrl: imageUrl!),
                               ))
-                        : const Icon(Icons.add_a_photo, color: Colors.grey, size: 32),
+                        : const Center(
+                            child: FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 28),
+                          ),
                   ),
                 ),
                 (imageFile != null || imageUrl != null)
@@ -86,9 +89,10 @@ class AppMetadataWidget extends StatelessWidget {
                               color: Color(0xFF35343B),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.edit,
+                            child: const FaIcon(
+                              FontAwesomeIcons.pen,
                               color: Colors.white,
+                              size: 16,
                             ),
                           ),
                         ),
@@ -102,16 +106,13 @@ class AppMetadataWidget extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 color: const Color(0xFF1F1F25),
-                borderRadius: BorderRadius.circular(12.0),
+                borderRadius: BorderRadius.circular(18.0),
               ),
               padding: const EdgeInsets.all(14.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(
-                    height: 10,
-                  ),
                   // App ID field with copy button
                   context.watch<AddAppProvider>().updateAppId != null
                       ? Column(
@@ -128,8 +129,9 @@ class AppMetadataWidget extends StatelessWidget {
                               margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
                               decoration: BoxDecoration(
-                                color: Color(0xFF35343B),
-                                borderRadius: BorderRadius.circular(10.0),
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(12.0),
+                                border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
                               ),
                               width: double.infinity,
                               child: Row(
@@ -157,10 +159,10 @@ class AppMetadataWidget extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(8.0),
                                       ),
-                                      child: Icon(
-                                        Icons.copy,
+                                      child: FaIcon(
+                                        FontAwesomeIcons.copy,
                                         color: Colors.white,
-                                        size: 20,
+                                        size: 16,
                                       ),
                                     ),
                                   ),
@@ -174,20 +176,7 @@ class AppMetadataWidget extends StatelessWidget {
                         )
                       : SizedBox.shrink(),
                   Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      'App Name',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
-                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    width: double.infinity,
+                    padding: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                     child: TextFormField(
                       validator: (value) {
                         if (value == null || value.isEmpty) {
@@ -196,23 +185,33 @@ class AppMetadataWidget extends StatelessWidget {
                         return null;
                       },
                       controller: appNameController,
-                      decoration: const InputDecoration(
-                        errorText: null,
-                        isDense: true,
-                        border: InputBorder.none,
-                        hintText: 'My Awesome App',
+                      decoration: InputDecoration(
+                        labelText: 'App Name*',
+                        labelStyle: TextStyle(color: Colors.grey.shade400),
+                        floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                          borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                          borderSide: BorderSide(color: Colors.red.shade300, width: 1),
+                        ),
+                        filled: false,
                       ),
                     ),
                   ),
                   const SizedBox(
-                    height: 16,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      'Category',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                    ),
+                    height: 6,
                   ),
                   GestureDetector(
                     onTap: () {
@@ -296,124 +295,113 @@ class AppMetadataWidget extends StatelessWidget {
                     },
                     child: Container(
                       margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
                       decoration: BoxDecoration(
-                        color: Color(0xFF35343B),
-                        borderRadius: BorderRadius.circular(10.0),
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(12.0),
+                        border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
                       ),
                       width: double.infinity,
                       child: Row(
                         children: [
-                          const SizedBox(
-                            width: 12,
+                          Expanded(
+                            child: Text(
+                              (category?.isNotEmpty == true ? category : 'Category*') ?? 'Category*',
+                              style: TextStyle(
+                                  color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
+                            ),
                           ),
-                          Text(
-                            (category?.isNotEmpty == true ? category : 'Select Category') ?? 'Select Category',
-                            style: TextStyle(
-                                color: category != null ? Colors.grey.shade100 : Colors.grey.shade400, fontSize: 16),
-                          ),
-                          const Spacer(),
-                          Icon(
-                            Icons.arrow_forward_ios_rounded,
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
                             color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(
-                            width: 12,
+                            size: 14,
                           ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(
-                    height: 16,
+                    height: 6,
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Text(
-                      'Description',
-                      style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                    margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Color(0xFF35343B),
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    width: double.infinity,
+                    padding: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                     child: Stack(
                       children: [
-                        ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: MediaQuery.sizeOf(context).height * 0.1,
-                            maxHeight: MediaQuery.sizeOf(context).height * 0.4,
-                          ),
-                          child: Scrollbar(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.vertical,
-                              reverse: false,
-                              child: generatingDescription
-                                  ? Skeletonizer.zone(
-                                      enabled: generatingDescription,
-                                      effect: ShimmerEffect(
-                                        baseColor: Colors.grey[700]!,
-                                        highlightColor: Colors.grey[600]!,
-                                        duration: Duration(seconds: 1),
-                                      ),
-                                      child: Bone.multiText(),
-                                    )
-                                  : TextFormField(
-                                      maxLines: null,
-                                      validator: (value) {
-                                        if (value == null || value.isEmpty) {
-                                          return 'Please provide a valid description';
-                                        }
-                                        return null;
-                                      },
-                                      controller: appDescriptionController,
-                                      decoration: const InputDecoration(
-                                        contentPadding: EdgeInsets.only(top: 6, bottom: 2),
-                                        isDense: true,
-                                        border: InputBorder.none,
-                                        hintText:
-                                            'My Awesome App is a great app that does amazing things. It is the best app ever!',
-                                        hintMaxLines: 4,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
-                        appDescriptionController.text.isNotEmpty && appNameController.text.isNotEmpty
-                            ? Positioned(
-                                bottom: 2,
-                                right: 0,
-                                child: GestureDetector(
-                                  onTap: () async {
-                                    await context.read<AddAppProvider>().generateDescription();
-                                  },
-                                  child: SvgPicture.asset(
-                                    Assets.images.aiMagic,
-                                    color: Colors.white,
+                        generatingDescription
+                            ? Container(
+                                padding: const EdgeInsets.all(16.0),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12.0),
+                                  border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                ),
+                                constraints: BoxConstraints(
+                                  minHeight: MediaQuery.sizeOf(context).height * 0.1,
+                                ),
+                                child: Skeletonizer.zone(
+                                  enabled: generatingDescription,
+                                  effect: ShimmerEffect(
+                                    baseColor: Colors.grey[700]!,
+                                    highlightColor: Colors.grey[600]!,
+                                    duration: Duration(seconds: 1),
                                   ),
+                                  child: Bone.multiText(),
                                 ),
                               )
-                            : SizedBox.shrink(),
+                            : TextFormField(
+                                maxLines: null,
+                                minLines: 4,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please provide a valid description';
+                                  }
+                                  return null;
+                                },
+                                controller: appDescriptionController,
+                                decoration: InputDecoration(
+                                  labelText: 'Description*',
+                                  labelStyle: TextStyle(color: Colors.grey.shade400),
+                                  floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
+                                  alignLabelWithHint: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12.0),
+                                    borderSide: BorderSide(color: Colors.red.shade300, width: 1),
+                                  ),
+                                  filled: false,
+                                ),
+                              ),
+                        if (appDescriptionController.text.isNotEmpty && appNameController.text.isNotEmpty)
+                          Positioned(
+                            bottom: 12,
+                            right: 12,
+                            child: GestureDetector(
+                              onTap: () async {
+                                await context.read<AddAppProvider>().generateDescription();
+                              },
+                              child: SvgPicture.asset(
+                                Assets.images.aiMagic,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
                   const SizedBox(
-                    height: 16,
+                    height: 6,
                   ),
-                  allowPaidApps
-                      ? Padding(
-                          padding: const EdgeInsets.only(left: 8.0),
-                          child: Text(
-                            'App Pricing',
-                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                          ),
-                        )
-                      : SizedBox.shrink(),
                   allowPaidApps
                       ? GestureDetector(
                           onTap: () {
@@ -507,9 +495,10 @@ class AppMetadataWidget extends StatelessWidget {
                                       fontSize: 16),
                                 ),
                                 const Spacer(),
-                                Icon(
-                                  Icons.arrow_forward_ios_rounded,
+                                FaIcon(
+                                  FontAwesomeIcons.chevronRight,
                                   color: Colors.grey.shade400,
+                                  size: 14,
                                 ),
                                 const SizedBox(
                                   width: 12,

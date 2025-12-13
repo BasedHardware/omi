@@ -4,131 +4,202 @@ description: "Get started with your Omi DevKit 2 for development"
 sidebarTitle: "DevKit 2 Setup"
 ---
 
-# Get Started with Omi DevKit 2
+<img src="/omi-devkit-without-rope.png" alt="Omi DevKit 2" style={{maxWidth: '250px'}} />
 
-<img src="/omi-devkit-without-rope.png" alt="Omi DevKit 2" width="300" />
+The Omi DevKit 2 is designed for developers who want to build, test, and customize their Omi experience.
 
-The Omi DevKit 2 is designed for developers who want to build, test, and customize their omi experience.
+---
 
-## Step 1: Power On Your DevKit
+## Quick Setup
 
-The DevKit 2 has multiple power options:
+<Steps>
+  <Step title="Power On Your DevKit" icon="power-off">
+    The DevKit 2 has multiple power options:
 
-- **Switch method**: Use the physical switch if available on your version
-- **Button method**: Press and hold the center button for 3 seconds
-- **USB-C**: Can be powered directly via USB-C connection
+    - **Switch method**: Use the physical switch if available on your version
+    - **Button method**: Press and hold the center button for 3 seconds
+    - **USB-C**: Can be powered directly via USB-C connection
 
-Look for the LED indicator to confirm the device is powered on.
+    Look for the LED indicator to confirm the device is powered on.
+  </Step>
+  <Step title="Flash Firmware (If Needed)" icon="microchip">
+    DevKits may not come with firmware pre-installed:
 
-## Step 2: Development Environment Setup
+    1. Check if your device shows any LED activity when powered
+    2. If no activity, [flash the firmware here](/doc/get_started/Flash_device)
+    3. Follow the [DevKit 2 testing guide](/doc/developer/DevKit2Testing)
 
-Before using your DevKit, set up your development environment:
+    <Warning>
+    If you see no LED activity at all, firmware installation is required before the device will function.
+    </Warning>
+  </Step>
+  <Step title="Download the Omi App" icon="mobile">
+    <CardGroup cols={2}>
+      <Card title="App Store" icon="apple" href="https://apps.apple.com/fi/app/omi-ai-smart-meeting-notes/id6502156163">
+        Download for iOS
+      </Card>
+      <Card title="Play Store" icon="google-play" href="https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US&pli=1">
+        Download for Android
+      </Card>
+    </CardGroup>
+  </Step>
+  <Step title="Pair with App" icon="bluetooth">
+    1. Open the Omi app
+    2. Follow pairing instructions
+    3. The DevKit should appear as a discoverable device
+    4. Test transcription by speaking near the device
+  </Step>
+</Steps>
 
-### For App Development
-- Download the Omi app: [iOS App Store](https://apps.apple.com/fi/app/omi-ai-smart-meeting-notes/id6502156163) | [Google Play](https://play.google.com/store/apps/details?id=com.friend.ios&hl=en_US&pli=1)
-- Follow our [App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)
-
-### For Firmware Development
-- Install the [firmware compilation tools](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
-- Set up the [development environment](https://docs.omi.me/doc/developer/AppSetup)
-
-<img src="/images/omi-setup-guide-1.avif" alt="DevKit Setup" width="400" />
-
-## Step 3: Flash Firmware (If Needed)
-
-DevKits may not come with firmware pre-installed:
-
-1. Check if your device shows any LED activity when powered
-2. If no activity, [flash the firmware here](https://docs.omi.me/get_started/Flash_device/)
-3. Follow the [DevKit 2 testing guide](https://docs.omi.me/doc/developer/DevKit2Testing)
-
-## Step 4: Pair with App
-
-1. Open the Omi app
-2. Follow pairing instructions
-3. The DevKit should appear as a discoverable device
-4. Test transcription by speaking near the device
+---
 
 ## Button Controls
 
-### Single Press
-- **Turn On/Off**: Single press to power the device on or off
+<CardGroup cols={2}>
+  <Card title="Single Press" icon="hand-pointer">
+    **Turn On/Off**
 
-### Long Press (Voice Questions)
-- **Press and hold** the button until you feel a vibration
-- **Keep pressed down** and ask your question
-- **Release the button** when you're done speaking
-- **Get your answer** in the Omi chat or as a notification on your phone
+    Single press to power the device on or off
+  </Card>
+  <Card title="Long Press" icon="hand">
+    **Voice Questions**
+
+    1. Press and hold until you feel a vibration
+    2. Keep pressed and ask your question
+    3. Release when you're done speaking
+    4. Get your answer in Omi chat or as a notification
+  </Card>
+</CardGroup>
+
+---
 
 ## Light Indicators
 
-Understanding your DevKit's status through LED colors:
+| Color | Status |
+|-------|--------|
+| 🔴 **Red** | Device is on but disconnected from your phone |
+| 🔵 **Blue** | Device is on and connected to your phone |
+| 🟠 **Orange** | Device is charging and disconnected |
+| 🟢 **Teal** | Device is charging and connected |
 
-- 🔴 **Red**: Device is turned on but disconnected from your phone
-- 🔵 **Blue**: Device is turned on and connected to your phone  
-- 🟠 **Orange**: Device is charging and disconnected from your phone
-- 🟢 **Teal**: Device is charging and connected to your phone
+---
 
 ## Developer Features
 
-- 🔧 **Firmware Customization**
-- 📊 **Development Testing Tools**
-- 🎙️ **Audio Streaming API**
-- 💾 **Local Storage Access**
-- 🔌 **GPIO Access** (advanced users)
-- 📡 **Protocol Testing**
+<CardGroup cols={3}>
+  <Card title="Firmware Customization" icon="wrench">
+    Modify and flash custom firmware
+  </Card>
+  <Card title="Testing Tools" icon="flask">
+    Built-in development testing
+  </Card>
+  <Card title="Audio Streaming API" icon="microphone">
+    Access raw audio data
+  </Card>
+  <Card title="Local Storage" icon="hard-drive">
+    On-device data access
+  </Card>
+  <Card title="GPIO Access" icon="plug">
+    Hardware pin control
+  </Card>
+  <Card title="Protocol Testing" icon="network-wired">
+    Debug communications
+  </Card>
+</CardGroup>
+
+---
 
 ## Development Resources
 
 <AccordionGroup>
-  <Accordion title="Building Custom Apps">
-    Learn how to build your own omi apps with our [comprehensive guide](https://docs.omi.me/doc/developer/apps/Introduction). You can create apps in just 2 minutes!
+  <Accordion title="Building Custom Apps" icon="puzzle-piece">
+    Learn how to build your own Omi apps with our [comprehensive guide](/doc/developer/apps/Introduction). You can create apps in just 2 minutes!
   </Accordion>
-  <Accordion title="Backend Integration">
-    Understand how to integrate with the omi backend: [Backend Setup Guide](https://docs.omi.me/doc/developer/backend/Backend_Setup)
+  <Accordion title="Backend Integration" icon="server">
+    Understand how to integrate with the Omi backend: [Backend Setup Guide](/doc/developer/backend/Backend_Setup)
   </Accordion>
-  <Accordion title="Audio Streaming">
-    Access real-time audio data: [Audio Streaming Documentation](https://docs.omi.me/doc/developer/AudioStreaming)
+  <Accordion title="Audio Streaming" icon="wave-square">
+    Access real-time audio data: [Audio Streaming Documentation](/doc/developer/apps/AudioStreaming)
   </Accordion>
-  <Accordion title="Firmware Development">
-    Customize the device firmware: [Firmware Compilation Guide](https://docs.omi.me/doc/developer/firmware/Compile_firmware)
+  <Accordion title="Firmware Development" icon="microchip">
+    Customize the device firmware: [Firmware Compilation Guide](/doc/developer/firmware/Compile_firmware)
+  </Accordion>
+  <Accordion title="App Setup" icon="mobile">
+    Set up the Flutter development environment: [App Setup Guide](/doc/developer/AppSetup)
   </Accordion>
 </AccordionGroup>
 
+---
+
 ## Testing Your DevKit
 
-1. **LED Test**: Device should show LED activity when powered
-2. **Bluetooth Test**: Should appear in Bluetooth discoverable devices
-3. **Audio Test**: Speak near the device and check for transcription
-4. **App Connection**: Should maintain stable connection with the app
+<Steps>
+  <Step title="LED Test" icon="lightbulb">
+    Device should show LED activity when powered
+  </Step>
+  <Step title="Bluetooth Test" icon="bluetooth">
+    Should appear in Bluetooth discoverable devices
+  </Step>
+  <Step title="Audio Test" icon="microphone">
+    Speak near the device and check for transcription
+  </Step>
+  <Step title="App Connection" icon="link">
+    Should maintain stable connection with the app
+  </Step>
+</Steps>
+
+---
 
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="No LED activity">
+  <Accordion title="No LED activity" icon="circle-xmark">
     - Check power connection (USB-C or battery)
     - Try different power methods (switch vs button)
     - Flash firmware if device is completely unresponsive
+    - Check if battery is charged
   </Accordion>
-  <Accordion title="Firmware flashing issues">
-    - Ensure device is in DFU mode
-    - Check USB-C cable and connection
-    - Follow the [detailed flashing guide](https://docs.omi.me/get_started/Flash_device/)
+  <Accordion title="Firmware flashing issues" icon="microchip">
+    - Ensure device is in DFU mode (double-click reset button)
+    - Check USB-C cable and connection (some cables are charge-only)
+    - Follow the [detailed flashing guide](/doc/get_started/Flash_device)
+    - Try a different USB port
   </Accordion>
-  <Accordion title="Development environment issues">
-    - Review [development setup guide](https://docs.omi.me/doc/developer/AppSetup)
-    - Check [contribution guidelines](https://docs.omi.me/doc/developer/Contribution)
+  <Accordion title="Development environment issues" icon="code">
+    - Review [development setup guide](/doc/developer/AppSetup)
+    - Check [contribution guidelines](/doc/developer/Contribution)
+    - Ensure all dependencies are installed
     - Ask for help in our [Discord](http://discord.omi.me)
+  </Accordion>
+  <Accordion title="Bluetooth connection drops" icon="bluetooth">
+    - Keep the app running in the foreground initially
+    - Check for interference from other Bluetooth devices
+    - Update to the latest firmware
+    - Restart both the device and phone
   </Accordion>
 </AccordionGroup>
 
+---
+
 ## Community & Support
 
-1. **Developer Discord**: Join [discord.omi.me](http://discord.omi.me) for development discussions
-2. **GitHub**: Contribute to [BasedHardware/omi](https://github.com/BasedHardware/omi/issues)
-3. **Documentation**: Full docs at [docs.omi.me](https://docs.omi.me)
-4. **Email Support**: [help@omi.me](mailto:help@omi.me)
+<CardGroup cols={2}>
+  <Card title="Developer Discord" icon="discord" href="http://discord.omi.me">
+    Join development discussions
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/BasedHardware/omi/issues">
+    Contribute and report issues
+  </Card>
+  <Card title="Documentation" icon="book" href="https://docs.omi.me">
+    Full developer documentation
+  </Card>
+  <Card title="Email Support" icon="envelope" href="mailto:help@omi.me">
+    Contact help@omi.me
+  </Card>
+</CardGroup>
 
 ---
 
-[← Back to device selection](/getstartedwithomi) 
+<Card title="← Back to device selection" icon="arrow-left" href="/getstartedwithomi">
+  Choose a different device
+</Card>

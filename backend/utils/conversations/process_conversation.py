@@ -166,12 +166,13 @@ def _get_conversation_obj(
         # Store calendar context in external_data if available
         calendar_context = conversation_dict.pop('calendar_meeting_context', None)
 
+        # Use started_at as created_at for imported conversations to preserve original timestamp
+        created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
             structured=structured,
-            **conversation_dict,
-            created_at=datetime.now(timezone.utc),
+            created_at=created_at,
             discarded=discarded,
         )
 
@@ -185,10 +186,12 @@ def _get_conversation_obj(
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
+        # Use started_at as created_at for external integrations to preserve original timestamp
+        created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             **conversation.dict(),
-            created_at=datetime.now(timezone.utc),
+            created_at=created_at,
             structured=structured,
             discarded=discarded,
         )

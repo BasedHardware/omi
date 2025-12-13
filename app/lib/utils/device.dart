@@ -56,6 +56,8 @@ class DeviceUtils {
     // Check deviceType first
     if (deviceType != null) {
       switch (deviceType) {
+        case DeviceType.limitless:
+          return Assets.images.limitless.path;
         case DeviceType.bee:
           return Assets.images.beeDevice.path;
         case DeviceType.openglass:
@@ -72,7 +74,7 @@ class DeviceUtils {
           return Assets.images.friendPendant.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
-           if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
+          if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
             final upperModel = modelNumber.toUpperCase();
 
             if (upperModel.contains('GLASS')) {
@@ -153,6 +155,9 @@ class DeviceUtils {
       }
       if (upperName.contains('FIELDY') || upperName.contains('COMPASS')) {
         return Assets.images.fieldy.path;
+      }
+      if (upperName.contains('LIMITLESS')) {
+        return Assets.images.limitless.path;
       }
     }
 

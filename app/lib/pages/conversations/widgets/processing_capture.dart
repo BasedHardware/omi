@@ -4,7 +4,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
@@ -17,6 +16,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
@@ -398,19 +398,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             ),
           ),
           const SizedBox(height: 4),
-          // Show transcript below controls during recording
-          if (provider.segments.isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: 12, bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: _AutoScrollingText(
-                text: provider.segments.map((segment) => segment.text).join(' '),
-              ),
-            ),
-          ],
-          // Show photos widget if there are photos
-          if (provider.photos.isNotEmpty) ...[
+          if (provider.photos.isNotEmpty || provider.segments.isNotEmpty) ...[
             const SizedBox(height: 8),
             const LiteCaptureWidget(),
           ],
@@ -425,78 +413,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           // Show content when there are segments/photos
           if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ...[
             const SizedBox(height: 24),
-            if (provider.segments.isNotEmpty) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _AutoScrollingText(
-                  text: provider.segments.map((segment) => segment.text).join(' '),
-                ),
-              ),
-            ],
-            // Show photos widget if there are photos
-            if (provider.photos.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const LiteCaptureWidget(),
-            ],
+            const LiteCaptureWidget(),
           ],
         ],
       );
     }
-  }
-}
-
-class _AutoScrollingText extends StatefulWidget {
-  final String text;
-
-  const _AutoScrollingText({required this.text});
-
-  @override
-  State<_AutoScrollingText> createState() => _AutoScrollingTextState();
-}
-
-class _AutoScrollingTextState extends State<_AutoScrollingText> {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(_AutoScrollingText oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.text != oldWidget.text) {
-      // Auto scroll to the end when text changes
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      controller: _scrollController,
-      scrollDirection: Axis.horizontal,
-      child: Text(
-        widget.text,
-        style: const TextStyle(
-          color: Color(0xFF6A6B71),
-          fontSize: 16,
-          height: 1.4,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.visible,
-      ),
-    );
   }
 }
 
@@ -685,10 +606,7 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
     delegate: SliverChildBuilderDelegate(
       (context, index) {
         var pm = conversations[index];
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-          child: ProcessingConversationWidget(conversation: pm),
-        );
+        return ProcessingConversationWidget(conversation: pm);
       },
       childCount: conversations.length,
     ),
@@ -721,71 +639,91 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
           ),
         );
       },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        width: double.maxFinite,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16.0),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _getConversationHeader(context),
-              (widget.conversation.transcriptSegments.isNotEmpty || widget.conversation.photos.isNotEmpty)
-                  ? Column(
-                      children: [
-                        const SizedBox(height: 8),
-                        getLiteTranscriptWidget(
-                          widget.conversation.transcriptSegments,
-                          widget.conversation.photos,
-                          null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Container(
+          width: double.maxFinite,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F25),
+            borderRadius: BorderRadius.circular(24.0),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header row with Processing indicator
+                Row(
+                  children: [
+                    // Icon placeholder with shimmer
+                    Shimmer.fromColors(
+                      baseColor: const Color(0xFF2A2A32),
+                      highlightColor: const Color(0xFF3D3D47),
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A32),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        const SizedBox(height: 8),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
-            ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Processing label with shimmer effect on text
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF35343B),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Shimmer.fromColors(
+                        baseColor: Colors.white,
+                        highlightColor: Colors.grey,
+                        child: const Text(
+                          'Processing',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Timestamp placeholder with shimmer
+                    Shimmer.fromColors(
+                      baseColor: const Color(0xFF2A2A32),
+                      highlightColor: const Color(0xFF3D3D47),
+                      child: Container(
+                        width: 50,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A32),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Title placeholder with shimmer
+                Shimmer.fromColors(
+                  baseColor: const Color(0xFF2A2A32),
+                  highlightColor: const Color(0xFF3D3D47),
+                  child: Container(
+                    width: double.maxFinite,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A32),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-
-  _getConversationHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 0, right: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Text(
-                  'Processing',
-                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-                  maxLines: 1,
-                ),
-              ),
-            ],
-          )
-        ],
       ),
     );
   }

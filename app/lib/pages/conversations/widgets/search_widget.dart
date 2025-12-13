@@ -49,8 +49,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                 // Header with Cancel and Done buttons
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1F1F25),
                     border: Border(
                       bottom: BorderSide(
                         color: Color(0xFF35343B),
@@ -234,7 +234,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                   convoProvider.toggleDiscardConversations();
                   MixpanelManager().deletedConversationsFilterToggled(!convoProvider.showDiscardedConversations);
                 },
-                icon: Icon(
+                icon: const Icon(
                   FontAwesomeIcons.trashCan,
                   color: Colors.white,
                   size: 18,

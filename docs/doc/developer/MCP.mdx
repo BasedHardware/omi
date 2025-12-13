@@ -3,97 +3,204 @@ title: "Model Context Protocol"
 description: "A Model Context Protocol server for Omi interaction and automation. This server provides tools to read, search, and manipulate Memories and Conversations."
 ---
 
-## Configuration
+## Overview
 
-### API Key
+The Omi MCP server enables AI assistants like Claude to interact with your Omi data using natural language. Query your memories, manage conversations, and automate workflows through AI-powered tools.
 
-To use the Omi MCP server, you need an API key. You can generate one in the Omi app under `Settings > Developer > MCP`. The API key can be provided with each tool call. If not provided, the server will use the `OMI_API_KEY` environment variable as a fallback.
+<CardGroup cols={3}>
+  <Card title="Read Memories" icon="brain">
+    Retrieve and search your memories
+  </Card>
+  <Card title="Manage Data" icon="pen-to-square">
+    Create, edit, and delete memories
+  </Card>
+  <Card title="Access Conversations" icon="comments">
+    Browse full conversation transcripts
+  </Card>
+</CardGroup>
 
-### Usage with Claude Desktop
+---
 
-Add this to your `claude_desktop_config.json`:
+## Getting Started
 
-Install docker, https://orbstack.dev/ is great.
+<Steps>
+  <Step title="Generate an API Key" icon="key">
+    Open the Omi app and navigate to **Settings → Developer → MCP** to generate your API key.
+  </Step>
+  <Step title="Install Docker" icon="docker">
+    Install Docker to run the MCP server. We recommend [OrbStack](https://orbstack.dev/) for macOS.
+  </Step>
+  <Step title="Configure Claude Desktop" icon="gear">
+    Add the following to your `claude_desktop_config.json`:
 
-Replace `your_api_key_here` with the key you generated in the Omi app.
+    ```json
+    "mcpServers": {
+      "omi": {
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server"]
+      }
+    }
+    ```
 
-```json
-"mcpServers": {
-  "omi": {
-    "command": "docker",
-    "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server"]
-  }
-}
-```
+    Replace `your_api_key_here` with the key you generated in Step 1.
+  </Step>
+</Steps>
 
-### Examples (langchain, openai Agents, dspy)
+<Tip>
+The API key can also be provided with each tool call. If not provided, the server uses the `OMI_API_KEY` environment variable as a fallback.
+</Tip>
 
-https://github.com/BasedHardware/omi/tree/main/mcp/examples
+---
 
+## Available Tools
 
-### Tools
-1. `get_memories`
-   - Retrieve a list of user memories
-   - Inputs:
-     - `limit` (number, optional): Maximum number of memories to retrieve (default: 100)
-     - `categories` (array of MemoryFilterOptions, optional): Categories of memories to retrieve (default: [])
-   - Returns: JSON object containing list of memories
+<AccordionGroup>
+  <Accordion title="get_memories" icon="brain">
+    Retrieve a list of user memories.
 
-2. `create_memory`
-   - Create a new memory
-   - Inputs:
-     - `content` (string): Content of the memory
-     - `category` (MemoryFilterOptions): Category of the memory
-   - Returns: Created memory object
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `limit` | number | No | Maximum number of memories to retrieve (default: 100) |
+    | `categories` | array | No | Categories to filter by (default: []) |
 
-3. `delete_memory`
-   - Delete a memory by ID
-   - Inputs:
-     - `memory_id` (string): ID of the memory to delete
-   - Returns: Status of the operation
+    **Returns:** JSON object containing list of memories
+  </Accordion>
+  <Accordion title="create_memory" icon="plus">
+    Create a new memory.
 
-4. `edit_memory`
-   - Edit a memory's content
-   - Inputs:
-     - `memory_id` (string): ID of the memory to edit
-     - `content` (string): New content for the memory
-   - Returns: Status of the operation
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `content` | string | Yes | Content of the memory |
+    | `category` | MemoryFilterOptions | Yes | Category of the memory |
 
-5. `get_conversations`
-   - Retrieve a list of user conversations
-   - Inputs:
-     - `include_discarded` (boolean, optional): Whether to include discarded conversations (default: false)
-     - `limit` (number, optional): Maximum number of conversations to retrieve (default: 25)
-   - Returns: List of conversation objects containing transcripts, timestamps, geolocation and structured summaries
+    **Returns:** Created memory object
+  </Accordion>
+  <Accordion title="edit_memory" icon="pen">
+    Edit an existing memory's content.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `memory_id` | string | Yes | ID of the memory to edit |
+    | `content` | string | Yes | New content for the memory |
+
+    **Returns:** Status of the operation
+  </Accordion>
+  <Accordion title="delete_memory" icon="trash">
+    Delete a memory by ID.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `memory_id` | string | Yes | ID of the memory to delete |
+
+    **Returns:** Status of the operation
+  </Accordion>
+  <Accordion title="get_conversations" icon="comments">
+    Retrieve a list of user conversations.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `include_discarded` | boolean | No | Include discarded conversations (default: false) |
+    | `limit` | number | No | Maximum number of conversations (default: 25) |
+
+    **Returns:** List of conversation objects containing transcripts, timestamps, geolocation, and structured summaries
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Example Integrations
+
+<CardGroup cols={3}>
+  <Card title="LangChain" icon="link" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    Build chains with Omi data
+  </Card>
+  <Card title="OpenAI Agents" icon="robot" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    Create AI agents using Omi
+  </Card>
+  <Card title="DSPy" icon="code" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    Programmatic LLM pipelines
+  </Card>
+</CardGroup>
+
+---
 
 ## Debugging
 
-You can use the MCP inspector to debug the server. For uvx installations:
+<Tabs>
+  <Tab title="MCP Inspector" icon="magnifying-glass">
+    Use the MCP inspector to debug the server:
 
-```
-npx @modelcontextprotocol/inspector uvx mcp-server-omi
-```
+    ```bash
+    npx @modelcontextprotocol/inspector uvx mcp-server-omi
+    ```
 
-Or if you've installed the package in a specific directory or are developing on it:
+    For local development:
 
-```
-cd path/to/servers/src/omi
-npx @modelcontextprotocol/inspector uv run mcp-server-omi
-```
+    ```bash
+    cd path/to/servers/src/omi
+    npx @modelcontextprotocol/inspector uv run mcp-server-omi
+    ```
+  </Tab>
+  <Tab title="Log Files" icon="file-lines">
+    View server logs to debug issues:
 
-Running `tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log` will show the logs from the server and may
-help you debug any issues.
+    ```bash
+    tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log
+    ```
+  </Tab>
+</Tabs>
 
-## Advanced
+---
+
+## Advanced Configuration
 
 ### Custom Backend URL
 
-If you are self-hosting the Omi backend, you can specify the API endpoint by setting the `OMI_API_BASE_URL` environment variable.
+If you are self-hosting the Omi backend, specify the API endpoint by setting the `OMI_API_BASE_URL` environment variable:
 
 ```bash
 export OMI_API_BASE_URL="https://your-backend-url.com"
 ```
 
-## License
+<Note>
+This is only needed for self-hosted Omi instances. The default URL points to the official Omi API.
+</Note>
 
-This MCP server is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
+---
+
+## Comparison with Developer API
+
+| Feature | MCP | Developer API |
+|---------|-----|---------------|
+| **Purpose** | AI assistant integration | Direct HTTP API access |
+| **Access** | Read/write with AI context | Read & write user data |
+| **Use Case** | Claude Desktop, AI agents | Custom apps, dashboards |
+| **Best For** | AI-powered workflows | Batch operations, integrations |
+
+<Info>
+For programmatic access without AI assistants, use the [Developer API](/doc/developer/api) instead.
+</Info>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Developer API" icon="code" href="/doc/developer/api">
+    Direct HTTP API for programmatic access
+  </Card>
+  <Card title="GitHub Examples" icon="github" href="https://github.com/BasedHardware/omi/tree/main/mcp/examples">
+    LangChain, OpenAI Agents, and DSPy examples
+  </Card>
+  <Card title="Discord Community" icon="discord" href="http://discord.omi.me">
+    Get help from the community
+  </Card>
+  <Card title="Contribution Guide" icon="code-branch" href="/doc/developer/Contribution">
+    Contribute to the MCP server
+  </Card>
+</CardGroup>

@@ -71,17 +71,16 @@ from utils.apps import (
     increment_username,
     generate_api_key,
     get_popular_apps,
-    filter_apps_by_category,
-    filter_apps_by_capability,
-    sort_apps_by_installs,
     paginate_apps,
     build_pagination_metadata,
-    group_apps_by_category,
-    build_category_groups_response,
-    group_apps_by_capability,
-    build_capability_groups_response,
     get_capabilities_list,
     normalize_app_numeric_fields,
+    filter_apps_by_capability,
+    sort_apps_by_installs,
+    group_apps_by_capability,
+    build_capability_groups_response,
+    group_capability_apps_by_category,
+    build_capability_category_groups_response,
 )
 
 from database.memories import migrate_memories
@@ -144,10 +143,9 @@ def get_apps_v2(
 
     Notes:
     - Uses approved public apps only (no private/tester apps).
-    - Groups: Popular, Chat, Conversations, External Integration.
-    - Chat excludes apps with external_integration capability.
-    - Conversations excludes apps with external_integration or chat capability.
+    - Groups: Popular, Integrations, Chat Assistants, Summary Apps, Realtime Notifications.
     - Popular section is shown first.
+    - Always excludes persona type apps.
     """
 
     capabilities = get_capabilities_list()
@@ -197,6 +195,57 @@ def get_apps_v2(
             'groupCount': len(groups),
             'limit': limit,
             'offset': offset,
+        },
+    }
+    set_generic_cache(cache_key, res, ttl=60 * 10)
+    return res
+
+
+@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
+def get_capability_apps_grouped_by_category(
+    capability_id: str,
+    include_reviews: bool = Query(default=True),
+):
+    """Get all apps for a specific capability, grouped by master category.
+
+    Returns apps grouped into master categories like:
+    - For chat: Personality Clones, Productivity & Lifestyle, Social & Entertainment
+    - For others: Productivity & Tools, Personal & Lifestyle, Social & Entertainment
+    """
+
+    cache_key = f"apps:capability:{capability_id}:grouped:reviews={int(include_reviews)}"
+
+    cached = get_generic_cache(cache_key)
+    if cached:
+        return cached
+
+    capabilities = get_capabilities_list()
+
+    # Fetch and filter approved public apps
+    apps = get_approved_available_apps(include_reviews=include_reviews)
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
+    # Always exclude persona type apps
+    approved_apps = [a for a in approved_apps if not a.is_a_persona()]
+
+    # Filter apps by capability
+    filtered_apps = filter_apps_by_capability(approved_apps, capability_id)
+
+    # Group filtered apps by master category
+    grouped_apps = group_capability_apps_by_category(filtered_apps, capability_id)
+    groups = build_capability_category_groups_response(grouped_apps, capability_id)
+
+    res = {
+        'groups': groups,
+        'capability': {
+            'id': capability_id,
+            'title': next(
+                (c['title'] for c in capabilities if c['id'] == capability_id),
+                capability_id.title().replace('_', ' '),
+            ),
+        },
+        'meta': {
+            'totalApps': len(filtered_apps),
+            'groupCount': len(groups),
         },
     }
     set_generic_cache(cache_key, res, ttl=60 * 10)
@@ -279,9 +328,14 @@ def search_apps(
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
     elif sort == 'name_desc':
         filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower(), reverse=True)
+    elif sort == 'installs_desc':
+        filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
     else:
-        # Default: sort by name
-        filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
+        # sort by installs when searching, otherwise by name
+        if q and q.strip():
+            filtered_apps = sorted(filtered_apps, key=lambda a: (a.installs or 0), reverse=True)
+        else:
+            filtered_apps = sorted(filtered_apps, key=lambda a: a.name.lower())
 
     # Paginate results
     total = len(filtered_apps)
@@ -943,6 +997,149 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
     return {
         'description': desc,
     }
+
+
+# ******************************************************
+# ****************** AI APP GENERATOR ******************
+# ******************************************************
+
+
+@router.get('/v1/app/generate-prompts', tags=['v1'])
+async def generate_sample_prompts_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate sample app prompts for the AI app generator.
+    Uses a fast model to generate creative suggestions.
+    """
+    from utils.llm.clients import llm_mini
+    import json
+
+    system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
+1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
+2. Chat assistant based apps - AI personas or assistants users can chat with
+
+Generate exactly 3 conversation-based and 2 chat-based app ideas.
+
+Examples:
+- Conversation based: "Mind map generator from my conversations", "Jokes and funny moments extractor", "Meeting action items tracker"
+- Chat based: "Elon Musk personality clone", "Strict accountability mentor", "Socratic philosophy tutor"
+
+Return ONLY a JSON array of 5 strings, each being a short app description (max 50 characters).
+Format: ["idea 1", "idea 2", "idea 3", "idea 4", "idea 5"]
+
+First 3 should be conversation-based, last 2 should be chat-based.
+Be creative, fun, and varied. No generic ideas."""
+
+    try:
+        response = await llm_mini.ainvoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": "Generate 5 creative app ideas now"},
+            ]
+        )
+
+        content = response.content.strip()
+
+        # Parse JSON from response
+        if content.startswith("```"):
+            lines = content.split("\n")
+            content = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+
+        prompts = json.loads(content)
+
+        if isinstance(prompts, list) and len(prompts) >= 5:
+            return {"prompts": prompts[:5]}
+        else:
+            # Fallback
+            return {
+                "prompts": [
+                    "Mind map generator from conversations",
+                    "Jokes and funny moments extractor",
+                    "Key decisions and commitments tracker",
+                    "Elon Musk startup advisor clone",
+                    "Strict accountability coach",
+                ]
+            }
+    except Exception as e:
+        print(f"Error generating prompts: {e}")
+        return {
+            "prompts": [
+                "Mind map generator from conversations",
+                "Jokes and funny moments extractor",
+                "Key decisions and commitments tracker",
+                "Elon Musk startup advisor clone",
+                "Strict accountability coach",
+            ]
+        }
+
+
+@router.post('/v1/app/generate', tags=['v1'])
+async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate an app configuration from a natural language prompt.
+    This is an experimental feature that uses AI to create app configurations.
+    """
+    from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
+
+    prompt = data.get('prompt', '').strip()
+    if not prompt:
+        raise HTTPException(status_code=422, detail='Prompt is required')
+
+    if len(prompt) < 10:
+        raise HTTPException(status_code=422, detail='Prompt is too short. Please provide more details.')
+
+    if len(prompt) > 2000:
+        raise HTTPException(status_code=422, detail='Prompt is too long. Please keep it under 2000 characters.')
+
+    try:
+        # Generate app configuration using LLM
+        generated_app = await generate_app_from_prompt(prompt)
+
+        return {
+            'status': 'ok',
+            'app': {
+                'name': generated_app.name,
+                'description': generated_app.description,
+                'category': generated_app.category,
+                'capabilities': generated_app.capabilities,
+                'chat_prompt': generated_app.chat_prompt,
+                'memory_prompt': generated_app.memory_prompt,
+            },
+        }
+    except Exception as e:
+        print(f"Error generating app: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
+
+
+@router.post('/v1/app/generate-icon', tags=['v1'])
+async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate an app icon using AI (DALL-E).
+    Returns the icon as a base64 encoded PNG image.
+    """
+    from utils.llm.app_generator import generate_app_icon
+    import base64
+
+    app_name = data.get('name', '').strip()
+    app_description = data.get('description', '').strip()
+    category = data.get('category', 'other').strip()
+
+    if not app_name:
+        raise HTTPException(status_code=422, detail='App name is required')
+
+    if not app_description:
+        raise HTTPException(status_code=422, detail='App description is required')
+
+    try:
+        # Generate icon using DALL-E
+        icon_bytes = await generate_app_icon(app_name, app_description, category)
+
+        # Return as base64
+        icon_base64 = base64.b64encode(icon_bytes).decode('utf-8')
+
+        return {'status': 'ok', 'icon_base64': icon_base64, 'mime_type': 'image/png'}
+    except Exception as e:
+        print(f"Error generating icon: {e}")
+        raise HTTPException(status_code=500, detail=f'Failed to generate icon: {str(e)}')
 
 
 # ******************************************************

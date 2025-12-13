@@ -92,18 +92,23 @@ def get_conversations(
     offset: int = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     print('get_conversations', uid, limit, offset, statuses)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
+
     conversations = conversations_db.get_conversations(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
         statuses=statuses.split(",") if len(statuses) > 0 else [],
+        start_date=start_date,
+        end_date=end_date,
     )
 
     for conv in conversations:
