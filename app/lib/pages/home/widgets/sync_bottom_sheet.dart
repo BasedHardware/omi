@@ -35,8 +35,10 @@ class SyncBottomSheet extends StatelessWidget {
         final hasPendingData = pendingFlashPages.isNotEmpty;
 
         // Check for orphaned files from previous failed syncs
-        final hasOrphanedFiles = ServiceManager.instance().wal.getSyncs().flashPage.hasOrphanedFiles;
-        final orphanedCount = ServiceManager.instance().wal.getSyncs().flashPage.orphanedFilesCount;
+        final flashPageSync = ServiceManager.instance().wal.getSyncs().flashPage;
+        final hasOrphanedFiles = flashPageSync.hasOrphanedFiles;
+        final orphanedCount = flashPageSync.orphanedFilesCount;
+        final isUploadingOrphans = flashPageSync.isUploadingOrphans;
 
         // Calculate time ago for pending data
         String timeAgo = '';
@@ -286,7 +288,7 @@ class SyncBottomSheet extends StatelessWidget {
               ),
 
               // Orphaned files card - files saved to phone but not yet uploaded
-              if (hasOrphanedFiles && !isSyncing) ...[
+              if ((hasOrphanedFiles || isUploadingOrphans) && !isSyncing) ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
@@ -304,32 +306,44 @@ class SyncBottomSheet extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$orphanedCount file${orphanedCount > 1 ? 's' : ''} saved on phone',
+                              isUploadingOrphans
+                                  ? 'Uploading to cloud...'
+                                  : '$orphanedCount file${orphanedCount > 1 ? 's' : ''} saved on phone',
                               style: TextStyle(color: Colors.blue.shade300, fontSize: 14, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Ready to upload to cloud',
+                              isUploadingOrphans ? 'Processing saved recordings' : 'Ready to upload to cloud',
                               style: TextStyle(color: Colors.blue.shade400.withOpacity(0.7), fontSize: 12),
                             ),
                           ],
                         ),
                       ),
-                      ElevatedButton(
-                        onPressed: () {
-                          ServiceManager.instance().wal.getSyncs().flashPage.uploadOrphanedFiles();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade700,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                      if (isUploadingOrphans)
+                        const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.blue,
                           ),
-                          elevation: 0,
+                        )
+                      else
+                        ElevatedButton(
+                          onPressed: () {
+                            flashPageSync.uploadOrphanedFiles();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text('Upload', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                         ),
-                        child: const Text('Upload', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      ),
                     ],
                   ),
                 ),

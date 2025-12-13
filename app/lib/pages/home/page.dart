@@ -35,6 +35,9 @@ import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 
@@ -678,6 +681,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
+              // Sync icon for Limitless devices
+              Consumer2<DeviceProvider, SyncProvider>(
+                builder: (context, deviceProvider, syncProvider, child) {
+                  final device = deviceProvider.pairedDevice;
+                  final hasPending = syncProvider.missingWals.isNotEmpty;
+                  final isSyncing = syncProvider.isSyncing;
+
+                  if (device != null && device.type == DeviceType.limitless) {
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        SyncBottomSheet.show(context);
+                      },
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: isSyncing
+                              ? Colors.deepPurple.withOpacity(0.2)
+                              : hasPending
+                                  ? Colors.orange.withOpacity(0.2)
+                                  : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                          border: isSyncing ? Border.all(color: Colors.deepPurpleAccent, width: 1) : null,
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Icon(
+                              isSyncing ? Icons.sync_rounded : Icons.cloud_sync_rounded,
+                              size: 18,
+                              color: isSyncing
+                                  ? Colors.deepPurpleAccent
+                                  : hasPending
+                                      ? Colors.orangeAccent
+                                      : Colors.white70,
+                            ),
+                            if (hasPending && !isSyncing)
+                              Positioned(
+                                right: 6,
+                                top: 6,
+                                child: Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.orangeAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
               Container(
                 width: 36,
                 height: 36,
