@@ -627,60 +627,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     right: 20,
                                     bottom: 100, // Position above the bottom navigation bar
                                     child: GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.mediumImpact();
-                                      MixpanelManager().bottomNavigationTabClicked('Chat');
-                                      // Navigate to chat page
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => const ChatPage(isPivotBottom: false),
-                                        ),
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(28),
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Colors.deepPurple.shade700,
-                                            Colors.purple.shade700,
-                                            Colors.deepPurple.shade700,
-                                          ],
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                        ),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 4),
+                                      onTap: () {
+                                        HapticFeedback.mediumImpact();
+                                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                                        // Navigate to chat page
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const ChatPage(isPivotBottom: false),
                                           ),
-                                        ],
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            FontAwesomeIcons.solidComment,
-                                            size: 20,
-                                            color: Colors.white,
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(28),
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.deepPurple.shade700,
+                                              Colors.purple.shade700,
+                                              Colors.deepPurple.shade700,
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
                                           ),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Chat',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 4),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              FontAwesomeIcons.solidComment,
+                                              size: 20,
+                                              color: Colors.white,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Chat',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
                               ],
                             );
                           }
@@ -759,9 +759,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           color: isSyncing
-                              ? Colors.deepPurple.withOpacity(0.2)
+                              ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPending
-                                  ? Colors.orange.withOpacity(0.15)
+                                  ? Colors.orange.withValues(alpha: 0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
@@ -787,7 +787,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   if (homeProvider.selectedIndex != 0) {
                     return const SizedBox.shrink();
                   }
-                  
+
                   // Hide search button if search bar is visible OR if there's an active search query
                   bool shouldShowSearchButton = !homeProvider.showConvoSearchBar && convoProvider.previousQuery.isEmpty;
                   return Row(
@@ -822,7 +822,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         height: 36,
                         decoration: BoxDecoration(
                           color: convoProvider.selectedDate != null
-                              ? Colors.deepPurple.withOpacity(0.5)
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
                               : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
@@ -889,7 +889,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                   onPressed: () async {
                                                     Navigator.of(context).pop();
                                                     if (context.mounted) {
-                                                      final provider = Provider.of<ConversationProvider>(context, listen: false);
+                                                      final provider =
+                                                          Provider.of<ConversationProvider>(context, listen: false);
                                                       await provider.filterConversationsByDate(selectedDate);
                                                       MixpanelManager().calendarFilterApplied(selectedDate);
                                                     }

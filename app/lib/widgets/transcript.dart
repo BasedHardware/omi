@@ -84,19 +84,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Color(0xFF8B5CF6).withOpacity(0.8);
+      return const Color(0xFF8B5CF6).withValues(alpha: 0.8);
     }
     // Use speakerId to get consistent color for each speaker
     final colorIndex = speakerId % _speakerColors.length;
-    return _speakerColors[colorIndex].withOpacity(0.8);
+    return _speakerColors[colorIndex].withValues(alpha: 0.8);
   }
 
   Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Color(0xFF8B5CF6).withOpacity(0.3);
+      return const Color(0xFF8B5CF6).withValues(alpha: 0.3);
     }
     final colorIndex = speakerId % _speakerColors.length;
-    return _speakerColors[colorIndex].withOpacity(0.3);
+    return _speakerColors[colorIndex].withValues(alpha: 0.3);
   }
 
   @override
@@ -128,14 +128,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (widget.searchQuery.isEmpty) return;
 
     final searchQuery = widget.searchQuery.toLowerCase();
-    int globalMatchCount = 0;
 
     for (var segment in widget.segments) {
       final text = _getDecodedText(segment.text).toLowerCase();
       final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
       for (final _ in matches) {
         _matchKeys.add(GlobalKey());
-        globalMatchCount++;
       }
     }
   }
@@ -568,7 +566,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
+                                    color: Colors.black.withValues(alpha: 0.15),
                                     blurRadius: 4,
                                     offset: const Offset(0, 1),
                                   ),
@@ -723,7 +721,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       },
       child: const Opacity(
         opacity: 0.5,
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
@@ -778,7 +776,7 @@ class LiteTranscriptWidget extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-              color: Colors.grey.shade300.withOpacity(0.6),
+              color: Colors.grey.shade300.withValues(alpha: 0.6),
               height: 1.3,
             ),
         textAlign: TextAlign.right,

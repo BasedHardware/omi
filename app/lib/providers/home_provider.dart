@@ -210,7 +210,7 @@ class HomeProvider extends ChangeNotifier {
   void dispose() {
     chatFieldFocusNode.removeListener(_onFocusChange);
     appsSearchFieldFocusNode.removeListener(_onFocusChange);
-    convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    convoSearchFieldFocusNode.removeListener(_onConvoSearchFocusChange);
     memoriesSearchFieldFocusNode.removeListener(_onFocusChange);
     memoriesSearchFieldFocusNode.dispose();
     chatFieldFocusNode.dispose();

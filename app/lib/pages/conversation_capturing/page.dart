@@ -4,7 +4,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -13,9 +12,6 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/conversation_bottom_bar.dart';
-import 'package:omi/widgets/photos_grid.dart';
-import 'package:omi/providers/people_provider.dart';
 
 import 'package:provider/provider.dart';
 
@@ -114,16 +110,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     String twoDigits(int n) => n.toString().padLeft(2, '0');
 
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
-  }
-
-  void _pushNewConversation(BuildContext context, conversation) async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (c) => ConversationDetailPage(
-          conversation: conversation,
-        ),
-      ));
-    });
   }
 
   Future<void> _stopConversation(CaptureProvider provider) async {
@@ -315,7 +301,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                             borderRadius: BorderRadius.circular(28),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.25),
+                                color: Colors.black.withValues(alpha: 0.25),
                                 spreadRadius: 2,
                                 blurRadius: 8,
                                 offset: const Offset(0, 4),
@@ -355,7 +341,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.25),
+                                color: Colors.black.withValues(alpha: 0.25),
                                 spreadRadius: 2,
                                 blurRadius: 8,
                                 offset: const Offset(0, 4),
