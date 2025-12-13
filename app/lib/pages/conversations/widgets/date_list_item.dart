@@ -15,7 +15,7 @@ class DateListItem extends StatelessWidget {
     var isYesterday = date.month == yesterday.month && date.day == yesterday.day && date.year == yesterday.year;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, isFirst ? 0 : 20, 16, 4),
+      padding: EdgeInsets.fromLTRB(24, isFirst ? 0 : 20, 16, 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -26,15 +26,8 @@ class DateListItem extends StatelessWidget {
                 : isYesterday
                     ? 'Yesterday'
                     : dateTimeFormat('MMM dd', date),
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            style: const TextStyle(color: Colors.white, fontSize: 18),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Container(
-              height: 1,
-              color: const Color(0xFF35343B),
-            ),
-          )
         ],
       ),
     );
