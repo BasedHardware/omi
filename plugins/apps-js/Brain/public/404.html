@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <style>
+        .error-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 90%;
+            max-width: 500px;
+            padding: 40px;
+            background: rgba(15, 15, 20, 0.95);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 255, 170, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .error-code {
+            font-size: 72px;
+            font-weight: 700;
+            color: #00ffaa;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px rgba(0, 255, 170, 0.5);
+        }
+
+        .error-message {
+            font-size: 24px;
+            color: #fff;
+            margin-bottom: 30px;
+        }
+
+        .error-description {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .home-button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: rgba(0, 255, 170, 0.15);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            border-radius: 8px;
+            color: #00ffaa;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .home-button:hover {
+            background: rgba(0, 255, 170, 0.25);
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">404</div>
+        <div class="error-message">Page Not Found</div>
+        <div class="error-description">
+            The page you're looking for doesn't exist or has been moved.
+            <br>Please check the URL or return to the homepage.
+        </div>
+        <a href="/" class="home-button">Return Home</a>
+    </div>
+</body>
+</html>

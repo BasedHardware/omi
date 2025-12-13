@@ -7,7 +7,7 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 
 // Import configuration
-const { 
+const {
   REQUIRED_ENV_VARS,
   MAX_REQUESTS_PER_MINUTE,
   RATE_LIMIT_WINDOW_MS,
@@ -41,8 +41,8 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors());
 app.use(compression());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
 // Serve static files from the 'public' directory
@@ -54,14 +54,14 @@ const requestCounts = new Map();
 app.use((req, res, next) => {
   const now = Date.now();
   const clientIp = req.ip;
-  
+
   // Clean up expired entries
   for (const [ip, data] of requestCounts.entries()) {
     if (now - data.windowStart > RATE_LIMIT_WINDOW_MS) {
       requestCounts.delete(ip);
     }
   }
-  
+
   // Initialize or get client data
   if (!requestCounts.has(clientIp)) {
     requestCounts.set(clientIp, {
@@ -69,18 +69,18 @@ app.use((req, res, next) => {
       windowStart: now
     });
   }
-  
+
   const clientData = requestCounts.get(clientIp);
-  
+
   // Reset window if needed
   if (now - clientData.windowStart > RATE_LIMIT_WINDOW_MS) {
     clientData.count = 0;
     clientData.windowStart = now;
   }
-  
+
   // Increment count and check limits
   clientData.count++;
-  
+
   if (clientData.count > MAX_REQUESTS_PER_MINUTE) {
     console.warn(`Rate limit exceeded for IP: ${clientIp}`);
     return res.status(429).json({
@@ -88,7 +88,7 @@ app.use((req, res, next) => {
       message: 'Too many requests, please try again later.'
     });
   }
-  
+
   next();
 });
 
@@ -97,6 +97,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/email', emailRouter);
 app.use('/api/deck', deckRouter);
+app.use('/brain', require('./Brain/src/routes/brain'));
 
 // App routes
 app.get('/', (req, res) => {
@@ -116,82 +117,82 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-  // Initialize database and start server
-  async function startServer() {
-    try {
-      // Initialize Supabase tables
-      await initializeDatabase();
-    
+// Initialize database and start server
+async function startServer() {
+  try {
+    // Initialize Supabase tables
+    await initializeDatabase();
+
     // Check Supabase connection
     await checkSupabaseConnection();
-      
-      // Ensure Redis is connected
-      try {
+
+    // Ensure Redis is connected
+    try {
       const { initializeRedis } = require('./email/src/utils/redisUtils');
-        const redisConnected = await initializeRedis();
-        if (redisConnected) {
-          console.log('Redis initialized successfully');
-        } else {
-          console.warn('Redis initialization failed, some features may not work properly');
-        }
-      } catch (redisError) {
-        console.error('Failed to initialize Redis:', redisError);
-        console.warn('Continuing without Redis, some features may not work properly');
+      const redisConnected = await initializeRedis();
+      if (redisConnected) {
+        console.log('Redis initialized successfully');
+      } else {
+        console.warn('Redis initialization failed, some features may not work properly');
       }
-      
-      // Start HTTP server
-      const server = app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-      }).on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          console.error(`Port ${PORT} is already in use. Please try a different port or kill the process using this port.`);
-          process.exit(1);
-        } else {
-          console.error('Failed to start server:', err);
-          process.exit(1);
-        }
+    } catch (redisError) {
+      console.error('Failed to initialize Redis:', redisError);
+      console.warn('Continuing without Redis, some features may not work properly');
+    }
+
+    // Start HTTP server
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    }).on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use. Please try a different port or kill the process using this port.`);
+        process.exit(1);
+      } else {
+        console.error('Failed to start server:', err);
+        process.exit(1);
+      }
+    });
+
+    // Graceful shutdown handler
+    const shutdown = async () => {
+      console.log('\nGracefully shutting down...');
+
+      // Close server first to stop accepting new connections
+      server.close(() => {
+        console.log('Server closed');
       });
 
-      // Graceful shutdown handler
-      const shutdown = async () => {
-        console.log('\nGracefully shutting down...');
-        
-        // Close server first to stop accepting new connections
-        server.close(() => {
-            console.log('Server closed');
-        });
+      try {
+        // Close Redis connections
+        await closeRedisConnection();
+        console.log('Redis connection closed');
 
-        try {
-          // Close Redis connections
-          await closeRedisConnection();
-          console.log('Redis connection closed');
-          
-          // Exit process
-          process.exit(0);
-        } catch (error) {
-          console.error('Error during shutdown:', error);
-          process.exit(1);
-        }
-      };
+        // Exit process
+        process.exit(0);
+      } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+      }
+    };
 
-      // Handle shutdown signals
-      process.on('SIGTERM', shutdown);
-      process.on('SIGINT', shutdown);
-      
-      return server;
-    } catch (error) {
-      console.error('Failed to start server:', error);
-      process.exit(1);
-    }
-  }
+    // Handle shutdown signals
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
 
-  // Start the server
-  startServer().catch(error => {
-    console.error('Unhandled error during server startup:', error);
+    return server;
+  } catch (error) {
+    console.error('Failed to start server:', error);
     process.exit(1);
-  });
+  }
+}
 
-  module.exports = app;
+// Start the server
+startServer().catch(error => {
+  console.error('Unhandled error during server startup:', error);
+  process.exit(1);
+});
+
+module.exports = app;
 
 
 
