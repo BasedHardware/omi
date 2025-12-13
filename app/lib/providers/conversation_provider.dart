@@ -328,9 +328,10 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // Re-apply grouping with date filter
-    groupConversationsByDate();
+    groupedConversations = {};
     notifyListeners();
+
+    await fetchConversations();
   }
 
   /// Clear the date filter
@@ -343,9 +344,10 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // Re-apply grouping without date filter
-    groupConversationsByDate();
+    groupedConversations = {};
     notifyListeners();
+
+    await fetchConversations();
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
@@ -392,8 +394,23 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  (DateTime?, DateTime?) _getDateFilterRange() {
+    if (selectedDate == null) return (null, null);
+    final date = selectedDate!;
+    return (
+      DateTime(date.year, date.month, date.day, 0, 0, 0),
+      DateTime(date.year, date.month, date.day, 23, 59, 59),
+    );
+  }
+
   Future _getConversationsFromServer() async {
-    return await getConversations(includeDiscarded: showDiscardedConversations);
+    final (startDate, endDate) = _getDateFilterRange();
+
+    return await getConversations(
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
   }
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
@@ -407,8 +424,16 @@ class ConversationProvider extends ChangeNotifier {
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations =
-        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
+
+    // Date filter if selected
+    final (startDate, endDate) = _getDateFilterRange();
+
+    var newConversations = await getConversations(
+      offset: conversations.length,
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();

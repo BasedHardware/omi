@@ -16,10 +16,10 @@ import 'package:provider/provider.dart';
 
 enum TaskIntegrationApp {
   appleReminders,
-  googleTasks,
   todoist,
   clickup,
   asana,
+  googleTasks,
   trello,
   monday,
 }
@@ -121,11 +121,10 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
   }
 
   bool get isAvailable {
-    // Apple Reminders, Todoist, Asana, Google Tasks, and ClickUp are available
+    // Apple Reminders, Todoist, Asana, and ClickUp are available
     return this == TaskIntegrationApp.appleReminders ||
         this == TaskIntegrationApp.todoist ||
         this == TaskIntegrationApp.asana ||
-        this == TaskIntegrationApp.googleTasks ||
         this == TaskIntegrationApp.clickup;
   }
 

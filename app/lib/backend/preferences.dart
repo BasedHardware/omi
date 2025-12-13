@@ -257,6 +257,15 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  // Transcription settings (cached for fast preload)
+  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
+
+  set cachedSingleLanguageMode(bool value) => saveBool('cachedSingleLanguageMode', value);
+
+  List<String> get cachedTranscriptionVocabulary => getStringList('cachedTranscriptionVocabulary');
+
+  set cachedTranscriptionVocabulary(List<String> value) => saveStringList('cachedTranscriptionVocabulary', value);
+
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage');
 

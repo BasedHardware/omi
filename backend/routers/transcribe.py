@@ -25,6 +25,7 @@ av.logging.set_level(av.logging.ERROR)
 
 import database.conversations as conversations_db
 import database.users as user_db
+from database.users import get_user_transcription_preferences
 from database import redis_db
 from database.redis_db import (
     get_cached_user_geolocation,
@@ -202,18 +203,30 @@ async def _listen(
         lc3_chunk_size = 30  # 30 bytes per frame
         lc3_frame_duration_us = 10000  # 10ms = 10000 microseconds
 
+    # Fetch user transcription preferences
+    transcription_prefs = get_user_transcription_preferences(uid)
+    single_language_mode = transcription_prefs.get('single_language_mode', False)
+    vocabulary = transcription_prefs.get('vocabulary', [])
+
+    # Always include "Omi" as predefined vocabulary
+    vocabulary = list({"Omi"} | set(vocabulary))
+
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
 
     # Determine the best STT service
-    stt_service, stt_language, stt_model = get_stt_service_for_language(language)
+    stt_service, stt_language, stt_model = get_stt_service_for_language(
+        language, multi_lang_enabled=not single_language_mode
+    )
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
 
-    # Translation language
+    # Translation language (disabled in single language mode)
     translation_language = None
-    if stt_language == 'multi':
+    if single_language_mode:
+        translation_language = None
+    elif stt_language == 'multi':
         if language == "multi":
             user_language_preference = user_db.get_user_language_preference(uid)
             if user_language_preference:
@@ -632,10 +645,16 @@ async def _listen(
                     1,
                     preseconds=speech_profile_duration,
                     model=stt_model,
+                    keywords=vocabulary if vocabulary else None,
                 )
                 if speech_profile_duration:
                     deepgram_socket2 = await process_audio_dg(
-                        stream_transcript, stt_language, sample_rate, 1, model=stt_model
+                        stream_transcript,
+                        stt_language,
+                        sample_rate,
+                        1,
+                        model=stt_model,
+                        keywords=vocabulary if vocabulary else None,
                     )
 
             # SONIOX
