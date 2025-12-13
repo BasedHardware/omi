@@ -82,10 +82,15 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  // Double tap behavior: true = pause/mute, false = end conversation (default)
-  bool get doubleTapPausesMuting => getBool('doubleTapPausesMuting');
+  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
+  int get doubleTapAction => getInt('doubleTapAction');
 
-  set doubleTapPausesMuting(bool value) => saveBool('doubleTapPausesMuting', value);
+  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+
+  // Keep backward compatibility
+  bool get doubleTapPausesMuting => doubleTapAction == 1;
+
+  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {

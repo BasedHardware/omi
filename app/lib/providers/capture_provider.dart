@@ -217,6 +217,20 @@ class CaptureProvider extends ChangeNotifier
   bool _isPaused = false;
   bool get isPaused => _isPaused;
 
+  // Flag to star the conversation when it ends
+  bool _starOngoingConversation = false;
+  bool get isConversationMarkedForStarring => _starOngoingConversation;
+
+  void markConversationForStarring() {
+    _starOngoingConversation = true;
+    notifyListeners();
+  }
+
+  void unmarkConversationForStarring() {
+    _starOngoingConversation = false;
+    notifyListeners();
+  }
+
   // Session-based auto-resume flag
   // Always true on app start, set to false only when user manually stops/pauses
   bool _shouldAutoResumeAfterWake = true;
@@ -438,7 +452,9 @@ class CaptureProvider extends ChangeNotifier
           return;
         }
 
-        if (SharedPreferencesUtil().doubleTapPausesMuting) {
+        int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+
+        if (doubleTapAction == 1) {
           // Pause/resume recording
           debugPrint("Double tap: toggling pause/mute");
           _isProcessingButtonEvent = true;
@@ -456,6 +472,18 @@ class CaptureProvider extends ChangeNotifier
               debugPrint("Error pausing device recording: $e");
               _isProcessingButtonEvent = false;
             });
+          }
+        } else if (doubleTapAction == 2) {
+          // Star ongoing conversation (doesn't end it)
+          debugPrint("Double tap: marking conversation for starring");
+          if (!_starOngoingConversation) {
+            markConversationForStarring();
+            // Haptic feedback to confirm
+            HapticFeedback.mediumImpact();
+          } else {
+            // Toggle off if already marked
+            unmarkConversationForStarring();
+            HapticFeedback.lightImpact();
           }
         } else {
           // End conversation and process (default)
@@ -1235,6 +1263,16 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
     if (conversation == null) return;
+
+    // Star the conversation if it was marked for starring
+    if (_starOngoingConversation) {
+      debugPrint("Conversation was marked for starring, applying star");
+      _starOngoingConversation = false; // Reset the flag
+      conversation.starred = true;
+      // Call API to star the conversation
+      await setConversationStarred(conversation.id, true);
+    }
+
     conversationProvider?.upsertConversation(conversation);
     MixpanelManager().conversationCreated(conversation);
   }
