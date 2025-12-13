@@ -90,6 +90,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
+  StreamSubscription? _notificationStreamSubscription;
 
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
@@ -316,7 +317,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _listenToMessagesFromNotification() {
-    NotificationService.instance.listenForServerMessages.listen((message) {
+    _notificationStreamSubscription = NotificationService.instance.listenForServerMessages.listen((message) {
       if (mounted) {
         var selectedApp = Provider.of<AppProvider>(context, listen: false).getSelectedApp();
         if (selectedApp == null || message.appId == selectedApp.id) {
@@ -981,6 +982,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Cancel stream subscription to prevent memory leak
+    _notificationStreamSubscription?.cancel();
+    // Remove foreground task callback to prevent memory leak
+    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();
     super.dispose();
   }
