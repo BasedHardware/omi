@@ -30,7 +30,7 @@ class STTService(str, Enum):
 
 
 # Languages supported by Soniox
-soniox_languages = [
+soniox_languages = {
     'multi',
     'en',
     'af',
@@ -92,7 +92,7 @@ soniox_languages = [
     'ur',
     'vi',
     'cy',
-]
+}
 soniox_multi_languages = soniox_languages
 
 # bg, ca, zh, zh-CN, zh-Hans, zh-TW, zh-Hant, zh-HK, cs, da, da-DK, nl, en, en-US, en-AU, en-GB, en-NZ, en-IN, et, fi, nl-BE, fr, fr-CA, de, de-CH, el, hi, hu, id, it, ja, ko, ko-KR, lv, lt, ms, no, pl, pt, pt-BR, pt-PT, ro, ru, sk, es, es-419, sv, sv-SE, th, th-TH, tr, uk, vi
@@ -107,7 +107,7 @@ deepgram_nova2_languages = {
     "th",
     "th-TH",
 }
-deepgram_nova2_multi_languages = [
+deepgram_nova2_multi_languages = {
     'multi',
     "en",
     "en-US",
@@ -117,8 +117,8 @@ deepgram_nova2_multi_languages = [
     "en-NZ",
     "es",
     "es-419",
-]
-deepgram_nova3_multi_languages = [
+}
+deepgram_nova3_multi_languages = {
     "multi",
     "en",
     "en-US",
@@ -139,8 +139,8 @@ deepgram_nova3_multi_languages = [
     "ja",
     "it",
     "nl",
-]
-deepgram_nova3_languages: List[str] = [
+}
+deepgram_nova3_languages = {
     "bg",
     "ca",
     "cs",
@@ -186,7 +186,7 @@ deepgram_nova3_languages: List[str] = [
     "tr",
     "uk",
     "vi",
-]
+}
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
