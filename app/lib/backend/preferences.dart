@@ -82,10 +82,15 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  // Double tap behavior: true = pause/mute, false = end conversation (default)
-  bool get doubleTapPausesMuting => getBool('doubleTapPausesMuting');
+  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
+  int get doubleTapAction => getInt('doubleTapAction');
 
-  set doubleTapPausesMuting(bool value) => saveBool('doubleTapPausesMuting', value);
+  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+
+  // Keep backward compatibility
+  bool get doubleTapPausesMuting => doubleTapAction == 1;
+
+  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
@@ -251,6 +256,15 @@ class SharedPreferencesUtil {
   bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: true);
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  // Transcription settings (cached for fast preload)
+  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
+
+  set cachedSingleLanguageMode(bool value) => saveBool('cachedSingleLanguageMode', value);
+
+  List<String> get cachedTranscriptionVocabulary => getStringList('cachedTranscriptionVocabulary');
+
+  set cachedTranscriptionVocabulary(List<String> value) => saveStringList('cachedTranscriptionVocabulary', value);
 
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage');

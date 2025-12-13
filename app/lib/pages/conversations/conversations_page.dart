@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/capture/widgets/limitless_sync_widget.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
@@ -160,11 +161,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(),
+                    padding: const EdgeInsets.only(top: 32.0),
+                    child: EmptyConversationsWidget(
+                      isStarredFilterActive: convoProvider.showStarredOnly,
+                    ),
                   ),
                 ),
               )

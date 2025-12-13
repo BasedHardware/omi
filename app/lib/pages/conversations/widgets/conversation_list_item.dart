@@ -17,6 +17,7 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -422,7 +423,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           const SizedBox(width: 12),
 
-          // 🕒 Timestamp + Duration or New
+          // 🕒 Timestamp + Duration or New + Starred
           FittedBox(
             fit: BoxFit.scaleDown,
             child: isNew
@@ -452,6 +453,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               style: const TextStyle(color: Colors.white, fontSize: 11),
                               maxLines: 1,
                             ),
+                          ),
+                        ),
+                      if (widget.conversation.starred)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: FaIcon(
+                            FontAwesomeIcons.solidStar,
+                            size: 12,
+                            color: Colors.amber,
                           ),
                         ),
                     ],

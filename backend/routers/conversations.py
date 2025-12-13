@@ -95,18 +95,23 @@ def get_conversations(
     offset: int = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     print('get_conversations', uid, limit, offset, statuses)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
+
     conversations = conversations_db.get_conversations(
         uid,
         limit,
         offset,
         include_discarded=include_discarded,
         statuses=statuses.split(",") if len(statuses) > 0 else [],
+        start_date=start_date,
+        end_date=end_date,
     )
 
     for conv in conversations:
@@ -514,6 +519,14 @@ def set_conversation_visibility(
         redis_db.store_conversation_to_uid(conversation_id, uid)
         redis_db.add_public_conversation(conversation_id)
 
+    return {"status": "Ok"}
+
+
+@router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
+def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
+    print('update_conversation_starred', conversation_id, starred, uid)
+    _get_valid_conversation_by_id(uid, conversation_id)
+    conversations_db.set_conversation_starred(uid, conversation_id, starred)
     return {"status": "Ok"}
 
 

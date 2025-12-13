@@ -101,7 +101,7 @@ class _SheetHeader extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Conversation Analysis',
+              'Summary Template',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -288,7 +288,7 @@ class _AppsListState extends State<_AppsList> {
           isSelected: widget.currentAppId == null,
           onTap: () => _handleAutoAppTap(context),
           trailingIcon: const Icon(Icons.autorenew, color: Colors.white, size: 20),
-          subtitle: 'Let Omi automatically choose the best app for this summary.',
+          subtitle: 'Let Omi choose the best template.',
           provider: widget.provider,
         ),
 
@@ -325,7 +325,7 @@ class _AppsListState extends State<_AppsList> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              suggestedApps.isNotEmpty ? 'Other Apps' : 'Available Apps',
+              suggestedApps.isNotEmpty ? 'Other Templates' : 'Available Templates',
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 14,

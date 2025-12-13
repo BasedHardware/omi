@@ -96,6 +96,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  void _onTabChanged(int value) {
+    setState(() {
+      _selectedTabIndex = value;
+    });
+    HapticFeedback.selectionClick();
+
+    // Track tab change
+    final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Old');
+    MixpanelManager().actionItemTabChanged(tabName);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -205,74 +216,62 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             width: double.infinity,
                             decoration: BoxDecoration(
                               color: const Color(0xFF1C1C1E),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                            padding: const EdgeInsets.all(2),
-                            child: CupertinoSlidingSegmentedControl<int>(
-                              groupValue: _selectedTabIndex,
-                              onValueChanged: (int? value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedTabIndex = value;
-                                  });
-                                  HapticFeedback.selectionClick();
-
-                                  // Track tab change
-                                  final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Snoozed');
-                                  MixpanelManager().actionItemTabChanged(tabName);
-                                }
-                              },
-                              backgroundColor: Colors.transparent,
-                              thumbColor: const Color(0xFF2C2C2E),
-                              padding: const EdgeInsets.all(0),
-                              children: {
-                                0: _buildTabLabel('To Do', todoItems.length),
-                                1: _buildTabLabel('Done', doneItems.length),
-                                2: _buildTabLabel('Snoozed', snoozedItems.length),
+                            padding: const EdgeInsets.all(4),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final tabWidth = constraints.maxWidth / 3;
+                                return Stack(
+                                  children: [
+                                    // Animated sliding background
+                                    AnimatedPositioned(
+                                      duration: const Duration(milliseconds: 200),
+                                      curve: Curves.easeInOut,
+                                      left: _selectedTabIndex * tabWidth,
+                                      top: 0,
+                                      bottom: 0,
+                                      width: tabWidth,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2C2C2E),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                    ),
+                                    // Tab buttons
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: () => _onTabChanged(0),
+                                            behavior: HitTestBehavior.opaque,
+                                            child: _buildTabLabel('To Do', todoItems.length),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: () => _onTabChanged(1),
+                                            behavior: HitTestBehavior.opaque,
+                                            child: _buildTabLabel('Done', doneItems.length),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: GestureDetector(
+                                            onTap: () => _onTabChanged(2),
+                                            behavior: HitTestBehavior.opaque,
+                                            child: _buildTabLabel('Old', snoozedItems.length),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                );
                               },
                             ),
                           ),
                           const SizedBox(height: 16),
                         ],
-                      ),
-                    ),
-                  ),
-
-                // Info banner for snoozed tab
-                if (provider.actionItems.isNotEmpty && _selectedTabIndex == 2)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 12.0),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1C1C1E),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.grey[800]!,
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 16,
-                              color: Colors.grey[500],
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Old tasks are auto-snoozed after 3 days to keep your To Do list clean. You can still complete or delete them here.',
-                                style: TextStyle(
-                                  color: Colors.grey[400],
-                                  fontSize: 12,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ),
@@ -337,25 +336,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             final item = items[index];
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 0),
-                    child: _buildDismissibleActionItem(
-                      item: item,
-                      provider: provider,
-                    ),
-                  ),
-                  if (index < items.length - 1)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 50),
-                      child: Divider(
-                        color: Colors.grey.withOpacity(0.2),
-                        thickness: 1,
-                        height: 1,
-                      ),
-                    ),
-                ],
+              child: _buildDismissibleActionItem(
+                item: item,
+                provider: provider,
               ),
             );
           }
@@ -372,8 +355,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return '🎉 All caught up!\nNo pending action items';
       case 1: // Done
         return 'No completed items yet';
-      case 2: // Snoozed
-        return '✅ No snoozed tasks\n\nOld tasks are auto-snoozed after 3 days to keep your To Do list clean';
+      case 2: // Old
+        return '✅ No old tasks';
       default:
         return 'No items';
     }
@@ -641,7 +624,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildTabLabel(String label, int count) {
-    final int tabIndex = label == 'To Do' ? 0 : (label == 'Done' ? 1 : 2);
+    final int tabIndex = label == 'To Do' ? 0 : (label == 'Done' ? 1 : (label == 'Old' ? 2 : 2));
     final bool isSelected = _selectedTabIndex == tabIndex;
 
     return Container(
@@ -653,7 +636,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           Text(
             label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               color: isSelected ? Colors.white : Colors.grey[500],
             ),
@@ -663,7 +646,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             Text(
               '$count',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: isSelected ? Colors.grey[400] : Colors.grey[600],
               ),

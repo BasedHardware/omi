@@ -49,8 +49,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                 // Header with Cancel and Done buttons
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1F1F25),
                     border: Border(
                       bottom: BorderSide(
                         color: Color(0xFF35343B),
@@ -217,31 +217,31 @@ class _SearchWidgetState extends State<SearchWidget> {
               );
             },
           ),
-          const SizedBox(
-            width: 8,
-          ),
-          // Filter button
+          const SizedBox(width: 8),
+          // Starred filter button
           Consumer<ConversationProvider>(
-              builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
-            return Container(
-              decoration: BoxDecoration(
-                color: convoProvider.showDiscardedConversations ? Colors.red.withOpacity(0.5) : const Color(0xFF1F1F25),
-                borderRadius: const BorderRadius.all(Radius.circular(16)),
-              ),
-              child: IconButton(
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  convoProvider.toggleDiscardConversations();
-                  MixpanelManager().deletedConversationsFilterToggled(!convoProvider.showDiscardedConversations);
-                },
-                icon: Icon(
-                  FontAwesomeIcons.trashCan,
-                  color: Colors.white,
-                  size: 18,
+            builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: convoProvider.showStarredOnly ? Colors.amber.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
                 ),
-              ),
-            );
-          }),
+                child: IconButton(
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    convoProvider.toggleStarredFilter();
+                  },
+                  icon: Icon(
+                    convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                    color: convoProvider.showStarredOnly ? Colors.amber : Colors.white,
+                    size: 18,
+                  ),
+                  tooltip:
+                      convoProvider.showStarredOnly ? 'Showing starred only - Tap to show all' : 'Filter by starred',
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
