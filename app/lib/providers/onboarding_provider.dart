@@ -43,6 +43,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   bool hasBackgroundPermission = false; // Android only
   bool hasMicrophonePermission = false;
   bool hasScreenCapturePermission = false; // macOS/Windows only
+  bool hasAccessibilityPermission = false; // macOS only
   bool isLoading = false;
 
   // Method channel for macOS/Windows permissions
@@ -70,7 +71,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         String screenCaptureStatus = await _screenCaptureChannel.invokeMethod('checkScreenCapturePermission');
         hasScreenCapturePermission = screenCaptureStatus == 'granted';
 
-        debugPrint('Permissions update - Mic: $microphoneStatus, Screen: $screenCaptureStatus');
+        // Add accessibility permission checking
+        String accessibilityStatus = await _screenCaptureChannel.invokeMethod('checkAccessibilityPermission');
+        hasAccessibilityPermission = accessibilityStatus == 'granted';
+
+        debugPrint(
+            'Permissions update - Mic: $microphoneStatus, Screen: $screenCaptureStatus, Accessibility: $accessibilityStatus');
       } catch (e) {
         debugPrint('Error updating permissions on macOS: $e');
         // Fallback to standard permission checking
@@ -80,6 +86,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         hasMicrophonePermission = await Permission.microphone.isGranted;
         // Screen capture permission not available through permission_handler on macOS
         hasScreenCapturePermission = false;
+        hasAccessibilityPermission = false;
       }
     } else {
       // Mobile platforms (iOS/Android)
@@ -87,8 +94,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       hasLocationPermission = await Permission.location.isGranted;
       hasNotificationPermission = await Permission.notification.isGranted;
       hasMicrophonePermission = await Permission.microphone.isGranted;
-      // Screen capture permission not relevant on mobile platforms for this use case
+      // Screen capture and accessibility permissions not relevant on mobile platforms for this use case
       hasScreenCapturePermission = false;
+      hasAccessibilityPermission = false;
     }
 
     SharedPreferencesUtil().notificationsEnabled = hasNotificationPermission;
@@ -133,6 +141,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   void updateScreenCapturePermission(bool value) {
     hasScreenCapturePermission = value;
+    notifyListeners();
+  }
+
+  void updateAccessibilityPermission(bool value) {
+    hasAccessibilityPermission = value;
     notifyListeners();
   }
 
@@ -387,6 +400,42 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     } else {
       // Screen capture not relevant on mobile for this use case
       updateScreenCapturePermission(false);
+      return false;
+    }
+  }
+
+  Future askForAccessibilityPermissions() async {
+    if (PlatformService.isDesktop) {
+      try {
+        String accessibilityStatus = await _screenCaptureChannel.invokeMethod('checkAccessibilityPermission');
+        debugPrint('accessibilityStatus: $accessibilityStatus');
+        if (accessibilityStatus == 'granted') {
+          updateAccessibilityPermission(true);
+          return true;
+        }
+
+        if (accessibilityStatus == 'undetermined') {
+          bool granted = await _screenCaptureChannel.invokeMethod('requestAccessibilityPermission');
+          updateAccessibilityPermission(granted);
+          if (!granted) {
+            AppSnackbar.showSnackbarError('Accessibility permission is required for detecting browser meetings.');
+          }
+          return granted;
+        } else {
+          updateAccessibilityPermission(false);
+          AppSnackbar.showSnackbarError(
+              'Accessibility permission status: $accessibilityStatus. Please check System Preferences.');
+          return false;
+        }
+      } catch (e) {
+        debugPrint('Error checking/requesting Accessibility permission on macOS: $e');
+        AppSnackbar.showSnackbarError('Failed to check Accessibility permission: $e');
+        updateAccessibilityPermission(false);
+        return false;
+      }
+    } else {
+      // Accessibility not relevant on mobile for this use case
+      updateAccessibilityPermission(false);
       return false;
     }
   }

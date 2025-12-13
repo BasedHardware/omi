@@ -20,12 +20,17 @@ class MenuBarManager: NSObject {
     private weak var mainWindow: NSWindow?
     private var isVisibleObservation: NSKeyValueObservation?
     
+    // Meeting display
+    private var currentMeetingTitle: String?
+    private var currentMeetingStartDate: Date?
+    private var updateTimer: Timer?
+    
     // MARK: - Initialization
     private override init() {
         super.init()
     }
     
-    // MARK: - Configuration
+    // MARK: - Configuration    
     func configure(mainWindow: NSWindow) {
         self.mainWindow = mainWindow
     }
@@ -183,6 +188,115 @@ class MenuBarManager: NSObject {
         askOmiItem.keyEquivalentModifierMask = modifierMask(for: modifiers)
     }
     
+    // MARK: - Meeting Display
+
+    /// Update menu bar to show upcoming meeting info
+    func updateWithMeeting(title: String, startDate: Date) {
+        // Store meeting info
+        currentMeetingTitle = title
+        currentMeetingStartDate = startDate
+
+        // Update display immediately
+        updateMeetingDisplay()
+
+        // Start timer to update every minute
+        startUpdateTimer()
+    }
+    
+    /// Reset menu bar to default icon view
+    func resetToDefaultView() {
+        // Clear meeting info
+        currentMeetingTitle = nil
+        currentMeetingStartDate = nil
+        
+        // Stop timer
+        stopUpdateTimer()
+        
+        guard let statusBarItem = statusBarItem,
+              let button = statusBarItem.button else {
+            return
+        }
+        
+        DispatchQueue.main.async {
+            // Clear title
+            button.title = ""
+            
+            // Restore icon
+            if let customIcon = NSImage(named: "app_launcher_icon") {
+                customIcon.isTemplate = true
+                customIcon.size = NSSize(width: 18, height: 18)
+                button.image = customIcon
+            } else {
+                button.image = NSImage(systemSymbolName: "mic.circle", accessibilityDescription: "Omi")
+            }
+            
+            button.toolTip = "Omi - Always On AI"
+            statusBarItem.length = NSStatusItem.squareLength
+        }
+    }
+    
+    private func startUpdateTimer() {
+        // Stop any existing timer
+        stopUpdateTimer()
+        
+        // Create new timer that fires every minute
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
+            self?.updateMeetingDisplay()
+        }
+    }
+    
+    private func stopUpdateTimer() {
+        updateTimer?.invalidate()
+        updateTimer = nil
+    }
+    
+    private func updateMeetingDisplay() {
+        guard let title = currentMeetingTitle,
+              let startDate = currentMeetingStartDate,
+              let statusBarItem = statusBarItem,
+              let button = statusBarItem.button else {
+            return
+        }
+
+        // Calculate seconds until meeting and round up to minutes
+        // This ensures "in 1m" means "less than 1 minute" and "in 0m" only shows when meeting starts
+        let secondsUntil = startDate.timeIntervalSinceNow
+        let minutesUntil = Int(ceil(secondsUntil / 60))
+
+        // If meeting has passed, reset to default
+        if minutesUntil < 0 {
+            resetToDefaultView()
+            return
+        }
+
+        DispatchQueue.main.async {
+            // Clear the icon
+            button.image = nil
+
+            // Format time remaining
+            let timeString: String
+            if minutesUntil >= 60 {
+                let hours = minutesUntil / 60
+                let minutes = minutesUntil % 60
+                timeString = "in \(hours)h \(minutes)m"
+            } else if minutesUntil == 0 {
+                timeString = "starting now"
+            } else {
+                timeString = "in \(minutesUntil)m"
+            }
+
+            // Truncate title if too long
+            let displayTitle = title.count > 20 ? String(title.prefix(17)) + "..." : title
+
+            // Set title with meeting info
+            button.title = "\(displayTitle) • \(timeString)"
+            button.toolTip = "Upcoming meeting: \(title)"
+
+            // Adjust width to fit text
+            statusBarItem.length = NSStatusItem.variableLength
+        }
+    }
+    
     // MARK: - Public Methods
     
     func observeFloatingControlBar(_ controlBar: FloatingControlBar) {
@@ -194,6 +308,7 @@ class MenuBarManager: NSObject {
     }
     
     func cleanup() {
+        stopUpdateTimer()
         NotificationCenter.default.removeObserver(self)
         if let statusBarItem = statusBarItem {
             NSStatusBar.system.removeStatusItem(statusBarItem)

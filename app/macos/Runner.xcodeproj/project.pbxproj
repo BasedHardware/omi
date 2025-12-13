@@ -30,6 +30,11 @@
 		33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11172044BFA00003C045 /* PermissionManager.swift */; };
 		33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11192044BFA00003C045 /* MenuBarManager.swift */; };
 		33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC111B2044BFA00003C045 /* AudioManager.swift */; };
+		42B9987E2ED0814900B97B59 /* MeetingDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9987B2ED0814900B97B59 /* MeetingDetector.swift */; };
+		42B9987F2ED0814900B97B59 /* NubManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9987C2ED0814900B97B59 /* NubManager.swift */; };
+		42B998802ED0814900B97B59 /* NubWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9987D2ED0814900B97B59 /* NubWindow.swift */; };
+		42B998822ED20D4700B97B59 /* CalendarMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B998812ED20D4700B97B59 /* CalendarMonitor.swift */; };
+		42B998852ED5CB5500B97B59 /* MeetingAppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B998832ED5CB5500B97B59 /* MeetingAppConstants.swift */; };
 		6CEA62AC1B6F48029F663C75 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 990C21DF2FB7195E1A0C66BB /* Pods_Runner.framework */; };
 		CF46C6482EC157BB00BEE80A /* Custom.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF46C6472EC157BB00BEE80A /* Custom.xcconfig */; };
 		CF46C6492EC157BB00BEE80A /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF46C6462EC157BB00BEE80A /* Base.xcconfig */; };
@@ -91,6 +96,11 @@
 		33E51913231747F40026EE4D /* DebugProfile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DebugProfile.entitlements; sourceTree = "<group>"; };
 		33E51914231749380026EE4D /* Release.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; path = Release.entitlements; sourceTree = "<group>"; };
 		33E5194F232828860026EE4D /* AppInfo.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppInfo.xcconfig; sourceTree = "<group>"; };
+		42B9987B2ED0814900B97B59 /* MeetingDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingDetector.swift; sourceTree = "<group>"; };
+		42B9987C2ED0814900B97B59 /* NubManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NubManager.swift; sourceTree = "<group>"; };
+		42B9987D2ED0814900B97B59 /* NubWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NubWindow.swift; sourceTree = "<group>"; };
+		42B998812ED20D4700B97B59 /* CalendarMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMonitor.swift; sourceTree = "<group>"; };
+		42B998832ED5CB5500B97B59 /* MeetingAppConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAppConstants.swift; sourceTree = "<group>"; };
 		499F292DC6760DF2E1C7EE6C /* Pods-Runner.profile-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile-dev.xcconfig"; sourceTree = "<group>"; };
 		727D30C5CE8BA20F9DDF5245 /* Pods-Runner.release-prod.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release-prod.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release-prod.xcconfig"; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -182,6 +192,11 @@
 		33FAB671232836740065AC1E /* Runner */ = {
 			isa = PBXGroup;
 			children = (
+				42B998842ED5CB5500B97B59 /* Constants */,
+				42B998812ED20D4700B97B59 /* CalendarMonitor.swift */,
+				42B9987B2ED0814900B97B59 /* MeetingDetector.swift */,
+				42B9987C2ED0814900B97B59 /* NubManager.swift */,
+				42B9987D2ED0814900B97B59 /* NubWindow.swift */,
 				CFD3F56C2E8697A400CFA1AD /* VisualEffectView.swift */,
 				CFD3F5622E868FD100CFA1AD /* ScreenCaptureManager.swift */,
 				CFD3F5602E86368F00CFA1AD /* FloatingControlBar.swift */,
@@ -205,6 +220,14 @@
 				33BA886A226E78AF003329D5 /* Configs */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		42B998842ED5CB5500B97B59 /* Constants */ = {
+			isa = PBXGroup;
+			children = (
+				42B998832ED5CB5500B97B59 /* MeetingAppConstants.swift */,
+			);
+			path = Constants;
 			sourceTree = "<group>";
 		};
 		7E46E8344CECDAF8A1C52DC9 /* Pods */ = {
@@ -273,7 +296,7 @@
 						LastSwiftMigration = 1100;
 						SystemCapabilities = {
 							com.apple.Sandbox = {
-								enabled = 1;
+								enabled = 0;
 							};
 						};
 					};
@@ -407,13 +430,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -428,13 +447,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -452,10 +467,15 @@
 				CFD3F5592E85968400CFA1AD /* FloatingChatWindowManager.swift in Sources */,
 				CFD3F5532E857FDC00CFA1AD /* GlobalShortcutManager.swift in Sources */,
 				CFD3F56D2E8697A400CFA1AD /* VisualEffectView.swift in Sources */,
+				42B9987E2ED0814900B97B59 /* MeetingDetector.swift in Sources */,
+				42B9987F2ED0814900B97B59 /* NubManager.swift in Sources */,
+				42B998802ED0814900B97B59 /* NubWindow.swift in Sources */,
 				33CC11162044BFA00003C045 /* PermissionManager.swift in Sources */,
 				33CC11182044BFA00003C045 /* MenuBarManager.swift in Sources */,
 				33CC111A2044BFA00003C045 /* AudioManager.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
+				42B998852ED5CB5500B97B59 /* MeetingAppConstants.swift in Sources */,
+				42B998822ED20D4700B97B59 /* CalendarMonitor.swift in Sources */,
 				CFD3F5632E868FD100CFA1AD /* ScreenCaptureManager.swift in Sources */,
 				CFD3F5612E86368F00CFA1AD /* FloatingControlBar.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
