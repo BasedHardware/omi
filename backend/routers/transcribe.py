@@ -645,7 +645,7 @@ async def _listen(
                     1,
                     preseconds=speech_profile_duration,
                     model=stt_model,
-                    keywords=vocabulary if vocabulary else None,
+                    keywords=vocabulary[:100] if vocabulary else None,
                 )
                 if speech_profile_duration:
                     deepgram_socket2 = await process_audio_dg(
@@ -654,7 +654,7 @@ async def _listen(
                         sample_rate,
                         1,
                         model=stt_model,
-                        keywords=vocabulary if vocabulary else None,
+                        keywords=vocabulary[:100] if vocabulary else None,
                     )
 
             # SONIOX
