@@ -25,6 +25,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
@@ -970,21 +971,299 @@ class SummaryTab extends StatelessWidget {
             builder: (context, data, child) {
               return Stack(
                 children: [
-                  ListView(
-                    shrinkWrap: true,
-                    children: [
-                      const GetSummaryWidgets(),
-                      data.item1
-                          ? const ReprocessDiscardedWidget()
-                          : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
-                      const SizedBox(height: 150)
-                    ],
+                  Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      return ListView(
+                        shrinkWrap: true,
+                        children: [
+                          const GetSummaryWidgets(),
+                          // Calendar event card below tags, above summary
+                          if (provider.conversation.calendarEvent != null)
+                            CalendarEventCard(calendarEvent: provider.conversation.calendarEvent!),
+                          data.item1
+                              ? const ReprocessDiscardedWidget()
+                              : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
+                          const SizedBox(height: 150)
+                        ],
+                      );
+                    },
                   ),
                 ],
               );
             },
           ),
         ));
+  }
+}
+
+/// Widget that displays the linked Google Calendar event information
+class CalendarEventCard extends StatelessWidget {
+  final CalendarEventLink calendarEvent;
+
+  const CalendarEventCard({super.key, required this.calendarEvent});
+
+  String _formatTime(DateTime time) {
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _formatDate(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(time.year, time.month, time.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (time.year == now.year) {
+      return dateTimeFormat('MMM d', time);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', time);
+    }
+  }
+
+  Future<void> _openInGoogleCalendar([String? link]) async {
+    final urlString = link ?? calendarEvent.htmlLink;
+    if (urlString == null) {
+      return;
+    }
+
+    final url = Uri.parse(urlString);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _handleUnlink(BuildContext context) {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context),
+        () async {
+          Navigator.pop(context);
+          final success = await provider.unlinkCalendarEvent();
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(success ? 'Calendar event unlinked successfully' : 'Failed to unlink calendar event'),
+              ),
+            );
+          }
+        },
+        'Unlink Calendar Event?',
+        'This will remove the link between this conversation and the calendar event "${calendarEvent.title}".',
+        okButtonText: 'Unlink',
+      ),
+    );
+  }
+
+  void _handleAddSummary(BuildContext context) async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    HapticFeedback.mediumImpact();
+
+    // Show loading indicator
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Adding summary to calendar event...')),
+    );
+
+    final htmlLink = await provider.addSummaryToCalendarEvent();
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (htmlLink != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Summary added! Opening calendar event...')),
+        );
+        await _openInGoogleCalendar(htmlLink);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add summary to calendar event')),
+        );
+      }
+    }
+  }
+
+  String _formatAttendeesLabel(List<String> attendees) {
+    if (attendees.length == 1) {
+      return _formatAttendeeName(attendees[0]);
+    } else if (attendees.length == 2) {
+      return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])}';
+    } else {
+      return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])} +${attendees.length - 2}';
+    }
+  }
+
+  void _shareWithAttendees(BuildContext context) async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final conversationId = provider.conversation.id;
+    final link = 'https://h.omi.me/memories/$conversationId';
+
+    // Use the attendee emails list
+    final emails = calendarEvent.attendeeEmails;
+
+    if (emails.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No email addresses found in attendees')),
+      );
+      return;
+    }
+
+    final subject = Uri.encodeComponent('Follow Up: ${calendarEvent.title}');
+    final body = Uri.encodeComponent('Greetings, here is the summary of our conversation:\n\n$link\n\nThanks!');
+    final mailto = Uri.parse('mailto:${emails.join(',')}?subject=$subject&body=$body');
+
+    if (await canLaunchUrl(mailto)) {
+      await launchUrl(mailto);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open email client')),
+        );
+      }
+    }
+  }
+
+  String _formatAttendeeName(String attendee) {
+    if (attendee.contains('@')) {
+      String localPart = attendee.split('@')[0];
+      if (localPart.isNotEmpty) {
+        return localPart[0].toUpperCase() + localPart.substring(1);
+      }
+      return localPart;
+    }
+    return attendee.split(' ')[0];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _openInGoogleCalendar(),
+      child: Container(
+        margin: const EdgeInsets.only(top: 16, bottom: 4),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/integration_app_logos/google-calendar.png',
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${_formatDate(calendarEvent.startTime)}, ${_formatTime(calendarEvent.startTime)} – ${_formatTime(calendarEvent.endTime)}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PullDownButton(
+                  itemBuilder: (context) => [
+                    PullDownMenuItem(
+                      title: 'Open in Calendar',
+                      iconWidget: const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, size: 16),
+                      onTap: () => _openInGoogleCalendar(),
+                    ),
+                    PullDownMenuItem(
+                      title: 'Add to Event Details',
+                      iconWidget: const FaIcon(FontAwesomeIcons.link, size: 16),
+                      onTap: () => _handleAddSummary(context),
+                    ),
+                    if (calendarEvent.attendeeEmails.isNotEmpty)
+                      PullDownMenuItem(
+                        title: 'Share with Attendees',
+                        iconWidget: const FaIcon(FontAwesomeIcons.envelope, size: 16),
+                        onTap: () => _shareWithAttendees(context),
+                      ),
+                    PullDownMenuItem(
+                      title: 'Unlink Event',
+                      iconWidget: FaIcon(FontAwesomeIcons.linkSlash, size: 16, color: Colors.orange),
+                      onTap: () => _handleUnlink(context),
+                    ),
+                  ],
+                  buttonBuilder: (context, showMenu) => GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      showMenu();
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2E),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          FontAwesomeIcons.gear,
+                          color: Colors.grey.shade400,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Attendees chip - aligned with timestamp (32px logo + 12px spacing = 44px indent)
+            if (calendarEvent.attendees.isNotEmpty)
+              Transform.translate(
+                offset: const Offset(0, -6),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 44),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurple.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.people,
+                          size: 13,
+                          color: Colors.purple.shade200,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          _formatAttendeesLabel(calendarEvent.attendees),
+                          style: TextStyle(
+                            color: Colors.purple.shade200,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

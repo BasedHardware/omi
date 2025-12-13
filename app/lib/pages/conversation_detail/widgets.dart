@@ -110,21 +110,19 @@ class GetSummaryWidgets extends StatelessWidget {
   }
 
   Widget _buildInfoChips(ServerConversation conversation) {
+    final date = _getDateFormat(conversation.startedAt ?? conversation.createdAt);
+    final time = conversation.source == ConversationSource.sdcard
+        ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+        : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt);
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        // Date chip
+        // Combined date & time chip
         _buildChip(
-          label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
+          label: '$date, $time',
           icon: Icons.calendar_today,
-        ),
-        // Time chip
-        _buildChip(
-          label: conversation.source == ConversationSource.sdcard
-              ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-              : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-          icon: Icons.access_time,
         ),
         // Duration chip (only if segments exist)
         if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
@@ -138,10 +136,10 @@ class GetSummaryWidgets extends StatelessWidget {
 
   Widget _buildChip({required String label, required IconData icon}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.grey.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -188,10 +186,9 @@ class GetSummaryWidgets extends StatelessWidget {
                     content: conversation.structured.title.decodeString,
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
                   ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             _buildInfoChips(conversation),
-            const SizedBox(height: 16),
-            conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
+            conversation.discarded ? const SizedBox.shrink() : const SizedBox.shrink(),
           ],
         );
       },
@@ -462,7 +459,7 @@ class AppResultDetailWidget extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.only(top: 8, bottom: 8, left: 8),
             child: content.isEmpty
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,

@@ -125,6 +125,49 @@ class ConversationPhoto {
       };
 }
 
+/// Links a conversation to a Google Calendar event.
+class CalendarEventLink {
+  final String eventId;
+  final String title;
+  final List<String> attendees;
+  final List<String> attendeeEmails;
+  final DateTime startTime;
+  final DateTime endTime;
+  final String? htmlLink;
+
+  CalendarEventLink({
+    required this.eventId,
+    required this.title,
+    this.attendees = const [],
+    this.attendeeEmails = const [],
+    required this.startTime,
+    required this.endTime,
+    this.htmlLink,
+  });
+
+  factory CalendarEventLink.fromJson(Map<String, dynamic> json) {
+    return CalendarEventLink(
+      eventId: json['event_id'] ?? '',
+      title: json['title'] ?? '',
+      attendees: ((json['attendees'] ?? []) as List<dynamic>).map((e) => e.toString()).toList(),
+      attendeeEmails: ((json['attendee_emails'] ?? []) as List<dynamic>).map((e) => e.toString()).toList(),
+      startTime: json['start_time'] != null ? DateTime.parse(json['start_time']).toLocal() : DateTime.now(),
+      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']).toLocal() : DateTime.now(),
+      htmlLink: json['html_link'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'event_id': eventId,
+        'title': title,
+        'attendees': attendees,
+        'attendee_emails': attendeeEmails,
+        'start_time': startTime.toUtc().toIso8601String(),
+        'end_time': endTime.toUtc().toIso8601String(),
+        'html_link': htmlLink,
+      };
+}
+
 class ServerConversation {
   final String id;
   final DateTime createdAt;
@@ -142,6 +185,9 @@ class ServerConversation {
   final String? language; // applies to friend/omi only
 
   final ConversationExternalData? externalIntegration;
+
+  /// Calendar event link - set when conversation overlaps with a Google Calendar event
+  final CalendarEventLink? calendarEvent;
 
   ConversationStatus status;
   bool discarded;
@@ -167,6 +213,7 @@ class ServerConversation {
     this.source,
     this.language,
     this.externalIntegration,
+    this.calendarEvent,
     this.status = ConversationStatus.completed,
     this.isLocked = false,
   });
@@ -195,6 +242,7 @@ class ServerConversation {
       deleted: json['deleted'] ?? false,
       externalIntegration:
           json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
+      calendarEvent: json['calendar_event'] != null ? CalendarEventLink.fromJson(json['calendar_event']) : null,
       status: json['status'] != null
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
@@ -219,6 +267,7 @@ class ServerConversation {
       'source': source?.toString(),
       'language': language,
       'external_data': externalIntegration?.toJson(),
+      'calendar_event': calendarEvent?.toJson(),
       'status': status.toString().split('.').last,
       'is_locked': isLocked,
     };

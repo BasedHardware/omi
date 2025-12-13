@@ -221,8 +221,44 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
         a: style,
         p: style.copyWith(
           height: 1.5,
+          color: Colors.white.withValues(alpha: 0.8),
+          fontSize: 16,
         ),
         pPadding: const EdgeInsets.only(bottom: 12),
+        h1: style.copyWith(fontSize: 26, fontWeight: FontWeight.bold),
+        h1Padding: const EdgeInsets.only(
+          bottom: 12,
+          top: 8,
+        ),
+        h2: style.copyWith(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.9),
+        ),
+        h2Padding: const EdgeInsets.only(
+          bottom: 4,
+          top: 4,
+        ),
+        h3: style.copyWith(
+          fontSize: 19,
+          fontWeight: FontWeight.w600,
+        ),
+        h3Padding: const EdgeInsets.only(
+          bottom: 8,
+          top: 4,
+        ),
+        h4: style.copyWith(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+        ),
+        h5: style.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+        h6: style.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
         blockquote: style.copyWith(
           backgroundColor: Colors.transparent,
           color: Colors.white,

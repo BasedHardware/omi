@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversations.dart' as conversations_api
+    show unlinkCalendarEvent, addSummaryToCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/preferences.dart';
@@ -426,6 +428,60 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void setCachedConversation(ServerConversation conversation) {
     _cachedConversation = conversation;
     notifyListeners();
+  }
+
+  /// Unlinks the calendar event from the current conversation
+  Future<bool> unlinkCalendarEvent() async {
+    try {
+      final success = await conversations_api.unlinkCalendarEvent(conversation.id);
+      if (success) {
+        // Update the local conversation state
+        // Since calendarEvent is final, we need to refetch or create a new conversation object
+        // For simplicity, we'll just notify and rely on the UI to refresh
+        if (_cachedConversation != null) {
+          // Create a new ServerConversation without the calendar event
+          final updatedConversation = ServerConversation(
+            id: _cachedConversation!.id,
+            createdAt: _cachedConversation!.createdAt,
+            structured: _cachedConversation!.structured,
+            startedAt: _cachedConversation!.startedAt,
+            finishedAt: _cachedConversation!.finishedAt,
+            transcriptSegments: _cachedConversation!.transcriptSegments,
+            appResults: _cachedConversation!.appResults,
+            suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
+            geolocation: _cachedConversation!.geolocation,
+            photos: _cachedConversation!.photos,
+            discarded: _cachedConversation!.discarded,
+            deleted: _cachedConversation!.deleted,
+            source: _cachedConversation!.source,
+            language: _cachedConversation!.language,
+            externalIntegration: _cachedConversation!.externalIntegration,
+            calendarEvent: null, // Remove calendar event
+            status: _cachedConversation!.status,
+            isLocked: _cachedConversation!.isLocked,
+          );
+          _cachedConversation = updatedConversation;
+
+          // Also update in the conversation provider
+          conversationProvider?.updateConversation(updatedConversation);
+        }
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Adds conversation summary to the linked calendar event and returns the event link
+  Future<String?> addSummaryToCalendarEvent() async {
+    try {
+      final htmlLink = await conversations_api.addSummaryToCalendarEvent(conversation.id);
+      return htmlLink;
+    } catch (e) {
+      return null;
+    }
   }
 
   String? _preferredSummarizationAppId;

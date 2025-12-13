@@ -57,6 +57,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.conversations.calendar_linking import get_overlapping_calendar_event
 
 
 def _get_structured(
@@ -447,6 +448,21 @@ def process_conversation(
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
+
+    # Check for overlapping calendar events
+    if not discarded and conversation.started_at and conversation.finished_at:
+        try:
+            calendar_event = get_overlapping_calendar_event(
+                uid,
+                conversation.started_at,
+                conversation.finished_at,
+            )
+            if calendar_event:
+                # Override the conversation title with calendar event title
+                conversation.structured.title = calendar_event.title
+                conversation.calendar_event = calendar_event
+        except Exception:
+            pass
 
     if not discarded:
         # Analytics tracking
