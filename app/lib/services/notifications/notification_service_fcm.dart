@@ -11,9 +11,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -213,6 +213,13 @@ class _FCMNotificationService implements NotificationInterface {
           return;
         } else if (messageType == 'action_item_delete') {
           ActionItemNotificationHandler.handleDeletionMessage(data);
+          return;
+        } else if (messageType == 'merge_completed') {
+          MergeNotificationHandler.handleMergeCompleted(
+            data,
+            channel.channelKey!,
+            isAppInForeground: true,
+          );
           return;
         }
 
