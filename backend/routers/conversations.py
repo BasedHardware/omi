@@ -506,6 +506,14 @@ def set_conversation_visibility(
     return {"status": "Ok"}
 
 
+@router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
+def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
+    print('update_conversation_starred', conversation_id, starred, uid)
+    _get_valid_conversation_by_id(uid, conversation_id)
+    conversations_db.set_conversation_starred(uid, conversation_id, starred)
+    return {"status": "Ok"}
+
+
 @router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
 def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)

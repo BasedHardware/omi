@@ -180,8 +180,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(),
+                    padding: const EdgeInsets.only(top: 32.0),
+                    child: EmptyConversationsWidget(
+                      isStarredFilterActive: convoProvider.showStarredOnly,
+                    ),
                   ),
                 ),
               )

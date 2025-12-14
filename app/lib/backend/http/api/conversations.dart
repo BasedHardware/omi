@@ -229,6 +229,18 @@ Future<bool> setConversationVisibility(String conversationId, {String visibility
   return response.statusCode == 200;
 }
 
+Future<bool> setConversationStarred(String conversationId, bool starred) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/starred?starred=$starred',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setConversationStarred: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<bool> setConversationEventsState(
   String conversationId,
   List<int> eventsIdx,

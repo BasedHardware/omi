@@ -130,6 +130,67 @@ class _SearchWidgetState extends State<SearchWidget> {
               style: const TextStyle(color: Colors.white),
             ),
           ),
+          const SizedBox(
+            width: 8,
+          ),
+          // Calendar button
+          Consumer<ConversationProvider>(
+            builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+              return Container(
+                decoration: BoxDecoration(
+                  color:
+                      convoProvider.selectedDate != null ? Colors.deepPurple.withOpacity(0.5) : const Color(0xFF1F1F25),
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
+                ),
+                child: IconButton(
+                  onPressed: () async {
+                    HapticFeedback.mediumImpact();
+                    if (convoProvider.selectedDate != null) {
+                      // Clear date filter
+                      await convoProvider.clearDateFilter();
+                      MixpanelManager().calendarFilterCleared();
+                    } else {
+                      // Open date picker
+                      await _selectDate(context);
+                    }
+                  },
+                  icon: Icon(
+                    convoProvider.selectedDate != null ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  tooltip: convoProvider.selectedDate != null
+                      ? 'Filtered by ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)} - Tap to clear'
+                      : 'Filter by date',
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+          // Starred filter button
+          Consumer<ConversationProvider>(
+            builder: (BuildContext context, ConversationProvider convoProvider, Widget? child) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: convoProvider.showStarredOnly ? Colors.amber.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
+                  borderRadius: const BorderRadius.all(Radius.circular(16)),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    convoProvider.toggleStarredFilter();
+                  },
+                  icon: Icon(
+                    convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                    color: convoProvider.showStarredOnly ? Colors.amber : Colors.white,
+                    size: 18,
+                  ),
+                  tooltip:
+                      convoProvider.showStarredOnly ? 'Showing starred only - Tap to show all' : 'Filter by starred',
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
