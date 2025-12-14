@@ -1,5 +1,5 @@
 apiVersion: v2
-appVersion: release-250331
+appVersion: release-251118
 dependencies:
 - condition: gpu-operator.enabled
   name: gpu-operator
@@ -39,4 +39,4 @@ name: deepgram-self-hosted
 sources:
 - https://github.com/deepgram/self-hosted-resources
 type: application
-version: 0.12.0
+version: 0.24.0

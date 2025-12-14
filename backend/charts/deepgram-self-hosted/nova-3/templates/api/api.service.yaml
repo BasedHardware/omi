@@ -17,7 +17,8 @@ metadata:
   name: {{ .Values.api.namePrefix }}-external
   labels:
 {{ include "deepgram-self-hosted.labels" . | indent 4}}
-    {{- range $key, $val := .Values.engine.additionalLabels }}
+    app: deepgram-api
+    {{- range $key, $val := .Values.api.additionalLabels }}
     {{ $key }}: {{ $val | quote }}
     {{- end}}
   annotations:
@@ -27,8 +28,18 @@ spec:
   selector:
     app: deepgram-api
     {{ include "deepgram-self-hosted.selectorLabels" . }}
-  type: ClusterIP
+  type: {{ .Values.api.service.type | default "ClusterIP" }}
+  {{- if and (eq .Values.api.service.type "LoadBalancer") .Values.api.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range .Values.api.service.loadBalancerSourceRanges }}
+    - {{ . }}
+    {{- end }}
+  {{- end }}
+  {{- if and (eq .Values.api.service.type "LoadBalancer") .Values.api.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.api.service.externalTrafficPolicy }}
+  {{- end }}
   ports:
     - name: "primary"
       port: {{ .Values.api.server.port }}
       targetPort: {{ .Values.api.server.port }}
+

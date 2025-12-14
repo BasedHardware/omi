@@ -8,11 +8,26 @@ metadata:
     {{- range $key, $val := .Values.licenseProxy.additionalLabels }}
     {{ $key }}: {{ $val | quote }}
     {{- end}}
+  {{- if and (eq .Values.licenseProxy.service.type "LoadBalancer") .Values.licenseProxy.service.annotations }}
+  annotations:
+    {{- range $key, $val := .Values.licenseProxy.service.annotations }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end}}
+  {{- end }}
 spec:
   selector:
     app: deepgram-license-proxy
     {{ include "deepgram-self-hosted.selectorLabels" . }}
-  type: NodePort
+  type: {{ .Values.licenseProxy.service.type | default "ClusterIP" }}
+  {{- if and (eq .Values.licenseProxy.service.type "LoadBalancer") .Values.licenseProxy.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range .Values.licenseProxy.service.loadBalancerSourceRanges }}
+    - {{ . }}
+    {{- end }}
+  {{- end }}
+  {{- if and (eq .Values.licenseProxy.service.type "LoadBalancer") .Values.licenseProxy.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.licenseProxy.service.externalTrafficPolicy }}
+  {{- end }}
   ports:
     - name: "status"
       port: {{ .Values.licenseProxy.server.statusPort }}
@@ -33,6 +48,7 @@ spec:
   selector:
     app: deepgram-license-proxy
     {{ include "deepgram-self-hosted.selectorLabels" . }}
+  type: ClusterIP
   ports:
     - name: "primary"
       port: {{ .Values.licenseProxy.server.port }}
