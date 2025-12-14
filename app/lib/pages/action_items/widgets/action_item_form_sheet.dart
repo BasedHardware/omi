@@ -264,7 +264,12 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     final period = hour >= 12 ? 'pm' : 'am';
     final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
 
-    return '$dayName, $monthName ${date.day} - $displayHour:$minute$period';
+    int? year;
+    if (date.year != DateTime.now().year) {
+      year = date.year;
+    }
+
+    return '$dayName, $monthName ${date.day} ${year ?? ""} - $displayHour:$minute$period';
   }
 
   @override
@@ -521,7 +526,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? ResponsiveHelper.purplePrimary
             : isCurrentYear == true
-            ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+            ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
@@ -533,7 +538,9 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
             fontWeight: isSelected == true
                 ? FontWeight.bold
                 : FontWeight.normal,
-            color: isDisabled == true ? ResponsiveHelper.textQuaternary : ResponsiveHelper.textPrimary,
+            color: isDisabled == true
+                ? ResponsiveHelper.textQuaternary
+                : ResponsiveHelper.textPrimary,
           ),
         ),
       ),
@@ -638,7 +645,9 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                       yearBuilder: yearBuilder,
                       selectedDayHighlightColor: ResponsiveHelper.purplePrimary,
                       // todayHighlightColor: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                      dayTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary),
+                      dayTextStyle: const TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                      ),
                       selectedDayTextStyle: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontWeight: FontWeight.bold,
@@ -706,11 +715,13 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                                     colorScheme: const ColorScheme.dark(
                                       primary: ResponsiveHelper.purplePrimary,
                                       onPrimary: ResponsiveHelper.textPrimary,
-                                      surface: ResponsiveHelper.backgroundSecondary,
+                                      surface:
+                                          ResponsiveHelper.backgroundSecondary,
                                       onSurface: ResponsiveHelper.textPrimary,
                                     ),
                                     timePickerTheme: TimePickerThemeData(
-                                      backgroundColor: ResponsiveHelper.backgroundSecondary,
+                                      backgroundColor:
+                                          ResponsiveHelper.backgroundSecondary,
                                       hourMinuteColor:
                                           WidgetStateColor.resolveWith(
                                             (states) =>
@@ -718,11 +729,15 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                                                   WidgetState.selected,
                                                 )
                                                 ? ResponsiveHelper.purplePrimary
-                                                : ResponsiveHelper.backgroundTertiary,
+                                                : ResponsiveHelper
+                                                      .backgroundTertiary,
                                           ),
-                                      hourMinuteTextColor: ResponsiveHelper.textPrimary,
-                                      dialHandColor: ResponsiveHelper.purplePrimary,
-                                      dialBackgroundColor: ResponsiveHelper.backgroundTertiary,
+                                      hourMinuteTextColor:
+                                          ResponsiveHelper.textPrimary,
+                                      dialHandColor:
+                                          ResponsiveHelper.purplePrimary,
+                                      dialBackgroundColor:
+                                          ResponsiveHelper.backgroundTertiary,
                                       dialTextColor:
                                           WidgetStateColor.resolveWith(
                                             (states) =>
@@ -730,9 +745,11 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                                                   WidgetState.selected,
                                                 )
                                                 ? ResponsiveHelper.textPrimary
-                                                : ResponsiveHelper.textSecondary,
+                                                : ResponsiveHelper
+                                                      .textSecondary,
                                           ),
-                                      entryModeIconColor: ResponsiveHelper.textTertiary,
+                                      entryModeIconColor:
+                                          ResponsiveHelper.textTertiary,
                                       dayPeriodColor:
                                           WidgetStateColor.resolveWith(
                                             (states) =>
