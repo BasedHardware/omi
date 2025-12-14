@@ -714,13 +714,16 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  (DateTime, int) getConversationDateAndIndex(ServerConversation conversation) {
-    var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-    var idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
-    if (idx == -1 && groupedConversations.containsKey(date)) {
-      groupedConversations[date]!.add(conversation);
-    }
+  (DateTime, int)? getConversationDateAndIndex(ServerConversation conversation) {
+    final effectiveDate = conversation.startedAt ?? conversation.createdAt;
+    final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+
+    final list = groupedConversations[date];
+    if (list == null) return null;
+
+    final idx = list.indexWhere((e) => e.id == conversation.id);
+    if (idx == -1) return null;
+
     return (date, idx);
   }
 
