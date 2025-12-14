@@ -1,20 +1,20 @@
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:intl/intl.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
-  final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
+  final ActionItemWithMetadata?
+  actionItem; // null for create, non-null for edit
   final VoidCallback? onRefresh;
 
-  const ActionItemFormSheet({
-    super.key,
-    this.actionItem,
-    this.onRefresh,
-  });
+  const ActionItemFormSheet({super.key, this.actionItem, this.onRefresh});
 
   bool get isEditing => actionItem != null;
 
@@ -31,7 +31,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   void initState() {
     super.initState();
     if (widget.isEditing) {
-      _textController = TextEditingController(text: widget.actionItem!.description);
+      _textController = TextEditingController(
+        text: widget.actionItem!.description,
+      );
       _textController.selection = TextSelection.fromPosition(
         TextPosition(offset: _textController.text.length),
       );
@@ -68,7 +70,8 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     if (widget.isEditing) {
       // Editing existing item
       String newDescription = _textController.text.trim();
-      bool descriptionChanged = newDescription != widget.actionItem!.description;
+      bool descriptionChanged =
+          newDescription != widget.actionItem!.description;
       bool dueDateChanged = _selectedDueDate != widget.actionItem!.dueAt;
       bool completionChanged = _isCompleted != widget.actionItem!.completed;
 
@@ -88,15 +91,24 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
       try {
         if (descriptionChanged) {
-          await provider.updateActionItemDescription(widget.actionItem!, newDescription);
+          await provider.updateActionItemDescription(
+            widget.actionItem!,
+            newDescription,
+          );
         }
 
         if (dueDateChanged) {
-          await provider.updateActionItemDueDate(widget.actionItem!, _selectedDueDate);
+          await provider.updateActionItemDueDate(
+            widget.actionItem!,
+            _selectedDueDate,
+          );
         }
 
         if (completionChanged) {
-          await provider.updateActionItemState(widget.actionItem!, _isCompleted);
+          await provider.updateActionItemState(
+            widget.actionItem!,
+            _isCompleted,
+          );
         }
 
         // Track action item edit
@@ -198,7 +210,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       context: context,
       builder: (context) => DateTimePickerSheet(
         initialDateTime: _selectedDueDate,
-        minimumDate: widget.isEditing ? widget.actionItem!.createdAt : DateTime.now(),
+        minimumDate: widget.isEditing
+            ? widget.actionItem!.createdAt
+            : DateTime.now(),
       ),
     );
 
@@ -216,7 +230,15 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   }
 
   String _formatDueDateWithTime(DateTime date) {
-    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
     final months = [
       'January',
       'February',
@@ -229,7 +251,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       'September',
       'October',
       'November',
-      'December'
+      'December',
     ];
 
     // Format date as "Wednesday, June 25"
@@ -248,10 +270,12 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF1F1F25),
+          color: ResponsiveHelper.backgroundSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -285,8 +309,14 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
                           // Only update immediately if editing
                           if (widget.isEditing) {
-                            final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-                            await provider.updateActionItemState(widget.actionItem!, value);
+                            final provider = Provider.of<ActionItemsProvider>(
+                              context,
+                              listen: false,
+                            );
+                            await provider.updateActionItemState(
+                              widget.actionItem!,
+                              value,
+                            );
                           }
                         },
                       ),
@@ -310,7 +340,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          backgroundColor: const Color(0xFF1F1F25),
+                          backgroundColor: ResponsiveHelper.backgroundSecondary,
                           title: const Text(
                             'Delete Action Item',
                             style: TextStyle(color: Colors.white),
@@ -361,10 +391,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
                 hintText: widget.isEditing ? null : 'What needs to be done?',
-                hintStyle: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 16,
-                ),
+                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
               ),
               onSubmitted: (value) {
                 FocusScope.of(context).unfocus();
@@ -388,9 +415,13 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
-                        _selectedDueDate != null ? _formatDueDateWithTime(_selectedDueDate!) : 'Add due date',
+                        _selectedDueDate != null
+                            ? _formatDueDateWithTime(_selectedDueDate!)
+                            : 'Add due date',
                         style: TextStyle(
-                          color: _selectedDueDate != null ? Colors.white : Colors.grey.shade500,
+                          color: _selectedDueDate != null
+                              ? Colors.white
+                              : Colors.grey.shade500,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
@@ -419,7 +450,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(12),
@@ -445,10 +479,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 ),
                 Text(
                   '${_textController.text.length}/200',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
                 ),
               ],
             ),
@@ -475,6 +506,39 @@ class DateTimePickerSheet extends StatefulWidget {
 
 class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
   late DateTime _selectedDateTime;
+  late TimeOfDay _selectedTimeOfDay;
+
+  Widget yearBuilder({
+    required int year,
+    TextStyle? textStyle,
+    BoxDecoration? decoration,
+    bool? isSelected,
+    bool? isDisabled,
+    bool? isCurrentYear,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isSelected == true
+            ? ResponsiveHelper.purplePrimary
+            : isCurrentYear == true
+            ? ResponsiveHelper.purplePrimary.withOpacity(0.3)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Text(
+          year.toString(),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isSelected == true
+                ? FontWeight.bold
+                : FontWeight.normal,
+            color: isDisabled == true ? ResponsiveHelper.textQuaternary : ResponsiveHelper.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -483,30 +547,23 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
     final minimumDate = widget.minimumDate ?? now;
 
     if (widget.initialDateTime != null) {
-      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) ? minimumDate : widget.initialDateTime!;
+      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate)
+          ? minimumDate
+          : widget.initialDateTime!;
     } else {
       _selectedDateTime = now.isBefore(minimumDate) ? minimumDate : now;
     }
+    _selectedTimeOfDay = TimeOfDay.fromDateTime(_selectedDateTime);
   }
 
   @override
   Widget build(BuildContext context) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final currentMonth = months[_selectedDateTime.month - 1];
-    final currentYear = _selectedDateTime.year;
-    final minimumDate = widget.minimumDate ?? DateTime.now();
-
-    // Check if we can go to previous month
-    final canGoPrevious = _selectedDateTime.year > minimumDate.year ||
-        (_selectedDateTime.year == minimumDate.year && _selectedDateTime.month > minimumDate.month);
-
     return Material(
       color: Colors.transparent,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       child: Container(
         height: MediaQuery.of(context).size.height * 0.65,
         decoration: const BoxDecoration(
-          color: Color(0xFF1F1F25),
+          color: ResponsiveHelper.backgroundSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -517,12 +574,12 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
               height: 4,
               margin: const EdgeInsets.only(top: 12, bottom: 20),
               decoration: BoxDecoration(
-                color: Colors.grey.shade600,
+                color: ResponsiveHelper.textTertiary,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
 
-            // Header with navigation
+            // Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
@@ -531,80 +588,31 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context),
-                    child: Text(
+                    child: const Text(
                       'Cancel',
                       style: TextStyle(
-                        color: Colors.grey.shade400,
+                        color: ResponsiveHelper.textTertiary,
                         fontSize: 17,
                       ),
                     ),
                   ),
-
-                  // Month/Year navigation
-                  Row(
-                    children: [
-                      CupertinoButton(
-                        padding: const EdgeInsets.all(8),
-                        onPressed: canGoPrevious
-                            ? () {
-                                final newMonth = _selectedDateTime.month == 1 ? 12 : _selectedDateTime.month - 1;
-                                final newYear =
-                                    _selectedDateTime.month == 1 ? _selectedDateTime.year - 1 : _selectedDateTime.year;
-
-                                setState(() {
-                                  _selectedDateTime = DateTime(
-                                    newYear,
-                                    newMonth,
-                                    _selectedDateTime.day,
-                                    _selectedDateTime.hour,
-                                    _selectedDateTime.minute,
-                                  );
-                                });
-                              }
-                            : null,
-                        child: Icon(
-                          Icons.chevron_left,
-                          color: canGoPrevious ? Colors.grey.shade400 : Colors.grey.shade700,
-                          size: 24,
-                        ),
-                      ),
-                      Text(
-                        '$currentMonth $currentYear',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                      CupertinoButton(
-                        padding: const EdgeInsets.all(8),
-                        onPressed: () {
-                          setState(() {
-                            _selectedDateTime = DateTime(
-                              _selectedDateTime.month == 12 ? _selectedDateTime.year + 1 : _selectedDateTime.year,
-                              _selectedDateTime.month == 12 ? 1 : _selectedDateTime.month + 1,
-                              _selectedDateTime.day,
-                              _selectedDateTime.hour,
-                              _selectedDateTime.minute,
-                            );
-                          });
-                        },
-                        child: Icon(
-                          Icons.chevron_right,
-                          color: Colors.grey.shade400,
-                          size: 24,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    DateFormat.yMMMd(
+                      Localizations.localeOf(context).toString(),
+                    ).format(_selectedDateTime),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: ResponsiveHelper.textPrimary,
+                    ),
                   ),
-
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context, _selectedDateTime),
                     child: const Text(
                       'Done',
                       style: TextStyle(
-                        color: Colors.deepPurpleAccent,
+                        color: ResponsiveHelper.purplePrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
                       ),
@@ -613,92 +621,178 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                 ],
               ),
             ),
-
-            const SizedBox(height: 10),
-
-            // Selected date and time display
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 20),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.deepPurpleAccent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Colors.deepPurpleAccent.withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Row(
+            const SizedBox(height: 20),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.calendar_today_outlined,
-                    color: Colors.deepPurpleAccent,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${months[_selectedDateTime.month - 1]} ${_selectedDateTime.day}, ${_selectedDateTime.year}',
-                      style: const TextStyle(
-                        fontSize: 16,
+                  CalendarDatePicker2(
+                    config: CalendarDatePicker2Config(
+                      calendarType: CalendarDatePicker2Type.single,
+                      firstDate: DateTime.now(),
+                      currentDate: DateTime.now(),
+                      lastDate: (widget.initialDateTime ?? DateTime.now()).add(
+                        const Duration(days: 365 * 5),
+                      ),
+                      disableMonthPicker: true,
+                      yearBuilder: yearBuilder,
+                      selectedDayHighlightColor: ResponsiveHelper.purplePrimary,
+                      // todayHighlightColor: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                      dayTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary),
+                      selectedDayTextStyle: const TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      todayTextStyle: const TextStyle(
+                        color: ResponsiveHelper.purplePrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      weekdayLabelTextStyle: const TextStyle(
+                        color: ResponsiveHelper.textTertiary,
                         fontWeight: FontWeight.w500,
-                        color: Colors.white,
+                      ),
+                      controlsTextStyle: const TextStyle(
+                        color: ResponsiveHelper.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      disabledDayTextStyle: const TextStyle(
+                        color: ResponsiveHelper.textQuaternary,
                       ),
                     ),
+                    value: [_selectedDateTime],
+                    onValueChanged: (dates) => setState(() {
+                      _selectedDateTime = DateTime(
+                        dates[0].year,
+                        dates[0].month,
+                        dates[0].day,
+                        _selectedDateTime.hour,
+                        _selectedDateTime.minute,
+                      );
+                    }),
                   ),
-                  const Icon(
-                    Icons.access_time,
-                    color: Colors.deepPurpleAccent,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_selectedDateTime.hour > 12 ? _selectedDateTime.hour - 12 : (_selectedDateTime.hour == 0 ? 12 : _selectedDateTime.hour)}:${_selectedDateTime.minute.toString().padLeft(2, '0')} ${_selectedDateTime.hour >= 12 ? 'PM' : 'AM'}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.deepPurpleAccent,
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.access_time,
+                          color: ResponsiveHelper.purplePrimary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            "Time",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: ResponsiveHelper.textPrimary,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () async {
+                            final TimeOfDay? pickedTime = await showTimePicker(
+                              context: context,
+                              initialTime: _selectedTimeOfDay,
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: const ColorScheme.dark(
+                                      primary: ResponsiveHelper.purplePrimary,
+                                      onPrimary: ResponsiveHelper.textPrimary,
+                                      surface: ResponsiveHelper.backgroundSecondary,
+                                      onSurface: ResponsiveHelper.textPrimary,
+                                    ),
+                                    timePickerTheme: TimePickerThemeData(
+                                      backgroundColor: ResponsiveHelper.backgroundSecondary,
+                                      hourMinuteColor:
+                                          WidgetStateColor.resolveWith(
+                                            (states) =>
+                                                states.contains(
+                                                  WidgetState.selected,
+                                                )
+                                                ? ResponsiveHelper.purplePrimary
+                                                : ResponsiveHelper.backgroundTertiary,
+                                          ),
+                                      hourMinuteTextColor: ResponsiveHelper.textPrimary,
+                                      dialHandColor: ResponsiveHelper.purplePrimary,
+                                      dialBackgroundColor: ResponsiveHelper.backgroundTertiary,
+                                      dialTextColor:
+                                          WidgetStateColor.resolveWith(
+                                            (states) =>
+                                                states.contains(
+                                                  WidgetState.selected,
+                                                )
+                                                ? ResponsiveHelper.textPrimary
+                                                : ResponsiveHelper.textSecondary,
+                                          ),
+                                      entryModeIconColor: ResponsiveHelper.textTertiary,
+                                      dayPeriodColor:
+                                          WidgetStateColor.resolveWith(
+                                            (states) =>
+                                                states.contains(
+                                                  WidgetState.selected,
+                                                )
+                                                ? ResponsiveHelper.purplePrimary
+                                                : Colors.transparent,
+                                          ),
+                                      dayPeriodTextColor:
+                                          WidgetStateColor.resolveWith(
+                                            (states) =>
+                                                states.contains(
+                                                  WidgetState.selected,
+                                                )
+                                                ? ResponsiveHelper.textPrimary
+                                                : ResponsiveHelper.textTertiary,
+                                          ),
+                                      dayPeriodBorderSide: const BorderSide(
+                                        color: ResponsiveHelper.textTertiary,
+                                      ),
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+
+                            if (pickedTime != null) {
+                              setState(() {
+                                _selectedTimeOfDay = pickedTime;
+                                _selectedDateTime = DateTime(
+                                  _selectedDateTime.year,
+                                  _selectedDateTime.month,
+                                  _selectedDateTime.day,
+                                  pickedTime.hour,
+                                  pickedTime.minute,
+                                );
+                              });
+                            }
+                          },
+                          child: Row(
+                            children: [
+                              Text(
+                                DateFormat.jm().format(_selectedDateTime),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: ResponsiveHelper.purplePrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // Simplified Date and Time Picker
-            Expanded(
-              child: Theme(
-                data: ThemeData.dark().copyWith(
-                  cupertinoOverrideTheme: const CupertinoThemeData(
-                    brightness: Brightness.dark,
-                    primaryColor: Colors.deepPurpleAccent,
-                    textTheme: CupertinoTextThemeData(
-                      dateTimePickerTextStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ),
-                ),
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.dateAndTime,
-                  initialDateTime: _selectedDateTime,
-                  minimumDate: widget.minimumDate ?? DateTime.now(),
-                  maximumDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                  use24hFormat: false,
-                  backgroundColor: const Color(0xFF1F1F25),
-                  onDateTimeChanged: (DateTime newDateTime) {
-                    setState(() {
-                      _selectedDateTime = newDateTime;
-                    });
-                  },
-                ),
-              ),
-            ),
-
-            // Bottom safe area
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
           ],
         ),
       ),
