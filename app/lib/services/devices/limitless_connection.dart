@@ -12,6 +12,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   final _audioController = StreamController<List<int>>.broadcast();
   final _flashPageController = StreamController<Map<String, dynamic>>.broadcast();
+  final _buttonController = StreamController<List<int>>.broadcast();
   final _rawDataBuffer = <int>[];
   int? _firstFlashPageTimestampMs;
 
@@ -21,6 +22,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   int _highestReceivedIndex = -1;
   int _lastAcknowledgedIndex = -1;
+
+  static const int _buttonNotPressed = 0;
+  static const int _buttonShortPress = 1;
+  static const int _buttonLongPress = 2;
+  static const int _buttonDoublePress = 3;
 
   LimitlessDeviceConnection(super.device, super.transport);
 
@@ -45,6 +51,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await _rxSubscription?.cancel();
     await _audioController.close();
     await _flashPageController.close();
+    await _buttonController.close();
     _isBatchMode = false;
     await super.disconnect();
   }
@@ -81,6 +88,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
     // Accumulate data for frame extraction
     _rawDataBuffer.addAll(data);
+
+    _tryParseButtonStatus(data);
 
     _tryParseDeviceStatus(data);
   }
@@ -559,6 +568,77 @@ class LimitlessDeviceConnection extends DeviceConnection {
     return frames;
   }
 
+  void _tryParseButtonStatus(List<int> data) {
+    try {
+      if (data.length < 10) return;
+
+      int pos = 0;
+      while (pos < data.length - 5) {
+        if (data[pos] == 0x22) {
+          pos++;
+          if (pos >= data.length) return;
+
+          final lengthResult = _decodeVarint(data, pos);
+          final payloadLength = lengthResult[0] as int;
+          pos = lengthResult[1] as int;
+
+          if (payloadLength < 2 || payloadLength > data.length - pos) return;
+
+          if (data[pos] != 0x42) return;
+
+          int innerPos = pos + 1;
+          if (innerPos >= data.length) return;
+
+          final buttonLengthResult = _decodeVarint(data, innerPos);
+          final buttonLength = buttonLengthResult[0] as int;
+          innerPos = buttonLengthResult[1] as int;
+
+          if (buttonLength < 2 || buttonLength > 50 || innerPos + buttonLength > data.length) return;
+
+          final buttonEnd = innerPos + buttonLength;
+          while (innerPos < buttonEnd - 1) {
+            if (data[innerPos] == 0x08) {
+              innerPos++;
+              final eventResult = _decodeVarint(data, innerPos);
+              final buttonEvent = eventResult[0] as int;
+
+              if (buttonEvent < 0 || buttonEvent > 4) return;
+
+              // Skip NOT_PRESSED events
+              if (buttonEvent == _buttonNotPressed) return;
+
+              // Skip LONG_PRESS - Limitless uses this to start/stop recording on device
+              if (buttonEvent == _buttonLongPress) return;
+
+              // Skip SHORT_PRESS -  what to do with this?
+              if (buttonEvent == _buttonShortPress) return;
+
+              // DOUBLE_PRESS
+              if (buttonEvent != _buttonDoublePress) return;
+
+              // Double press -> pause/resume/process conversation
+              const int mappedState = 2;
+
+              final buttonBytes = [
+                mappedState & 0xFF,
+                (mappedState >> 8) & 0xFF,
+                (mappedState >> 16) & 0xFF,
+                (mappedState >> 24) & 0xFF,
+              ];
+              _buttonController.add(buttonBytes);
+              return;
+            }
+            innerPos++;
+          }
+          return;
+        }
+        pos++;
+      }
+    } catch (e) {
+      // Silently ignore parsing errors
+    }
+  }
+
   void _tryParseDeviceStatus(List<int> data) {
     try {
       if (data.length < 20) return;
@@ -946,6 +1026,17 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   @override
   Future<List<int>> performGetButtonState() async => [];
+
+  @override
+  Future<StreamSubscription?> performGetBleButtonListener({
+    required void Function(List<int>) onButtonReceived,
+  }) async {
+    return _buttonController.stream.listen((value) {
+      if (value.isNotEmpty) {
+        onButtonReceived(value);
+      }
+    });
+  }
 
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
