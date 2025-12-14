@@ -246,8 +246,8 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
-deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
-deepgram_beta_options.url = "https://api.beta.deepgram.com"
+deepgram_cloud_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_cloud_options.url = "https://api.deepgram.com"
 
 if is_dg_self_hosted:
     dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
@@ -255,13 +255,13 @@ if is_dg_self_hosted:
         raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
     # Override only the URL while keeping all other options
     deepgram_options.url = dg_self_hosted_url
-    deepgram_beta_options.url = dg_self_hosted_url
+    deepgram_cloud_options.url = dg_self_hosted_url
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 
 # unused fn
-deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
+deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_cloud_options)
 
 
 async def process_audio_dg(
