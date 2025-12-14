@@ -52,6 +52,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
   bool _isSharing = false;
+  bool _isTogglingStarred = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -408,7 +409,71 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Share button (first) - directly share summary link
+                      // Star button (first) - toggle starred status
+                      Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: provider.conversation.starred
+                              ? Colors.amber.withValues(alpha: 0.3)
+                              : Colors.grey.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: _isTogglingStarred
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _isTogglingStarred = true;
+                                  });
+                                  HapticFeedback.mediumImpact();
+                                  try {
+                                    final newStarredState = !provider.conversation.starred;
+                                    bool success = await setConversationStarred(
+                                      provider.conversation.id,
+                                      newStarredState,
+                                    );
+                                    if (!mounted) return;
+                                    if (success) {
+                                      provider.conversation.starred = newStarredState;
+                                      // Update in conversation provider
+                                      context.read<ConversationProvider>().updateConversationInSortedList(
+                                            provider.conversation,
+                                          );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Failed to update starred status.')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    debugPrint('Failed to toggle starred status: $e');
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _isTogglingStarred = false;
+                                      });
+                                    }
+                                  }
+                                },
+                          icon: _isTogglingStarred
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : FaIcon(
+                                  provider.conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                                  size: 16.0,
+                                  color: provider.conversation.starred ? Colors.amber : Colors.white,
+                                ),
+                        ),
+                      ),
+                      // Share button (second) - directly share summary link
                       Container(
                         key: _shareButtonKey,
                         width: 36,
