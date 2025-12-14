@@ -12,6 +12,11 @@
 .swiftpm/
 migrate_working_dir/
 
+#This is Binary and cache stuff 
+macos/*
+macos/
+app/macos/*
+
 # IntelliJ related
 *.iml
 *.ipr
