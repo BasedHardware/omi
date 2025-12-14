@@ -281,6 +281,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return MultiProvider(
         providers: [
           ListenableProvider(create: (context) => ConnectivityProvider()),
+          ChangeNotifierProvider(create: (_) => DeviceManager()),
           ChangeNotifierProvider(create: (context) => AuthenticationProvider()),
           ChangeNotifierProvider(create: (context) => ConversationProvider()),
           ListenableProvider(create: (context) => AppProvider()),
