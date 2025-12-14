@@ -565,6 +565,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+
     return Material(
       color: Colors.transparent,
       child: Container(
@@ -636,9 +638,9 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                   CalendarDatePicker2(
                     config: CalendarDatePicker2Config(
                       calendarType: CalendarDatePicker2Type.single,
-                      firstDate: DateTime.now(),
-                      currentDate: DateTime.now(),
-                      lastDate: (widget.initialDateTime ?? DateTime.now()).add(
+                      firstDate: now,
+                      currentDate: now,
+                      lastDate: (widget.initialDateTime ?? now).add(
                         const Duration(days: 365 * 5),
                       ),
                       disableMonthPicker: true,
