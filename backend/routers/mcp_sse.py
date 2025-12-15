@@ -540,103 +540,18 @@ async def mcp_sse_info(request: Request):
         "transport": "streamable-http",
         "protocol_version": "2025-03-26",
         "authentication": {
-            "methods": ["api_key", "oauth2"],
+            "methods": ["api_key"],
             "api_key": {
                 "header": "Authorization",
                 "format": "Bearer <api_key>"
-            },
-            "oauth2": {
-                "token_endpoint": "/v1/mcp/sse/token",
-                "grant_type": "client_credentials",
-                "client_secret": "Your MCP API key (omi_mcp_...)"
             }
         },
         "instructions": {
             "step1": "Create an MCP API key in the Omi app (Settings > Developer > MCP)",
             "step2": f"Set Server URL to: {base_url}/v1/mcp/sse",
-            "step3": "For API Key auth: Set Authorization header to your key",
-            "step4": "For OAuth: Use client_secret = your MCP API key"
+            "step3": "Set Authorization header to your key"
         }
     }
 
 
-class TokenRequest(BaseModel):
-    """OAuth2 token request body."""
-    grant_type: str = "client_credentials"
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None
 
-
-@router.post("/v1/mcp/sse/token", tags=["mcp"])
-async def mcp_oauth_token(
-    request: Request,
-    grant_type: Optional[str] = None,
-    client_id: Optional[str] = None,
-    client_secret: Optional[str] = None,
-):
-    """
-    OAuth2 Client Credentials token endpoint for MCP.
-    """
-    secret = client_secret
-    
-    if not secret:
-        try:
-            form = await request.form()
-            secret = form.get("client_secret")
-        except Exception as e:
-            logging.warning(f"Could not parse form data in OAuth token endpoint: {e}")
-    
-    if not secret:
-        try:
-            body = await request.json()
-            secret = body.get("client_secret")
-        except Exception:
-            pass
-    
-    if not secret:
-        raise HTTPException(
-            status_code=400,
-            detail="client_secret is required (use your MCP API key)"
-        )
-    
-    user_id = authenticate_api_key(secret)
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid client_secret (MCP API key)"
-        )
-    
-    # Return the API key as the access token
-    return {
-        "access_token": secret,
-        "token_type": "Bearer",
-        "expires_in": 31536000  # 1 year (keys don't expire)
-    }
-
-
-async def get_oauth_metadata(request: Request):
-    """
-    Return OAuth 2.0 / OpenID Connect discovery metadata.
-    """
-    base_url = str(request.base_url).rstrip("/")
-    
-    return {
-        "issuer": base_url,
-        "authorization_endpoint": f"{base_url}/v1/oauth/authorize",
-        "token_endpoint": f"{base_url}/v1/mcp/sse/token",
-        "scopes_supported": [],
-        "response_types_supported": ["token"],
-        "grant_types_supported": ["client_credentials"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic"],
-        "service_documentation": "https://docs.omi.me/doc/developer/MCP"
-    }
-
-
-@router.get("/.well-known/oauth-authorization-server", tags=["mcp"])
-async def oauth_authorization_server(request: Request):
-    return await get_oauth_metadata(request)
-
-
-@router.get("/.well-known/openid-configuration", tags=["mcp"])
-async def openid_configuration(request: Request):
-    return await get_oauth_metadata(request)
