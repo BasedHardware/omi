@@ -12,6 +12,8 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+
+import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
 export 'package:omi/utils/audio/audio_transcoder.dart';
@@ -408,6 +410,25 @@ class TranscriptSocketServiceFactory {
 
     // Build URL with query params for raw_binary type
     final effectiveUrl = requestType == SttRequestType.rawBinary ? _buildUrlWithParams(url, params) : url;
+
+    // Special handling for On-Device Whisper
+    if (config.provider == SttProvider.onDeviceWhisper) {
+      if (config.url == null || config.url!.isEmpty) {
+        debugPrint("[STTFactory] OnDeviceWhisper selected but no model path provided.");
+      }
+      return PurePollingSocket(
+        config: AudioPollingConfig(
+          bufferDuration: const Duration(seconds: 5),
+          minBufferSizeBytes: sampleRate * 2,
+          serviceId: config.provider.name,
+          transcoder: transcoder,
+        ),
+        sttProvider: OnDeviceWhisperProvider(
+          modelPath: config.url ?? '',
+          language: config.language ?? 'en',
+        ),
+      );
+    }
 
     return PurePollingSocket(
       config: AudioPollingConfig(

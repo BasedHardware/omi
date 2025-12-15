@@ -11,6 +11,10 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:disk_space_2/disk_space_2.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
@@ -30,6 +34,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showLogs = false;
   bool _isSaving = false;
   String? _validationError;
+
+  // On-device model download state
+  bool _isDownloadingModel = false;
+  double _downloadProgress = 0.0;
+  String? _modelDownloadStatus;
 
   // Device codec compatibility
   BleAudioCodec? _connectedDeviceCodec;
@@ -131,6 +140,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _portController.text = (config?.port ?? 8080).toString();
     _urlController.text = config?.url ?? '';
 
+    // Auto-detect model for on-device whisper if not set
+    if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
+      _checkLocalModel();
+    }
+
     // Restore JSON configs if customized
     if (config != null) {
       final hasCustomRequest = config.requestType != null ||
@@ -162,6 +176,39 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _schemaJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
       }
     }
+  }
+
+  Future<void> _checkLocalModel() async {
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      final modelName = _currentModel.isEmpty ? 'medium' : _currentModel;
+      final filePath = '${appDir.path}/models/ggml-$modelName.bin';
+      if (File(filePath).existsSync()) {
+        if (mounted) {
+          setState(() {
+            _urlController.text = filePath;
+            _updateCurrentProviderConfig(url: filePath);
+          });
+          
+          await _saveCurrentProviderConfig();
+          if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
+             final config = _buildCurrentConfig();
+             await SharedPreferencesUtil().saveCustomSttConfig(config);
+             
+             if (mounted) {
+               await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
+             }
+          }
+        }
+      } else {
+        // Clear if not found matching current model
+        if (mounted && _urlController.text.isNotEmpty) {
+           setState(() {
+            _urlController.text = '';
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   void _initializeJsonConfigs() {
@@ -201,6 +248,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     // Only regenerate JSON if user hasn't customized it
     if (_requestJsonCustomized[_selectedProvider] != true) {
       _regenerateRequestJson(_selectedProvider);
+    }
+    
+    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+      _checkLocalModel();
     }
   }
 
@@ -269,7 +320,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
 
     // Use URL from text field for custom providers
-    if (_selectedProvider == SttProvider.custom || _selectedProvider == SttProvider.customLive) {
+    if (_selectedProvider == SttProvider.custom ||
+        _selectedProvider == SttProvider.customLive ||
+        _selectedProvider == SttProvider.onDeviceWhisper) {
       url = _urlController.text.isNotEmpty ? _urlController.text : url;
     }
 
@@ -359,6 +412,32 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       return;
     }
 
+    // Validate On-Device model presence
+    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+      final modelPath = _urlController.text;
+      final hasModel = modelPath.isNotEmpty && File(modelPath).existsSync();
+      if (!hasModel) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            title: const Text('Model Required', style: TextStyle(color: Colors.white)),
+            content: const Text(
+              'Please download a Whisper model before saving.',
+              style: TextStyle(color: Colors.white70),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK', style: TextStyle(color: Colors.blue)),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -436,24 +515,78 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildSourceSelector() {
+    // Determine current active tab
+    // 0: Omi (default)
+    // 1: On-Device
+    // 2: BYO Cloud 
+    int currentTab = 0;
+    if (_useCustomStt) {
+      if (_selectedProvider == SttProvider.onDeviceWhisper) {
+        currentTab = 1;
+      } else {
+        currentTab = 2;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _buildSourceOption(false, 'Omi')),
-            const SizedBox(width: 10),
-            Expanded(child: _buildSourceOption(true, 'Bring your own')),
+            Expanded(
+              child: _buildTabOption(
+                isSelected: currentTab == 0,
+                title: 'Omi',
+                onTap: () {
+                  setState(() {
+                    _useCustomStt = false;
+                    MixpanelManager().transcriptionSourceSelected(source: 'omi');
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildTabOption(
+                isSelected: currentTab == 1,
+                title: 'On-Device',
+                onTap: () {
+                  setState(() {
+                    _useCustomStt = true;
+                    _selectedProvider = SttProvider.onDeviceWhisper;
+                    _checkLocalModel(); // Ensure model check is triggered
+                    
+                    // Track source selection
+                    MixpanelManager().transcriptionSourceSelected(source: 'custom_on_device');
+                  });
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _buildTabOption(
+                isSelected: currentTab == 2,
+                title: 'Cloud Provider',
+                onTap: () {
+                  setState(() {
+                    _useCustomStt = true;
+                    // Switch back to a cloud provider if currently valid onDevice
+                    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+                       _selectedProvider = SttProvider.openai;
+                    }
+                     
+                    // Track source selection
+                    MixpanelManager().transcriptionSourceSelected(source: 'custom_cloud');
+                  });
+                },
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
-        if (_useCustomStt)
-          Text(
-            'Freely use omi. You only pay your STT provider directly.',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          )
-        else
+        const SizedBox(height: 12),
+        if (currentTab == 0)
           GestureDetector(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)),
@@ -480,24 +613,28 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 ],
               ),
             ),
+          )
+        else if (currentTab == 1)
+          Text(
+            'Audio is processed locally. Note that this increases battery usage.',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          )
+        else if (currentTab == 2)
+          Text(
+            'Freely use omi. You only pay your STT provider directly.',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           ),
       ],
     );
   }
 
-  Widget _buildSourceOption(bool isCustom, String title) {
-    final isSelected = _useCustomStt == isCustom;
+  Widget _buildTabOption({
+    required bool isSelected,
+    required String title,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
-      onTap: () {
-        if (_useCustomStt == isCustom) return;
-
-        setState(() => _useCustomStt = isCustom);
-
-        // Track source selection: 'omi' vs 'custom'
-        MixpanelManager().transcriptionSourceSelected(
-          source: isCustom ? 'custom' : 'omi',
-        );
-      },
+      onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
@@ -517,9 +654,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 title,
                 style: TextStyle(
                   color: isSelected ? Colors.black : Colors.grey.shade400,
-                  fontSize: 15,
+                  fontSize: 13, // Slightly smaller to fit 3 tabs
                   fontWeight: FontWeight.w500,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -550,12 +689,18 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildProviderSection() {
+    // If using On-Device Whisper, hide the provider dropdown completely
+    // as the tab selection already determines the provider.
+    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCodecWarning(),
         Text(
-          'Provider',
+          'Cloud Provider',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
         ),
         const SizedBox(height: 10),
@@ -574,7 +719,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               style: const TextStyle(color: Colors.white, fontSize: 15),
               icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
               items: [
-                ...SttProviderConfig.allProviders.map((config) {
+                ...SttProviderConfig.allProviders
+                    .where((config) => config.provider != SttProvider.onDeviceWhisper)
+                    .map((config) {
                   return DropdownMenuItem<SttProvider>(
                     value: config.provider,
                     child: Row(
@@ -601,27 +748,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     ),
                   );
                 }),
-                DropdownMenuItem<SttProvider>(
-                  value: null,
-                  enabled: false,
-                  child: Row(
-                    children: [
-                      const Expanded(child: Text('On Device')),
-                      Container(
-                        margin: const EdgeInsets.only(left: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        child: Text(
-                          'Coming Soon',
-                          style: TextStyle(
-                            color: Colors.orange.withOpacity(0.5),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+
               ],
               onChanged: (provider) async {
                 if (provider != null) {
@@ -678,6 +805,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Widget _buildConfigSection() {
     if (_selectedProvider == SttProvider.localWhisper) {
       return _buildLocalWhisperConfig();
+    } else if (_selectedProvider == SttProvider.onDeviceWhisper) {
+      return _buildOnDeviceWhisperConfig();
     } else if (_selectedProvider == SttProvider.custom) {
       return _buildCustomPollingConfig();
     } else if (_selectedProvider == SttProvider.customLive) {
@@ -991,6 +1120,278 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
+  /// UI for On-Device Whisper Configuration
+  Widget _buildOnDeviceWhisperConfig() {
+    final hasModel = _urlController.text.isNotEmpty && File(_urlController.text).existsSync();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasModel && !_isDownloadingModel)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Model Ready (ggml-${_currentModel.isEmpty ? 'medium' : _currentModel}.bin)',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _downloadModel,
+                  child: Text('Re-download', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                ),
+              ],
+            ),
+          )
+        else if (_isDownloadingModel)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(
+                value: _downloadProgress,
+                backgroundColor: Colors.grey.shade800,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Please do not close the app.',
+                  style: TextStyle(color: Colors.orange.shade300, fontSize: 11),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _modelDownloadStatus ?? 'Downloading...',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                  TextButton(
+                    onPressed: _cancelDownload,
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(50, 24),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text('Cancel', style: TextStyle(color: Colors.red.shade400, fontSize: 12)),
+                  ),
+                ],
+              ),
+            ],
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _downloadModel,
+                  icon: const Icon(Icons.download, size: 16),
+                  label: Text('Download Model (ggml-${_currentModel.isEmpty ? 'medium' : _currentModel}.bin)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+        const SizedBox(height: 20),
+        _buildModelSelector(),
+        const SizedBox(height: 20),
+        _buildLanguageSelector(),
+      ],
+    );
+  }
+
+  // Add this field to the State class
+  http.Client? _downloadClient;
+
+  Future<void> _downloadModel() async {
+    final modelName = _currentModel.isEmpty ? 'medium' : _currentModel;
+    
+    double estimatedSizeMB = 1500;
+    switch(modelName) {
+      case 'tiny': estimatedSizeMB = 75; break;
+      case 'base': estimatedSizeMB = 142; break;
+      case 'small': estimatedSizeMB = 466; break;
+      case 'medium': estimatedSizeMB = 1500; break;
+      case 'large-v1': 
+      case 'large-v2': estimatedSizeMB = 2900; break;
+    }
+
+    final appDir = await getApplicationSupportDirectory();
+    final modelDir = Directory('${appDir.path}/models');
+    
+    double? freeSpaceMB = await DiskSpace.getFreeDiskSpaceForPath(appDir.path);
+    
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text('Download Model', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Model: ggml-$modelName.bin',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Estimated Size: ~${estimatedSizeMB.toStringAsFixed(0)} MB',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 8),
+             Text(
+              'Available Space: ${freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : 'Unknown'}',
+              style: TextStyle(
+                color: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? Colors.red : Colors.white70,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text(
+                  'Warning: Not enough space!',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+             onPressed: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) 
+                 ? null 
+                 : () => Navigator.pop(context, true),
+            child: const Text('Download', style: TextStyle(color: Colors.blue)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isDownloadingModel = true;
+      _downloadProgress = 0.0;
+      _modelDownloadStatus = 'Preparing $modelName...';
+    });
+
+    try {
+      if (!await modelDir.exists()) {
+        await modelDir.create(recursive: true);
+      }
+
+      final fileName = 'ggml-$modelName.bin';
+      final filePath = '${modelDir.path}/$fileName';
+      final url = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$fileName';
+      
+      _downloadClient = http.Client();
+      final request = http.Request('GET', Uri.parse(url));
+      final response = await _downloadClient!.send(request);
+      
+      if (response.statusCode != 200) {
+        throw Exception('Download failed: ${response.statusCode}');
+      }
+
+      final contentLength = response.contentLength ?? (estimatedSizeMB * 1024 * 1024).toInt();
+      int received = 0;
+      
+      final file = File(filePath);
+      final sink = file.openWrite();
+
+      await response.stream.listen(
+        (chunk) {
+          sink.add(chunk);
+          received += chunk.length;
+          if (mounted) {
+            setState(() {
+              _downloadProgress = received / contentLength;
+              _modelDownloadStatus = 'Downloading $modelName: ${(received / 1024 / 1024).toStringAsFixed(1)} / ${(contentLength / 1024 / 1024).toStringAsFixed(1)} MB';
+            });
+          }
+        },
+        onError: (e) {
+            throw e;
+        },
+        onDone: () async {
+            await sink.close();
+        },
+        cancelOnError: true,
+      ).asFuture();
+
+      if (mounted) {
+        setState(() {
+          _urlController.text = filePath;
+          _isDownloadingModel = false;
+          _modelDownloadStatus = 'Done';
+        });
+      }
+      
+      _updateCurrentProviderConfig(url: filePath);
+      
+      await _saveCurrentProviderConfig();
+      if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
+        final config = _buildCurrentConfig();
+        await SharedPreferencesUtil().saveCustomSttConfig(config);
+        if (mounted) {
+          await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
+        }
+      }
+
+    } catch (e) {
+      if (e.toString().contains('ClientException') || e.toString().contains('closed')) {
+         if (mounted) {
+            setState(() {
+              _isDownloadingModel = false;
+              _modelDownloadStatus = 'Cancelled';
+            });
+         }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isDownloadingModel = false;
+            _modelDownloadStatus = 'Error: $e';
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Download error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } finally {
+      _downloadClient?.close();
+      _downloadClient = null;
+    }
+  }
+
+  void _cancelDownload() {
+    _downloadClient?.close();
+    setState(() {
+      _isDownloadingModel = false;
+      _modelDownloadStatus = 'Cancelled';
+    });
+  }
+
   Widget _buildAdvancedSection() {
     // Show advanced section for all providers except Omi
     if (_selectedProvider == SttProvider.omi) return const SizedBox.shrink();
@@ -1022,7 +1423,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         ),
         if (_showAdvanced) ...[
           const SizedBox(height: 4),
-          if (_currentConfig.supportedModels.isNotEmpty) ...[
+          // Hide generic model selector for OnDeviceWhisper as it has a specific UI
+          if (_currentConfig.supportedModels.isNotEmpty && _selectedProvider != SttProvider.onDeviceWhisper) ...[
             _buildModelSelector(),
             const SizedBox(height: 16),
           ],
