@@ -16,6 +16,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
   final _rawDataBuffer = <int>[];
   int? _firstFlashPageTimestampMs;
 
+  // Fragment reassembly: index -> {seq -> payload}
+  final Map<int, Map<int, List<int>>> _fragmentBuffer = {};
+
+  // Completed flash pages
+  final List<Map<String, dynamic>> _completedFlashPages = [];
+
   StreamSubscription? _rxSubscription;
   bool _isInitialized = false;
   bool _isBatchMode = false;
@@ -78,20 +84,380 @@ class LimitlessDeviceConnection extends DeviceConnection {
   void _handleNotification(List<int> data) {
     if (data.isEmpty) return;
 
-    if (data.length > 2 && data[0] == 0x08) {
-      final indexResult = _decodeVarint(data, 1);
-      final packetIndex = indexResult[0] as int;
-      if (packetIndex > _highestReceivedIndex) {
-        _highestReceivedIndex = packetIndex;
+    _tryParseButtonStatus(data);
+    _tryParseDeviceStatus(data);
+
+    // Parse BLE packet to get fragmentation info
+    final packet = _parseBlePacket(data);
+    if (packet == null) {
+      if (_isBatchMode) {
+        debugPrint(
+            'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}');
       }
+      _rawDataBuffer.addAll(data);
+      return;
     }
 
-    // Accumulate data for frame extraction
-    _rawDataBuffer.addAll(data);
+    final index = packet['index'] as int;
+    final seq = packet['seq'] as int;
+    final numFrags = packet['num_frags'] as int;
+    final payload = packet['payload'] as List<int>;
 
-    _tryParseButtonStatus(data);
+    // Track highest received index for acknowledgment
+    if (index > _highestReceivedIndex) {
+      _highestReceivedIndex = index;
+    }
 
-    _tryParseDeviceStatus(data);
+    if (_isBatchMode) {
+      _fragmentBuffer.putIfAbsent(index, () => {});
+      _fragmentBuffer[index]![seq] = payload;
+
+      if (_fragmentBuffer[index]!.length == numFrags) {
+        final completePayload = <int>[];
+        for (int i = 0; i < numFrags; i++) {
+          final fragment = _fragmentBuffer[index]![i];
+          if (fragment != null) {
+            completePayload.addAll(fragment);
+          }
+        }
+
+        _fragmentBuffer.remove(index);
+
+        _handlePendantMessage(completePayload);
+      }
+    } else {
+      _rawDataBuffer.addAll(data);
+    }
+  }
+
+  void _handlePendantMessage(List<int> payload) {
+    try {
+      int pos = 0;
+      List<int> foundFields = [];
+
+      while (pos < payload.length) {
+        final tag = payload[pos];
+        final fieldNum = tag >> 3;
+        final wireType = tag & 0x07;
+        pos++;
+
+        foundFields.add(fieldNum);
+
+        if (wireType == 2) {
+          // Length-delimited field
+          final lengthResult = _decodeVarint(payload, pos);
+          final length = lengthResult[0] as int;
+          pos = lengthResult[1] as int;
+
+          final fieldData = payload.sublist(pos, pos + length);
+          pos += length;
+
+          if (fieldNum == 2) {
+            _handleStorageBuffer(fieldData);
+          }
+        } else if (wireType == 0) {
+          final result = _decodeVarint(payload, pos);
+          pos = result[1] as int;
+        } else {
+          // Unknown wire type, skip byte
+          pos++;
+        }
+      }
+    } catch (e) {
+      debugPrint('Limitless: Error handling pendant message: $e');
+    }
+  }
+
+  void _handleStorageBuffer(List<int> storageData) {
+    try {
+      int pos = 0;
+      int? session;
+      int? seq;
+      int? index;
+      List<int>? flashPageData;
+
+      while (pos < storageData.length) {
+        final tag = storageData[pos];
+        final fieldNum = tag >> 3;
+        final wireType = tag & 0x07;
+        pos++;
+
+        if (wireType == 0) {
+          // Varint
+          final result = _decodeVarint(storageData, pos);
+          final value = result[0] as int;
+          pos = result[1] as int;
+
+          if (fieldNum == 2) {
+            session = value;
+          } else if (fieldNum == 4) {
+            seq = value;
+          } else if (fieldNum == 5) {
+            index = value;
+          }
+        } else if (wireType == 2) {
+          // Length-delimited
+          final lengthResult = _decodeVarint(storageData, pos);
+          final length = lengthResult[0] as int;
+          pos = lengthResult[1] as int;
+
+          if (fieldNum == 6) {
+            flashPageData = storageData.sublist(pos, pos + length);
+          }
+          pos += length;
+        } else {
+          pos++;
+        }
+      }
+
+      if (flashPageData != null && flashPageData.isNotEmpty) {
+        final pageInfo = _parseFlashPageInfo(flashPageData);
+
+        final opusFrames = _extractOpusFramesFromFlashPage(flashPageData);
+
+        if (opusFrames.isNotEmpty) {
+          final flashPage = {
+            'opus_frames': opusFrames,
+            'timestamp_ms': pageInfo['timestamp_ms'] ?? DateTime.now().millisecondsSinceEpoch,
+            'session': session,
+            'seq': seq,
+            'index': index,
+            'did_start_session': pageInfo['did_start_session'] ?? false,
+            'did_stop_session': pageInfo['did_stop_session'] ?? false,
+            'did_start_recording': pageInfo['did_start_recording'] ?? false,
+            'did_stop_recording': pageInfo['did_stop_recording'] ?? false,
+          };
+
+          _completedFlashPages.add(flashPage);
+
+          // Update first flash page timestamp if not set
+          if (_firstFlashPageTimestampMs == null) {
+            final timestamp = pageInfo['timestamp_ms'] as int?;
+            if (timestamp != null && timestamp > 1577836800000) {
+              _firstFlashPageTimestampMs = timestamp;
+            }
+          }
+
+          _flashPageController.add(flashPage);
+        }
+      }
+    } catch (e) {
+      debugPrint('Limitless: Error handling storage buffer: $e');
+    }
+  }
+
+  Map<String, dynamic> _parseFlashPageInfo(List<int> flashPageData) {
+    Map<String, dynamic> result = {
+      'timestamp_ms': 0,
+      'did_start_session': false,
+      'did_stop_session': false,
+      'did_start_recording': false,
+      'did_stop_recording': false,
+    };
+
+    try {
+      int pos = 0;
+
+      // Field 1 (0x08) = timestamp_ms
+      if (pos < flashPageData.length && flashPageData[pos] == 0x08) {
+        pos++;
+        final timestampResult = _decodeVarint(flashPageData, pos);
+        result['timestamp_ms'] = timestampResult[0] as int;
+        pos = timestampResult[1] as int;
+      }
+
+      while (pos < flashPageData.length - 2) {
+        // Audio wrapper (0x1a)
+        if (flashPageData[pos] == 0x1a) {
+          pos++;
+          final chunkLengthResult = _decodeVarint(flashPageData, pos);
+          final chunkLength = chunkLengthResult[0] as int;
+          pos = chunkLengthResult[1] as int;
+
+          final chunkEnd = pos + chunkLength;
+
+          while (pos < chunkEnd - 1) {
+            final marker = flashPageData[pos];
+
+            // Storage status (0x62)
+            if (marker == 0x62) {
+              pos++;
+              final statusLengthResult = _decodeVarint(flashPageData, pos);
+              final statusLength = statusLengthResult[0] as int;
+              pos = statusLengthResult[1] as int;
+
+              final statusEnd = pos + statusLength;
+              while (pos < statusEnd) {
+                final statusMarker = flashPageData[pos];
+                pos++;
+
+                if (statusMarker == 0x08 && pos < statusEnd) {
+                  result['did_start_session'] = flashPageData[pos] != 0;
+                  pos++;
+                } else if (statusMarker == 0x10 && pos < statusEnd) {
+                  result['did_stop_session'] = flashPageData[pos] != 0;
+                  pos++;
+                }
+              }
+              continue;
+            }
+
+            // Audio data (0x12)
+            if (marker == 0x12) {
+              pos++;
+              final audioLengthResult = _decodeVarint(flashPageData, pos);
+              final audioLength = audioLengthResult[0] as int;
+              pos = audioLengthResult[1] as int;
+
+              final audioEnd = pos + audioLength;
+              while (pos < audioEnd - 1) {
+                final audioMarker = flashPageData[pos];
+                pos++;
+
+                if (audioMarker == 0x40 && pos < audioEnd) {
+                  result['did_start_recording'] = flashPageData[pos] != 0;
+                  pos++;
+                } else if (audioMarker == 0x48 && pos < audioEnd) {
+                  result['did_stop_recording'] = flashPageData[pos] != 0;
+                  pos++;
+                }
+              }
+              pos = audioEnd;
+              continue;
+            }
+
+            pos++;
+          }
+          pos = chunkEnd;
+        } else {
+          pos++;
+        }
+      }
+    } catch (e) {
+      // Silently ignore parsing errors
+    }
+
+    return result;
+  }
+
+  List<List<int>> _extractOpusFramesFromFlashPage(List<int> flashPageData) {
+    final frames = <List<int>>[];
+
+    try {
+      int pos = 0;
+
+      // Skip timestamp (0x08) if present
+      if (pos < flashPageData.length && flashPageData[pos] == 0x08) {
+        pos++;
+        final result = _decodeVarint(flashPageData, pos);
+        pos = result[1] as int;
+      }
+
+      // Skip 0x10 if present
+      if (pos < flashPageData.length && flashPageData[pos] == 0x10) {
+        pos++;
+        final result = _decodeVarint(flashPageData, pos);
+        pos = result[1] as int;
+      }
+
+      // Process audio wrappers (0x1a)
+      while (pos < flashPageData.length - 2) {
+        if (flashPageData[pos] == 0x1a) {
+          pos++;
+          final wrapperLengthResult = _decodeVarint(flashPageData, pos);
+          final wrapperLength = wrapperLengthResult[0] as int;
+          pos = wrapperLengthResult[1] as int;
+
+          final wrapperEnd = pos + wrapperLength;
+          if (wrapperEnd > flashPageData.length) break;
+
+          while (pos < wrapperEnd - 1) {
+            final marker = flashPageData[pos];
+
+            // Offset (0x08) - skip
+            if (marker == 0x08) {
+              pos++;
+              final result = _decodeVarint(flashPageData, pos);
+              pos = result[1] as int;
+              continue;
+            }
+
+            // Audio data (0x12) containing Opus packets
+            if (marker == 0x12) {
+              pos++;
+              final audioLengthResult = _decodeVarint(flashPageData, pos);
+              final audioLength = audioLengthResult[0] as int;
+              pos = audioLengthResult[1] as int;
+
+              final audioEnd = pos + audioLength;
+              if (audioEnd > flashPageData.length) {
+                pos = wrapperEnd;
+                break;
+              }
+
+              _extractOpusRecursive(flashPageData, pos, audioEnd, frames);
+              pos = audioEnd;
+              continue;
+            }
+
+            // Skip other wire types
+            final wireType = marker & 0x07;
+            pos++;
+            if (wireType == 0) {
+              final result = _decodeVarint(flashPageData, pos);
+              pos = result[1] as int;
+            } else if (wireType == 2) {
+              final lengthResult = _decodeVarint(flashPageData, pos);
+              pos = lengthResult[1] as int;
+              pos += lengthResult[0] as int;
+            }
+          }
+
+          pos = wrapperEnd;
+        } else {
+          pos++;
+        }
+      }
+    } catch (e) {
+      debugPrint('Limitless: Error extracting Opus frames from flash page: $e');
+    }
+
+    return frames;
+  }
+
+  void _extractOpusRecursive(List<int> data, int start, int end, List<List<int>> frames) {
+    int pos = start;
+
+    while (pos < end - 1) {
+      final tag = data[pos];
+      final wireType = tag & 0x07;
+      pos++;
+
+      if (wireType == 2) {
+        // Length-delimited
+        final lengthResult = _decodeVarint(data, pos);
+        final length = lengthResult[0] as int;
+        pos = lengthResult[1] as int;
+
+        if (length > 0 && pos + length <= end) {
+          final fieldData = data.sublist(pos, pos + length);
+
+          if (length >= 10 && length <= 200 && fieldData.isNotEmpty && _isValidOpusToc(fieldData[0])) {
+            frames.add(fieldData);
+          } else if (length > 10) {
+            _extractOpusRecursive(data, pos, pos + length, frames);
+          }
+        }
+        pos += length;
+      } else if (wireType == 0) {
+        // Varint
+        final result = _decodeVarint(data, pos);
+        pos = result[1] as int;
+      } else {
+        // Unknown wire type
+        break;
+      }
+    }
   }
 
   /// Observed pattern in BLE data:
@@ -184,6 +550,64 @@ class LimitlessDeviceConnection extends DeviceConnection {
       shift += 7;
     }
     return [result, pos];
+  }
+
+  /// Parse BLE packet to extract index, sequence, number of fragments, and payload
+  Map<String, dynamic>? _parseBlePacket(List<int> data) {
+    try {
+      int pos = 0;
+      int? index;
+      int seq = 0;
+      int? numFrags;
+      List<int>? payload;
+
+      while (pos < data.length) {
+        final tag = data[pos];
+        final fieldNum = tag >> 3;
+        final wireType = tag & 0x07;
+        pos++;
+
+        if (wireType == 0) {
+          // Varint
+          final result = _decodeVarint(data, pos);
+          final value = result[0] as int;
+          pos = result[1] as int;
+
+          if (fieldNum == 1) {
+            index = value;
+          } else if (fieldNum == 2) {
+            seq = value;
+          } else if (fieldNum == 3) {
+            numFrags = value;
+          }
+        } else if (wireType == 2) {
+          // Length-delimited
+          final lengthResult = _decodeVarint(data, pos);
+          final length = lengthResult[0] as int;
+          pos = lengthResult[1] as int;
+
+          if (fieldNum == 4) {
+            payload = data.sublist(pos, pos + length);
+          }
+          pos += length;
+        } else {
+          // Unknown wire type, skip
+          break;
+        }
+      }
+
+      if (index != null && numFrags != null && payload != null) {
+        return {
+          'index': index,
+          'seq': seq,
+          'num_frags': numFrags,
+          'payload': payload,
+        };
+      }
+    } catch (e) {
+      debugPrint('Limitless: Error parsing BLE wrapper: $e');
+    }
+    return null;
   }
 
   List<int> _encodeField(int fieldNum, int wireType, List<int> value) {
@@ -338,8 +762,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
-      // Clear buffer before switching modes to prevent cross-contamination
+      // Clear all buffers before switching modes to prevent cross-contamination
       _rawDataBuffer.clear();
+      _fragmentBuffer.clear();
+      _completedFlashPages.clear();
       _isBatchMode = true;
       final cmd = _encodeDownloadFlashPages(batchMode: true, realTime: false);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
@@ -354,8 +780,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
-      // Clear buffer before switching modes to prevent batch data from being processed as real-time
+      // Clear all buffers before switching modes to prevent batch data from being processed as real-time
       _rawDataBuffer.clear();
+      _fragmentBuffer.clear();
+      _completedFlashPages.clear();
       _firstFlashPageTimestampMs = null;
 
       // Send command to switch back to real-time mode
@@ -415,6 +843,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   void clearBuffer() {
     _rawDataBuffer.clear();
     _firstFlashPageTimestampMs = null;
+    _fragmentBuffer.clear();
+    _completedFlashPages.clear();
   }
 
   int? getFirstFlashPageTimestampMs() => _firstFlashPageTimestampMs;
@@ -427,12 +857,64 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Returns map with: opus_frames, timestamp_ms, did_start_session, did_stop_session, etc.
   /// This combines frame extraction with session marker parsing
   Map<String, dynamic>? extractFramesWithSessionInfo() {
+    if (_isBatchMode) {
+      if (_completedFlashPages.isEmpty) return null;
+
+      final allFrames = <List<int>>[];
+      int? timestampMs;
+      bool didStartSession = false;
+      bool didStopSession = false;
+      bool didStartRecording = false;
+      bool didStopRecording = false;
+      int? maxIndex;
+
+      for (final page in _completedFlashPages) {
+        final frames = page['opus_frames'] as List<List<int>>?;
+        if (frames != null) {
+          allFrames.addAll(frames);
+        }
+
+        // Use timestamp from first page
+        if (timestampMs == null) {
+          final ts = page['timestamp_ms'] as int?;
+          if (ts != null && ts > 1577836800000) {
+            timestampMs = ts;
+          }
+        }
+
+        // Track the highest index for ACK
+        final pageIndex = page['index'] as int?;
+        if (pageIndex != null && (maxIndex == null || pageIndex > maxIndex)) {
+          maxIndex = pageIndex;
+        }
+
+        // Aggregate session markers
+        if (page['did_start_session'] == true) didStartSession = true;
+        if (page['did_stop_session'] == true) didStopSession = true;
+        if (page['did_start_recording'] == true) didStartRecording = true;
+        if (page['did_stop_recording'] == true) didStopRecording = true;
+      }
+
+      // Clear processed flash pages
+      _completedFlashPages.clear();
+
+      if (allFrames.isEmpty) return null;
+
+      return {
+        'opus_frames': allFrames,
+        'timestamp_ms': timestampMs ?? _firstFlashPageTimestampMs ?? DateTime.now().millisecondsSinceEpoch,
+        'did_start_session': didStartSession,
+        'did_stop_session': didStopSession,
+        'did_start_recording': didStartRecording,
+        'did_stop_recording': didStopRecording,
+        'max_index': maxIndex,
+      };
+    }
+
     if (_rawDataBuffer.isEmpty) return null;
 
-    // First try to parse session markers from the buffer before extraction
     final sessionInfo = parseStorageBuffer(_rawDataBuffer);
 
-    // Now extract opus frames (this also modifies the buffer)
     final frames = extractFramesFromBuffer();
 
     if (frames.isEmpty) return null;
