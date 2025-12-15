@@ -1425,12 +1425,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _updateCurrentProviderConfig(url: filePath);
       
       await _saveCurrentProviderConfig();
+      if (!mounted) return;
       if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
         final config = _buildCurrentConfig();
         await SharedPreferencesUtil().saveCustomSttConfig(config);
-        if (mounted) {
-          await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
-        }
+        if (!mounted) return;
+        await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
       }
       
       // Auto-delete unused models
