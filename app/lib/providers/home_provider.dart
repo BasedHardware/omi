@@ -96,8 +96,8 @@ class HomeProvider extends ChangeNotifier {
     showConvoSearchBar = !showConvoSearchBar;
     if (showConvoSearchBar) {
       // Focus the search field when showing the search bar
-      // Use a small delay to ensure the widget is built first
-      Future.delayed(const Duration(milliseconds: 100), () {
+      // Use a post-frame callback for reliability.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         convoSearchFieldFocusNode.requestFocus();
       });
     } else {
