@@ -23,7 +23,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
   Future<void> _ensureInitialized() async {
     if (_isInitialized) return;
     try {
-      if (!File(modelPath).existsSync()) {
+      if (!await File(modelPath).exists()) {
         throw Exception('Model file not found at $modelPath');
       }
 
