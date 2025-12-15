@@ -130,6 +130,7 @@ dependencies:
   in_app_review: ^2.0.9
   fl_chart: ^0.68.0
   image: ^4.3.0
+  calendar_date_picker2: ^2.0.1
 
 dependency_overrides:
   js: ^0.7.1
