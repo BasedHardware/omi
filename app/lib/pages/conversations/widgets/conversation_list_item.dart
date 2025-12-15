@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -14,6 +13,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -65,7 +65,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
@@ -165,16 +164,20 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                 },
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      _buildConversationBody(context),
-                    ],
-                  ),
+                  padding: PlatformService.isMobile
+                      ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
+                      : const EdgeInsetsDirectional.all(16),
+                  child: PlatformService.isMobile
+                      ? _buildMobileLayout(context)
+                      : Column(
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _getConversationHeader(),
+                            const SizedBox(height: 16),
+                            _buildConversationBody(context),
+                          ],
+                        ),
                 ),
               ),
             ),
@@ -182,6 +185,79 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ),
       );
     });
+  }
+
+  Widget _buildMobileLayout(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Emoji + Title row
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!widget.conversation.discarded)
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF35343B),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  widget.conversation.structured.getEmoji(),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+                ),
+              ),
+            if (!widget.conversation.discarded) const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.conversation.discarded
+                        ? widget.conversation.getTranscript(maxCount: 100)
+                        : widget.conversation.structured.title.decodeString,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  // Duration and time below title (or New status)
+                  isNew
+                      ? const ConversationNewStatusIndicator(text: "New 🚀")
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              dateTimeFormat(
+                                'h:mm a',
+                                widget.conversation.startedAt ?? widget.conversation.createdAt,
+                              ),
+                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                              maxLines: 1,
+                            ),
+                            if (_getConversationDuration().isNotEmpty) ...[
+                              const Text(
+                                ' • ',
+                                style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                              ),
+                              Text(
+                                _getConversationDuration(),
+                                style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                maxLines: 1,
+                              ),
+                            ],
+                          ],
+                        ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (widget.conversation.isLocked) _buildLockedOverlay(),
+      ],
+    );
   }
 
   Widget _buildConversationBody(BuildContext context) {
@@ -217,28 +293,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     }
 
-    final structured = widget.conversation.structured;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          structured.title.decodeString,
+          widget.conversation.structured.title.decodeString,
           style: Theme.of(context).textTheme.titleLarge,
           maxLines: 1,
         ),
-        const SizedBox(height: 8),
-        Stack(
-          children: [
-            Text(
-              structured.overview.decodeString,
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            if (widget.conversation.isLocked) _buildLockedOverlay(),
-          ],
-        ),
-        const SizedBox(height: 8),
       ],
     );
   }

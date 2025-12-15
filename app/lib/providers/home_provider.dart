@@ -17,6 +17,7 @@ class HomeProvider extends ChangeNotifier {
   bool isChatFieldFocused = false;
   bool isConvoSearchFieldFocused = false;
   bool isMemoriesSearchFieldFocused = false;
+  bool showConvoSearchBar = false;
   bool hasSpeakerProfile = true;
   bool isLoading = false;
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
@@ -68,21 +69,50 @@ class HomeProvider extends ChangeNotifier {
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
     appsSearchFieldFocusNode.addListener(_onFocusChange);
-    convoSearchFieldFocusNode.addListener(_onFocusChange);
+    convoSearchFieldFocusNode.addListener(_onConvoSearchFocusChange);
     memoriesSearchFieldFocusNode.addListener(_onFocusChange);
   }
 
   void _onFocusChange() {
     isChatFieldFocused = chatFieldFocusNode.hasFocus;
     isAppsSearchFieldFocused = appsSearchFieldFocusNode.hasFocus;
-    isConvoSearchFieldFocused = convoSearchFieldFocusNode.hasFocus;
     isMemoriesSearchFieldFocused = memoriesSearchFieldFocusNode.hasFocus;
+    notifyListeners();
+  }
+
+  void _onConvoSearchFocusChange() {
+    isConvoSearchFieldFocused = convoSearchFieldFocusNode.hasFocus;
+    // Don't auto-hide search bar when focus is lost - the widget will handle visibility
+    // based on whether there's an active search query
     notifyListeners();
   }
 
   void setIndex(int index) {
     selectedIndex = index;
     notifyListeners();
+  }
+
+  void toggleConvoSearchBar() {
+    showConvoSearchBar = !showConvoSearchBar;
+    if (showConvoSearchBar) {
+      // Focus the search field when showing the search bar
+      // Use a post-frame callback for reliability.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        convoSearchFieldFocusNode.requestFocus();
+      });
+    } else {
+      // Clear search and unfocus when hiding
+      convoSearchFieldFocusNode.unfocus();
+    }
+    notifyListeners();
+  }
+
+  void hideConvoSearchBar() {
+    if (showConvoSearchBar) {
+      showConvoSearchBar = false;
+      convoSearchFieldFocusNode.unfocus();
+      notifyListeners();
+    }
   }
 
   void setIsLoading(bool loading) {
@@ -180,7 +210,7 @@ class HomeProvider extends ChangeNotifier {
   void dispose() {
     chatFieldFocusNode.removeListener(_onFocusChange);
     appsSearchFieldFocusNode.removeListener(_onFocusChange);
-    convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    convoSearchFieldFocusNode.removeListener(_onConvoSearchFocusChange);
     memoriesSearchFieldFocusNode.removeListener(_onFocusChange);
     memoriesSearchFieldFocusNode.dispose();
     chatFieldFocusNode.dispose();

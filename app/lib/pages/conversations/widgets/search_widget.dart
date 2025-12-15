@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});
@@ -20,6 +16,45 @@ class _SearchWidgetState extends State<SearchWidget> {
   final TextEditingController searchController = TextEditingController();
   final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
   bool showClearButton = false;
+  HomeProvider? _homeProvider;
+  ConversationProvider? _convoProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Store provider references safely
+    _homeProvider = Provider.of<HomeProvider>(context, listen: false);
+    _convoProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+    // Add listener if not already added
+    _homeProvider?.convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    _homeProvider?.convoSearchFieldFocusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    // Remove listener safely
+    _homeProvider?.convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    // Dispose the text controller to prevent memory leak
+    searchController.dispose();
+    // Cancel any pending debounced operations
+    _debouncer.cancel();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    // Check if widget is still mounted before accessing providers
+    if (!mounted || _homeProvider == null || _convoProvider == null) {
+      return;
+    }
+
+    // Hide search bar if focus is lost and there's no search query
+    if (!_homeProvider!.isConvoSearchFieldFocused &&
+        _convoProvider!.previousQuery.isEmpty &&
+        _homeProvider!.showConvoSearchBar) {
+      _homeProvider!.hideConvoSearchBar();
+    }
+  }
 
   void setShowClearButton() {
     if (showClearButton != searchController.text.isNotEmpty) {
@@ -27,95 +62,6 @@ class _SearchWidgetState extends State<SearchWidget> {
         showClearButton = searchController.text.isNotEmpty;
       });
     }
-  }
-
-  Future<void> _selectDate(BuildContext context) async {
-    DateTime selectedDate = DateTime.now();
-
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Container(
-          height: 300,
-          padding: const EdgeInsets.only(top: 6.0),
-          margin: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          color: CupertinoColors.systemBackground.resolveFrom(context),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                // Header with Cancel and Done buttons
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1F1F25),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Color(0xFF35343B),
-                        width: 0.5,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          if (context.mounted) {
-                            final provider = Provider.of<ConversationProvider>(context, listen: false);
-                            await provider.filterConversationsByDate(selectedDate);
-                            MixpanelManager().calendarFilterApplied(selectedDate);
-                          }
-                        },
-                        child: const Text(
-                          'Done',
-                          style: TextStyle(
-                            color: Colors.deepPurple,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Date picker
-                Expanded(
-                  child: Container(
-                    color: const Color(0xFF1F1F25),
-                    child: CupertinoDatePicker(
-                      mode: CupertinoDatePickerMode.date,
-                      initialDateTime: DateTime.now(),
-                      minimumDate: DateTime(2020),
-                      maximumDate: DateTime.now(),
-                      onDateTimeChanged: (DateTime newDate) {
-                        selectedDate = newDate;
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -165,9 +111,12 @@ class _SearchWidgetState extends State<SearchWidget> {
                     ? GestureDetector(
                         onTap: () async {
                           var provider = Provider.of<ConversationProvider>(context, listen: false);
+                          var homeProvider = Provider.of<HomeProvider>(context, listen: false);
                           await provider.searchConversations(""); // clear
                           searchController.clear();
                           setShowClearButton();
+                          // Hide search bar when search is cleared
+                          homeProvider.hideConvoSearchBar();
                           MixpanelManager().searchQueryCleared();
                         },
                         child: const Icon(
