@@ -129,7 +129,7 @@ class _AddAppPageState extends State<AddAppPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const AiAppGeneratorBanner(),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 4),
                           AppMetadataWidget(
                             pickImage: () async {
                               await provider.pickImage();
