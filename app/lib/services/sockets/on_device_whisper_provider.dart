@@ -38,6 +38,9 @@ class OnDeviceWhisperProvider implements ISttProvider {
       else if (filename.contains('medium')) targetModel = WhisperModel.medium;
       else if (filename.contains('large-v1')) targetModel = WhisperModel.largeV1;
       else if (filename.contains('large-v2')) targetModel = WhisperModel.largeV2;
+      else {
+        CustomSttLogService.instance.warning('OnDeviceWhisper', 'Unknown model filename "$filename", defaulting to tiny.');
+      }
       
       _whisper = Whisper(
         model: targetModel,
@@ -46,7 +49,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
       _isInitialized = true;
       CustomSttLogService.instance.info('OnDeviceWhisper', 'Initialized with model: $filename in $dir');
     } catch (e) {
-      CustomSttLogService.instance.error('OnDeviceWhisper', 'Transcription error: $e');
+      CustomSttLogService.instance.error('OnDeviceWhisper', 'Initialization error: $e');
       rethrow;
     }
   }
@@ -89,15 +92,17 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
         if (cleanText.isEmpty) return null;
 
-        return SttTranscriptionResult(
-          segments: [
-             SttSegment(
-               text: cleanText,
-               start: audioOffsetSeconds,
-               end: audioOffsetSeconds + 5.0,
-               speakerId: 0,
-             )
-          ],
+                // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
+               final duration = audioData.lengthInBytes / 32000.0;
+               return SttTranscriptionResult(
+                 segments: [
+                    SttSegment(
+                      text: cleanText,
+                      start: audioOffsetSeconds,
+                      end: audioOffsetSeconds + duration,
+                      speakerId: 0,
+                    )
+                 ],
           rawText: cleanText,
         );
 
@@ -114,6 +119,12 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
   @override
   void dispose() {
+    try {
+      _whisper?.release();
+    } catch (e) {
+      CustomSttLogService.instance.error('OnDeviceWhisper', 'Dispose error: $e');
+    }
+    _whisper = null;
     _isInitialized = false;
   }
 }

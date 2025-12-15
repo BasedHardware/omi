@@ -262,7 +262,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           });
         }
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      debugPrint('Error checking local model: $e\n$stack');
+    }
   }
 
   void _initializeJsonConfigs() {
@@ -638,7 +640,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
         const SizedBox(height: 12),
         if (currentTab == 0)
           GestureDetector(
@@ -1395,25 +1396,23 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final file = File(filePath);
       final sink = file.openWrite();
 
-      await response.stream.listen(
-        (chunk) {
-          sink.add(chunk);
-          received += chunk.length;
-          if (mounted) {
-            setState(() {
-              _downloadProgress = received / contentLength;
-              _modelDownloadStatus = 'Downloading $modelName: ${(received / 1024 / 1024).toStringAsFixed(1)} / ${(contentLength / 1024 / 1024).toStringAsFixed(1)} MB';
-            });
-          }
-        },
-        onError: (e) {
-            throw e;
-        },
-        onDone: () async {
-            await sink.close();
-        },
-        cancelOnError: true,
-      ).asFuture();
+      try {
+        await response.stream.listen(
+          (chunk) {
+            sink.add(chunk);
+            received += chunk.length;
+            if (mounted) {
+              setState(() {
+                _downloadProgress = received / contentLength;
+                _modelDownloadStatus = 'Downloading $modelName: ${(received / 1024 / 1024).toStringAsFixed(1)} / ${(contentLength / 1024 / 1024).toStringAsFixed(1)} MB';
+              });
+            }
+          },
+          cancelOnError: true,
+        ).asFuture();
+      } finally {
+        await sink.close();
+      }
 
       if (mounted) {
         setState(() {

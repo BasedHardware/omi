@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -414,7 +415,10 @@ class TranscriptSocketServiceFactory {
     // Special handling for On-Device Whisper
     if (config.provider == SttProvider.onDeviceWhisper) {
       if (config.url == null || config.url!.isEmpty) {
-        debugPrint("[STTFactory] OnDeviceWhisper selected but no model path provided.");
+        throw ArgumentError("[STTFactory] OnDeviceWhisper selected but no model path provided.");
+      }
+      if (!File(config.url!).existsSync()) {
+        throw ArgumentError("[STTFactory] Model file not found at ${config.url}");
       }
       return PurePollingSocket(
         config: AudioPollingConfig(
