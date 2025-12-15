@@ -74,15 +74,26 @@ class _AddAppPageState extends State<AddAppPage> {
                       launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
                     },
                     borderRadius: BorderRadius.circular(20),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        'Docs',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text(
+                            'Docs',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          FaIcon(
+                            FontAwesomeIcons.arrowUpRightFromSquare,
+                            color: Colors.black,
+                            size: 10,
+                          ),
+                        ],
                       ),
                     ),
                   ),
