@@ -999,6 +999,23 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
     }
 
 
+@router.post('/v1/app/generate-description-emoji', tags=['v1'])
+def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Generate an app description and representative emoji.
+    Used by the quick template creator feature.
+    """
+    from utils.llm.persona import generate_description_and_emoji
+
+    if not data.get('name'):
+        raise HTTPException(status_code=422, detail='App Name is required')
+    if not data.get('prompt'):
+        raise HTTPException(status_code=422, detail='App Prompt is required')
+
+    result = generate_description_and_emoji(data['name'], data['prompt'])
+    return result
+
+
 # ******************************************************
 # ****************** AI APP GENERATOR ******************
 # ******************************************************

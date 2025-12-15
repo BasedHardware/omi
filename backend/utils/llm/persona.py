@@ -214,3 +214,41 @@ def generate_description(app_name: str, description: str) -> str:
     """
     prompt = prompt.replace('    ', '').strip()
     return llm_mini.invoke(prompt).content
+
+
+def generate_description_and_emoji(app_name: str, prompt: str) -> dict:
+    """
+    Generate an app description and a representative emoji for the app.
+    Used by the quick template creator feature.
+    """
+    system_prompt = """You are an AI assistant that creates app descriptions and selects representative emojis.
+
+Given an app name and what it should do, respond with a JSON object containing:
+1. "description": A concise, engaging description (max 40 words) highlighting what the app does
+2. "emoji": A single emoji that best represents the app's purpose
+
+Respond ONLY with the JSON object, no other text."""
+
+    user_prompt = f"""App Name: {app_name}
+What it does: {prompt}"""
+
+    response = llm_mini.invoke([{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
+
+    content = response.content.strip()
+
+    # Parse JSON from response
+    if content.startswith("```"):
+        lines = content.split("\n")
+        content = "\n".join(lines[1:-1])
+
+    try:
+        import json
+
+        result = json.loads(content)
+        return {
+            "description": result.get("description", f"A custom app that {prompt}"),
+            "emoji": result.get("emoji", "✨"),
+        }
+    except:
+        # Fallback if JSON parsing fails
+        return {"description": f"A custom app that {prompt}", "emoji": "✨"}
