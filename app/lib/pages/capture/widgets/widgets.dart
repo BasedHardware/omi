@@ -108,7 +108,7 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                     child: Container(
                       decoration: const BoxDecoration(
                         color: Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                        borderRadius: BorderRadius.all(Radius.circular(20)),
                       ),
                       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       padding: const EdgeInsets.all(16),
