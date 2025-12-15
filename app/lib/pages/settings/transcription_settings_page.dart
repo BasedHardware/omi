@@ -853,8 +853,29 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       value: _currentModel,
       suggestions: models,
       onChanged: (value) {
+        final newModel = value.trim();
+        if (_selectedProvider == SttProvider.onDeviceWhisper && 
+            ['medium', 'large-v1', 'large-v2'].contains(newModel)) {
+             showDialog(
+               context: context,
+               builder: (context) => AlertDialog(
+                 backgroundColor: const Color(0xFF1A1A1A),
+                 title: const Text('Performance Warning', style: TextStyle(color: Colors.white)),
+                 content: const Text(
+                   'This model is large and may crash the app or run very slowly on mobile devices.\n\n"small" or "base" is recommended.',
+                   style: TextStyle(color: Colors.white70),
+                 ),
+                 actions: [
+                   TextButton(
+                     onPressed: () => Navigator.pop(context),
+                     child: const Text('OK', style: TextStyle(color: Colors.blue)),
+                   ),
+                 ],
+               ),
+             );
+        }
         setState(() {
-          _onLanguageOrModelChanged(null, value.trim());
+          _onLanguageOrModelChanged(null, newModel);
         });
       },
     );
@@ -1357,6 +1378,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         if (mounted) {
           await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
         }
+      }
+      
+      // Auto-delete unused models
+      try {
+        final List<FileSystemEntity> files = modelDir.listSync();
+        for (final file in files) {
+          if (file is File && file.path.endsWith('.bin') && file.path != filePath) {
+            await file.delete();
+            debugPrint('Deleted unused model: ${file.path}');
+          }
+        }
+      } catch (e) {
+        debugPrint('Error cleaning up models: $e');
       }
 
     } catch (e) {
