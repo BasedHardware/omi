@@ -510,20 +510,16 @@ async def mcp_delete_session(
     """
     Delete/terminate an MCP session.
     """
-    # Step 1: Validate authorization
     user_id = authenticate_api_key(authorization)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     
-    # Step 2: Validate session ID is provided
     if not mcp_session_id:
         raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")
     
-    # Step 3: Check if session exists
     if mcp_session_id not in active_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Step 4: Verify ownership
     session = active_sessions[mcp_session_id]
     if session.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this session")
@@ -534,10 +530,11 @@ async def mcp_delete_session(
 
 
 @router.get("/v1/mcp/sse/info", tags=["mcp"])
-async def mcp_sse_info():
+async def mcp_sse_info(request: Request):
     """
     Get information about the pre-hosted MCP server.
     """
+    base_url = str(request.base_url).rstrip("/")
     return {
         "endpoint": "/v1/mcp/sse",
         "transport": "streamable-http",
@@ -556,7 +553,7 @@ async def mcp_sse_info():
         },
         "instructions": {
             "step1": "Create an MCP API key in the Omi app (Settings > Developer > MCP)",
-            "step2": "Set Server URL to: https://api.omi.me/v1/mcp/sse",
+            "step2": f"Set Server URL to: {base_url}/v1/mcp/sse",
             "step3": "For API Key auth: Set Authorization header to your key",
             "step4": "For OAuth: Use client_secret = your MCP API key"
         }
@@ -579,18 +576,10 @@ async def mcp_oauth_token(
 ):
     """
     OAuth2 Client Credentials token endpoint for MCP.
-    
-    Used by ChatGPT and other OAuth-aware MCP clients.
-    - client_id: Optional (not used)
-    - client_secret: Your MCP API key (omi_mcp_...)
-    
-    Returns an access token that can be used with the /v1/mcp/sse endpoint.
     """
-    # Try to get credentials from form data or JSON body
     secret = client_secret
     
     if not secret:
-        # Try form data
         try:
             form = await request.form()
             secret = form.get("client_secret")
@@ -598,7 +587,6 @@ async def mcp_oauth_token(
             logging.warning(f"Could not parse form data in OAuth token endpoint: {e}")
     
     if not secret:
-        # Try JSON body
         try:
             body = await request.json()
             secret = body.get("client_secret")
@@ -611,7 +599,6 @@ async def mcp_oauth_token(
             detail="client_secret is required (use your MCP API key)"
         )
     
-    # Validate the API key
     user_id = authenticate_api_key(secret)
     if not user_id:
         raise HTTPException(
@@ -620,9 +607,36 @@ async def mcp_oauth_token(
         )
     
     # Return the API key as the access token
-    # ChatGPT will use this in the Authorization header
     return {
         "access_token": secret,
         "token_type": "Bearer",
         "expires_in": 31536000  # 1 year (keys don't expire)
     }
+
+
+async def get_oauth_metadata(request: Request):
+    """
+    Return OAuth 2.0 / OpenID Connect discovery metadata.
+    """
+    base_url = str(request.base_url).rstrip("/")
+    
+    return {
+        "issuer": base_url,
+        "authorization_endpoint": f"{base_url}/v1/oauth/authorize",
+        "token_endpoint": f"{base_url}/v1/mcp/sse/token",
+        "scopes_supported": [],
+        "response_types_supported": ["token"],
+        "grant_types_supported": ["client_credentials"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic"],
+        "service_documentation": "https://docs.omi.me/doc/developer/MCP"
+    }
+
+
+@router.get("/.well-known/oauth-authorization-server", tags=["mcp"])
+async def oauth_authorization_server(request: Request):
+    return await get_oauth_metadata(request)
+
+
+@router.get("/.well-known/openid-configuration", tags=["mcp"])
+async def openid_configuration(request: Request):
+    return await get_oauth_metadata(request)
