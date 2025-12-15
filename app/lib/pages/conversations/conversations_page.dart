@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/capture/widgets/limitless_sync_widget.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
@@ -168,7 +167,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     children: [
                       SizedBox(height: 12), // above search widget
                       SearchWidget(),
-                      SizedBox(height: 0), //below search widget
+                      SizedBox(height: 12), //below search widget
                     ],
                   ),
                 );
@@ -176,8 +175,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations && !convoProvider.isFetchingConversations)
-              const SliverToBoxAdapter(
+            if (convoProvider.groupedConversations.isEmpty &&
+                !convoProvider.isLoadingConversations &&
+                !convoProvider.isFetchingConversations)
+              SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.only(top: 32.0),
@@ -187,7 +188,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   ),
                 ),
               )
-            else if (convoProvider.groupedConversations.isEmpty && (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
+            else if (convoProvider.groupedConversations.isEmpty &&
+                (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
               _buildLoadingShimmer()
             else
               SliverList(

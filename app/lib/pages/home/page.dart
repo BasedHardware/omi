@@ -652,6 +652,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             begin: Alignment.topLeft,
                                             end: Alignment.bottomRight,
                                           ),
+                                          border: Border.all(
+                                            color: Colors.white.withValues(alpha: 0.3),
+                                            width: 1,
+                                          ),
                                           boxShadow: [
                                             BoxShadow(
                                               color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
@@ -930,6 +934,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 },
                               );
                             }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Star filter button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: convoProvider.showStarredOnly
+                              ? Colors.amber.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                            size: 16,
+                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            convoProvider.toggleStarredFilter();
                           },
                         ),
                       ),
