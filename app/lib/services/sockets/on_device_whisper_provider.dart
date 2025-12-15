@@ -71,8 +71,8 @@ class OnDeviceWhisperProvider implements ISttProvider {
           audio: tempFile.path,
           language: (language == 'multi' ? '' : language) ?? '', 
           isTranslate: false,
-          isNoTimestamps: false,
-          splitOnWord: true,
+          isNoTimestamps: true,
+          splitOnWord: false,
         );
 
         final res = await _whisper!.transcribe(

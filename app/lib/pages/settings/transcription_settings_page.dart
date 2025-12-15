@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/preferences.dart';
@@ -36,6 +37,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   String? _validationError;
 
   // On-device model download state
+  static bool _hasShownDebugWarning = false;
   bool _isDownloadingModel = false;
   double _downloadProgress = 0.0;
   String? _modelDownloadStatus;
@@ -143,6 +145,58 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     // Auto-detect model for on-device whisper if not set
     if (_selectedProvider == SttProvider.onDeviceWhisper && _urlController.text.isEmpty) {
       _checkLocalModel();
+    }
+    
+    // Check for debug mode and warn user
+    if (kDebugMode && _selectedProvider == SttProvider.onDeviceWhisper && !_hasShownDebugWarning) {
+      _hasShownDebugWarning = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Debug Mode Detected',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Performance reduced 5-10x. Use Release mode.',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 10.0, end: 0.0),
+                          duration: const Duration(seconds: 10),
+                          builder: (context, value, child) {
+                            return Text(
+                              'Auto-closing in ${value.toInt()}s',
+                              style: const TextStyle(fontSize: 10, color: Colors.white70),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.orange.shade900,
+              duration: const Duration(seconds: 10),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+      });
     }
 
     // Restore JSON configs if customized
