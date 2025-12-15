@@ -52,7 +52,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
