@@ -225,9 +225,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   const SizedBox(height: 8),
                   // Duration and time below title (or New status)
                   isNew
-                      ? const ConversationNewStatusIndicator(text: "New 🚀")
+                      ? Row(
+                          children: [
+                            const ConversationNewStatusIndicator(text: "New 🚀"),
+                            const Spacer(),
+                            if (widget.conversation.starred)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4.0),
+                                child: FaIcon(
+                                  FontAwesomeIcons.solidStar,
+                                  size: 12,
+                                  color: Colors.amber,
+                                ),
+                              ),
+                          ],
+                        )
                       : Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               dateTimeFormat(
@@ -248,6 +261,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                 maxLines: 1,
                               ),
                             ],
+                            const Spacer(),
+                            if (widget.conversation.starred)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4.0),
+                                child: FaIcon(
+                                  FontAwesomeIcons.solidStar,
+                                  size: 12,
+                                  color: Colors.amber,
+                                ),
+                              ),
                           ],
                         ),
                 ],
