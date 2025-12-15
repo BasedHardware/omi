@@ -1447,7 +1447,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       }
 
     } catch (e) {
-      if (e.toString().contains('ClientException') || e.toString().contains('closed')) {
+      if (e is http.ClientException) {
          if (mounted) {
             setState(() {
               _isDownloadingModel = false;
