@@ -10,7 +10,7 @@ class ReferralPage extends StatefulWidget {
 }
 
 class _ReferralPageState extends State<ReferralPage> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   bool _isLoading = true;
 
   @override
@@ -19,25 +19,29 @@ class _ReferralPageState extends State<ReferralPage> {
 
     MixpanelManager().pageOpened('Referral Program');
 
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (int progress) {
-            if (progress == 100) {
-              setState(() {
-                _isLoading = false;
-              });
-            }
-          },
-          onPageStarted: (String url) {
-            setState(() {
-              _isLoading = true;
-            });
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse('https://affiliate.omi.me/'));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageStarted: (String url) {
+              if (!mounted) return;
+              setState(() => _isLoading = true);
+            },
+            onPageFinished: (String url) {
+              if (!mounted) return;
+              setState(() => _isLoading = false);
+            },
+          ),
+        )
+        ..loadRequest(Uri.parse('https://affiliate.omi.me/'));
+
+      setState(() {
+        _controller = controller;
+      });
+    });
   }
 
   @override
@@ -65,8 +69,8 @@ class _ReferralPageState extends State<ReferralPage> {
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading)
+          if (_controller != null) WebViewWidget(controller: _controller!),
+          if (_isLoading || _controller == null)
             const Center(
               child: CircularProgressIndicator(color: Colors.deepPurple),
             ),
