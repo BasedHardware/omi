@@ -315,7 +315,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: 'Profile',
                 icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
-                  Navigator.pop(context);
                   routeToPage(context, const ProfilePage());
                 },
               ),
