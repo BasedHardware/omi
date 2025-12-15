@@ -61,6 +61,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
     String? language,
   }) async {
     try {
+      final sw = Stopwatch()..start();
       await _ensureInitialized();
 
       if (_whisper == null) return null;
@@ -92,17 +93,20 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
         if (cleanText.isEmpty) return null;
 
-                // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
-               final duration = audioData.lengthInBytes / 32000.0;
-               return SttTranscriptionResult(
-                 segments: [
-                    SttSegment(
-                      text: cleanText,
-                      start: audioOffsetSeconds,
-                      end: audioOffsetSeconds + duration,
-                      speakerId: 0,
-                    )
-                 ],
+        // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
+        final duration = audioData.lengthInBytes / 32000.0;
+        final speedFactor = sw.elapsedMilliseconds / 1000 / duration;
+        CustomSttLogService.instance.info('OnDeviceWhisper', 'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms (${speedFactor.toStringAsFixed(2)}x real-time). Text: $cleanText');
+
+        return SttTranscriptionResult(
+          segments: [
+            SttSegment(
+              text: cleanText,
+              start: audioOffsetSeconds,
+              end: audioOffsetSeconds + duration,
+              speakerId: 0,
+            )
+          ],
           rawText: cleanText,
         );
 

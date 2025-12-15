@@ -266,7 +266,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _checkLocalModel() async {
     try {
       final appDir = await getApplicationSupportDirectory();
-      final modelName = _currentModel.isEmpty ? 'medium' : _currentModel;
+      final modelName = _currentModel.isEmpty ? 'tiny' : _currentModel;
       final filePath = '${appDir.path}/models/ggml-$modelName.bin';
       if (await File(filePath).exists()) {
         if (mounted) {
@@ -1248,7 +1248,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Model Ready (ggml-${_currentModel.isEmpty ? 'medium' : _currentModel}.bin)',
+                    'Model Ready (ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin)',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
                   ),
                 ),
@@ -1303,7 +1303,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 child: ElevatedButton.icon(
                   onPressed: _downloadModel,
                   icon: const Icon(Icons.download, size: 16),
-                  label: Text('Download Model (ggml-${_currentModel.isEmpty ? 'medium' : _currentModel}.bin)'),
+                  label: Text('Download Model (ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin)'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black,
@@ -1327,7 +1327,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   http.Client? _downloadClient;
 
   Future<void> _downloadModel() async {
-    final modelName = _currentModel.isEmpty ? 'medium' : _currentModel;
+    final modelName = _currentModel.isEmpty ? 'tiny' : _currentModel;
     
     double estimatedSizeMB = 1500;
     switch(modelName) {

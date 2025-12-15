@@ -273,7 +273,7 @@ class SttProviderConfig {
       supportedLanguages: SttLanguages.whisperSupported,
       supportedModels: const ['tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2'],
       defaultLanguage: 'multi',
-      defaultModel: 'small',
+      defaultModel: 'tiny',
       responseSchema: SttResponseSchema.openAI,
     ),
   };
