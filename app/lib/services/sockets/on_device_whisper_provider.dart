@@ -119,11 +119,6 @@ class OnDeviceWhisperProvider implements ISttProvider {
 
   @override
   void dispose() {
-    try {
-      _whisper?.release();
-    } catch (e) {
-      CustomSttLogService.instance.error('OnDeviceWhisper', 'Dispose error: $e');
-    }
     _whisper = null;
     _isInitialized = false;
   }

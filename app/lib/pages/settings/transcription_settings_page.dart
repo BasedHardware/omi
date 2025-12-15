@@ -39,6 +39,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   // On-device model download state
   static bool _hasShownDebugWarning = false;
   bool _isDownloadingModel = false;
+  bool _isModelFilePresent = false;
   double _downloadProgress = 0.0;
   String? _modelDownloadStatus;
 
@@ -71,8 +72,38 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   @override
   void initState() {
     super.initState();
+    _urlController.addListener(_updateModelPresence);
     _loadConfig();
     _checkConnectedDevice();
+    // Initial check
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateModelPresence());
+  }
+
+  @override
+  void dispose() {
+    _urlController.removeListener(_updateModelPresence);
+    _downloadClient?.close();
+    
+    // Dispose controllers
+    _apiKeyController.dispose();
+    _hostController.dispose();
+    _portController.dispose();
+    _urlController.dispose();
+    
+    super.dispose();
+  }
+
+  void _updateModelPresence() {
+    final path = _urlController.text;
+    if (path.isEmpty) {
+      if (_isModelFilePresent) setState(() => _isModelFilePresent = false);
+      return;
+    }
+    File(path).exists().then((exists) {
+      if (mounted && _isModelFilePresent != exists) {
+        setState(() => _isModelFilePresent = exists);
+      }
+    });
   }
 
   Future<void> _checkConnectedDevice() async {
@@ -237,7 +268,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final appDir = await getApplicationSupportDirectory();
       final modelName = _currentModel.isEmpty ? 'medium' : _currentModel;
       final filePath = '${appDir.path}/models/ggml-$modelName.bin';
-      if (File(filePath).existsSync()) {
+      if (await File(filePath).exists()) {
         if (mounted) {
           setState(() {
             _urlController.text = filePath;
@@ -471,7 +502,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     // Validate On-Device model presence
     if (_selectedProvider == SttProvider.onDeviceWhisper) {
       final modelPath = _urlController.text;
-      final hasModel = modelPath.isNotEmpty && File(modelPath).existsSync();
+      final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
         showDialog(
           context: context,
@@ -1198,7 +1229,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   /// UI for On-Device Whisper Configuration
   Widget _buildOnDeviceWhisperConfig() {
-    final hasModel = _urlController.text.isNotEmpty && File(_urlController.text).existsSync();
+    final hasModel = _isModelFilePresent;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1969,14 +2000,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
-  @override
-  void dispose() {
-    _apiKeyController.dispose();
-    _hostController.dispose();
-    _portController.dispose();
-    _urlController.dispose();
-    super.dispose();
-  }
+
 }
 
 class _JsonEditorPage extends StatefulWidget {

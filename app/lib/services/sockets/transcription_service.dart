@@ -417,9 +417,6 @@ class TranscriptSocketServiceFactory {
       if (config.url == null || config.url!.isEmpty) {
         throw ArgumentError("[STTFactory] OnDeviceWhisper selected but no model path provided.");
       }
-      if (!File(config.url!).existsSync()) {
-        throw ArgumentError("[STTFactory] Model file not found at ${config.url}");
-      }
       return PurePollingSocket(
         config: AudioPollingConfig(
           bufferDuration: const Duration(seconds: 5),
