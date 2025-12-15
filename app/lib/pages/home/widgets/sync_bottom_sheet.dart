@@ -3,7 +3,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:provider/provider.dart';
 
@@ -34,25 +33,10 @@ class SyncBottomSheet extends StatelessWidget {
         final progress = syncProvider.walsSyncedProgress;
         final hasPendingData = pendingFlashPages.isNotEmpty;
 
-        // Check for orphaned files from previous failed syncs
-        final flashPageSync = ServiceManager.instance().wal.getSyncs().flashPage;
-        final hasOrphanedFiles = flashPageSync.hasOrphanedFiles;
-        final orphanedCount = flashPageSync.orphanedFilesCount;
-        final isUploadingOrphans = flashPageSync.isUploadingOrphans;
-
-        // Calculate time ago for pending data
-        String timeAgo = '';
-        if (hasPendingData && pendingFlashPages.isNotEmpty) {
-          final oldestWal = pendingFlashPages.reduce((a, b) => a.timerStart < b.timerStart ? a : b);
-          final minutesAgo = ((DateTime.now().millisecondsSinceEpoch ~/ 1000) - oldestWal.timerStart) ~/ 60;
-          if (minutesAgo < 60) {
-            timeAgo = '$minutesAgo minutes ago';
-          } else if (minutesAgo < 1440) {
-            timeAgo = '${minutesAgo ~/ 60} hours ago';
-          } else {
-            timeAgo = '${minutesAgo ~/ 1440} days ago';
-          }
-        }
+        final isSyncingFromPendant = syncProvider.isSyncingFromPendant;
+        final isUploadingToCloud = syncProvider.isUploadingToCloud;
+        final hasOrphanedFiles = syncProvider.hasOrphanedFiles;
+        final orphanedCount = syncProvider.orphanedFilesCount;
 
         return Container(
           decoration: const BoxDecoration(
@@ -106,7 +90,7 @@ class SyncBottomSheet extends StatelessWidget {
 
               // Title
               Text(
-                isSyncing ? 'Catching Up' : (hasPendingData ? 'Recordings Available' : 'All Synced'),
+                isSyncing ? 'Syncing recordings' : (hasPendingData ? 'Recordings to sync' : 'All caught up'),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -117,46 +101,28 @@ class SyncBottomSheet extends StatelessWidget {
 
               // Description
               if (isSyncing) ...[
-                RichText(
+                Text(
+                  'We\'ll keep syncing your recordings in the background.',
                   textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 16,
-                      height: 1.4,
-                    ),
-                    children: [
-                      const TextSpan(text: 'Processing audio and generating summaries from '),
-                      TextSpan(
-                        text: timeAgo.isNotEmpty ? timeAgo : 'earlier',
-                        style: const TextStyle(color: Colors.deepPurpleAccent),
-                      ),
-                      const TextSpan(text: '.'),
-                    ],
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 16,
+                    height: 1.4,
                   ),
                 ),
               ] else if (hasPendingData) ...[
-                RichText(
+                Text(
+                  'You have recordings that aren\'t synced yet.',
                   textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: TextStyle(
-                      color: Colors.grey.shade400,
-                      fontSize: 16,
-                      height: 1.4,
-                    ),
-                    children: [
-                      const TextSpan(text: 'You have '),
-                      TextSpan(
-                        text: _formatDuration(pendingFlashPages.fold(0, (sum, w) => sum + w.seconds)),
-                        style: const TextStyle(color: Colors.deepPurpleAccent),
-                      ),
-                      const TextSpan(text: ' of offline recordings to sync.'),
-                    ],
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 16,
+                    height: 1.4,
                   ),
                 ),
               ] else ...[
                 Text(
-                  'Your pendant is fully synced with the cloud.',
+                  'Everything is already synced.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey.shade400,
@@ -171,7 +137,9 @@ class SyncBottomSheet extends StatelessWidget {
               // Explanation text
               if ((isSyncing || hasPendingData) && isLimitless) ...[
                 Text(
-                  'This happens when your pendant is away from your phone for an extended period, the app is closed, or if Bluetooth is turned off on your phone.',
+                  isSyncing
+                      ? 'We\'re catching up on earlier recordings. New moments are still being saved and will appear once sync finishes.'
+                      : 'This usually happens when your pendant and phone were apart or Bluetooth was off.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey.shade600,
@@ -230,9 +198,7 @@ class SyncBottomSheet extends StatelessWidget {
                           Text(
                             isSyncing
                                 ? _getSyncStatusText(progress)
-                                : (hasPendingData
-                                    ? '${_formatDuration(pendingFlashPages.fold(0, (sum, w) => sum + w.seconds))} waiting'
-                                    : 'All audio has been sent to phone'),
+                                : (hasPendingData ? 'Tap Sync to start' : 'All recordings are synced'),
                             style: TextStyle(
                               color: Colors.grey.shade500,
                               fontSize: 13,
@@ -287,8 +253,8 @@ class SyncBottomSheet extends StatelessWidget {
                 ),
               ),
 
-              // Orphaned files card - files saved to phone but not yet uploaded
-              if ((hasOrphanedFiles || isUploadingOrphans) && !isSyncing) ...[
+              // Upload status card - shows when uploading to cloud (automatic, no manual button needed)
+              if (isUploadingToCloud && !isSyncingFromPendant) ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(14),
@@ -299,51 +265,34 @@ class SyncBottomSheet extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.phone_android_rounded, color: Colors.blue.shade400, size: 22),
+                      Icon(Icons.cloud_upload_rounded, color: Colors.blue.shade400, size: 22),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isUploadingOrphans
-                                  ? 'Uploading to cloud...'
-                                  : '$orphanedCount file${orphanedCount > 1 ? 's' : ''} saved on phone',
+                              'Uploading to cloud...',
                               style: TextStyle(color: Colors.blue.shade300, fontSize: 14, fontWeight: FontWeight.w600),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              isUploadingOrphans ? 'Processing saved recordings' : 'Ready to upload to cloud',
+                              hasOrphanedFiles
+                                  ? '$orphanedCount file${orphanedCount > 1 ? 's' : ''} remaining'
+                                  : 'Processing saved recordings',
                               style: TextStyle(color: Colors.blue.shade400.withOpacity(0.7), fontSize: 12),
                             ),
                           ],
                         ),
                       ),
-                      if (isUploadingOrphans)
-                        const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.blue,
-                          ),
-                        )
-                      else
-                        ElevatedButton(
-                          onPressed: () {
-                            flashPageSync.uploadOrphanedFiles();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue.shade700,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text('Upload', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.blue,
                         ),
+                      ),
                     ],
                   ),
                 ),
@@ -380,19 +329,11 @@ class SyncBottomSheet extends StatelessWidget {
     );
   }
 
-  String _formatDuration(int seconds) {
-    if (seconds < 60) return '${seconds}s';
-    if (seconds < 3600) return '${(seconds / 60).round()} min';
-    final hours = seconds ~/ 3600;
-    final mins = (seconds % 3600) ~/ 60;
-    return '${hours}h ${mins}m';
-  }
-
   String _getSyncStatusText(double progress) {
     if (progress <= 0.4) {
-      return 'Syncing from device...';
+      return 'Downloading your recordings…';
     } else {
-      return 'Processing audio...';
+      return 'Processing your audio…';
     }
   }
 }
