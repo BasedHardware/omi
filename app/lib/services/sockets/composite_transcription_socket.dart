@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class CompositeTranscriptionSocket implements IPureSocket {
   final IPureSocket primarySocket;
@@ -73,6 +74,10 @@ class CompositeTranscriptionSocket implements IPureSocket {
       _status = PureSocketStatus.connected;
       _reconnectRetries = 0;
       CustomSttLogService.instance.info('Composite', 'Both sockets connected');
+      DebugLogManager.logEvent('composite_socket_connected', {
+        'primary_status': primarySocket.status.toString(),
+        'secondary_status': secondarySocket.status.toString(),
+      });
       onConnected();
       return true;
     }
@@ -82,6 +87,12 @@ class CompositeTranscriptionSocket implements IPureSocket {
       'Composite',
       'Connection failed - primary: $primaryOk, secondary: $secondaryOk',
     );
+    DebugLogManager.logWarning('composite_socket_connect_failed', {
+      'primary_ok': primaryOk,
+      'secondary_ok': secondaryOk,
+      'primary_status': primarySocket.status.toString(),
+      'secondary_status': secondarySocket.status.toString(),
+    });
     await _disconnectBothQuietly();
     _status = PureSocketStatus.notConnected;
     return false;
@@ -98,6 +109,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   @override
   Future disconnect() async {
     CustomSttLogService.instance.info('Composite', 'Disconnecting...');
+    DebugLogManager.logEvent('composite_socket_disconnecting', {});
     _cancelReconnect();
 
     await _disconnectBothQuietly();
@@ -109,6 +121,7 @@ class CompositeTranscriptionSocket implements IPureSocket {
   @override
   Future stop() async {
     CustomSttLogService.instance.info('Composite', 'Stopping...');
+    DebugLogManager.logEvent('composite_socket_stopping', {});
     _stopped = true;  // Prevent any further reconnect attempts
     _cancelReconnect();
 
@@ -135,6 +148,11 @@ class CompositeTranscriptionSocket implements IPureSocket {
       'Composite',
       '$name socket closed (code: $closeCode), disconnecting composite',
     );
+    DebugLogManager.logEvent('composite_socket_child_closed', {
+      'child_socket': name,
+      'close_code': closeCode ?? -1,
+      'will_reconnect': !_stopped,
+    });
 
     _status = PureSocketStatus.disconnected;
     _disconnectBothQuietly();
@@ -149,6 +167,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
     }
 
     CustomSttLogService.instance.error('Composite', '$name socket error: $err');
+    DebugLogManager.logError(err, trace, 'composite_socket_child_error', {
+      'child_socket': name,
+    });
 
     _status = PureSocketStatus.disconnected;
     _disconnectBothQuietly();
@@ -169,6 +190,9 @@ class CompositeTranscriptionSocket implements IPureSocket {
         'Composite',
         'Max reconnect retries reached ($_maxReconnectRetries)',
       );
+      DebugLogManager.logWarning('composite_socket_max_retries', {
+        'max_retries': _maxReconnectRetries,
+      });
       _listener?.onMaxRetriesReach();
       return;
     }
@@ -178,6 +202,12 @@ class CompositeTranscriptionSocket implements IPureSocket {
       'Composite',
       'Scheduling reconnect in ${waitMs}ms (attempt ${_reconnectRetries + 1}/$_maxReconnectRetries)',
     );
+
+    DebugLogManager.logEvent('composite_socket_reconnect_scheduled', {
+      'wait_ms': waitMs,
+      'attempt': _reconnectRetries + 1,
+      'max_retries': _maxReconnectRetries,
+    });
 
     _reconnectTimer = Timer(Duration(milliseconds: waitMs), () async {
       _reconnectTimer = null;
@@ -189,6 +219,10 @@ class CompositeTranscriptionSocket implements IPureSocket {
       }
       
       _reconnectRetries++;
+      DebugLogManager.logEvent('composite_socket_reconnect_attempt', {
+        'attempt': _reconnectRetries,
+        'max_retries': _maxReconnectRetries,
+      });
       final success = await connect();
       if (!success && !_stopped) {
         _scheduleReconnect();
