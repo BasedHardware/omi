@@ -505,7 +505,7 @@ void showCreateTemplateBottomSheet(BuildContext context, {String? conversationId
       minChildSize: 0.4,
       maxChildSize: 0.85,
       expand: false,
-      builder: (context, scrollController) => CreateTemplateBottomSheet(
+      builder: (context, _) => CreateTemplateBottomSheet(
         conversationId: conversationId,
       ),
     ),
