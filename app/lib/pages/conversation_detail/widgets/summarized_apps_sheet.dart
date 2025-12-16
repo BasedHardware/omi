@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
@@ -176,7 +177,7 @@ class _AppsListState extends State<_AppsList> {
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            'Suggested Apps',
+            'Suggested Templates',
             style: TextStyle(
               color: Colors.grey,
               fontSize: 14,
@@ -303,7 +304,7 @@ class _AppsListState extends State<_AppsList> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              'Suggested Apps',
+              'Suggested Templates',
               style: TextStyle(
                 color: Colors.grey,
                 fontSize: 14,
@@ -368,10 +369,23 @@ class _AppsListState extends State<_AppsList> {
               )),
         ],
 
+        // Get Creative section
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'Get Creative',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+
         // Create Template option
         const _CreateTemplateListItem(),
 
-        // Enable Apps option
+        // All Templates option
         const _EnableAppsListItem(),
       ],
     );
@@ -771,12 +785,12 @@ class _CreateTemplateListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: CircleAvatar(
-            backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
+          leading: const CircleAvatar(
+            backgroundColor: Colors.white,
             radius: 16,
-            child: const Icon(
-              Icons.auto_fix_high,
-              color: Color(0xFF6366F1),
+            child: Icon(
+              FontAwesomeIcons.plus,
+              color: Colors.black,
               size: 18,
             ),
           ),
@@ -788,7 +802,7 @@ class _CreateTemplateListItem extends StatelessWidget {
               fontSize: 16,
             ),
           ),
-          trailing: const Icon(Icons.add, color: Colors.white, size: 20),
+          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           onTap: () {
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
             MixpanelManager().summarizedAppCreateTemplateClicked(conversationId: conversationId);
@@ -822,9 +836,17 @@ class _EnableAppsListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: const Icon(Icons.apps, color: Colors.white, size: 24),
+          leading: const CircleAvatar(
+            backgroundColor: Colors.white,
+            radius: 16,
+            child: FaIcon(
+              FontAwesomeIcons.solidFolderOpen,
+              color: Colors.black,
+              size: 14,
+            ),
+          ),
           title: const Text(
-            'Explore',
+            'All Templates',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w500,
