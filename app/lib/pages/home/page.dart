@@ -774,17 +774,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return const SizedBox.shrink();
                   }
 
-                  // Hide search button if search bar is visible OR if there's an active search query
-                  bool shouldShowSearchButton = !homeProvider.showConvoSearchBar && convoProvider.previousQuery.isEmpty;
+                  // Hide search button if there's an active search query
+                  bool shouldShowSearchButton = convoProvider.previousQuery.isEmpty;
                   return Row(
                     children: [
-                      // Search button - only show when search bar is hidden and no active search
+                      // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
                         Container(
                           width: 36,
                           height: 36,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF1F1F25),
+                          decoration: BoxDecoration(
+                            color: homeProvider.showConvoSearchBar
+                                ? Colors.deepPurple.withValues(alpha: 0.5)
+                                : const Color(0xFF1F1F25),
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
