@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from models.memories import MemoryCategory, MemoryDB
 from models.transcript_segment import TranscriptSegment as BaseTranscriptSegment
+from models.task import TaskAction, TaskStatus, Task
 
 
 class ConversationTimestampRange(BaseModel):
@@ -149,3 +150,12 @@ class SearchConversationsResponse(BaseModel):
     total_pages: int = Field(description="Total number of pages")
     current_page: int = Field(description="Current page number")
     per_page: int = Field(description="Number of items per page")
+
+
+class ExternalIntegrationCreateTask(BaseModel):
+    action: TaskAction = Field(description="The task action type")
+    status: TaskStatus = Field(description="The status of the task")
+
+
+class TasksResponse(BaseModel):
+    tasks: List[Task] = Field(description="List of user tasks")

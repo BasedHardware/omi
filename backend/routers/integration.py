@@ -554,7 +554,8 @@ async def send_notification_via_integration(
 
 @router.get(
     '/v2/integrations/{app_id}/tasks',
-    response_model=dict,
+    response_model=integration_models.TasksResponse,
+    response_model_exclude_none=True,
     tags=['integration', 'tasks'],
 )
 async def get_tasks_via_integration(
@@ -604,7 +605,7 @@ async def get_tasks_via_integration(
 async def create_task_via_integration(
     request: Request,
     app_id: str,
-    task_data: dict,
+    task_data: integration_models.ExternalIntegrationCreateTask,
     uid: str,
     authorization: Optional[str] = Header(None),
 ):
@@ -638,11 +639,12 @@ async def create_task_via_integration(
     import uuid
 
     task_id = str(uuid.uuid4())
-    task_data['id'] = task_id
-    task_data['user_uid'] = uid
-    task_data['created_at'] = datetime.now(timezone.utc)
+    db_task_data = task_data.model_dump()
+    db_task_data['id'] = task_id
+    db_task_data['user_uid'] = uid
+    db_task_data['created_at'] = datetime.now(timezone.utc)
 
     # Create the task
-    tasks_db.create(task_data)
+    tasks_db.create(db_task_data)
 
     return {}
