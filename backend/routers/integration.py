@@ -594,3 +594,54 @@ async def get_tasks_via_integration(
     tasks = tasks_db.get_tasks_by_user(uid, limit=limit, offset=offset)
 
     return {"tasks": tasks}
+
+
+@router.post(
+    '/v2/integrations/{app_id}/user/tasks',
+    response_model=integration_models.EmptyResponse,
+    tags=['integration', 'tasks'],
+)
+async def create_task_via_integration(
+    request: Request,
+    app_id: str,
+    task_data: dict,
+    uid: str,
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Create a task for a user via integration API.
+    Authentication is required via API key in the Authorization header.
+    """
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid integration API key")
+
+    # Verify if the app exists
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Verify if the uid has enabled the app
+    enabled_plugins = redis_db.get_enabled_apps(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Check if the app has the capability to create tasks
+    if not apps_utils.app_can_create_task(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to create tasks")
+
+    # Generate task ID and set user_uid
+    import uuid
+    task_id = str(uuid.uuid4())
+    task_data['id'] = task_id
+    task_data['user_uid'] = uid
+    task_data['created_at'] = datetime.now(timezone.utc)
+
+    # Create the task
+    tasks_db.create(task_data)
+
+    return {}
