@@ -188,11 +188,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   Widget _buildMobileLayout(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        // Emoji + Title row
-        Row(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Emoji + Title row
+            Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!widget.conversation.discarded)
@@ -276,6 +278,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 ],
               ),
             ),
+          ],
+        ),
           ],
         ),
         if (widget.conversation.isLocked) _buildLockedOverlay(),
