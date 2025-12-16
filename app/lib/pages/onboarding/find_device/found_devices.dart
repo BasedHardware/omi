@@ -169,10 +169,12 @@ class _FoundDevicesState extends State<FoundDevices> {
 
     bool dontShowAgain = false;
 
+    if (!mounted) return;
+
     await showDialog(
       context: context,
       barrierDismissible: false, // Must click button
-      builder: (context) => ConfirmationDialog(
+      builder: (dialogContext) => ConfirmationDialog(
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
         checkboxText: "Don't show it again",
@@ -185,7 +187,7 @@ class _FoundDevicesState extends State<FoundDevices> {
           if (dontShowAgain) {
             SharedPreferencesUtil().saveBool(prefKey, true);
           }
-          Navigator.of(context).pop();
+          Navigator.pop(dialogContext);
         },
         onCancel: () {
           // Not used, but required by ConfirmationDialog
