@@ -45,7 +45,7 @@ def _generate_notification_tag(user_id: str, title: str, body: str, data: dict =
 def _build_android_config(tag: str, priority: str = 'normal', is_data_only: bool = False) -> messaging.AndroidConfig:
     """Build Android configuration with deduplication."""
     config_kwargs = {
-        'collapse_key': 'omi',
+        'collapse_key': tag,
         'priority': priority,
     }
     # Only add notification config if not data-only (Android shows empty notification otherwise)
