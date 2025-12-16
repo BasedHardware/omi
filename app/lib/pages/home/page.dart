@@ -643,26 +643,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(28),
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Colors.deepPurple.shade700,
-                                              Colors.purple.shade700,
-                                              Colors.deepPurple.shade700,
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.3),
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
+                                          color: Colors.deepPurple,
                                         ),
                                         child: const Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -674,7 +655,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             ),
                                             SizedBox(width: 8),
                                             Text(
-                                              'Chat',
+                                              'Ask Omi',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
@@ -996,69 +977,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       }
                     }
                   },
-                ),
-              ),
-              // Chat Button - Shows on all pages
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  MixpanelManager().bottomNavigationTabClicked('Chat');
-                  // Navigate to chat page
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ChatPage(isPivotBottom: false),
-                    ),
-                  );
-                },
-                child: Container(
-                  height: 36,
-                  margin: const EdgeInsets.only(left: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                        Colors.purpleAccent.withValues(alpha: 0.2),
-                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                        Colors.purpleAccent.withValues(alpha: 0.2),
-                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Container(
-                    margin: const EdgeInsets.all(0.5),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(17.5),
-                      border: Border.all(
-                        color: Colors.pink.withValues(alpha: 0.3),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          FontAwesomeIcons.solidComment,
-                          size: 14,
-                          color: Colors.white70,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Ask Omi',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
             ],
