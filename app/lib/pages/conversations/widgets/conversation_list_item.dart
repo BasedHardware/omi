@@ -188,93 +188,95 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   Widget _buildMobileLayout(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Stack(
       children: [
-        // Emoji + Title row
-        Row(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!widget.conversation.discarded)
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  widget.conversation.structured.getEmoji(),
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
-                ),
-              ),
-            if (!widget.conversation.discarded) const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.conversation.discarded
-                        ? widget.conversation.getTranscript(maxCount: 100)
-                        : widget.conversation.structured.title.decodeString,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            // Emoji + Title row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!widget.conversation.discarded)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF35343B),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  // Duration and time below title (or New status)
-                  isNew
-                      ? Row(
-                          children: [
-                            const ConversationNewStatusIndicator(text: "New 🚀"),
-                            const Spacer(),
-                            if (widget.conversation.starred)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 4.0),
-                                child: FaIcon(
-                                  FontAwesomeIcons.solidStar,
-                                  size: 12,
-                                  color: Colors.amber,
+                if (!widget.conversation.discarded) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.conversation.discarded
+                            ? widget.conversation.getTranscript(maxCount: 100)
+                            : widget.conversation.structured.title.decodeString,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      // Duration and time below title (or New status)
+                      isNew
+                          ? Row(
+                              children: [
+                                const ConversationNewStatusIndicator(text: "New 🚀"),
+                                const Spacer(),
+                                if (widget.conversation.starred)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4.0),
+                                    child: FaIcon(
+                                      FontAwesomeIcons.solidStar,
+                                      size: 12,
+                                      color: Colors.amber,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Text(
+                                  dateTimeFormat(
+                                    'h:mm a',
+                                    widget.conversation.startedAt ?? widget.conversation.createdAt,
+                                  ),
+                                  style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  maxLines: 1,
                                 ),
-                              ),
-                          ],
-                        )
-                      : Row(
-                          children: [
-                            Text(
-                              dateTimeFormat(
-                                'h:mm a',
-                                widget.conversation.startedAt ?? widget.conversation.createdAt,
-                              ),
-                              style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                              maxLines: 1,
+                                if (_getConversationDuration().isNotEmpty) ...[
+                                  const Text(
+                                    ' • ',
+                                    style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  ),
+                                  Text(
+                                    _getConversationDuration(),
+                                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                    maxLines: 1,
+                                  ),
+                                ],
+                                const Spacer(),
+                                if (widget.conversation.starred)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4.0),
+                                    child: FaIcon(
+                                      FontAwesomeIcons.solidStar,
+                                      size: 12,
+                                      color: Colors.amber,
+                                    ),
+                                  ),
+                              ],
                             ),
-                            if (_getConversationDuration().isNotEmpty) ...[
-                              const Text(
-                                ' • ',
-                                style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                              ),
-                              Text(
-                                _getConversationDuration(),
-                                style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
-                                maxLines: 1,
-                              ),
-                            ],
-                            const Spacer(),
-                            if (widget.conversation.starred)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 4.0),
-                                child: FaIcon(
-                                  FontAwesomeIcons.solidStar,
-                                  size: 12,
-                                  color: Colors.amber,
-                                ),
-                              ),
-                          ],
-                        ),
-                ],
-              ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -322,7 +324,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
         Text(
           widget.conversation.structured.title.decodeString,
           style: Theme.of(context).textTheme.titleLarge,
-          maxLines: 1,
         ),
       ],
     );
@@ -332,7 +333,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Positioned.fill(
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
