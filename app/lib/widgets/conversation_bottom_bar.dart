@@ -1,12 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
-import 'package:omi/widgets/conversation_bottom_bar/tab_button.dart';
 import 'package:provider/provider.dart';
 
 enum ConversationBottomBarMode {
@@ -46,16 +47,23 @@ class ConversationBottomBar extends StatelessWidget {
   }
 
   Widget _buildBottomBar(BuildContext context) {
+    if (mode == ConversationBottomBarMode.recording) {
+      return _buildRecordingBar();
+    }
+    return _buildDetailBar(context);
+  }
+
+  Widget _buildRecordingBar() {
     return Material(
       elevation: 8,
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(28),
       child: Container(
         height: 56,
-        width: mode == ConversationBottomBarMode.recording ? 180 : null,
+        width: 180,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A0B2E), // Very deep purple
+          color: const Color(0xFF1A0B2E),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
@@ -70,34 +78,92 @@ class ConversationBottomBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Transcript tab
-            _buildTranscriptTab(),
-
-            // Add minimal spacing between tabs
-            const SizedBox(width: 4),
-
-            // Stop button or Summary/Action Items tabs
-            ...switch (mode) {
-              ConversationBottomBarMode.recording => [_buildStopButton()],
-              ConversationBottomBarMode.detail => [
-                  _buildSummaryTab(context),
-                  if (hasActionItems) ...[
-                    const SizedBox(width: 4),
-                    _buildActionItemsTab(),
-                  ],
-                ],
-            },
+            _buildCircularButton(
+              icon: FontAwesomeIcons.solidComments,
+              isSelected: selectedTab == ConversationTab.transcript,
+              onTap: () => onTabSelected(ConversationTab.transcript),
+            ),
+            const SizedBox(width: 8),
+            _buildStopButton(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTranscriptTab() {
-    return TabButton(
-      icon: FontAwesomeIcons.solidComments,
-      isSelected: selectedTab == ConversationTab.transcript,
-      onTap: () => onTabSelected(ConversationTab.transcript),
+  Widget _buildDetailBar(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Left: Transcript circular button
+        _buildCircularButton(
+          icon: FontAwesomeIcons.solidComments,
+          isSelected: selectedTab == ConversationTab.transcript,
+          onTap: () => onTabSelected(ConversationTab.transcript),
+        ),
+
+        const SizedBox(width: 8),
+
+        // Center: Summary pill with app icon + name
+        _buildSummaryPill(context),
+
+        // Right: Action items circular button (if available)
+        if (hasActionItems) ...[
+          const SizedBox(width: 8),
+          _buildCircularButton(
+            icon: FontAwesomeIcons.listCheck,
+            isSelected: selectedTab == ConversationTab.actionItems,
+            onTap: () => onTabSelected(ConversationTab.actionItems),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildCircularButton({
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      elevation: 4,
+      color: Colors.transparent,
+      shape: const CircleBorder(),
+      child: Container(
+        height: 56,
+        width: 56,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(28),
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              onTap();
+            },
+            child: Center(
+              child: FaIcon(
+                icon,
+                color: isSelected ? Colors.white : Colors.grey.shade400,
+                size: 22,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -132,7 +198,7 @@ class ConversationBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryTab(BuildContext context) {
+  Widget _buildSummaryPill(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, _) {
         final summarizedApp = provider.getSummarizedApp();
@@ -140,18 +206,20 @@ class ConversationBottomBar extends StatelessWidget {
             ? provider.appsList.firstWhereOrNull((element) => element.id == summarizedApp.appId)
             : null;
 
-        return _buildSummaryTabContent(context, provider, app);
+        return _buildSummaryPillContent(context, provider, app, hasActionItems);
       },
     );
   }
 
-  Widget _buildSummaryTabContent(BuildContext context, ConversationDetailProvider provider, App? app) {
+  Widget _buildSummaryPillContent(
+      BuildContext context, ConversationDetailProvider provider, App? app, bool showActionItems) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, detailProvider, _) {
         final isReprocessing = detailProvider.loadingReprocessConversation;
         final reprocessingApp = detailProvider.selectedAppForReprocessing;
 
         void handleTap() {
+          HapticFeedback.mediumImpact();
           if (selectedTab == ConversationTab.summary) {
             showModalBottomSheet(
               context: context,
@@ -164,34 +232,169 @@ class ConversationBottomBar extends StatelessWidget {
           }
         }
 
-        return TabButton(
-          icon: null,
-          customIcon: app == null && reprocessingApp == null
-              ? SvgPicture.asset(
-                  Assets.images.aiMagic,
-                  color: Colors.white,
-                )
-              : null,
-          isSelected: selectedTab == ConversationTab.summary,
-          onTap: handleTap,
-          label: null, // Remove the label to show only icon + dropdown
-          appImage: isReprocessing
-              ? (reprocessingApp != null ? reprocessingApp.getImageUrl() : Assets.images.herologo.path)
-              : (app != null ? app.getImageUrl() : null),
-          isLocalAsset: isReprocessing && reprocessingApp == null,
-          showDropdownArrow: true, // Always show dropdown arrow
-          isLoading: isReprocessing,
-          onDropdownPressed: handleTap,
+        // Get the app name to display
+        String displayName = 'Summary';
+        if (isReprocessing && reprocessingApp != null) {
+          displayName = reprocessingApp.name;
+        } else if (app != null) {
+          displayName = app.name;
+        }
+
+        // Clip name: 8 chars if action items shown, 15 chars otherwise
+        final maxChars = showActionItems ? 8 : 15;
+        if (displayName.length > maxChars) {
+          displayName = '${displayName.substring(0, maxChars)}...';
+        }
+
+        // Get app image URL
+        String? appImageUrl;
+        bool isLocalAsset = false;
+        if (isReprocessing) {
+          if (reprocessingApp != null) {
+            appImageUrl = reprocessingApp.getImageUrl();
+          } else {
+            appImageUrl = Assets.images.herologo.path;
+            isLocalAsset = true;
+          }
+        } else if (app != null) {
+          appImageUrl = app.getImageUrl();
+        }
+
+        final isSelected = selectedTab == ConversationTab.summary;
+
+        return Material(
+          elevation: 4,
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(28),
+          child: Container(
+            height: 56,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  spreadRadius: 1,
+                  blurRadius: 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(28),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(28),
+                onTap: handleTap,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // App icon or default icon
+                    _buildAppIcon(appImageUrl, isLocalAsset, isReprocessing),
+
+                    const SizedBox(width: 10),
+
+                    // App name
+                    Text(
+                      displayName,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.grey.shade300,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+
+                    const SizedBox(width: 4),
+
+                    // Dropdown arrow
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      color: isSelected ? Colors.white : Colors.grey.shade400,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget _buildActionItemsTab() {
-    return TabButton(
-      icon: FontAwesomeIcons.listCheck,
-      isSelected: selectedTab == ConversationTab.actionItems,
-      onTap: () => onTabSelected(ConversationTab.actionItems),
+  Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading) {
+    const double size = 28;
+
+    if (isLoading) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: const CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      );
+    }
+
+    if (imageUrl == null) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: SvgPicture.asset(
+          Assets.images.aiMagic,
+          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+        ),
+      );
+    }
+
+    if (isLocalAsset) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(size / 2),
+          image: DecorationImage(
+            image: AssetImage(imageUrl),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      imageBuilder: (context, imageProvider) {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            image: DecorationImage(
+              image: imageProvider,
+              fit: BoxFit.cover,
+            ),
+          ),
+        );
+      },
+      errorWidget: (context, url, error) {
+        return SizedBox(
+          width: size,
+          height: size,
+          child: SvgPicture.asset(
+            Assets.images.aiMagic,
+            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+          ),
+        );
+      },
+      placeholder: (context, url) => SizedBox(
+        width: size,
+        height: size,
+        child: const CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      ),
     );
   }
 }

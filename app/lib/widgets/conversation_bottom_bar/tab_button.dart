@@ -30,8 +30,16 @@ class TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Calculate width based on whether we have a label and dropdown
+    double buttonWidth = 60;
+    if (label != null && showDropdownArrow) {
+      buttonWidth = 130; // App icon + name + dropdown
+    } else if (label != null) {
+      buttonWidth = 100;
+    }
+
     return Container(
-      width: label != null ? 100 : 60,
+      width: buttonWidth,
       height: 40,
       decoration: BoxDecoration(
         color: isSelected ? const Color(0xFF6B46C1) : Colors.transparent, // Lighter purple for selected state
@@ -45,9 +53,11 @@ class TabButton extends StatelessWidget {
             HapticFeedback.mediumImpact();
             onTap();
           }, // Always use onTap for tab selection
-          child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 if (appImage != null)
                   AppImage(
@@ -69,38 +79,25 @@ class TabButton extends StatelessWidget {
                     size: 24,
                   ),
                 if (label != null) ...[
-                  const SizedBox(width: 2),
-                  Flexible(
-                    child: Container(
-                      width: 50,
-                      child: ShaderMask(
-                        shaderCallback: (Rect bounds) {
-                          return LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [Colors.white, Colors.transparent],
-                            stops: [0.8, 1.0],
-                          ).createShader(bounds);
-                        },
-                        blendMode: BlendMode.dstIn,
-                        child: Text(
-                          label ?? '',
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey.shade400,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      label!.length > 12 ? '${label!.substring(0, 12)}...' : label!,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.grey.shade400,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
                 if (showDropdownArrow) ...[
-                  const SizedBox(width: 1),
+                  const SizedBox(width: 2),
                   GestureDetector(
                     onTap: onDropdownPressed, // Separate tap handler for dropdown
-                    child: Icon(
+                    child: const Icon(
                       Icons.keyboard_arrow_down,
                       color: Colors.white,
                       size: 16,
