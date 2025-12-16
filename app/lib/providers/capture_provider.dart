@@ -85,6 +85,8 @@ class CaptureProvider extends ChangeNotifier
   List<int> _systemAudioBuffer = [];
   bool _systemAudioCaching = true;
 
+  bool _isLoadingInProgressConversation = false;
+
   // BLE streaming metrics
   int _blesBytesReceived = 0;
   int _wsSocketBytesSent = 0;
@@ -1398,11 +1400,16 @@ class CaptureProvider extends ChangeNotifier
   void _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
 
-    if (segments.isEmpty) {
+    if (segments.isEmpty && !_isLoadingInProgressConversation) {
+      _isLoadingInProgressConversation = true;
       if (!PlatformService.isDesktop) {
         FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       }
-      await _loadInProgressConversation();
+      try {
+        await _loadInProgressConversation();
+      } finally {
+        _isLoadingInProgressConversation = false;
+      }
     }
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
