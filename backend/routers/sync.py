@@ -16,7 +16,7 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
-from models.conversation import CreateConversation, ConversationSource
+from models.conversation import CreateConversation, ConversationSource, Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
@@ -282,6 +282,32 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
         segmented_paths.add(segment_path)
 
 
+def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
+    """
+    Reprocess a conversation after new segments have been added.
+    This checks if the conversation should still be discarded and regenerates
+    the summary/structured data if it now has sufficient content.
+    """
+    # Fetch the updated conversation with all segments
+    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation_data:
+        print(f'Conversation {conversation_id} not found for reprocessing')
+        return
+
+    # Convert to Conversation object
+    conversation = Conversation(**conversation_data)
+
+    process_conversation(
+        uid=uid,
+        language_code=language or 'en',
+        conversation=conversation,
+        force_process=True,
+        is_reprocess=True,
+    )
+
+    print(f'Successfully reprocessed conversation {conversation_id}')
+
+
 def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
     url = get_syncing_file_temporal_signed_url(path)
 
@@ -349,6 +375,11 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
         # save with updated finished_at
         response['updated_memories'].add(closest_memory['id'])
         update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
+
+        # If the conversation was previously discarded, reprocess it with the new segments
+        if closest_memory.get('discarded', False):
+            print(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
+            _reprocess_conversation_after_update(uid, closest_memory['id'], language)
 
 
 @router.post("/v1/sync-local-files")
