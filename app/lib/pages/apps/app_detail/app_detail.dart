@@ -759,7 +759,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                             if (app.isNotPersona()) {
                               await Share.share(
-                                'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+                                'https://h.omi.me/apps/${app.id}',
                                 subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
