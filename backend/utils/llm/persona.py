@@ -3,7 +3,7 @@ from typing import Optional, List
 from models.app import App
 from models.chat import Message, MessageSender
 from langchain.schema import SystemMessage, HumanMessage, AIMessage
-from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium, llm_mini, llm_medium_experiment
+from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium_experiment
 
 
 def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
@@ -202,15 +202,3 @@ def generate_persona_intro_message(prompt: str, name: str):
 
     response = llm_medium_experiment.invoke(messages)
     return response.content.strip('"').strip()
-
-
-def generate_description(app_name: str, description: str) -> str:
-    prompt = f"""
-    You are an AI assistant specializing in crafting detailed and engaging descriptions for apps.
-    You will be provided with the app's name and a brief description which might not be that good. Your task is to expand on the given information, creating a captivating and detailed app description that highlights the app's features, functionality, and benefits.
-    The description should be concise, professional, and not more than 40 words, ensuring clarity and appeal. Respond with only the description, tailored to the app's concept and purpose.
-    App Name: {app_name}
-    Description: {description}
-    """
-    prompt = prompt.replace('    ', '').strip()
-    return llm_mini.invoke(prompt).content
