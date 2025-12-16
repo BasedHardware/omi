@@ -641,30 +641,35 @@ class _AppListItemState extends State<_AppListItem> {
     if (widget.isDefault) {
       tags.add(
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.amber.shade300.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.amber.shade300.withValues(alpha: 0.4)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.star,
-                size: 10,
-                color: Colors.amber.shade300,
-              ),
-              const SizedBox(width: 3),
-              Text(
-                'Default',
-                style: TextStyle(
-                  color: Colors.amber.shade300,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
+                  child: Icon(
+                    FontAwesomeIcons.solidStar,
+                    size: 7,
+                    color: Colors.amber.shade300,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Text(
+                  'Default',
+                  style: TextStyle(
+                    color: Colors.amber.shade300,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -673,30 +678,35 @@ class _AppListItemState extends State<_AppListItem> {
     if (widget.isLastUsed && !widget.isDefault) {
       tags.add(
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.grey.shade600.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade500.withValues(alpha: 0.4)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.access_time,
-                size: 10,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(width: 3),
-              Text(
-                'Last Used',
-                style: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
+                  child: Icon(
+                    FontAwesomeIcons.clock,
+                    size: 7,
+                    color: Colors.grey.shade400,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Text(
+                  'Last Used',
+                  style: TextStyle(
+                    color: Colors.grey.shade400,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
