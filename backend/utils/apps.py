@@ -783,6 +783,26 @@ def app_can_create_conversation(app: dict) -> bool:
     return app_has_action(app, 'create_conversation')
 
 
+def app_can_create_task(app: dict) -> bool:
+    """Check if an app can create tasks."""
+    return app_has_action(app, 'create_task')
+
+
+def app_can_read_tasks(app: dict) -> bool:
+    """Check if an app can read tasks."""
+    return app_has_action(app, 'read_tasks')
+
+
+def app_can_update_task(app: dict) -> bool:
+    """Check if an app can update tasks."""
+    return app_has_action(app, 'update_task')
+
+
+def app_can_delete_task(app: dict) -> bool:
+    """Check if an app can delete tasks."""
+    return app_has_action(app, 'delete_task')
+
+
 def is_user_app_enabled(uid: str, app_id: str) -> bool:
     """Check if a specific app is enabled for the user based on Redis cache."""
     user_enabled_apps = set(get_enabled_apps(uid))
