@@ -32,18 +32,19 @@ class BatteryInfoWidget extends StatelessWidget {
                         MixpanelManager().batteryIndicatorClicked();
                       },
                 child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Container(
-                          width: 10,
-                          height: 10,
+                          width: 8,
+                          height: 8,
                           decoration: BoxDecoration(
                             color: deviceProvider.batteryLevel > 75
                                 ? const Color.fromARGB(255, 0, 255, 8)
@@ -55,11 +56,11 @@ class BatteryInfoWidget extends StatelessWidget {
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 8.0),
+                        const SizedBox(width: 6.0),
                         // Add device icon
-                        Container(
-                          width: 20,
-                          height: 20,
+                        SizedBox(
+                          width: 16,
+                          height: 16,
                           child: Image.asset(
                             DeviceUtils.getDeviceImagePath(
                               deviceType: deviceProvider.connectedDevice?.type,
@@ -69,7 +70,7 @@ class BatteryInfoWidget extends StatelessWidget {
                             fit: BoxFit.contain,
                           ),
                         ),
-                        const SizedBox(width: 8.0),
+                        const SizedBox(width: 6.0),
                         Text(
                           deviceProvider.batteryLevel > 0 ? '${deviceProvider.batteryLevel.toString()}%' : "",
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
@@ -84,19 +85,20 @@ class BatteryInfoWidget extends StatelessWidget {
                   await routeToPage(context, const ConnectedDevice());
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Device icon with slash line
-                      Container(
-                        width: 20,
-                        height: 20,
+                      SizedBox(
+                        width: 16,
+                        height: 16,
                         child: Stack(
                           children: [
                             Image.asset(
@@ -112,10 +114,10 @@ class BatteryInfoWidget extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8.0),
+                      const SizedBox(width: 6.0),
                       Text(
                         "Disconnected",
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70),
+                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
                       ),
                     ],
                   ),
@@ -132,28 +134,35 @@ class BatteryInfoWidget extends StatelessWidget {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Image.asset(
                         Assets.images.logoTransparent.path,
-                        width: MediaQuery.sizeOf(context).width * 0.05,
-                        height: MediaQuery.sizeOf(context).width * 0.05,
+                        width: 16,
+                        height: 16,
                       ),
-                      isMemoriesPage ? const SizedBox(width: 8) : const SizedBox.shrink(),
+                      isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
                       deviceProvider.isConnecting && isMemoriesPage
                           ? Text(
                               "Searching",
-                              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                              style:
+                                  Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                             )
                           : isMemoriesPage
                               ? Text(
                                   "Connect Device",
-                                  style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium!
+                                      .copyWith(color: Colors.white, fontSize: 12),
                                 )
                               : const SizedBox.shrink(),
                     ],

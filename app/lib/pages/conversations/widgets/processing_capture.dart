@@ -52,11 +52,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 18, 10, 16),
@@ -381,16 +381,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   children: [
                     // Pause/Resume button
                     GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        // Track mute/pause action
+                      onTap: () async {
                         if (!isPaused) {
+                          // Muting: double impact for a satisfying "click-click" feel
+                          HapticFeedback.heavyImpact();
+                          await Future.delayed(const Duration(milliseconds: 80));
+                          HapticFeedback.lightImpact();
                           // User is pausing/muting
                           MixpanelManager().recordingMuteToggled(
                             isMuted: true,
                             recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                           );
                         } else {
+                          // Unmuting: standard haptic feedback
+                          HapticFeedback.mediumImpact();
                           // User is resuming
                           MixpanelManager().recordingMuteToggled(
                             isMuted: false,

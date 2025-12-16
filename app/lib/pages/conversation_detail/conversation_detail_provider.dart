@@ -35,6 +35,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   // Cache enabled conversation apps and suggested apps
   final List<App> _cachedEnabledConversationApps = [];
   final List<App> _cachedSuggestedApps = [];
+  // Track locally added apps (e.g., from quick template creator) to preserve during refetch
+  final Set<String> _locallyAddedAppIds = {};
 
   List<App> get appsList => appProvider?.apps ?? [];
 
@@ -344,11 +346,28 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   /// Fetches and caches enabled conversation apps
+  /// Preserves locally added apps that may not yet be returned by the API
   Future<void> fetchAndCacheEnabledConversationApps() async {
     try {
       final apps = await getEnabledConversationAppsFromAPI();
+
+      // Preserve locally added apps that aren't in the API response yet
+      final locallyAddedApps =
+          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
+
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
+
+      // Add back locally added apps if they weren't returned by the API
+      for (final localApp in locallyAddedApps) {
+        if (!apps.any((app) => app.id == localApp.id)) {
+          _cachedEnabledConversationApps.add(localApp);
+        } else {
+          // If API returned the app, remove from locally tracked set
+          _locallyAddedAppIds.remove(localApp.id);
+        }
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint('Error fetching and caching enabled conversation apps: $e');
@@ -410,6 +429,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       debugPrint('Error enabling app ${app.id}: $e');
       return false;
     }
+  }
+
+  /// Adds an app to the cached enabled conversation apps list
+  /// Used when a new app is created and installed from the quick template creator
+  void addToEnabledConversationApps(App app) {
+    final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
+    if (existingIndex == -1) {
+      _cachedEnabledConversationApps.add(app);
+    } else {
+      _cachedEnabledConversationApps[existingIndex] = app;
+    }
+    // Track this as a locally added app so it's preserved during refetch
+    _locallyAddedAppIds.add(app.id);
+    notifyListeners();
   }
 
   /// Checks if an app is in the suggested apps list

@@ -222,18 +222,28 @@ def _trigger_apps(
     language_code: str = 'en',
     people: List[Person] = None,
 ):
+    # Get default apps for auto-selection
+    default_apps = get_default_conversation_summarized_apps()
+    default_apps_dict = {app.id: app for app in default_apps}
+
+    # Also get user's installed apps (only used for preferred app lookup and reprocessing)
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
 
-    # Create a unique list of apps by combining user's and default apps
+    # Combined dict for looking up preferred apps or specific app_id requests
     all_apps_dict = {app.id: app for app in conversation_apps}
-    for app in get_default_conversation_summarized_apps():
-        if app.id not in all_apps_dict:
-            all_apps_dict[app.id] = app
+    all_apps_dict.update(default_apps_dict)
 
-    all_available_apps = list(all_apps_dict.values())
+    # Combined list for suggestions: default apps + user's installed apps (no duplicates)
+    all_suggestion_apps = list(all_apps_dict.values())
 
     app_to_run = None
+
+    # Always generate/update suggestions if not already set (even during reprocessing)
+    if not conversation.suggested_summarization_apps:
+        suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
+        conversation.suggested_summarization_apps = suggested_apps
+        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
 
     # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
@@ -244,20 +254,14 @@ def _trigger_apps(
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = all_apps_dict.get(preferred_app_id)
             print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        else:
-            # Auto-selection logic - fall back to LLM-based suggestion
-            suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_available_apps)
-            conversation.suggested_summarization_apps = suggested_apps
-            print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
-
+        elif conversation.suggested_summarization_apps:
             # Use the first suggested app if available
-            if conversation.suggested_summarization_apps:
-                first_suggested_app_id = conversation.suggested_summarization_apps[0]
-                app_to_run = all_apps_dict.get(first_suggested_app_id)
-                if app_to_run:
-                    print(f"Using first suggested app: {app_to_run.name}")
-                else:
-                    print(f"First suggested app '{first_suggested_app_id}' not found in available apps.")
+            first_suggested_app_id = conversation.suggested_summarization_apps[0]
+            app_to_run = all_apps_dict.get(first_suggested_app_id)
+            if app_to_run:
+                print(f"Using first suggested app: {app_to_run.name}")
+            else:
+                print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 

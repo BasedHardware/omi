@@ -132,6 +132,7 @@ def search_apps_db(
 
         if len(enabled_app_ids) > 30:
             # Firestore 'in' limited to 30 items
+            # Query public approved apps first, then add user's own apps
             filters.append(FieldFilter('approved', '==', True))
             filters.append(FieldFilter('private', '==', False))
         else:
@@ -158,10 +159,23 @@ def search_apps_db(
     else:
         apps = []
 
-    # Post-filter for installed_apps with > 30 enabled apps
+    # For installed_apps with > 30 enabled apps, we need to also fetch user's own apps
+    # because the main query only returns approved+public apps
     if installed_apps and enabled_app_ids and len(enabled_app_ids) > 30:
         enabled_set = set(enabled_app_ids)
+        # Filter to only enabled apps from the public approved set
         apps = [app for app in apps if app.get('id') in enabled_set]
+
+        # Also fetch user's own enabled apps (which may be private or unapproved)
+        user_apps_filter = FieldFilter('uid', '==', uid)
+        user_apps_query = db.collection(apps_collection).where(filter=user_apps_filter)
+        user_apps = [doc.to_dict() for doc in user_apps_query.stream()]
+
+        # Add user's own enabled apps that aren't already in the list
+        existing_ids = {app.get('id') for app in apps}
+        for user_app in user_apps:
+            if user_app.get('id') in enabled_set and user_app.get('id') not in existing_ids:
+                apps.append(user_app)
 
     # Post-filter for category if my_apps is enabled
     if my_apps and category:

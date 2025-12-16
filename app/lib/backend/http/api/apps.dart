@@ -582,6 +582,32 @@ Future<String> getGenratedDescription(String name, String description) async {
   }
 }
 
+/// Generates an app description and a representative emoji.
+/// Used by the quick template creator feature.
+Future<({String description, String emoji})> getGeneratedDescriptionAndEmoji(String name, String prompt) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/app/generate-description-emoji',
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode({'name': name, 'prompt': prompt}),
+    method: 'POST',
+  );
+  try {
+    if (response == null || response.statusCode != 200) {
+      return (description: 'A custom app that $prompt', emoji: '✨');
+    }
+    log('getGeneratedDescriptionAndEmoji: ${response.body}');
+    var data = jsonDecode(response.body);
+    return (
+      description: (data['description'] as String?) ?? 'A custom app that $prompt',
+      emoji: (data['emoji'] as String?) ?? '✨',
+    );
+  } catch (e, stackTrace) {
+    debugPrint(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return (description: 'A custom app that $prompt', emoji: '✨');
+  }
+}
+
 // AI App Generator APIs
 
 /// Fetches AI-generated sample prompts for the app generator
