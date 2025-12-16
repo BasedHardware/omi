@@ -178,7 +178,7 @@ class _FoundDevicesState extends State<FoundDevices> {
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
         checkboxText: "Don't show it again",
-        checkboxValue: false,
+        checkboxValue: dontShowAgain,
         onCheckboxChanged: (value) {
           dontShowAgain = value;
         },
