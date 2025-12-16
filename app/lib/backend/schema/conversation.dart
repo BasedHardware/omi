@@ -40,6 +40,7 @@ enum ConversationSource {
   apple_watch,
   phone,
   desktop,
+  limitless,
 }
 
 class ConversationExternalData {
