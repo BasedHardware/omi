@@ -661,7 +661,7 @@ class SDCardWalSync implements IWalSync {
 class FlashPageWalSync implements IWalSync {
   static const int pagesPerChunk = 25;
   static const String _pendingFilesKey = 'flash_page_pending_uploads';
-  static const Duration _uploadTimerInterval = Duration(seconds: 10);
+  static const Duration _uploadTimerInterval = Duration(seconds: 5);
   static const Duration _persistBatchDuration = Duration(seconds: 90);
 
   List<Wal> _wals = const [];
@@ -743,25 +743,48 @@ class FlashPageWalSync implements IWalSync {
       return tsA.compareTo(tsB);
     });
 
-    for (final filePath in sortedFiles) {
-      try {
+    // Upload in batches of 2 files
+    const batchSize = 2;
+    for (int i = 0; i < sortedFiles.length; i += batchSize) {
+      final batchPaths = sortedFiles.skip(i).take(batchSize).toList();
+      final batchFiles = <File>[];
+      final validPaths = <String>[];
+
+      // Collect valid files for this batch
+      for (final filePath in batchPaths) {
         final file = File(filePath);
         if (await file.exists()) {
-          final partialResp = await syncLocalFiles([file]);
-
-          resp.newConversationIds
-              .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-          resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
-              .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
-
-          await file.delete();
-          _removePendingFile(filePath);
+          batchFiles.add(file);
+          validPaths.add(filePath);
         } else {
           // File doesn't exist, remove from pending
           _removePendingFile(filePath);
         }
+      }
+
+      if (batchFiles.isEmpty) continue;
+
+      try {
+        debugPrint("FlashPageSync: Uploading batch of ${batchFiles.length} orphaned files");
+        final partialResp = await syncLocalFiles(batchFiles);
+
+        resp.newConversationIds
+            .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+        // Delete files and remove from pending list after successful upload
+        for (final filePath in validPaths) {
+          try {
+            await File(filePath).delete();
+            _removePendingFile(filePath);
+          } catch (e) {
+            debugPrint("FlashPageSync: Failed to delete file $filePath: $e");
+          }
+        }
       } catch (e) {
-        debugPrint("FlashPageSync: Failed to upload orphaned file $filePath: $e");
+        debugPrint("FlashPageSync: Failed to upload batch: $e");
+        // Files stay in pending list for next upload cycle
       }
     }
 
@@ -986,33 +1009,52 @@ class FlashPageWalSync implements IWalSync {
       return tsA.compareTo(tsB);
     });
 
-    for (final filePath in sortedFiles) {
-      try {
+    // Upload in batches of 2 files
+    const batchSize = 2;
+    for (int i = 0; i < sortedFiles.length; i += batchSize) {
+      final batchPaths = sortedFiles.skip(i).take(batchSize).toList();
+      final batchFiles = <File>[];
+      final validPaths = <String>[];
+
+      // Collect valid files for this batch
+      for (final filePath in batchPaths) {
         final file = File(filePath);
         if (await file.exists()) {
-          debugPrint("FlashPageSync: Uploading $filePath");
-          final partialResp = await syncLocalFiles([file]);
-
-          resp.newConversationIds
-              .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-          resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
-              .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
-
-          await file.delete();
-          _removePendingFile(filePath);
-          debugPrint("FlashPageSync: Uploaded and deleted $filePath");
+          batchFiles.add(file);
+          validPaths.add(filePath);
         } else {
           // File doesn't exist, remove from pending
           _removePendingFile(filePath);
         }
+      }
+
+      if (batchFiles.isEmpty) continue;
+
+      try {
+        debugPrint("FlashPageSync: Uploading batch of ${batchFiles.length} pending files");
+        final partialResp = await syncLocalFiles(batchFiles);
+
+        resp.newConversationIds
+            .addAll(partialResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialResp.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+        // Delete files and remove from pending list after successful upload
+        for (final filePath in validPaths) {
+          try {
+            await File(filePath).delete();
+            _removePendingFile(filePath);
+          } catch (e) {
+            debugPrint("FlashPageSync: Failed to delete file $filePath: $e");
+          }
+        }
       } catch (e) {
-        debugPrint("FlashPageSync: Failed to upload $filePath: $e");
-        // File stays in pending list for next upload cycle
+        debugPrint("FlashPageSync: Failed to upload batch: $e");
+        // Files stay in pending list for next upload cycle
       }
     }
 
     _uploadInProgress = false;
-    _isUploading = false;
     listener.onWalUpdated();
     return resp;
   }
@@ -1214,9 +1256,6 @@ class FlashPageWalSync implements IWalSync {
       _isSyncing = false;
       listener.onWalUpdated();
 
-      // Stop upload timer
-      _stopUploadTimer();
-
       // Send one final ACK if we haven't already (in case last batch wasn't saved)
       if (lastProcessedIndex != null) {
         try {
@@ -1230,17 +1269,26 @@ class FlashPageWalSync implements IWalSync {
       // Switch back to real-time mode
       await limitlessConnection.enableRealTimeMode();
 
-      // Final upload of any remaining pending files
-      debugPrint("FlashPageSync: Final upload of remaining files");
+      // Upload all remaining files synchronously to ensure they're all processed
       _isUploading = true;
       listener.onWalUpdated();
 
-      final uploadResp = await _uploadPendingFiles();
-      resp.newConversationIds
-          .addAll(uploadResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(uploadResp.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      // Keep uploading until no files are left
+      while (_getPendingFiles().isNotEmpty) {
+        debugPrint("FlashPageSync: Uploading remaining files (${_getPendingFiles().length} left)");
+        final uploadResp = await _uploadPendingFiles();
+        resp.newConversationIds
+            .addAll(uploadResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(uploadResp.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
 
+        // Small delay to avoid tight loop if uploads fail
+        if (_getPendingFiles().isNotEmpty) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+      }
+
+      _stopUploadTimer();
       _isUploading = false;
       listener.onWalUpdated();
 

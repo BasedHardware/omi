@@ -35,6 +35,9 @@ class SyncBottomSheet extends StatelessWidget {
 
         final isSyncingFromPendant = syncProvider.isSyncingFromPendant;
         final isUploadingToCloud = syncProvider.isUploadingToCloud;
+
+        // Consider sync in progress if EITHER pendant sync OR cloud upload is happening
+        final isAnySyncInProgress = isSyncing || isSyncingFromPendant || isUploadingToCloud;
         final hasOrphanedFiles = syncProvider.hasOrphanedFiles;
         final orphanedCount = syncProvider.orphanedFilesCount;
 
@@ -81,7 +84,9 @@ class SyncBottomSheet extends StatelessWidget {
                   ],
                 ),
                 child: Icon(
-                  isSyncing ? Icons.sync_rounded : (hasPendingData ? Icons.graphic_eq_rounded : Icons.check_rounded),
+                  isAnySyncInProgress
+                      ? Icons.sync_rounded
+                      : (hasPendingData ? Icons.graphic_eq_rounded : Icons.check_rounded),
                   color: Colors.white,
                   size: 36,
                 ),
@@ -90,7 +95,7 @@ class SyncBottomSheet extends StatelessWidget {
 
               // Title
               Text(
-                isSyncing ? 'Syncing recordings' : (hasPendingData ? 'Recordings to sync' : 'All caught up'),
+                isAnySyncInProgress ? 'Syncing recordings' : (hasPendingData ? 'Recordings to sync' : 'All caught up'),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -100,7 +105,7 @@ class SyncBottomSheet extends StatelessWidget {
               const SizedBox(height: 12),
 
               // Description
-              if (isSyncing) ...[
+              if (isAnySyncInProgress) ...[
                 Text(
                   'We\'ll keep syncing your recordings in the background.',
                   textAlign: TextAlign.center,
@@ -135,9 +140,9 @@ class SyncBottomSheet extends StatelessWidget {
               const SizedBox(height: 8),
 
               // Explanation text
-              if ((isSyncing || hasPendingData) && isLimitless) ...[
+              if ((isAnySyncInProgress || hasPendingData) && isLimitless) ...[
                 Text(
-                  isSyncing
+                  isAnySyncInProgress
                       ? 'We\'re catching up on earlier recordings. New moments are still being saved and will appear once sync finishes.'
                       : 'This usually happens when your pendant and phone were apart or Bluetooth was off.',
                   textAlign: TextAlign.center,
@@ -185,7 +190,7 @@ class SyncBottomSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isSyncing
+                            isAnySyncInProgress
                                 ? 'Syncing in progress'
                                 : (hasPendingData ? 'Ready to sync' : 'Pendant is up to date'),
                             style: const TextStyle(
@@ -196,8 +201,9 @@ class SyncBottomSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isSyncing
-                                ? _getSyncStatusText(progress)
+                            isAnySyncInProgress
+                                ? _getSyncStatusText(
+                                    progress, isSyncingFromPendant, isUploadingToCloud, hasOrphanedFiles, orphanedCount)
                                 : (hasPendingData ? 'Tap Sync to start' : 'All recordings are synced'),
                             style: TextStyle(
                               color: Colors.grey.shade500,
@@ -208,7 +214,7 @@ class SyncBottomSheet extends StatelessWidget {
                       ),
                     ),
                     // Status indicator or button
-                    if (isSyncing) ...[
+                    if (isAnySyncInProgress) ...[
                       const SizedBox(
                         width: 28,
                         height: 28,
@@ -253,51 +259,6 @@ class SyncBottomSheet extends StatelessWidget {
                 ),
               ),
 
-              // Upload status card - shows when uploading to cloud (automatic, no manual button needed)
-              if (isUploadingToCloud && !isSyncingFromPendant) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.cloud_upload_rounded, color: Colors.blue.shade400, size: 22),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Uploading to cloud...',
-                              style: TextStyle(color: Colors.blue.shade300, fontSize: 14, fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              hasOrphanedFiles
-                                  ? '$orphanedCount file${orphanedCount > 1 ? 's' : ''} remaining'
-                                  : 'Processing saved recordings',
-                              style: TextStyle(color: Colors.blue.shade400.withOpacity(0.7), fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
               // Not connected warning
               if (!isConnected && isLimitless) ...[
                 const SizedBox(height: 16),
@@ -329,8 +290,16 @@ class SyncBottomSheet extends StatelessWidget {
     );
   }
 
-  String _getSyncStatusText(double progress) {
-    if (progress <= 0.4) {
+  String _getSyncStatusText(
+      double progress, bool isSyncingFromPendant, bool isUploadingToCloud, bool hasOrphanedFiles, int orphanedCount) {
+    if (isSyncingFromPendant) {
+      return 'Downloading your recordings…';
+    } else if (isUploadingToCloud) {
+      if (hasOrphanedFiles && orphanedCount > 0) {
+        return 'Uploading to cloud… ($orphanedCount file${orphanedCount > 1 ? 's' : ''} remaining)';
+      }
+      return 'Uploading to cloud…';
+    } else if (progress <= 0.4) {
       return 'Downloading your recordings…';
     } else {
       return 'Processing your audio…';
