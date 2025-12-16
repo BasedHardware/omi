@@ -286,80 +286,70 @@ PLANNING_ADVICE = [
 
 def get_actionable_advice(rating: float, learn_score: float, exec_score: float, 
                           memories: int, tasks_done: int, tasks_total: int) -> dict:
-    """Get detailed actionable advice based on what needs improvement."""
+    """Get specific explanations for why the score is what it is."""
     
     # Determine what needs work
     learning_weak = learn_score < 3.0
     execution_weak = exec_score < 3.0
     no_tasks = tasks_total == 0
+    has_uncompleted_tasks = tasks_total > 0 and tasks_done < tasks_total
     
-    # Excellent day
-    if rating >= 4.5:
+    # Everything is great
+    if not learning_weak and not execution_weak and not no_tasks:
         return {
-            "headline": "Exceptional Day",
+            "headline": "Excellent Day",
             "primary": {
-                "title": "You're in the Zone",
-                "detail": "Strong execution and continuous learning. This is what peak performance looks like. Keep this rhythm going tomorrow."
+                "title": "You're Doing Great",
+                "detail": "You are doing great today - you learned a lot and accomplished a lot!"
             },
             "secondary": None
         }
     
-    # Great day
-    if rating >= 4.0:
-        return {
-            "headline": "Strong Performance",
-            "primary": {
-                "title": "Great Balance Today",
-                "detail": "You're doing well on both fronts. Small improvements compound over time—see if you can push a little further tomorrow."
-            },
-            "secondary": None
-        }
+    # Build messages based on issues
+    messages = []
     
-    # Both need work
-    if learning_weak and (execution_weak or no_tasks):
-        # Execution is worse or equal—prioritize tasks
-        if no_tasks:
-            return {
-                "headline": "Set Your Targets",
-                "primary": random.choice(PLANNING_ADVICE),
-                "secondary": random.choice(LEARNING_ADVICE)
-            }
+    # Execution issues
+    if no_tasks:
+        messages.append("You haven't set any tasks today. Make sure to plan what you want to accomplish.")
+    elif has_uncompleted_tasks:
+        tasks_missed = tasks_total - tasks_done
+        if tasks_missed == 1:
+            messages.append("You have 1 uncompleted task. Make sure to finish it today.")
         else:
-            return {
-                "headline": "Time to Execute",
-                "primary": random.choice(TASK_ADVICE),
-                "secondary": random.choice(LEARNING_ADVICE)
-            }
+            messages.append(f"You have {tasks_missed} uncompleted tasks. Make sure to finish all of them today.")
     
-    # Only execution needs work
-    if execution_weak or (no_tasks and not learning_weak):
-        if no_tasks:
-            return {
-                "headline": "Define Your Goals",
-                "primary": random.choice(PLANNING_ADVICE),
-                "secondary": None
-            }
-        else:
-            return {
-                "headline": "Focus on Execution",
-                "primary": random.choice(TASK_ADVICE),
-                "secondary": None
-            }
-    
-    # Only learning needs work
+    # Learning issues
     if learning_weak:
-        return {
-            "headline": "Feed Your Mind",
-            "primary": random.choice(LEARNING_ADVICE),
-            "secondary": None
-        }
+        if memories == 0:
+            messages.append("You didn't learn anything today. Try listening to a podcast or talking to a smart friend.")
+        elif memories == 1:
+            messages.append("You only learned 1 thing today. Try listening to a podcast or talking to a smart friend to learn more.")
+        else:
+            messages.append(f"You only learned {memories} things today. Try listening to a podcast or talking to a smart friend to learn more.")
     
-    # Default - decent day
+    # Combine messages
+    if len(messages) == 0:
+        detail = "You're making good progress. Keep it up!"
+    elif len(messages) == 1:
+        detail = messages[0]
+    else:
+        detail = " ".join(messages)
+    
+    # Set headline based on primary issue
+    if execution_weak and learning_weak:
+        headline = "Both Areas Need Work"
+    elif execution_weak or no_tasks:
+        headline = "Focus on Tasks"
+    elif learning_weak:
+        headline = "Focus on Learning"
+    else:
+        headline = "Keep Improving"
+    
     return {
-        "headline": "Solid Progress",
+        "headline": headline,
         "primary": {
-            "title": "Keep the Momentum",
-            "detail": "You're making progress. Stay consistent and push a bit harder tomorrow to reach your potential."
+            "title": "What You Can Do",
+            "detail": detail
         },
         "secondary": None
     }
