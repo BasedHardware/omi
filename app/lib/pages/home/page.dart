@@ -803,7 +803,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                         SizedBox(width: 6),
                         Text(
-                          'Chat',
+                          'Ask Omi',
                           style: TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
