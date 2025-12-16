@@ -12,6 +12,7 @@ import utils.apps as apps_utils
 from utils.apps import verify_api_key
 import database.redis_db as redis_db
 import database.memories as memory_db
+import database.tasks as tasks_db
 from database.redis_db import get_enabled_apps, r as redis_client
 import database.notifications as notification_db
 import models.integrations as integration_models
@@ -549,3 +550,47 @@ async def send_notification_via_integration(
 
     send_app_notification(uid, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
+
+
+@router.get(
+    '/v2/integrations/{app_id}/tasks',
+    response_model=dict,
+    tags=['integration', 'tasks'],
+)
+async def get_tasks_via_integration(
+    request: Request,
+    app_id: str,
+    uid: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Get all tasks for a user via integration API.
+    Authentication is required via API key in the Authorization header.
+    """
+    # Verify API key from Authorization header
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid integration API key")
+
+    # Verify if the app exists
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Verify if the uid has enabled the app
+    enabled_plugins = redis_db.get_enabled_apps(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Check if the app has the capability to read tasks
+    if not apps_utils.app_can_read_tasks(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read tasks")
+
+    tasks = tasks_db.get_tasks_by_user(uid, limit=limit, offset=offset)
+
+    return {"tasks": tasks}
