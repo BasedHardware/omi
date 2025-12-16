@@ -83,7 +83,12 @@ class _ScoreWidgetState extends State<ScoreWidget> {
       final Td = tasksDone;
       final T = tasksTotal;
 
-      final learnScore = 5 * (1 - math.exp(-L / 3));
+      // Learning goal is 5 memories per day
+      const learningGoal = 5;
+      // If reached goal, give full score; otherwise use exponential formula
+      final learnScore = L >= learningGoal 
+          ? 5.0 
+          : 5 * (1 - math.exp(-L / 3));
       
       double execScore;
       // Use neutral baseline when no tasks exist (matches plugin behavior)
