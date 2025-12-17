@@ -1,8 +1,7 @@
 import asyncio
 import concurrent.futures
 import threading
-from datetime import datetime
-from datetime import time
+from datetime import datetime, time
 
 import pytz
 
@@ -10,8 +9,9 @@ import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 from models.notification_message import NotificationMessage
+from models.conversation import Conversation
 from utils.llm.external_integrations import get_conversation_summary
-from utils.notifications import send_notification, send_bulk_notification
+from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 
 
@@ -53,13 +53,14 @@ def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     # Note: user_data[1] was fcm_token, no longer needed
     daily_summary_title = "Here is your action plan for tomorrow"  # TODO: maybe include llm a custom message for this
-    memories = conversations_db.filter_conversations_by_date(
-        uid, datetime.combine(datetime.now().date(), time.min), datetime.now()
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=datetime.combine(datetime.now().date(), time.min), end_date=datetime.now()
     )
-    if not memories:
+    if not conversations_data or len(conversations_data) == 0:
         return
-    else:
-        summary = get_conversation_summary(uid, memories)
+
+    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    summary = get_conversation_summary(uid, conversations)
 
     ai_message = NotificationMessage(
         text=summary,
