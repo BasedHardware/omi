@@ -23,10 +23,11 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:tuple/tuple.dart';
 import 'package:omi/widgets/rich_content.dart';
 
-import 'maps_util.dart';
+import 'package:omi/utils/other/maps_util.dart';
 
 // Highlight search matches with current result highlighting
 List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int currentResultIndex = -1}) {
@@ -452,6 +453,42 @@ class AppResultDetailWidget extends StatelessWidget {
     this.currentResultIndex = -1,
   });
 
+  Future<void> _handleAction(BuildContext context, String action, Map<String, dynamic> data) async {
+    if (action == 'shareLocation') {
+      bool serviceEnabled;
+      LocationPermission permission;
+
+      // Test if location services are enabled.
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location services are disabled.')));
+        return;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are denied')));
+          return;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are permanently denied, we cannot request permissions.')));
+        return;
+      } 
+
+      try {
+        Position position = await Geolocator.getCurrentPosition();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Location shared: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}')));
+        // TODO: Send location to conversation
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error getting location: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final String content = appResponse.content.trim().decodeString;
@@ -488,7 +525,10 @@ class AppResultDetailWidget extends StatelessWidget {
                     ],
                   )
                 : content.contains(':::')
-                    ? RichContent(content: content)
+                    ? RichContent(
+                        content: content,
+                        onAction: (action, data) => _handleAction(context, action, data),
+                      )
                     : ConversationMarkdownWidget(
                         content: content,
                         searchQuery: searchQuery,

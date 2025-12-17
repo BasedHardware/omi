@@ -2,16 +2,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:omi/widgets/extensions/string.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:omi/utils/other/maps_util.dart';
 
 class RichContent extends StatelessWidget {
   final String content;
   final TextStyle? baseStyle;
+  final Function(String action, Map<String, dynamic> data)? onAction;
 
   const RichContent({
     super.key,
     required this.content,
     this.baseStyle,
+    this.onAction,
   });
 
   static const _cardColors = {
@@ -106,7 +110,6 @@ class RichContent extends StatelessWidget {
           components.add(_MetricComponent(match.group(1) ?? '', match.group(2) ?? ''));
         }
       }
-      // Tags
       else if (line.startsWith(':::tags')) {
         if (buffer.isNotEmpty) {
           components.add(_TextComponent(buffer.toString().trim()));
@@ -117,6 +120,33 @@ class RichContent extends StatelessWidget {
         if (tags.isNotEmpty) {
           components.add(_TagsComponent(tags));
         }
+      }
+      // Map
+      else if (line.startsWith(':::map')) {
+        if (buffer.isNotEmpty) {
+          components.add(_TextComponent(buffer.toString().trim()));
+          buffer.clear();
+        }
+        // :::map lat=37.7749 lng=-122.4194
+        final latMatch = RegExp(r'lat=([-0-9.]+)').firstMatch(line);
+        final lngMatch = RegExp(r'lng=([-0-9.]+)').firstMatch(line);
+        
+        if (latMatch != null && lngMatch != null) {
+          final lat = double.tryParse(latMatch.group(1) ?? '0') ?? 0;
+          final lng = double.tryParse(lngMatch.group(1) ?? '0') ?? 0;
+          components.add(_MapComponent(lat, lng));
+        }
+      }
+      // Share Location
+      else if (line.startsWith(':::shareLocation')) {
+         if (buffer.isNotEmpty) {
+          components.add(_TextComponent(buffer.toString().trim()));
+          buffer.clear();
+        }
+        final textMatch = RegExp(r':::shareLocation\s+"([^"]*)"').firstMatch(line); 
+        // e.g. :::shareLocation "Click to share"
+        final text = textMatch?.group(1) ?? 'Share Location';
+        components.add(_ShareLocationComponent(text));
       }
       // End of block
       else if (line == ':::' && currentComponent != null) {
@@ -169,6 +199,10 @@ class RichContent extends StatelessWidget {
       return _buildMetric(component, style);
     } else if (component is _TagsComponent) {
       return _buildTags(component, style);
+    } else if (component is _MapComponent) {
+      return _buildMap(component);
+    } else if (component is _ShareLocationComponent) {
+      return _buildShareLocation(component);
     }
     return const SizedBox.shrink();
   }
@@ -545,6 +579,49 @@ class RichContent extends StatelessWidget {
       ),
     );
   }
+
+
+  Widget _buildMap(_MapComponent component) {
+    return GestureDetector(
+      onTap: () => MapsUtil.launchMap(component.lat, component.lng),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        height: 200,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: Colors.white10,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: CachedNetworkImage(
+            imageUrl: MapsUtil.getMapImageUrl(component.lat, component.lng),
+            fit: BoxFit.cover,
+            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Center(child: Icon(Icons.map, size: 40, color: Colors.white54)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShareLocation(_ShareLocationComponent component) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      alignment: Alignment.centerLeft,
+      child: ElevatedButton.icon(
+        onPressed: () => onAction?.call('shareLocation', {}),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blueAccent,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+        icon: const Icon(Icons.location_on),
+        label: Text(component.text),
+      ),
+    );
+  }
 }
 
 class _PieChartPainter extends CustomPainter {
@@ -649,6 +726,17 @@ class _MetricComponent extends _Component {
 class _TagsComponent extends _Component {
   final List<String> tags;
   _TagsComponent(this.tags);
+}
+
+class _MapComponent extends _Component {
+  final double lat;
+  final double lng;
+  _MapComponent(this.lat, this.lng);
+}
+
+class _ShareLocationComponent extends _Component {
+  final String text;
+  _ShareLocationComponent(this.text);
 }
 
 class _BarChartEntry {
