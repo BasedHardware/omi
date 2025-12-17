@@ -42,7 +42,7 @@ if sentry_dsn:
         dsn=sentry_dsn,
         # Set traces_sample_rate to capture performance data
         # Adjust this value in production (e.g., 0.1 for 10% of transactions)
-        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '1.0')),
+        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0.1')),
         # Set profiles_sample_rate to profile performance
         profiles_sample_rate=float(os.environ.get('SENTRY_PROFILES_SAMPLE_RATE', '1.0')),
         # Set environment
