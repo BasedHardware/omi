@@ -582,7 +582,7 @@ class RichContent extends StatelessWidget {
 
 
   Widget _buildMap(_MapComponent component) {
-    final cacheKey = '${component.lat.toStringAsFixed(4)},${component.lng.toStringAsFixed(4)}';
+    final cacheKey = '${component.lat.toStringAsFixed(6)},${component.lng.toStringAsFixed(6)}';
     return GestureDetector(
       onTap: () => MapsUtil.launchMap(component.lat, component.lng),
       child: Container(
