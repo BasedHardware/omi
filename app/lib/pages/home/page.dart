@@ -19,7 +19,6 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
-import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -36,6 +35,10 @@ import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
+import 'package:flutter/cupertino.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 
@@ -87,6 +90,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
+  StreamSubscription? _notificationStreamSubscription;
 
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
@@ -313,7 +317,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _listenToMessagesFromNotification() {
-    NotificationService.instance.listenForServerMessages.listen((message) {
+    _notificationStreamSubscription = NotificationService.instance.listenForServerMessages.listen((message) {
       if (mounted) {
         var selectedApp = Provider.of<AppProvider>(context, listen: false).getSelectedApp();
         if (selectedApp == null || message.appId == selectedApp.id) {
@@ -439,7 +443,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Consumer2<HomeProvider, DeviceProvider>(
                         builder: (context, home, deviceProvider, child) {
                           if (home.isChatFieldFocused ||
-                              home.isConvoSearchFieldFocused ||
                               home.isAppsSearchFieldFocused ||
                               home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
@@ -455,10 +458,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   alignment: Alignment.bottomCenter,
                                   child: Container(
                                     width: double.infinity,
-                                    height: 80,
-                                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                                    height: 100,
+                                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                                     decoration: const BoxDecoration(
-                                      color: Color.fromARGB(255, 15, 15, 15),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        stops: [0.0, 0.30, 1.0],
+                                        colors: [
+                                          Colors.transparent,
+                                          Color.fromARGB(255, 15, 15, 15),
+                                          Color.fromARGB(255, 15, 15, 15),
+                                        ],
+                                      ),
                                     ),
                                     child: Row(
                                       children: [
@@ -477,28 +489,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.house,
-                                                      color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Home',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 0
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.house,
+                                                  color: home.selectedIndex == 0 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -519,28 +514,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.listCheck,
-                                                      color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Tasks',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 1
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.listCheck,
+                                                  color: home.selectedIndex == 1 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -563,28 +541,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.brain,
-                                                      color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Memories',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 2
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.brain,
+                                                  color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -605,28 +566,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             },
                                             child: SizedBox(
                                               height: 90,
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(bottom: 15),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      FontAwesomeIcons.puzzlePiece,
-                                                      color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
-                                                      size: 24,
-                                                    ),
-                                                    const SizedBox(height: 6),
-                                                    Text(
-                                                      'Apps',
-                                                      style: TextStyle(
-                                                        color: home.selectedIndex == 3
-                                                            ? Colors.white
-                                                            : Colors.grey.withValues(alpha: 0.8),
-                                                        fontSize: 12,
-                                                        fontWeight: FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
+                                              child: Center(
+                                                child: Icon(
+                                                  FontAwesomeIcons.puzzlePiece,
+                                                  color: home.selectedIndex == 3 ? Colors.white : Colors.grey,
+                                                  size: 26,
                                                 ),
                                               ),
                                             ),
@@ -678,7 +622,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       },
                                     ),
                                   ),
-                                // Remove the floating chat button - moving it to app bar
+                                // Floating Chat Button - Bottom Right (only on homepage)
+                                if (home.selectedIndex == 0)
+                                  Positioned(
+                                    right: 20,
+                                    bottom: 100, // Position above the bottom navigation bar
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.mediumImpact();
+                                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                                        // Navigate to chat page
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const ChatPage(isPivotBottom: false),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(28),
+                                          color: Colors.deepPurple,
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              FontAwesomeIcons.solidComment,
+                                              size: 20,
+                                              color: Colors.white,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Ask Omi',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             );
                           }
@@ -738,48 +726,230 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFB8860B).withValues(alpha: 0.5),
-                      Color(0xFFCD853F).withValues(alpha: 0.5),
-                      Color(0xFFB8860B).withValues(alpha: 0.5),
-                    ],
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.amber.withOpacity(0.15),
-                      blurRadius: 6,
-                      spreadRadius: 0.5,
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(
-                    FontAwesomeIcons.gift,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Referral Program');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ReferralPage(),
+              // Sync icon for Limitless devices
+              Consumer2<DeviceProvider, SyncProvider>(
+                builder: (context, deviceProvider, syncProvider, child) {
+                  final device = deviceProvider.pairedDevice;
+                  final hasPending = syncProvider.missingWals.isNotEmpty;
+                  final isSyncing = syncProvider.isSyncing;
+
+                  if (device != null && device.type == DeviceType.limitless) {
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        SyncBottomSheet.show(context);
+                      },
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: isSyncing
+                              ? Colors.deepPurple.withValues(alpha: 0.2)
+                              : hasPending
+                                  ? Colors.orange.withValues(alpha: 0.15)
+                                  : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.cloud_rounded,
+                          size: 18,
+                          color: isSyncing
+                              ? Colors.deepPurpleAccent
+                              : hasPending
+                                  ? Colors.orangeAccent
+                                  : Colors.white70,
+                        ),
                       ),
                     );
-                  },
-                ),
+                  }
+                  return const SizedBox.shrink();
+                },
               ),
-              const SizedBox(width: 8),
+              // Search and Calendar buttons - only on home page
+              Consumer2<HomeProvider, ConversationProvider>(
+                builder: (context, homeProvider, convoProvider, _) {
+                  // Only show search and calendar buttons on home page (index 0)
+                  if (homeProvider.selectedIndex != 0) {
+                    return const SizedBox.shrink();
+                  }
+
+                  // Hide search button if there's an active search query
+                  bool shouldShowSearchButton = convoProvider.previousQuery.isEmpty;
+                  return Row(
+                    children: [
+                      // Search button - show when no active search, clicking closes search bar
+                      if (shouldShowSearchButton)
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: homeProvider.showConvoSearchBar
+                                ? Colors.deepPurple.withValues(alpha: 0.5)
+                                : const Color(0xFF1F1F25),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              Icons.search,
+                              size: 18,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              // Toggle search bar visibility
+                              homeProvider.toggleConvoSearchBar();
+                            },
+                          ),
+                        ),
+                      if (shouldShowSearchButton) const SizedBox(width: 8),
+                      // Calendar button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: convoProvider.selectedDate != null
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            convoProvider.selectedDate != null
+                                ? FontAwesomeIcons.calendarDay
+                                : FontAwesomeIcons.calendarDays,
+                            size: 16,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () async {
+                            HapticFeedback.mediumImpact();
+                            if (convoProvider.selectedDate != null) {
+                              await convoProvider.clearDateFilter();
+                              MixpanelManager().calendarFilterCleared();
+                            } else {
+                              // Open date picker
+                              DateTime selectedDate = DateTime.now();
+                              await showCupertinoModalPopup<void>(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return Container(
+                                    height: 300,
+                                    padding: const EdgeInsets.only(top: 6.0),
+                                    margin: EdgeInsets.only(
+                                      bottom: MediaQuery.of(context).viewInsets.bottom,
+                                    ),
+                                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                                    child: SafeArea(
+                                      top: false,
+                                      child: Column(
+                                        children: [
+                                          // Header with Cancel and Done buttons
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF1F1F25),
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                  color: Color(0xFF35343B),
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                CupertinoButton(
+                                                  padding: EdgeInsets.zero,
+                                                  onPressed: () => Navigator.of(context).pop(),
+                                                  child: const Text(
+                                                    'Cancel',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                CupertinoButton(
+                                                  padding: EdgeInsets.zero,
+                                                  onPressed: () async {
+                                                    Navigator.of(context).pop();
+                                                    if (context.mounted) {
+                                                      final provider =
+                                                          Provider.of<ConversationProvider>(context, listen: false);
+                                                      await provider.filterConversationsByDate(selectedDate);
+                                                      MixpanelManager().calendarFilterApplied(selectedDate);
+                                                    }
+                                                  },
+                                                  child: const Text(
+                                                    'Done',
+                                                    style: TextStyle(
+                                                      color: Colors.deepPurple,
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Date picker
+                                          Expanded(
+                                            child: Container(
+                                              color: const Color(0xFF1F1F25),
+                                              child: CupertinoDatePicker(
+                                                mode: CupertinoDatePickerMode.date,
+                                                initialDateTime: DateTime.now(),
+                                                minimumDate: DateTime(2020),
+                                                maximumDate: DateTime.now(),
+                                                onDateTimeChanged: (DateTime newDate) {
+                                                  selectedDate = newDate;
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Star filter button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: convoProvider.showStarredOnly
+                              ? Colors.amber.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                            size: 16,
+                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            convoProvider.toggleStarredFilter();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  );
+                },
+              ),
+              // Settings button - always visible
               Container(
                 width: 36,
                 height: 36,
@@ -811,77 +981,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                 ),
               ),
-              // Chat Button - Only show on home page (index 0)
-              Consumer<HomeProvider>(
-                builder: (context, provider, child) {
-                  if (provider.selectedIndex == 0) {
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                        // Navigate to chat page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatPage(isPivotBottom: false),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        height: 36,
-                        margin: const EdgeInsets.only(left: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                              Colors.purpleAccent.withValues(alpha: 0.2),
-                              Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        child: Container(
-                          margin: const EdgeInsets.all(0.5),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(17.5),
-                            border: Border.all(
-                              color: Colors.pink.withValues(alpha: 0.3),
-                              width: 0.5,
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                FontAwesomeIcons.solidComment,
-                                size: 14,
-                                color: Colors.white70,
-                              ),
-                              SizedBox(width: 6),
-                              Text(
-                                'Chat',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  } else {
-                    return const SizedBox.shrink();
-                  }
-                },
-              ),
             ],
           ),
         ],
@@ -894,6 +993,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Cancel stream subscription to prevent memory leak
+    _notificationStreamSubscription?.cancel();
+    // Remove foreground task callback to prevent memory leak
+    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();
     super.dispose();
   }

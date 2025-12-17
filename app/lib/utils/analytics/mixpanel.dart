@@ -702,6 +702,18 @@ class MixpanelManager {
     });
   }
 
+  void quickTemplateCreated({
+    required String conversationId,
+    required String appName,
+    required bool isPublic,
+  }) {
+    track('Quick Template Created', properties: {
+      'conversation_id': conversationId,
+      'app_name': appName,
+      'is_public': isPublic,
+    });
+  }
+
   // Action Items Page Events
   void actionItemsPageOpened() => track('Action Items Page Opened');
 

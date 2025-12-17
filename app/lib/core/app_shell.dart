@@ -369,6 +369,7 @@ class _AppShellState extends State<AppShell> {
         context.read<AppProvider>().setAppsFromCache();
         context.read<MessageProvider>().refreshMessages();
         context.read<UsageProvider>().fetchSubscription();
+        context.read<TaskIntegrationProvider>().loadFromBackend();
 
         NotificationService.instance.saveNotificationToken();
       } else {

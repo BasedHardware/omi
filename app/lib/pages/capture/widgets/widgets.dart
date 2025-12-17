@@ -41,10 +41,12 @@ class SpeechProfileCardWidget extends StatelessWidget {
                         MixpanelManager().pageOpened('Speech Profile Memories');
                         bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
                         await routeToPage(context, const SpeechProfilePage());
-                        if (hasSpeakerProfile != SharedPreferencesUtil().hasSpeakerProfile) {
-                          if (context.mounted) {
-                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                          }
+                        final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                        if (hasSpeakerProfile != newHasSpeakerProfile) {
+                          if (!context.mounted) return;
+                          await context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          if (!context.mounted) return;
+                          context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
                         }
                       },
                       child: Container(
@@ -106,7 +108,7 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
                     child: Container(
                       decoration: const BoxDecoration(
                         color: Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.all(Radius.circular(12)),
+                        borderRadius: BorderRadius.all(Radius.circular(20)),
                       ),
                       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                       padding: const EdgeInsets.all(16),

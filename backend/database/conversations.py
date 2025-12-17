@@ -326,6 +326,43 @@ def delete_conversation(uid, conversation_id):
     conversation_ref.delete()
 
 
+def delete_conversations_by_source(uid: str, source: str, batch_size: int = 450) -> int:
+    """
+    Delete all conversations with a specific source.
+
+    Args:
+        uid: User ID
+        source: Source type (e.g., 'limitless')
+        batch_size: Number of documents to delete per batch
+
+    Returns:
+        Number of deleted conversations
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+
+    total_deleted = 0
+
+    while True:
+        # Query for conversations with matching source
+        query = conversations_ref.where(filter=FieldFilter('source', '==', source)).limit(batch_size)
+        docs = list(query.stream())
+
+        if not docs:
+            break
+
+        batch = db.batch()
+        for doc in docs:
+            batch.delete(doc.reference)
+            total_deleted += 1
+        batch.commit()
+
+        if len(docs) < batch_size:
+            break
+
+    return total_deleted
+
+
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def filter_conversations_by_date(uid, start_date, end_date):
@@ -478,12 +515,29 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection(conversations_collection).where(
-        filter=FieldFilter('status', '==', 'in_progress')
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(1)
     )
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
     return conversation
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def get_in_progress_conversations(uid: str):
+    """Get all in-progress conversations for a user, ordered by created_at descending."""
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = (
+        user_ref.collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', 'in_progress'))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+    )
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -643,7 +697,7 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
     conversation_ref.update({'finished_at': finished_at})
 
 
-def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict]):
+def update_conversation_segments(uid: str, conversation_id: str, segments: List[dict], finished_at: datetime = None):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
     if not doc_snapshot.exists:
@@ -651,6 +705,8 @@ def update_conversation_segments(uid: str, conversation_id: str, segments: List[
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     update_payload = {'transcript_segments': segments}
+    if finished_at:
+        update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
     doc_ref.update(prepared_payload)
 
@@ -664,6 +720,12 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'visibility': visibility})
+
+
+def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'starred': starred})
 
 
 def unlock_all_conversations(uid: str):
@@ -814,10 +876,8 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
-    print('get_closest_conversation_to_timestamps', start_timestamp, end_timestamp)
-    start_threshold = datetime.utcfromtimestamp(start_timestamp) - timedelta(minutes=2)
-    end_threshold = datetime.utcfromtimestamp(end_timestamp) + timedelta(minutes=2)
-    print('get_closest_conversation_to_timestamps', start_threshold, end_threshold)
+    start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
+    end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(minutes=2)
 
     query = (
         db.collection('users')

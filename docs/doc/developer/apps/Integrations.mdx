@@ -1,262 +1,414 @@
 ---
-title: Integration Apps
-description: "Integration apps allow OMI to interact with external services and process data in real-time. This guide will walk you through creating both Memory Creation Triggers and Real-Time Transcript Processors."
+title: "Integration Apps"
+description: "Build webhook-based apps that connect Omi to external services. Process memories, real-time transcripts, or raw audio."
 ---
 
-## Types of Integration Apps
+## What Are Integration Apps?
 
-### 1. 👷 Memory Creation Triggers
+Integration apps allow Omi to interact with external services by sending data to your webhook endpoints. Unlike prompt-based apps, these require you to host a server.
 
-#### Video Walkthrough
+<CardGroup cols={3}>
+  <Card title="Memory Triggers" icon="bell">
+    Run code when a memory is created
+  </Card>
+  <Card title="Real-Time Transcript" icon="bolt">
+    Process live transcripts as they happen
+  </Card>
+  <Card title="Audio Streaming" icon="microphone">
+    Receive raw audio bytes for custom processing
+  </Card>
+</CardGroup>
 
-<iframe
-  width="560"
-  height="315"
-  src="https://www.youtube.com/embed/OOjWeGhuLeY?si=6Ya1GwqL4GSlq3mi"
-  title="YouTube video player"
-  frameborder="0"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-  referrerpolicy="strict-origin-when-cross-origin"
-  allowfullscreen
-></iframe>
+```mermaid
+flowchart LR
+    subgraph Omi["Omi Backend"]
+        M[Memory Created]
+        T[Live Transcript]
+        A[Audio Stream]
+    end
 
-**Running a FastAPI app locally, not on AWS:**
+    subgraph Your["Your Server"]
+        W[Webhook Endpoint]
+        P[Process Data]
+        E[External Services]
+    end
 
-<iframe
-  width="560"
-  height="315"
-  src="https://www.youtube.com/embed/bMU6fTLysRY?si=3cvXEsWAUwKEnjHn"
-  title="YouTube video player"
-  frameborder="0"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-  referrerpolicy="strict-origin-when-cross-origin"
-  allowfullscreen
-></iframe>
+    M -->|POST| W
+    T -->|POST| W
+    A -->|POST| W
+    W --> P
+    P --> E
+```
 
-These apps are activated when OMI creates a new memory, allowing you to process or store the memory data
-externally.
+---
 
-[![Memory trigger app](https://img.youtube.com/vi/Yv7gP3GZ0ME/0.jpg)](https://youtube.com/shorts/Yv7gP3GZ0ME)
+## Memory Creation Triggers
 
-#### Example Use Cases
+These apps are activated when Omi creates a new memory, allowing you to process or store the data externally.
 
-- Update project management tools with conversation summaries
-- Create a personalized social platform based on conversations and interests
-- Generate a knowledge graph of interests, experiences, and relationships
+<AccordionGroup>
+  <Accordion title="How It Works" icon="gear">
+    1. User completes a conversation
+    2. Omi processes and creates a memory
+    3. Your webhook receives the complete memory object
+    4. Your server processes and responds
 
-### 2. 🏎️ Real-Time Transcript Processors
+    The webhook receives the full conversation data including transcript, structured summary, action items, and metadata.
+  </Accordion>
+  <Accordion title="Example Use Cases" icon="lightbulb">
+    - **Slack Integration**: Post conversation summaries to team channels
+    - **CRM Updates**: Log customer interactions automatically
+    - **Project Management**: Create tasks in Notion, Asana, or Jira
+    - **Knowledge Base**: Build a searchable archive of conversations
+    - **Analytics**: Track conversation patterns and insights
+  </Accordion>
+  <Accordion title="Video Tutorial" icon="video">
+    <iframe
+      width="560"
+      height="315"
+      src="https://www.youtube.com/embed/OOjWeGhuLeY?si=6Ya1GwqL4GSlq3mi"
+      title="Memory Creation Triggers Tutorial"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
 
-#### Video Walkthrough:
+    **Running FastAPI locally (no cloud deployment):**
 
-<iframe
-  width="560"
-  height="315"
-  src="https://www.youtube.com/embed/86D4v3n1o48?si=tQl-s9jikupjix0c"
-  title="YouTube video player"
-  frameborder="0"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-  referrerpolicy="strict-origin-when-cross-origin"
-  allowfullscreen
-></iframe>
+    <iframe
+      width="560"
+      height="315"
+      src="https://www.youtube.com/embed/bMU6fTLysRY?si=3cvXEsWAUwKEnjHn"
+      title="Running FastAPI Locally"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
+  </Accordion>
+</AccordionGroup>
 
-These apps process conversation transcripts as they occur, enabling real-time analysis and actions.
+### Webhook Payload
 
-[![Memory trigger app](https://img.youtube.com/vi/h4ojO3WzkxQ/0.jpg)](https://youtube.com/shorts/h4ojO3WzkxQ)
-
-#### Example Use Cases
-
-- Live conversation coaching and feedback
-- Real-time web searches or fact-checking
-- Emotional state analysis and supportive responses
-
-### 3. 🔊 Real-Time Audio Bytes (audio_bytes)
-
-#### Guide:
-
-Omi can stream raw audio bytes from a DevKit directly to an external endpoint. This integration uses the trigger type `audio_bytes` and is useful for applications that need raw PCM audio (VAD, custom ASR, feature extraction, or long-term storage).
-
-Key points:
-
-- Trigger name: `audio_bytes`
-- Request: POST
-- Query parameters appended by the backend: `sample_rate` (e.g. 16000) and `uid`
-- Content-Type: `application/octet-stream` (raw PCM16 bytes)
-
-Example request:
-
-`POST /your-endpoint?sample_rate=16000&uid=user123` with the request body containing raw PCM16 (16-bit little-endian) audio bytes.
-
-Notes and recommendations:
-
-- The bytes are raw PCM16 (16-bit little-endian), 2 bytes per sample. To produce a playable WAV file you must prepend a WAV header and concatenate the received chunks.
-- You control delivery frequency in the Omi app Developer Settings (the webhook field accepts `url,seconds` — the second value configures how many seconds of audio are sent per request).
-- For an example implementation and deployment-ready code, see the Real-Time Audio Streaming guide: `doc/developer/apps/AudioStreaming.mdx`.
-
-#### Example Use Cases
-
-- Voice activity detection (VAD) and endpointing
-- Feed custom ASR or speech models for research or improved accuracy
-- Extract audio features (spectrograms, embeddings) in real-time
-- Store raw audio chunks to cloud storage for later processing
-
-## Creating an Integration App
-
-### Step 1: Define Your App 🎯
-
-Decide whether you're creating a Memory Creation Trigger or a Real-Time Transcript Processor, and outline its specific
-purpose.
-
-### Step 2: Set Up Your Endpoint 🔗
-
-Create an endpoint (webhook) that can receive and process the data sent by OMI. You can [create a test webhook](https://webhook-test.com/). The data structure will differ based on your
-app type:
-
-#### For Memory Creation Triggers:
-
-Your endpoint will receive the entire memory object as a JSON payload, with a `uid` as a query parameter. Here is what to
-expect:
+Your endpoint receives a POST request with the memory object:
 
 `POST /your-endpoint?uid=user123`
 
 ```json
 {
-  "id": 0,
+  "id": "memory_abc123",
   "created_at": "2024-07-22T23:59:45.910559+00:00",
   "started_at": "2024-07-21T22:34:43.384323+00:00",
   "finished_at": "2024-07-21T22:35:43.384323+00:00",
   "transcript_segments": [
     {
-      "text": "Segment text",
+      "text": "Let's discuss the project timeline.",
       "speaker": "SPEAKER_00",
       "speakerId": 0,
       "is_user": false,
       "start": 10.0,
-      "end": 20.0
+      "end": 15.0
     }
-    // More segments...
   ],
-  "photos": [],
   "structured": {
-    "title": "Conversation Title",
-    "overview": "Brief overview...",
-    "emoji": "🗣️",
-    "category": "personal",
+    "title": "Project Timeline Discussion",
+    "overview": "Brief overview of the conversation...",
+    "emoji": "📅",
+    "category": "work",
     "action_items": [
       {
-        "description": "Action item description",
+        "description": "Send project proposal by Friday",
         "completed": false
       }
     ],
     "events": []
   },
-  "apps_response": [
-    {
-      "app_id": "app-id",
-      "content": "App response content"
-    }
-  ],
+  "apps_response": [],
   "discarded": false
 }
 ```
 
-Your app should process this entire object and perform any necessary actions based on the full context of the memory.
+<Tip>
+Check out the [Notion CRM Example](https://github.com/BasedHardware/Omi/blob/main/plugins/example/main.py) for a complete implementation.
+</Tip>
 
-> Check the [Notion CRM Python Example](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/apps/example/main.py#L85)
-> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L359).
+---
 
-**For Real-Time Transcript Processors:**
+## Real-Time Transcript Processors
 
-Your endpoint will receive a JSON payload containing the most recently transcribed segments, with both session_id and
-uid as query parameters. Here's the structure:
+Process conversation transcripts as they occur, enabling real-time analysis and actions.
+
+<AccordionGroup>
+  <Accordion title="How It Works" icon="gear">
+    1. User starts speaking
+    2. Omi transcribes in real-time
+    3. Your webhook receives transcript segments as they're created
+    4. Your server processes and can trigger immediate actions
+
+    Segments arrive in multiple calls as the conversation unfolds, allowing for live reactions.
+  </Accordion>
+  <Accordion title="Example Use Cases" icon="lightbulb">
+    - **Live Coaching**: Provide real-time feedback during presentations
+    - **Fact-Checking**: Verify claims as they're made
+    - **Smart Home**: Trigger actions based on spoken commands
+    - **Sentiment Analysis**: Monitor emotional tone in real-time
+    - **Translation**: Live translation of conversations
+  </Accordion>
+  <Accordion title="Video Tutorial" icon="video">
+    <iframe
+      width="560"
+      height="315"
+      src="https://www.youtube.com/embed/86D4v3n1o48?si=tQl-s9jikupjix0c"
+      title="Real-Time Transcript Processing"
+      frameborder="0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen
+    ></iframe>
+  </Accordion>
+</AccordionGroup>
+
+### Webhook Payload
+
+Your endpoint receives transcript segments with session context:
 
 `POST /your-endpoint?session_id=abc123&uid=user123`
 
 ```json
 [
   {
-    "text": "Segment text",
+    "text": "I think we should prioritize the mobile app.",
     "speaker": "SPEAKER_00",
     "speakerId": 0,
     "is_user": false,
     "start": 10.0,
-    "end": 20.0
+    "end": 15.0
+  },
+  {
+    "text": "Agreed, let's start with iOS.",
+    "speaker": "SPEAKER_01",
+    "speakerId": 1,
+    "is_user": true,
+    "start": 16.0,
+    "end": 18.0
   }
-  // More recent segments...
 ]
 ```
 
-**Key points for Real-Time Transcript Processors:**
+### Implementation Tips
 
-1. Segments arrive in multiple calls as the conversation unfolds.
-2. Use the session_id to maintain context across calls.
-3. Implement smart logic to avoid redundant processing.
-4. Consider building a complete conversation context by accumulating segments.
-5. Clear processed segments to prevent re-triggering on future calls.
+<Warning>
+Real-time processors require careful design to avoid performance issues.
+</Warning>
 
-Remember to handle errors gracefully and consider performance, especially for lengthy conversations!
+<CardGroup cols={2}>
+  <Card title="Use session_id" icon="key">
+    Track context across multiple calls using the session_id parameter
+  </Card>
+  <Card title="Avoid Redundancy" icon="copy">
+    Implement logic to prevent processing the same segments twice
+  </Card>
+  <Card title="Accumulate Context" icon="layer-group">
+    Build complete conversation context by storing segments
+  </Card>
+  <Card title="Handle Errors" icon="triangle-exclamation">
+    Fail gracefully - don't block transcription with slow processing
+  </Card>
+</CardGroup>
 
-> Check the Realtime News checker [Python Example](https://github.com/BasedHardware/omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/plugins/example/main.py#L100)
-> and it's respective JSON format [here](https://github.com/BasedHardware/Omi/blob/bab12a678f3cfe43ab1a7aba62645222de4378fb/community-plugins.json#L379).
+<Tip>
+See the [Real-time News Checker Example](https://github.com/BasedHardware/omi/blob/main/plugins/example/advanced/realtime.py) for a complete implementation.
+</Tip>
 
-### Step 3: Test Your App 🧪
+---
 
-Time to put your app through its paces! Follow these steps to test both types of integrations:
+## Real-Time Audio Bytes
 
-1. Open the OMI app on your device.
-2. Go to Settings and enable Developer Mode.
-3. Navigate to Developer Settings.
+Stream raw audio bytes from Omi directly to your endpoint for custom audio processing.
 
-#### For Memory Creation Triggers:
+<AccordionGroup>
+  <Accordion title="How It Works" icon="gear">
+    1. User speaks into Omi device
+    2. Raw PCM audio is streamed to your endpoint
+    3. Your server processes the audio bytes directly
+    4. Handle as needed (custom STT, VAD, feature extraction, etc.)
 
-4. Set your endpoint URL in the "Memory Creation Webhook" field. If you don't have an endpoint yet, [create a test webhook](https://webhook-test.com/)
-5. To test without creating a new memory:
-   - Go to any memory detail view.
-   - Click on the top right corner (3 dots menu).
-   - In the Developer Tools section, trigger the endpoint call with existing memory data.
+    Unlike transcript processors, you receive the actual audio data, not text.
+  </Accordion>
+  <Accordion title="Example Use Cases" icon="lightbulb">
+    - **Custom ASR**: Use your own speech recognition models
+    - **Voice Activity Detection**: Implement custom VAD logic
+    - **Audio Features**: Extract spectrograms, embeddings, or other features
+    - **Recording**: Store raw audio for later processing
+    - **Real-time Translation**: Feed audio to translation services
+  </Accordion>
+</AccordionGroup>
 
-[![Memory trigger app](https://img.youtube.com/vi/dYVSbEpoV0U/0.jpg)](https://youtube.com/shorts/dYVSbEpoV0U)
+### Technical Details
 
-#### For Real-Time Transcript Processors:
+| Setting | Value |
+|---------|-------|
+| Trigger Type | `audio_bytes` |
+| HTTP Method | POST |
+| Content-Type | `application/octet-stream` |
+| Audio Format | PCM16 (16-bit little-endian) |
+| Bytes per Sample | 2 |
 
-4. Set your endpoint URL in the "Real-Time Transcript Webhook" field.
-5. Start speaking to your device - your endpoint will receive real-time updates as you speak.
+**Request format:**
 
-[![Memory trigger app](https://img.youtube.com/vi/CHz9JnOGlTQ/0.jpg)](https://youtube.com/shorts/CHz9JnOGlTQ)
+`POST /your-endpoint?sample_rate=16000&uid=user123`
 
-Your endpoints are now ready to spring into action!
+Body contains raw PCM16 audio bytes.
 
-For **Memory Creation Triggers**, you can test with existing memories or wait for new ones to be created.
+<Note>
+To produce a playable WAV file, prepend a WAV header and concatenate the received chunks.
+</Note>
 
-For **Real-Time Processors**, simply start a conversation with OMI to see your app in action.
+### Configuring Delivery Frequency
 
-Happy app crafting! We can't wait to see what you create! 🎉
+You can control how often audio is sent via the Omi app Developer Settings:
 
-### Step 4: Submit Your App
+```
+url,seconds
+```
 
-Submit your app using the Omi mobile app.
+For example: `https://your-endpoint.com/audio,5` sends audio every 5 seconds.
 
-The **webhook URL** should be a POST request in which the memory object is sent as a JSON payload.
+<Info>
+For a complete implementation, see the [Audio Streaming Guide](/doc/developer/apps/AudioStreaming).
+</Info>
 
-The **setup completed URL** is optional and should be a GET endpoint that returns `{'is_setup_completed': boolean}`.
+---
 
-The **auth URL** is optional as well and is utilized by users to setup your app. The `uid` query paramater will be appended to this URL upon usage.
+## Creating an Integration App
 
-The setup instructions can be either a link to instructions or text instructions for users on how to setup your app.
+<Steps>
+  <Step title="Choose Your Trigger Type" icon="toggle-on">
+    Decide which integration type(s) you need:
+    - **Memory Trigger**: Process completed conversations
+    - **Real-Time Transcript**: React to live speech
+    - **Audio Bytes**: Process raw audio
+  </Step>
+  <Step title="Set Up Your Endpoint" icon="server">
+    Create a webhook endpoint that can receive POST requests. For testing, use [webhook.site](https://webhook.site) or [webhook-test.com](https://webhook-test.com/).
 
-### Setup Instructions Documentation
+    Your endpoint should:
+    - Accept POST requests
+    - Parse JSON body (or binary for audio)
+    - Read `uid` from query parameters
+    - Return 200 OK quickly
+  </Step>
+  <Step title="Implement Your Logic" icon="code">
+    Process the incoming data and integrate with external services.
 
-When writing your setup instructions, consider including:
+    **Example (Python/FastAPI):**
+    ```python
+    from fastapi import FastAPI, Request
 
-1. A step-by-step setup guide
-2. Screenshots (if applicable)
-3. Authentication steps (if required)
-4. Troubleshooting tips
+    app = FastAPI()
 
-Example structure:
+    @app.post("/webhook")
+    async def handle_memory(request: Request, uid: str):
+        memory = await request.json()
+        # Process memory data
+        await send_to_slack(memory["structured"]["title"])
+        return {"status": "ok"}
+    ```
+  </Step>
+  <Step title="Test Your Integration" icon="flask">
+    Use Developer Mode to test without creating new memories (see testing section below)
+  </Step>
+  <Step title="Submit Your App" icon="rocket">
+    Publish through the Omi mobile app
+  </Step>
+</Steps>
 
-**Notes:**
+---
 
-- Authentication is not needed for all apps. Include only if your app requires user-specific setup or credentials.
-- For apps without authentication, users can simply enable the app without additional steps.
-- All your README links, when the user opens them, we'll append a `uid` query parameter to it, which you can use to
-  associate setup or credentials with specific users.
+## Testing Your Integration
+
+<Steps>
+  <Step title="Enable Developer Mode" icon="code">
+    Open Omi app → Settings → Enable Developer Mode → Developer Settings
+  </Step>
+  <Step title="Set Webhook URL" icon="link">
+    - **Memory Triggers**: Enter URL in "Memory Creation Webhook"
+    - **Real-Time**: Enter URL in "Real-Time Transcript Webhook"
+  </Step>
+  <Step title="Test Memory Triggers" icon="bell">
+    Go to any memory → Tap 3-dot menu → Developer Tools → Trigger webhook with existing data
+  </Step>
+  <Step title="Test Real-Time" icon="bolt">
+    Start speaking - your endpoint receives updates immediately
+  </Step>
+</Steps>
+
+<Tip>
+Use [webhook.site](https://webhook.site) to see exactly what data Omi sends before writing any code.
+</Tip>
+
+---
+
+## App Submission Fields
+
+When submitting your integration app:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Webhook URL** | Yes | Your POST endpoint for receiving data |
+| **Setup Completed URL** | No | GET endpoint returning `{"is_setup_completed": boolean}` |
+| **Auth URL** | No | URL for user authentication (uid appended automatically) |
+| **Setup Instructions** | No | Text or link explaining how to configure your app |
+
+### Setup Instructions Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Step-by-Step Guide" icon="list-ol">
+    Clear numbered instructions for configuration
+  </Card>
+  <Card title="Screenshots" icon="image">
+    Visual aids for complex setup steps
+  </Card>
+  <Card title="Authentication Flow" icon="key">
+    If required, explain how to connect accounts
+  </Card>
+  <Card title="Troubleshooting" icon="screwdriver-wrench">
+    Common issues and how to resolve them
+  </Card>
+</CardGroup>
+
+<Info>
+When users open your setup links, Omi automatically appends a `uid` query parameter. Use this to associate credentials with specific users.
+</Info>
+
+---
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Developer API" icon="code" href="/doc/developer/api">
+    Access your own personal Omi data programmatically
+  </Card>
+  <Card title="Data Import APIs" icon="file-import" href="/doc/developer/apps/Import">
+    Create conversations and memories via REST API
+  </Card>
+  <Card title="Audio Streaming Guide" icon="microphone" href="/doc/developer/apps/AudioStreaming">
+    Detailed guide for processing raw audio bytes
+  </Card>
+  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+    Add custom tools users can invoke in chat
+  </Card>
+  <Card title="OAuth Setup" icon="key" href="/doc/developer/apps/Oauth">
+    Add authentication flows to your apps
+  </Card>
+  <Card title="Notifications" icon="bell" href="/doc/developer/apps/Notifications">
+    Send push notifications from your app
+  </Card>
+  <Card title="Prompt-Based Apps" icon="wand-magic-sparkles" href="/doc/developer/apps/PromptBased">
+    Create apps without hosting a server
+  </Card>
+  <Card title="Apps Introduction" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+    Overview of all app types
+  </Card>
+</CardGroup>

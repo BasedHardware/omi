@@ -265,6 +265,7 @@ class FilterBottomSheet extends StatelessWidget {
       {'label': 'Z-A', 'key': 'Z-A'},
       {'label': 'Highest Rating', 'key': 'Highest Rating'},
       {'label': 'Lowest Rating', 'key': 'Lowest Rating'},
+      {'label': 'Most Installs', 'key': 'Most Installs'},
     ];
 
     return Column(

@@ -59,7 +59,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
 
     return GestureDetector(
       onTap: () async {
-        context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+        context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
         Provider.of<ConversationProvider>(context, listen: false).onConversationTap(widget.conversationIdx);
         routeToPage(
           context,
@@ -72,7 +72,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(16.0),
+            borderRadius: BorderRadius.circular(24.0),
           ),
           child: Padding(
             padding: const EdgeInsetsDirectional.all(16),

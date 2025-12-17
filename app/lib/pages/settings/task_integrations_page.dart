@@ -13,13 +13,14 @@ import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum TaskIntegrationApp {
   appleReminders,
-  googleTasks,
   todoist,
   clickup,
   asana,
+  googleTasks,
   trello,
   monday,
 }
@@ -121,11 +122,10 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
   }
 
   bool get isAvailable {
-    // Apple Reminders, Todoist, Asana, Google Tasks, and ClickUp are available
+    // Apple Reminders, Todoist, Asana, and ClickUp are available
     return this == TaskIntegrationApp.appleReminders ||
         this == TaskIntegrationApp.todoist ||
         this == TaskIntegrationApp.asana ||
-        this == TaskIntegrationApp.googleTasks ||
         this == TaskIntegrationApp.clickup;
   }
 
@@ -472,13 +472,28 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     }
   }
 
-  Widget _buildAppTile(TaskIntegrationApp app) {
+  Widget _buildShimmerButton() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade600,
+      child: Container(
+        width: 70,
+        height: 28,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppTile(TaskIntegrationApp app, bool isLoading) {
     final isSelected = context.read<TaskIntegrationProvider>().selectedApp == app;
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
 
     return GestureDetector(
-      onTap: isAvailable
+      onTap: isAvailable && !isLoading
           ? () {
               // If already connected and selected, open settings
               if (isConnected && isSelected) {
@@ -549,42 +564,21 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               ),
             ),
             const SizedBox(width: 16),
-            // App Name and Status
+            // App Name
             Expanded(
-              child: Row(
-                children: [
-                  Text(
-                    app.displayName,
-                    style: TextStyle(
-                      color: isAvailable ? Colors.white : Colors.grey,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  // Connected chip
-                  if (isConnected) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text(
-                        'Linked',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+              child: Text(
+                app.displayName,
+                style: TextStyle(
+                  color: isAvailable ? Colors.white : Colors.grey,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
-            // Action Button
-            if (!isAvailable)
+            // Action Button - Show shimmer while loading (except for Apple Reminders which is always connected)
+            if (isLoading && app != TaskIntegrationApp.appleReminders)
+              _buildShimmerButton()
+            else if (!isAvailable)
               // Coming Soon button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -647,7 +641,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
   @override
   Widget build(BuildContext context) {
     // Watch provider to rebuild when it changes
-    context.watch<TaskIntegrationProvider>();
+    final provider = context.watch<TaskIntegrationProvider>();
+    final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
@@ -694,7 +689,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                         }
                         return true;
                       })
-                      .map(_buildAppTile)
+                      .map((app) => _buildAppTile(app, isLoading))
                       .toList(),
                 ),
               ),

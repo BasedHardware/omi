@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/dev_api_key.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:provider/provider.dart';
@@ -133,48 +133,27 @@ class DevApiKeyListItem extends StatelessWidget {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          surfaceTintColor: Colors.transparent,
+          backgroundColor: const Color(0xFF1C1C1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444), size: 20),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Revoke Key?',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          title: const Text(
+            'Revoke Key?',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           content: Text(
-            'Are you sure you want to revoke "${apiKey.name}"? Any applications using this key will stop working. This action cannot be undone.',
-            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
+            'Are you sure you want to revoke the key "${apiKey.name}"? This action cannot be undone.',
+            style: TextStyle(color: Colors.grey.shade400),
           ),
-          actions: [
+          actions: <Widget>[
             TextButton(
+              child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
             ),
             TextButton(
+              child: const Text('Revoke', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
               onPressed: () {
                 Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
                 Navigator.of(dialogContext).pop();
               },
-              child: const Text(
-                'Revoke',
-                style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600),
-              ),
             ),
           ],
         );

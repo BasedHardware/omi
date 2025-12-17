@@ -4,7 +4,7 @@ import os
 import firebase_admin
 import asyncio
 
-from utils.other.notifications import start_cron_job
+from utils.other.jobs import start_job
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -13,5 +13,5 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 else:
     firebase_admin.initialize_app()
 
-print('Starting cron job...')
-asyncio.run(start_cron_job())
+print('Starting job...')
+asyncio.run(start_job())

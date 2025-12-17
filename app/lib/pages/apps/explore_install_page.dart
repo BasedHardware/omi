@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/list_item.dart';
 import 'package:omi/pages/apps/widgets/category_apps_page.dart';
@@ -145,12 +144,19 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     return Selector<AppProvider, List<Map<String, dynamic>>>(
       selector: (context, provider) => provider.groupedApps,
       builder: (context, groups, child) {
+        // Filter out "Summary" (memories) section - it's accessed via conversation detail page
+        final filteredGroups = groups.where((group) {
+          final capabilityMap = group['capability'] as Map<String, dynamic>?;
+          final groupId = capabilityMap?['id'] as String? ?? '';
+          return groupId != 'memories';
+        }).toList();
+
         return SliverPadding(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           sliver: SliverList.builder(
-            itemCount: groups.length,
+            itemCount: filteredGroups.length,
             itemBuilder: (context, index) {
-              final group = groups[index];
+              final group = filteredGroups[index];
               // Support capability-based grouping (new) and category-based (legacy)
               final capabilityMap = group['capability'] as Map<String, dynamic>?;
               final categoryMap = group['category'] as Map<String, dynamic>?;
@@ -627,16 +633,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                 ],
                               ),
                             ),
-                          ),
-                  ),
-
-                  // AI App Generator Banner
-                  SliverToBoxAdapter(
-                    child: state.isLoading
-                        ? const SizedBox.shrink()
-                        : const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16),
-                            child: AiAppGeneratorBanner(),
                           ),
                   ),
 

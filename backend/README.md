@@ -11,6 +11,13 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 2. You will need to have your own Google Cloud Project with Firebase enabled. If you've already set up Firebase for the Omi app, you're good to go. If not, please refer to the [Firebase Setup Guide](https://firebase.google.com/docs/projects/learn-more).
    - **IMPORTANT:** Make sure you have the [`Cloud Resource Manager API`](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com), [`Firebase Management API`](https://console.cloud.google.com/apis/library/firebase.googleapis.com), and [`Cloud Firestore API`](https://console.developers.google.com/apis/api/firestore.googleapis.com/overview) enabled in the [Google Cloud API Console](https://console.cloud.google.com/apis/dashboard) **before proceeding to the next steps**. Failure to enable these APIs will result in authentication errors.
+   - **Firestore Composite Indexes:** You must create composite indexes for API key queries. Go to [Firebase Console](https://console.firebase.google.com/) → Firestore Database → Indexes, and create the following composite indexes:
+     | Collection | Fields |
+     |------------|--------|
+     | `dev_api_keys` | `user_id` (Ascending) + `created_at` (Descending) |
+     | `mcp_api_keys` | `user_id` (Ascending) + `created_at` (Descending) |
+     
+     Without these indexes, the Developer Settings page will show "Failed to load API keys: Internal Server Error".
 
 3. Run the following commands one by one to authenticate with Google Cloud:
    ```bash
