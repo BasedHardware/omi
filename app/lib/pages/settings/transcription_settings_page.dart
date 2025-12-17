@@ -686,6 +686,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 'Enabling this will likely cause the app to crash or freeze.',
                 style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 8),
+              const Text(
+                'Transcription will be significantly slower and less accurate.',
+                style: TextStyle(color: Colors.white70),
+              ),
             ],
           ),
           actions: [
@@ -731,6 +736,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               ),
               Text(
                 '• Device may warm up during extended use.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              Text(
+                '• Speed and accuracy will be lower than Cloud models.',
                 style: TextStyle(color: Colors.white70),
               ),
             ],
