@@ -317,6 +317,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     }
 
+    final structured = widget.conversation.structured;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
