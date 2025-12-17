@@ -1,6 +1,7 @@
 import json
 import os
 
+import sentry_sdk
 import firebase_admin
 from fastapi import FastAPI
 
@@ -33,6 +34,22 @@ from routers import (
 )
 
 from utils.other.timeout import TimeoutMiddleware
+
+# Initialize Sentry for error tracking and performance monitoring
+sentry_dsn = os.environ.get('SENTRY_DSN')
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        # Set traces_sample_rate to capture performance data
+        # Adjust this value in production (e.g., 0.1 for 10% of transactions)
+        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '1.0')),
+        # Set profiles_sample_rate to profile performance
+        profiles_sample_rate=float(os.environ.get('SENTRY_PROFILES_SAMPLE_RATE', '1.0')),
+        # Set environment
+        environment=os.environ.get('SENTRY_ENVIRONMENT', 'development'),
+        # Enable sending of default PII (be careful with this in production)
+        send_default_pii=os.environ.get('SENTRY_SEND_PII', 'false').lower() == 'true',
+    )
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     json_str = os.environ["SERVICE_ACCOUNT_JSON"]
