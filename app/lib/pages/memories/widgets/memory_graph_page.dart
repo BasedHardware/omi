@@ -54,7 +54,7 @@ class ForceDirectedSimulation3D {
   final List<GraphEdge3D> edges = [];
   final Map<String, GraphNode3D> nodeMap = {};
 
-  double repulsion = 80000.0;
+  double repulsion = 120000.0;
   double attraction = 0.0015;
   double centerGravity = 0.0002;
   double damping = 0.9;
@@ -111,8 +111,14 @@ class ForceDirectedSimulation3D {
         if (distSq < 1.0) distSq = 1.0;
         if (distSq > 10000000) continue;
 
-        final forceVal = (repulsion * skipFactor) / distSq;
+        var forceVal = (repulsion * skipFactor) / distSq;
         final dist = sqrt(distSq);
+        
+        // Collision prevention
+        if (dist < 100.0) {
+           forceVal += (100.0 - dist) * 50.0; 
+        }
+
         final fx = (dx / dist) * forceVal;
         final fy = (dy / dist) * forceVal;
         final fz = (dz / dist) * forceVal;
@@ -137,7 +143,7 @@ class ForceDirectedSimulation3D {
       final dist = sqrt(dx * dx + dy * dy + dz * dz);
       if (dist < 0.1) continue;
 
-      const restLength = 2000.0;
+      const restLength = 1500.0;
       final forceVal = (dist - restLength) * attraction;
       final fx = (dx / dist) * forceVal;
       final fy = (dy / dist) * forceVal;
@@ -253,14 +259,14 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _loadGraph();
+      _loadGraph(silent: true);
     }
   }
 
   void _startAutoRefresh() {
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_isLoading && !_isRebuilding) {
-        _loadGraph();
+        _loadGraph(silent: true);
       }
     });
   }
@@ -272,29 +278,57 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     _repaintNotifier.value++;
   }
 
-  Future<void> _loadGraph() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _loadGraph({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final data = await KnowledgeGraphApi.getKnowledgeGraph();
       if (!mounted) return;
+
+      final newNodes = data['nodes'] as List<dynamic>? ?? [];
+      final newEdges = data['edges'] as List<dynamic>? ?? [];
+
+      if (_isSameGraph(newNodes, newEdges)) {
+        if (!silent) {
+          setState(() {
+             _isLoading = false; 
+          });
+        }
+        return;
+      }
+
       _populateGraph(data);
       _runLayoutSync();
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-      });
+      if (!silent) {
+        setState(() {
+          _error = e.toString();
+        });
+      }
     } finally {
-      if (mounted) {
+      if (mounted && !silent) {
         setState(() {
           _isLoading = false;
         });
       }
     }
+  }
+
+  bool _isSameGraph(List<dynamic> newNodes, List<dynamic> newEdges) {
+    if (newNodes.length != simulation.nodes.length) return false;
+    if (newEdges.length != simulation.edges.length) return false;
+    
+    final currentIds = simulation.nodes.map((n) => n.id).toSet();
+    for (var n in newNodes) {
+      if (!currentIds.contains(n['id'])) return false;
+    }
+    return true;
   }
 
   Future<void> _rebuildGraph() async {
@@ -307,7 +341,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
-      // Clean polling approach with timeout
       final data = await KnowledgeGraphApi.waitForGraphStability();
       if (!mounted) return;
 
