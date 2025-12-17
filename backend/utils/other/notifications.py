@@ -51,10 +51,33 @@ async def send_daily_summary_notification():
 
 def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
+    user_tz_name = user_data[2] if len(user_data) > 2 else None
+
     # Note: user_data[1] was fcm_token, no longer needed
     daily_summary_title = "Here is your action plan for tomorrow"  # TODO: maybe include llm a custom message for this
+
+    # Calculate user's day boundaries in their timezone, then convert to UTC for database query
+    start_date_utc = None
+    end_date_utc = None
+    if user_tz_name:
+        try:
+            user_tz = pytz.timezone(user_tz_name)
+            now_in_user_tz = datetime.now(user_tz)
+            start_of_day_user_tz = user_tz.localize(datetime.combine(now_in_user_tz.date(), time.min))
+            end_of_day_user_tz = now_in_user_tz
+            start_date_utc = start_of_day_user_tz.astimezone(pytz.utc)
+            end_date_utc = end_of_day_user_tz.astimezone(pytz.utc)
+        except Exception as e:
+            print(e)
+
+    # Fallback to UTC if timezone not available
+    if not start_date_utc or not end_date_utc:
+        now_utc = datetime.now(pytz.utc)
+        start_date_utc = datetime.combine(now_utc.date(), time.min).replace(tzinfo=pytz.utc)
+        end_date_utc = now_utc
+
     conversations_data = conversations_db.get_conversations(
-        uid, start_date=datetime.combine(datetime.now().date(), time.min), end_date=datetime.now()
+        uid, start_date=start_date_utc, end_date=start_date_utc
     )
     if not conversations_data or len(conversations_data) == 0:
         return
@@ -77,7 +100,7 @@ def _send_summary_notification(user_data: tuple):
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        tasks = [loop.run_in_executor(pool, _send_summary_notification, uid) for uid in users]
+        tasks = [loop.run_in_executor(pool, _send_summary_notification, user_tokens) for user_tokens in users]
         await asyncio.gather(*tasks)
 
 
