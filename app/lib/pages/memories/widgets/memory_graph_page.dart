@@ -23,7 +23,7 @@ class GraphNode3D {
   v.Vector3 force;
 
   double mass = 1.0;
-  double radius = 15.0;
+  double radius = 12.0;
 
   GraphNode3D({
     required this.id,
@@ -53,17 +53,19 @@ class ForceDirectedSimulation3D {
   final List<GraphEdge3D> edges = [];
   final Map<String, GraphNode3D> nodeMap = {};
 
-  double repulsion = 75000.0;
-  double attraction = 0.002;
-  double centerGravity = 0.0003;
-  double damping = 0.88;
+  double repulsion = 80000.0;
+  double attraction = 0.0015;
+  double centerGravity = 0.0002;
+  double damping = 0.9;
   double dt = 0.016;
-  
+
   bool isStable = false;
   int _tickCounter = 0;
+  int _stableCounter = 0;
 
   void wake() {
     isStable = false;
+    _stableCounter = 0;
   }
 
   void addNode(GraphNode3D node) {
@@ -75,32 +77,51 @@ class ForceDirectedSimulation3D {
     edges.add(edge);
   }
 
-  void tick() {
-    if (isStable) return;
+  bool tick() {
+    if (isStable) return false;
 
     _tickCounter++;
-    if (_tickCounter % 3 != 0) return;
-    
+    if (_tickCounter % 4 != 0) return false;
+
     double totalEnergy = 0.0;
-    
+    final nodeCount = nodes.length;
+
     for (var node in nodes) {
       node.force.setZero();
     }
 
-    for (int i = 0; i < nodes.length; i++) {
-      for (int j = i + 1; j < nodes.length; j++) {
+    final maxPairs = 5000;
+    final totalPairs = (nodeCount * (nodeCount - 1)) ~/ 2;
+    final skipFactor = totalPairs > maxPairs ? totalPairs ~/ maxPairs : 1;
+    int pairIndex = 0;
+
+    for (int i = 0; i < nodeCount; i++) {
+      for (int j = i + 1; j < nodeCount; j++) {
+        pairIndex++;
+        if (skipFactor > 1 && pairIndex % skipFactor != 0) continue;
+
         final n1 = nodes[i];
         final n2 = nodes[j];
 
-        v.Vector3 delta = n1.position - n2.position;
-        double distSq = delta.length2;
+        final dx = n1.position.x - n2.position.x;
+        final dy = n1.position.y - n2.position.y;
+        final dz = n1.position.z - n2.position.z;
+        double distSq = dx * dx + dy * dy + dz * dz;
         if (distSq < 1.0) distSq = 1.0;
+        if (distSq > 10000000) continue;
 
-        double forceVal = repulsion / distSq;
+        final forceVal = (repulsion * skipFactor) / distSq;
+        final dist = sqrt(distSq);
+        final fx = (dx / dist) * forceVal;
+        final fy = (dy / dist) * forceVal;
+        final fz = (dz / dist) * forceVal;
 
-        v.Vector3 param = delta.normalized() * forceVal;
-        n1.force += param;
-        n2.force -= param;
+        n1.force.x += fx;
+        n1.force.y += fy;
+        n1.force.z += fz;
+        n2.force.x -= fx;
+        n2.force.y -= fy;
+        n2.force.z -= fz;
       }
     }
 
@@ -109,39 +130,65 @@ class ForceDirectedSimulation3D {
       final n2 = nodeMap[edge.targetId];
       if (n1 == null || n2 == null) continue;
 
-      v.Vector3 delta = n2.position - n1.position;
-      double distance = delta.length;
-      double restLength = 1800.0;
+      final dx = n2.position.x - n1.position.x;
+      final dy = n2.position.y - n1.position.y;
+      final dz = n2.position.z - n1.position.z;
+      final dist = sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist < 0.1) continue;
 
-      double forceVal = (distance - restLength) * attraction;
+      const restLength = 2000.0;
+      final forceVal = (dist - restLength) * attraction;
+      final fx = (dx / dist) * forceVal;
+      final fy = (dy / dist) * forceVal;
+      final fz = (dz / dist) * forceVal;
 
-      v.Vector3 param = delta.normalized() * forceVal;
-      n1.force += param;
-      n2.force -= param;
+      n1.force.x += fx;
+      n1.force.y += fy;
+      n1.force.z += fz;
+      n2.force.x -= fx;
+      n2.force.y -= fy;
+      n2.force.z -= fz;
     }
 
     for (var node in nodes) {
-      v.Vector3 toCenter = -node.position;
-      node.force += toCenter.normalized() * (toCenter.length * centerGravity * node.mass);
+      final cx = -node.position.x * centerGravity;
+      final cy = -node.position.y * centerGravity;
+      final cz = -node.position.z * centerGravity;
+      node.force.x += cx;
+      node.force.y += cy;
+      node.force.z += cz;
     }
 
     for (var node in nodes) {
-      v.Vector3 acceleration = node.force / node.mass;
-      node.velocity += acceleration * dt;
-      node.velocity *= damping;
-      
-      totalEnergy += node.velocity.length2;
+      node.velocity.x = (node.velocity.x + node.force.x * dt) * damping;
+      node.velocity.y = (node.velocity.y + node.force.y * dt) * damping;
+      node.velocity.z = (node.velocity.z + node.force.z * dt) * damping;
 
-      if (node.velocity.length > 50.0) {
-        node.velocity = node.velocity.normalized() * 50.0;
+      final speed = node.velocity.length;
+      totalEnergy += speed * speed;
+
+      if (speed > 40.0) {
+        final scale = 40.0 / speed;
+        node.velocity.x *= scale;
+        node.velocity.y *= scale;
+        node.velocity.z *= scale;
       }
 
-      node.position += node.velocity;
+      node.position.x += node.velocity.x;
+      node.position.y += node.velocity.y;
+      node.position.z += node.velocity.z;
     }
-    
-    if (totalEnergy < 0.3) {
-      isStable = true;
+
+    if (totalEnergy < 0.2) {
+      _stableCounter++;
+      if (_stableCounter > 10) {
+        isStable = true;
+      }
+    } else {
+      _stableCounter = 0;
     }
+
+    return true;
   }
 }
 
@@ -161,6 +208,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   double _rotationX = 0.0;
   double _rotationY = 0.0;
+  double _panX = 0.0;
+  double _panY = 0.0;
   double _zoom = 1.0;
   double _baseZoom = 1.0;
 
@@ -170,14 +219,19 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   bool _isRebuilding = false;
   String? _error;
 
+  final _repaintNotifier = ValueNotifier<int>(0);
+
   @override
   void initState() {
     super.initState();
     simulation = ForceDirectedSimulation3D();
 
     _ticker = createTicker((elapsed) {
-      simulation.tick();
-      setState(() {});
+      if (simulation.tick()) {
+        _repaintNotifier.value++;
+      } else if (_ticker.isTicking) {
+        _ticker.stop();
+      }
     });
 
     _loadGraph();
@@ -186,7 +240,15 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   void dispose() {
     _ticker.dispose();
+    _repaintNotifier.dispose();
     super.dispose();
+  }
+
+  void _runLayoutSync() {
+    for (int i = 0; i < 200 && !simulation.isStable; i++) {
+      simulation.tick();
+    }
+    _repaintNotifier.value++;
   }
 
   Future<void> _loadGraph() async {
@@ -199,7 +261,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final data = await KnowledgeGraphApi.getKnowledgeGraph();
       if (!mounted) return;
       _populateGraph(data);
-      _ticker.start();
+      _runLayoutSync();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -223,13 +285,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     try {
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
-      
-      await Future.delayed(const Duration(seconds: 3));
+
+      await Future.delayed(const Duration(seconds: 5));
       if (!mounted) return;
-      
+
       await _loadGraph();
       if (!mounted) return;
-      
+
       simulation.wake();
     } catch (e) {
       if (!mounted) return;
@@ -272,9 +334,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       );
       simulation.addEdge(edge);
     }
+
+    simulation.wake();
+    _repaintNotifier.value++;
   }
 
-  v.Vector3 _randomPos3D({double spread = 800.0}) {
+  v.Vector3 _randomPos3D({double spread = 1000.0}) {
     return v.Vector3(
       (_rnd.nextDouble() - 0.5) * spread,
       (_rnd.nextDouble() - 0.5) * spread,
@@ -302,59 +367,55 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
 
-      final ui.Image image = await boundary.toImage(pixelRatio: 2.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return;
-
-      // Add Branding
+      final size = boundary.size;
+      const double scale = 3.0;
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      final int width = image.width;
-      final int height = image.height;
+
+      final int width = (size.width * scale).toInt();
+      final int height = (size.height * scale).toInt();
+
+      canvas.drawRect(Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()), Paint()..color = Colors.black);
+
+      final screenshotPainter = GraphPainter3D(
+        nodes: simulation.nodes,
+        edges: simulation.edges,
+        nodeMap: simulation.nodeMap,
+        rotationX: _rotationX,
+        rotationY: _rotationY,
+        panX: _panX * scale,
+        panY: _panY * scale,
+        zoom: _zoom * scale,
+        screenshotMode: true,
+      );
+      screenshotPainter.paint(canvas, Size(width.toDouble(), height.toDouble()));
 
       final Paint paint = Paint();
-      canvas.drawImage(image, Offset.zero, paint);
 
-      // Load Logo
       final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
       final Uint8List logoBytes = logoData.buffer.asUint8List();
       final ui.Codec codec = await ui.instantiateImageCodec(logoBytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       final ui.Image logoImage = frameInfo.image;
 
-      // Draw Logo
-      final double logoHeight = 80.0;
+      const double logoHeight = 100.0;
       final double logoScale = logoHeight / logoImage.height;
       final double logoWidth = logoImage.width * logoScale;
 
       canvas.drawImageRect(
         logoImage,
         Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble()),
-        Rect.fromLTWH(40, height - logoHeight - 40, logoWidth, logoHeight),
+        Rect.fromLTWH(50, height - logoHeight - 50, logoWidth, logoHeight),
         paint,
       );
 
-      // Draw Text
       final textSpan = TextSpan(
-        children: [
-          const TextSpan(
-            text: 'OMI',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 48,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'SF Pro Display',
-            ),
-          ),
-          TextSpan(
-            text: ' | omi.me',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 32,
-              fontFamily: 'SF Pro Display',
-            ),
-          ),
-        ],
+        text: 'omi.me',
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.85),
+          fontSize: 42,
+          fontWeight: FontWeight.w500,
+        ),
       );
 
       final textPainter = TextPainter(
@@ -362,8 +423,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         textDirection: TextDirection.ltr,
       );
       textPainter.layout();
-      // Draw text to the right of the logo
-      textPainter.paint(canvas, Offset(40 + logoWidth + 24, height - textPainter.height - 50));
+      textPainter.paint(canvas, Offset(50 + logoWidth + 20, height - logoHeight / 2 - textPainter.height / 2 - 50));
 
       final ui.Image brandedImage = await recorder.endRecording().toImage(width, height);
       final ByteData? brandedByteData = await brandedImage.toByteData(format: ui.ImageByteFormat.png);
@@ -387,27 +447,27 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Knowledge Graph', style: TextStyle(color: Colors.white70)),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Knowledge Graph', style: TextStyle(color: Colors.white70)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.purpleAccent.withOpacity(0.5)),
+              ),
+              child: const Text('BETA', style: TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
         leading: const BackButton(color: Colors.white),
         actions: [
-          if (_isRebuilding)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              onPressed: _rebuildGraph,
-              tooltip: 'Regenerate Graph',
-            ),
           IconButton(
             icon: const Icon(Icons.ios_share, color: Colors.white),
             onPressed: _shareGraph,
@@ -425,7 +485,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.cyanAccent),
+            CircularProgressIndicator(color: Colors.purpleAccent),
             SizedBox(height: 16),
             Text('Loading Knowledge Graph...', style: TextStyle(color: Colors.white70)),
           ],
@@ -470,8 +530,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               icon: const Icon(Icons.auto_fix_high),
               label: const Text('Build Graph'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.cyanAccent.withOpacity(0.2),
-                foregroundColor: Colors.cyanAccent,
+                backgroundColor: Colors.purpleAccent.withOpacity(0.2),
+                foregroundColor: Colors.purpleAccent,
               ),
             ),
           ],
@@ -486,42 +546,49 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         _baseZoom = _zoom;
       },
       onScaleUpdate: (details) {
-        simulation.wake();
         if (_lastPanStart != null) {
           final delta = details.focalPoint - _lastPanStart!;
 
-          setState(() {
-            if (details.scale == 1.0) {
-              _rotationY += delta.dx * 0.005;
-              _rotationX -= delta.dy * 0.005;
-            }
-
+          if (details.pointerCount >= 2) {
+            _panX += delta.dx;
+            _panY += delta.dy;
             if (details.scale != 1.0) {
               _zoom = _baseZoom * details.scale;
               _zoom = _zoom.clamp(0.2, 5.0);
             }
-          });
+          } else {
+            _rotationY -= delta.dx * 0.005;
+            _rotationX += delta.dy * 0.005;
+          }
 
           _lastPanStart = details.focalPoint;
+          _repaintNotifier.value++;
         }
       },
       onScaleEnd: (_) => _lastPanStart = null,
-        child: RepaintBoundary(
-          key: _graphKey,
-          child: CustomPaint(
-            size: Size.infinite,
-            painter: GraphPainter3D(
-              nodes: simulation.nodes,
-              edges: simulation.edges,
-              nodeMap: simulation.nodeMap,
-              rotationX: _rotationX,
-              rotationY: _rotationY,
-              zoom: _zoom,
-            ),
-          ),
+      child: RepaintBoundary(
+        key: _graphKey,
+        child: ValueListenableBuilder<int>(
+          valueListenable: _repaintNotifier,
+          builder: (context, _, __) {
+            return CustomPaint(
+              size: Size.infinite,
+              painter: GraphPainter3D(
+                nodes: simulation.nodes,
+                edges: simulation.edges,
+                nodeMap: simulation.nodeMap,
+                rotationX: _rotationX,
+                rotationY: _rotationY,
+                panX: _panX,
+                panY: _panY,
+                zoom: _zoom,
+              ),
+            );
+          },
         ),
-      );
-    }
+      ),
+    );
+  }
 }
 
 class GraphPainter3D extends CustomPainter {
@@ -530,7 +597,14 @@ class GraphPainter3D extends CustomPainter {
   final Map<String, GraphNode3D> nodeMap;
   final double rotationX;
   final double rotationY;
+  final double panX;
+  final double panY;
   final double zoom;
+  final bool screenshotMode;
+
+  final Paint _edgePaint = Paint()..strokeCap = StrokeCap.round;
+  final Paint _nodePaint = Paint();
+  final Paint _ringPaint = Paint()..style = PaintingStyle.stroke;
 
   GraphPainter3D({
     required this.nodes,
@@ -538,43 +612,49 @@ class GraphPainter3D extends CustomPainter {
     required this.nodeMap,
     required this.rotationX,
     required this.rotationY,
+    required this.panX,
+    required this.panY,
     required this.zoom,
+    this.screenshotMode = false,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = v.Vector2(size.width / 2, size.height / 2);
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
 
-    List<_ProjectedNode> projectedNodes = [];
-    Map<String, _ProjectedNode> projectedMap = {};
+    final cosY = cos(rotationY);
+    final sinY = sin(rotationY);
+    final cosX = cos(rotationX);
+    final sinX = sin(rotationX);
+
+    final projectedNodes = <_ProjectedNode>[];
+    final projectedMap = <String, _ProjectedNode>{};
 
     for (var node in nodes) {
-      var p = v.Vector3.copy(node.position);
+      final px = node.position.x;
+      final py = node.position.y;
+      final pz = node.position.z;
 
-      double x = p.x * cos(rotationY) - p.z * sin(rotationY);
-      double z = p.x * sin(rotationY) + p.z * cos(rotationY);
-      p.x = x;
-      p.z = z;
+      final x1 = px * cosY - pz * sinY;
+      final z1 = px * sinY + pz * cosY;
 
-      double y = p.y * cos(rotationX) - p.z * sin(rotationX);
-      z = p.y * sin(rotationX) + p.z * cos(rotationX);
-      p.y = y;
-      p.z = z;
+      final y2 = py * cosX - z1 * sinX;
+      final z2 = py * sinX + z1 * cosX;
 
-      double cameraZ = 1200.0;
-      double perspective = cameraZ / (cameraZ - p.z);
-      perspective *= zoom;
+      const cameraZ = 1500.0;
+      final perspective = (cameraZ / (cameraZ - z2)) * zoom;
 
-      final projectedX = center.x + p.x * perspective;
-      final projectedY = center.y + p.y * perspective;
+      final projectedX = centerX + x1 * perspective + panX;
+      final projectedY = centerY + y2 * perspective + panY;
 
-      double alpha = (1.0 + (p.z / 2000.0)).clamp(0.0, 1.0);
+      final alpha = (1.0 + (z2 / 2500.0)).clamp(0.0, 1.0);
 
       final proj = _ProjectedNode(
         node: node,
         x: projectedX,
         y: projectedY,
-        z: p.z,
+        z: z2,
         scale: perspective,
         alpha: alpha,
       );
@@ -585,38 +665,33 @@ class GraphPainter3D extends CustomPainter {
 
     projectedNodes.sort((a, b) => a.z.compareTo(b.z));
 
-    final Paint edgePaint = Paint()..strokeCap = StrokeCap.round;
-
     for (var edge in edges) {
       final p1 = projectedMap[edge.sourceId];
       final p2 = projectedMap[edge.targetId];
-
       if (p1 == null || p2 == null) continue;
 
-      double alpha = (p1.alpha + p2.alpha) / 2.0;
-      alpha *= 0.3;
+      final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.25).clamp(0.0, 1.0);
+      if (alpha < 0.05) continue;
 
-      edgePaint.color = Colors.white.withOpacity(alpha.clamp(0.0, 1.0));
-      edgePaint.strokeWidth = 1.0 * ((p1.scale + p2.scale) / 2);
+      _edgePaint.color = Colors.white.withOpacity(alpha);
+      _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
-      canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), edgePaint);
+      canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
 
-      if (edge.label.trim().isNotEmpty && alpha > 0.1) {
+      final avgScale = (p1.scale + p2.scale) / 2;
+      if (edge.label.isNotEmpty && avgScale > 0.6 && alpha > 0.1) {
         final midX = (p1.x + p2.x) / 2;
         final midY = (p1.y + p2.y) / 2;
-
         final textSpan = TextSpan(
           text: edge.label,
           style: TextStyle(
-            color: Colors.cyanAccent.withOpacity(p1.alpha),
-            fontSize: 12 * p1.scale,
-            fontWeight: FontWeight.w500,
-            shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
+            color: Colors.white54.withOpacity(alpha * 2),
+            fontSize: (9 * avgScale).clamp(7, 11),
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
-        tp.paint(canvas, Offset(midX - tp.width / 2, midY - tp.height / 2));
+        tp.paint(canvas, Offset(midX - tp.width / 2, midY - tp.height / 2 - 8));
       }
     }
 
@@ -625,47 +700,51 @@ class GraphPainter3D extends CustomPainter {
       final centerOffset = Offset(p.x, p.y);
       final radius = node.radius * p.scale;
 
-      final glowRadius = radius * 3.0;
-      if (glowRadius > 1.0) {
-        final glowPaint = Paint()
-          ..shader = ui.Gradient.radial(
-            centerOffset,
-            glowRadius,
-            [
-              node.baseColor.withOpacity(p.alpha * 0.8),
-              node.baseColor.withOpacity(0.0),
-            ],
-          );
-        canvas.drawCircle(centerOffset, glowRadius, glowPaint);
+      if (radius < 0.5) continue;
+
+      if (radius > 3) {
+        _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.3);
+        _ringPaint.strokeWidth = 1.5 * p.scale;
+        canvas.drawCircle(centerOffset, radius * 1.8, _ringPaint);
+        
+        _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.15);
+        _ringPaint.strokeWidth = 1.0 * p.scale;
+        canvas.drawCircle(centerOffset, radius * 2.5, _ringPaint);
       }
 
-      canvas.drawCircle(
-        centerOffset,
-        radius,
-        Paint()..color = node.baseColor.withOpacity(p.alpha),
+      final gradient = ui.Gradient.radial(
+        centerOffset + Offset(-radius * 0.25, -radius * 0.25),
+        radius * 1.2,
+        [
+          Colors.white.withOpacity(p.alpha * 0.9),
+          Color.lerp(Colors.white, node.baseColor, 0.5)!.withOpacity(p.alpha),
+          node.baseColor.withOpacity(p.alpha),
+        ],
+        [0.0, 0.3, 1.0],
       );
+      _nodePaint.shader = gradient;
+      canvas.drawCircle(centerOffset, radius, _nodePaint);
+      _nodePaint.shader = null;
 
-      if (p.scale > 0.6 && p.alpha > 0.4) {
+      final showLabel = screenshotMode || (p.scale > 0.7 && p.alpha > 0.5 && radius > 4);
+      if (showLabel) {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withOpacity(p.alpha),
-            fontSize: 12 * p.scale,
-            fontWeight: FontWeight.bold,
-            shadows: [Shadow(blurRadius: 3, color: Colors.black.withOpacity(p.alpha))],
+            color: Colors.white.withOpacity(screenshotMode ? 0.95 : p.alpha * 0.9),
+            fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
+            fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
-        tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 4));
+        tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant GraphPainter3D oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(covariant GraphPainter3D oldDelegate) => true;
 }
 
 class _ProjectedNode {
