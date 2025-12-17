@@ -5,6 +5,7 @@ import 'package:omi/models/stt_response_schema.dart';
 enum SttProvider {
   omi,
   openai,
+  openaiDiarize,
   deepgram,
   deepgramLive,
   falai,
@@ -158,6 +159,21 @@ class SttProviderConfig {
       apiKeyUrl: 'https://platform.openai.com/api-keys',
       docsUrl: 'https://platform.openai.com/docs/guides/speech-to-text',
     ),
+    SttProvider.openaiDiarize: SttProviderConfig(
+      provider: SttProvider.openaiDiarize,
+      displayName: 'OpenAI GPT-4o (Speaker)',
+      description: 'GPT-4o Transcribe with speaker diarization',
+      icon: FontAwesomeIcons.userGroup,
+      requiresApiKey: true,
+      requestType: SttRequestType.multipartForm,
+      supportedLanguages: SttLanguages.whisperSupported,
+      supportedModels: const ['gpt-4o-transcribe-diarize'],
+      defaultLanguage: 'ja',
+      defaultModel: 'gpt-4o-transcribe-diarize',
+      responseSchema: SttResponseSchema.openAIDiarize,
+      apiKeyUrl: 'https://platform.openai.com/api-keys',
+      docsUrl: 'https://platform.openai.com/docs/models/gpt-4o-transcribe-diarize',
+    ),
     SttProvider.deepgram: SttProviderConfig(
       provider: SttProvider.deepgram,
       displayName: 'Deepgram',
@@ -281,6 +297,7 @@ class SttProviderConfig {
 
   static const _visibleProviders = [
     SttProvider.openai,
+    SttProvider.openaiDiarize,
     SttProvider.deepgramLive,
     SttProvider.geminiLive,
     SttProvider.localWhisper,
@@ -348,6 +365,18 @@ class SttProviderConfig {
           'language': lang,
           'response_format': 'verbose_json',
           'timestamp_granularities[]': 'segment',
+        };
+        break;
+
+      case SttProvider.openaiDiarize:
+        config['url'] = 'https://api.openai.com/v1/audio/transcriptions';
+        config['audio_field_name'] = 'file';
+        config['headers'] = {'Authorization': 'Bearer ${apiKey ?? ''}'};
+        config['params'] = {
+          'model': 'gpt-4o-transcribe-diarize',
+          'language': lang,
+          'response_format': 'diarized_json',
+          'chunking_strategy': 'auto',
         };
         break;
 
