@@ -224,8 +224,19 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
       
-      await Future.delayed(const Duration(seconds: 3));
-      if (!mounted) return;
+      // Poll for the graph to be ready instead of using a fixed delay.
+      for (int i = 0; i < 20; i++) { // Poll for a maximum of 60 seconds
+        await Future.delayed(const Duration(seconds: 3));
+        if (!mounted) return;
+        try {
+          final data = await KnowledgeGraphApi.getKnowledgeGraph();
+          if ((data['nodes'] as List).isNotEmpty) {
+            break; // Graph is ready
+          }
+        } catch (e) {
+          // Ignore polling errors, the final _loadGraph will handle them.
+        }
+      }
       
       await _loadGraph();
       if (!mounted) return;
