@@ -283,12 +283,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
-      await KnowledgeGraphApi.rebuildKnowledgeGraph();
-      if (!mounted) return;
-
-      await Future.delayed(const Duration(seconds: 5));
-      if (!mounted) return;
-
       await _loadGraph();
       if (!mounted) return;
 
@@ -528,7 +522,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
             ElevatedButton.icon(
               onPressed: _isRebuilding ? null : _rebuildGraph,
               icon: const Icon(Icons.auto_fix_high),
-              label: const Text('Build Graph'),
+              label: const Text('Refresh Graph'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.purpleAccent.withOpacity(0.2),
                 foregroundColor: Colors.purpleAccent,
