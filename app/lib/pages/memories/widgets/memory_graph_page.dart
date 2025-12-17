@@ -53,10 +53,10 @@ class ForceDirectedSimulation3D {
   final List<GraphEdge3D> edges = [];
   final Map<String, GraphNode3D> nodeMap = {};
 
-  double repulsion = 25000.0;
-  double attraction = 0.003;
-  double centerGravity = 0.0005;
-  double damping = 0.85;
+  double repulsion = 75000.0;
+  double attraction = 0.002;
+  double centerGravity = 0.0003;
+  double damping = 0.88;
   double dt = 0.016;
   
   bool isStable = false;
@@ -79,7 +79,7 @@ class ForceDirectedSimulation3D {
     if (isStable) return;
 
     _tickCounter++;
-    if (_tickCounter % 2 != 0) return;
+    if (_tickCounter % 3 != 0) return;
     
     double totalEnergy = 0.0;
     
@@ -111,7 +111,7 @@ class ForceDirectedSimulation3D {
 
       v.Vector3 delta = n2.position - n1.position;
       double distance = delta.length;
-      double restLength = 600.0;
+      double restLength = 1800.0;
 
       double forceVal = (distance - restLength) * attraction;
 
@@ -139,7 +139,7 @@ class ForceDirectedSimulation3D {
       node.position += node.velocity;
     }
     
-    if (totalEnergy < 0.5) {
+    if (totalEnergy < 0.3) {
       isStable = true;
     }
   }
