@@ -153,7 +153,7 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 # Pre-compile all patterns for performance
 _compiled_patterns = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
-    _compiled_patterns.extend(lang_patterns)
+    _compiled_patterns.extend([re.compile(p) for p in lang_patterns])
 
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
