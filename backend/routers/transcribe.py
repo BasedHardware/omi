@@ -793,10 +793,7 @@ async def _listen(
                 pending_conversation_requests.add(conversation_id)
                 data = bytearray()
                 data.extend(struct.pack("I", 104))
-                data.extend(bytes(json.dumps({
-                    "conversation_id": conversation_id,
-                    "language": language
-                }), "utf-8"))
+                data.extend(bytes(json.dumps({"conversation_id": conversation_id, "language": language}), "utf-8"))
                 await pusher_ws.send(data)
                 print(f"Sent process_conversation request to pusher: {conversation_id}", uid, session_id)
                 return True
@@ -912,21 +909,21 @@ async def _listen(
                     if not msg or len(msg) < 4:
                         continue
                     header_type = struct.unpack('<I', msg[:4])[0]
-                    
+
                     # Conversation processed response
                     if header_type == 201:
                         result = json.loads(msg[4:].decode("utf-8"))
                         conversation_id = result.get("conversation_id")
                         pending_conversation_requests.discard(conversation_id)
-                        
+
                         if "error" in result:
                             print(f"Conversation processing failed: {result['error']}", uid, session_id)
                             continue
-                        
+
                         if result.get("success"):
                             print(f"Conversation processed by pusher: {conversation_id}", uid, session_id)
                             on_conversation_processed(conversation_id)
-                            
+
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
@@ -1275,6 +1272,49 @@ async def _listen(
         timer_start = time.time()
         last_audio_received_time = timer_start
         last_activity_time = timer_start
+
+        # STT audio buffer - accumulate 100ms before sending for better transcription quality
+        stt_audio_buffer = bytearray()
+        stt_buffer_flush_size = int(sample_rate * 2 * 0.1)  # 100ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
+
+        async def flush_stt_buffer(force: bool = False):
+            nonlocal stt_audio_buffer, speech_profile_processed, soniox_socket2, dg_socket2
+
+            if not stt_audio_buffer:
+                return
+            if not force and len(stt_audio_buffer) < stt_buffer_flush_size:
+                return
+
+            chunk = bytes(stt_audio_buffer)
+            stt_audio_buffer.clear()
+
+            elapsed_seconds = time.time() - timer_start
+
+            if soniox_socket is not None:
+                if elapsed_seconds > speech_profile_duration or not soniox_socket2:
+                    await soniox_socket.send(chunk)
+                    if soniox_socket2:
+                        print('Killing soniox_socket2', uid, session_id)
+                        await soniox_socket2.close()
+                        soniox_socket2 = None
+                        speech_profile_processed = True
+                else:
+                    await soniox_socket2.send(chunk)
+
+            if speechmatics_socket1 is not None:
+                await speechmatics_socket1.send(chunk)
+
+            if dg_socket1 is not None:
+                if elapsed_seconds > speech_profile_duration or not dg_socket2:
+                    dg_socket1.send(chunk)
+                    if dg_socket2:
+                        print('Killing deepgram_socket2', uid, session_id)
+                        dg_socket2.finish()
+                        dg_socket2 = None
+                        speech_profile_processed = True
+                else:
+                    dg_socket2.send(chunk)
+
         try:
             while websocket_active:
                 message = await websocket.receive()
@@ -1341,32 +1381,8 @@ async def _listen(
                             continue
 
                     if not use_custom_stt:
-                        if soniox_socket is not None:
-                            elapsed_seconds = time.time() - timer_start
-                            if elapsed_seconds > speech_profile_duration or not soniox_socket2:
-                                await soniox_socket.send(data)
-                                if soniox_socket2:
-                                    print('Killing soniox_socket2', uid, session_id)
-                                    await soniox_socket2.close()
-                                    soniox_socket2 = None
-                                    speech_profile_processed = True
-                            else:
-                                await soniox_socket2.send(data)
-
-                        if speechmatics_socket1 is not None:
-                            await speechmatics_socket1.send(data)
-
-                        if dg_socket1 is not None:
-                            elapsed_seconds = time.time() - timer_start
-                            if elapsed_seconds > speech_profile_duration or not dg_socket2:
-                                dg_socket1.send(data)
-                                if dg_socket2:
-                                    print('Killing deepgram_socket2', uid, session_id)
-                                    dg_socket2.finish()
-                                    dg_socket2 = None
-                                    speech_profile_processed = True
-                            else:
-                                dg_socket2.send(data)
+                        stt_audio_buffer.extend(data)
+                        await flush_stt_buffer()
 
                     if audio_bytes_send is not None:
                         audio_bytes_send(data)
@@ -1423,6 +1439,9 @@ async def _listen(
             print(f'Could not process data: error {e}', uid, session_id)
             websocket_close_code = 1011
         finally:
+            # Flush any remaining audio in buffer to STT
+            if not use_custom_stt:
+                await flush_stt_buffer(force=True)
             websocket_active = False
 
     # Start
