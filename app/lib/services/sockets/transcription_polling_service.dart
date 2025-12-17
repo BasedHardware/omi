@@ -237,7 +237,7 @@ class SchemaBasedSttProvider implements ISttProvider {
   /// ref: https://platform.openai.com/docs/models/gpt-4o-transcribe-diarize
   factory SchemaBasedSttProvider.openAIDiarize({
     required String apiKey,
-    String language = 'ja',
+    String language = 'en',
   }) {
     return SchemaBasedSttProvider(
       apiUrl: 'https://api.openai.com/v1/audio/transcriptions',

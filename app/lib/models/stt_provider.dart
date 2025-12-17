@@ -168,7 +168,7 @@ class SttProviderConfig {
       requestType: SttRequestType.multipartForm,
       supportedLanguages: SttLanguages.whisperSupported,
       supportedModels: const ['gpt-4o-transcribe-diarize'],
-      defaultLanguage: 'ja',
+      defaultLanguage: 'en',
       defaultModel: 'gpt-4o-transcribe-diarize',
       responseSchema: SttResponseSchema.openAIDiarize,
       apiKeyUrl: 'https://platform.openai.com/api-keys',
@@ -373,7 +373,7 @@ class SttProviderConfig {
         config['audio_field_name'] = 'file';
         config['headers'] = {'Authorization': 'Bearer ${apiKey ?? ''}'};
         config['params'] = {
-          'model': 'gpt-4o-transcribe-diarize',
+          'model': mdl.isNotEmpty ? mdl : 'gpt-4o-transcribe-diarize',
           'language': lang,
           'response_format': 'diarized_json',
           'chunking_strategy': 'auto',
