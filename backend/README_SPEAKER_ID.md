@@ -1,3 +1,4 @@
+
 # Speaker Identification Module
 
 Self-hosted LLM-based speaker identification for the Omi wearable project.
@@ -46,9 +47,9 @@ speakers = identify_speaker_from_transcript("Hey Alice and Bob, can you help?")
 speakers = identify_speaker_from_transcript("I told Alice about the meeting")
 # Result: None
 
-# Legacy function (returns single string)
+# Legacy function (Self-Identification only)
 from backend.utils.speaker_identification import detect_speaker_from_text
-name = detect_speaker_from_text("Hey Alice, help me")
+name = detect_speaker_from_text("My name is Alice")
 # Result: 'Alice'
 ```
 
@@ -78,6 +79,15 @@ backend/utils/
 ```
 
 ## Testing
+
+Run the comprehensive pytest suite to verify both legacy regex and new LLM logic:
+
+```bash
+# From omi project root
+python3 -m pytest backend/tests/test_speaker_identification.py
+```
+
+Or run manual spot checks:
 
 ```bash
 python3 -c "
