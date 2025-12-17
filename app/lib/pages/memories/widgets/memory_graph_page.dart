@@ -229,6 +229,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   final _repaintNotifier = ValueNotifier<int>(0);
   Timer? _refreshTimer;
 
+  String? _selectedNodeId;
+  Set<String> _highlightedNodeIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -614,7 +617,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       );
     }
 
-    return GestureDetector(
+    return LayoutBuilder(builder: (context, constraints) {
+      return GestureDetector(
+        onTapUp: (details) => _handleTap(details, Size(constraints.maxWidth, constraints.maxHeight)),
       onScaleStart: (details) {
         simulation.wake();
         _lastPanStart = details.focalPoint;
@@ -657,12 +662,120 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 panX: _panX,
                 panY: _panY,
                 zoom: _zoom,
+                highlightedNodeIds: _highlightedNodeIds,
               ),
             );
           },
         ),
       ),
     );
+    });
+  }
+  
+  void _handleTap(TapUpDetails details, Size size) {
+    // 1. CLEAR SELECTION if background tapped (default)
+    String? hitNodeId;
+    
+    // 2. HIT TEST
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
+    final cosY = cos(_rotationY);
+    final sinY = sin(_rotationY);
+    final cosX = cos(_rotationX);
+    final sinX = sin(_rotationX);
+
+    // Sort nodes by depth (z) to hit the front-most one, similar to painter
+    // Actually painter sorts by Z, but for hit test we can just check distance in 2D
+    // But front nodes should block back nodes? 
+    // For simplicity, we just find the closest node to the tap within a radius.
+    // If overlapping, maybe closest Z wins? Let's just do simple radius check.
+
+    double minDist = 30.0; // Hit radius
+    _ProjectedNode? closestHit;
+
+    for (var node in simulation.nodes) {
+       // Manual Projection
+       final px = node.position.x;
+       final py = node.position.y;
+       final pz = node.position.z;
+       final x1 = px * cosY - pz * sinY;
+       final z1 = px * sinY + pz * cosY;
+       final y2 = py * cosX - z1 * sinX;
+       final z2 = py * sinX + z1 * cosX;
+       const cameraZ = 1500.0;
+       
+       if (cameraZ - z2 <= 0) continue; // Behind camera
+
+       final perspective = (cameraZ / (cameraZ - z2)) * _zoom;
+       final projX = centerX + x1 * perspective + _panX;
+       final projY = centerY + y2 * perspective + _panY;
+       
+       final dist = (Offset(projX, projY) - details.localPosition).distance;
+       
+       // Dynamic radius based on scale
+       final radius = 12.0 * perspective; 
+       // Give it a bit of padding for easier tapping
+       final hitThreshold = max(radius * 1.5, 20.0);
+
+       if (dist < hitThreshold && dist < minDist) {
+         minDist = dist;
+         // Store simplified projected info for z-check if needed, but simple min dist is okay for sparse graphs
+         closestHit = _ProjectedNode(
+            node: node, x: projX, y: projY, z: z2, scale: perspective, alpha: 1.0
+         );
+       }
+    }
+
+    if (closestHit != null) {
+      hitNodeId = closestHit.node.id;
+    }
+
+    if (hitNodeId == _selectedNodeId && hitNodeId != null) {
+      // Toggle off if tapping same node? Or maybe keep it? 
+      // User might want to deselect. Let's allowing toggling off.
+       hitNodeId = null;
+    }
+
+    setState(() {
+      _selectedNodeId = hitNodeId;
+      _highlightedNodeIds.clear();
+      
+      if (hitNodeId != null) {
+        _highlightedNodeIds.add(hitNodeId!);
+        
+        // Find neighbors
+        final neighbors = <String>[];
+        for (var edge in simulation.edges) {
+          if (edge.sourceId == hitNodeId) neighbors.add(edge.targetId);
+          if (edge.targetId == hitNodeId) neighbors.add(edge.sourceId);
+        }
+        
+        // "Closest 4" - sorting by 3D distance
+        // We need the GraphNode3D objects
+        final centerNode = simulation.nodeMap[hitNodeId];
+        if (centerNode != null) {
+             neighbors.sort((a, b) {
+                final na = simulation.nodeMap[a];
+                final nb = simulation.nodeMap[b];
+                if (na == null || nb == null) return 0;
+                // distSq
+                final da = _distSq(centerNode.position, na.position);
+                final db = _distSq(centerNode.position, nb.position);
+                return da.compareTo(db);
+             });
+        }
+        
+        // Take top 4 and add them
+        _highlightedNodeIds.addAll(neighbors.take(4));
+      }
+    });
+  }
+
+  double _distSq(v.Vector3 a, v.Vector3 b) {
+    final dx = a.x - b.x;
+    final dy = a.y - b.y;
+    final dz = a.z - b.z;
+    return dx * dx + dy * dy + dz * dz;
   }
 }
 
@@ -676,6 +789,7 @@ class GraphPainter3D extends CustomPainter {
   final double panY;
   final double zoom;
   final bool screenshotMode;
+  final Set<String> highlightedNodeIds;
 
   final Paint _edgePaint = Paint()..strokeCap = StrokeCap.round;
   final Paint _nodePaint = Paint();
@@ -691,6 +805,7 @@ class GraphPainter3D extends CustomPainter {
     required this.panY,
     required this.zoom,
     this.screenshotMode = false,
+    this.highlightedNodeIds = const {},
   });
 
   @override
@@ -724,6 +839,12 @@ class GraphPainter3D extends CustomPainter {
       final projectedY = centerY + y2 * perspective + panY;
 
       final alpha = (1.0 + (z2 / 2500.0)).clamp(0.0, 1.0);
+      
+      // Dimming logic
+      double finalAlpha = alpha;
+      if (highlightedNodeIds.isNotEmpty && !highlightedNodeIds.contains(node.id)) {
+        finalAlpha *= 0.15; // Dim significantly
+      }
 
       final proj = _ProjectedNode(
         node: node,
@@ -731,7 +852,7 @@ class GraphPainter3D extends CustomPainter {
         y: projectedY,
         z: z2,
         scale: perspective,
-        alpha: alpha,
+        alpha: finalAlpha,
       );
 
       projectedNodes.add(proj);
@@ -751,10 +872,24 @@ class GraphPainter3D extends CustomPainter {
       _edgePaint.color = Colors.white.withOpacity(alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
-      canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
+      // Drawn above with logic
+
 
       final avgScale = (p1.scale + p2.scale) / 2;
-      if (edge.label.isNotEmpty && avgScale > 0.6 && alpha > 0.1) {
+      
+      // Highlight edge if BOTH nodes are in the highlighted set
+      final isHighlightedEdge = highlightedNodeIds.contains(edge.sourceId) && highlightedNodeIds.contains(edge.targetId);
+      final isDimmed = highlightedNodeIds.isNotEmpty && !isHighlightedEdge;
+      
+      if (isDimmed) {
+         _edgePaint.color = _edgePaint.color.withOpacity(alpha * 0.1);
+      } else if (isHighlightedEdge) {
+         _edgePaint.color = Colors.white.withOpacity(max(alpha, 0.8)); // Pop
+      }
+
+      canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
+
+      if (edge.label.isNotEmpty && avgScale > 0.6 && alpha > 0.1 && (!isDimmed || isHighlightedEdge)) {
         final midX = (p1.x + p2.x) / 2;
         final midY = (p1.y + p2.y) / 2;
         final textSpan = TextSpan(
