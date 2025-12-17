@@ -582,6 +582,8 @@ class RichContent extends StatelessWidget {
 
 
   Widget _buildMap(_MapComponent component) {
+    // Use a cache key based on lat/lng to avoid redundant network requests
+    final cacheKey = '${component.lat},${component.lng}';
     return GestureDetector(
       onTap: () => MapsUtil.launchMap(component.lat, component.lng),
       child: Container(
@@ -596,6 +598,7 @@ class RichContent extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: CachedNetworkImage(
             imageUrl: MapsUtil.getMapImageUrl(component.lat, component.lng),
+            cacheKey: cacheKey,
             fit: BoxFit.cover,
             placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
             errorWidget: (context, url, error) => const Center(child: Icon(Icons.map, size: 40, color: Colors.white54)),
