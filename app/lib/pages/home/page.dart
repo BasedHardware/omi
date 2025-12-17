@@ -643,26 +643,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(28),
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Colors.deepPurple.shade700,
-                                              Colors.purple.shade700,
-                                              Colors.deepPurple.shade700,
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.3),
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
+                                          color: Colors.deepPurple,
                                         ),
                                         child: const Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -674,7 +655,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                             ),
                                             SizedBox(width: 8),
                                             Text(
-                                              'Chat',
+                                              'Ask Omi',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 16,
@@ -793,17 +774,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return const SizedBox.shrink();
                   }
 
-                  // Hide search button if search bar is visible OR if there's an active search query
-                  bool shouldShowSearchButton = !homeProvider.showConvoSearchBar && convoProvider.previousQuery.isEmpty;
+                  // Hide search button if there's an active search query
+                  bool shouldShowSearchButton = convoProvider.previousQuery.isEmpty;
                   return Row(
                     children: [
-                      // Search button - only show when search bar is hidden and no active search
+                      // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
                         Container(
                           width: 36,
                           height: 36,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF1F1F25),
+                          decoration: BoxDecoration(
+                            color: homeProvider.showConvoSearchBar
+                                ? Colors.deepPurple.withValues(alpha: 0.5)
+                                : const Color(0xFF1F1F25),
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
