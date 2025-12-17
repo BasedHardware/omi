@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 
@@ -54,9 +55,6 @@ class KnowledgeNode:
             created_at=data.get('created_at'),
             updated_at=data.get('updated_at'),
         )
-        if 'label_lower' in data:
-            node.label_lower = data['label_lower']
-        return node
 
 
 class KnowledgeEdge:
