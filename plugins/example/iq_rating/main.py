@@ -1806,13 +1806,14 @@ async def setup_status():
     return {"is_setup_completed": True}
 
 
-# Standalone app for local development
+# Create app for deployment (Railway, etc.)
+from fastapi import FastAPI as StandaloneApp
+app = StandaloneApp(title="IQ Rating", version="1.0.0")
+app.include_router(router)
+
+
+# Standalone runner for local development
 if __name__ == '__main__':
-    from fastapi import FastAPI
     import uvicorn
-    
-    app = FastAPI(title="IQ Rating", version="1.0.0")
-    app.include_router(router)
-    
     port = int(os.getenv('PORT', 8765))
     uvicorn.run(app, host='0.0.0.0', port=port)
