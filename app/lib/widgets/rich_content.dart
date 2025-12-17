@@ -597,9 +597,7 @@ class RichContent extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: CachedNetworkImage(
-            final imageUrl = MapsUtil.getMapImageUrl(component.lat, component.lng);
-            ...
-            imageUrl: imageUrl,
+            imageUrl: MapsUtil.getMapImageUrl(component.lat, component.lng),
             cacheKey: cacheKey,
             fit: BoxFit.cover,
             placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
