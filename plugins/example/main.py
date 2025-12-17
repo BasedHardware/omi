@@ -12,6 +12,7 @@ from chatgpt import main as chatgpt_router
 from subscription import main as subscription_router
 from notifications import hey_omi
 from notifications.mentor import main as omi_mentor
+from iq_rating import main as iq_rating_router
 
 # from ahda import client as ahda_realtime_transcription_router
 # from advanced import openglass as advanced_openglass_router
@@ -79,3 +80,6 @@ app.include_router(subscription_router.router)
 # Notifications
 app.include_router(hey_omi.router)
 app.include_router(omi_mentor.router)
+
+# IQ Rating
+app.include_router(iq_rating_router.router)
