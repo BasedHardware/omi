@@ -321,6 +321,23 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
+        
+        try:
+            from utils.llm.knowledge_graph import extract_knowledge_from_memory
+            from database import users as users_db
+            
+            user = users_db.get_user_store_recording_permission(uid)
+            user_name = user.get('name', 'User') if user else 'User'
+            
+            from database.memories import set_memory_kg_extracted
+            
+            for memory_db_obj in parsed_memories:
+                if memory_db_obj.kg_extracted:
+                    continue
+                extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
+                set_memory_kg_extracted(uid, memory_db_obj.id)
+        except Exception as e:
+            print(f"Error extracting knowledge graph: {e}")
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):

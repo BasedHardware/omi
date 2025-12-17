@@ -128,10 +128,12 @@ STRICT EXCLUSION RULES - DO NOT extract if memory is:
 ❌ "Has meetings regularly" (if user is in a corporate job)
 
 CRITICAL DEDUPLICATION RULES:
-• DO NOT extract memories >90% similar to existing memories listed below
-• Check both the content AND the context
-• Consider semantic similarity, not just exact word matches
-• If unsure whether something is duplicate, treat it as duplicate (DON'T extract)
+• You are provided with a large list of existing memories. SCAN IT COMPLETELY.
+• ABSOLUTELY FORBIDDEN to add a memory if it (or something semantically similar) already exists.
+• If a memory exists like "Likes coffee", DO NOT add "Enjoys drinking coffee".
+• WE WOULD RATHER MISS A MEMORY THAN HAVE A DUPLICATE.
+• CHECK EVERY CANDIDATE MEMORY AGAINST THE ENTIRE EXISTING LIST.
+• If unsure whether something is duplicate, DISCARD IT.
 
 Examples of DUPLICATES (DO NOT extract):
 - "Loves Italian food" (existing) vs "Enjoys pasta and pizza" → DUPLICATE

@@ -131,6 +131,7 @@ dependencies:
   fl_chart: ^0.68.0
   image: ^4.3.0
   calendar_date_picker2: ^2.0.1
+  graphview: ^1.2.0
 
 dependency_overrides:
   js: ^0.7.1

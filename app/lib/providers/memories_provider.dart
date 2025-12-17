@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
@@ -11,7 +12,6 @@ import 'package:flutter/material.dart';
 
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
-  List<Memory> _unreviewed = [];
   bool _loading = true;
   String _searchQuery = '';
   MemoryCategory? _categoryFilter;
@@ -20,7 +20,6 @@ class MemoriesProvider extends ChangeNotifier {
   MemoryCategory? selectedCategory;
 
   List<Memory> get memories => _memories;
-  List<Memory> get unreviewed => _unreviewed;
   bool get loading => _loading;
   String get searchQuery => _searchQuery;
   MemoryCategory? get categoryFilter => _categoryFilter;
@@ -65,10 +64,17 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setCategoryFilter(MemoryCategory? category) {
+  void setCategoryFilter(MemoryCategory? category) async {
     _categoryFilter = category;
     _excludeInteresting = false; // Reset exclude filter when setting a category filter
     notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    if (category == null) {
+      await prefs.setString('memories_filter', 'all');
+    } else {
+      await prefs.setString('memories_filter', category.name);
+    }
   }
 
   void _setCategories() {
@@ -80,7 +86,24 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    await _loadFilter();
     await loadMemories();
+  }
+
+  Future<void> _loadFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    final filter = prefs.getString('memories_filter');
+    if (filter != null) {
+      if (filter == 'all') {
+        _categoryFilter = null;
+      } else {
+        try {
+          _categoryFilter = MemoryCategory.values.firstWhere((e) => e.name == filter);
+        } catch (_) {
+          _categoryFilter = null;
+        }
+      }
+    }
   }
 
   Future<void> loadMemories() async {
@@ -88,10 +111,6 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     _memories = await getMemories();
-    _unreviewed = _memories
-        .where(
-            (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
-        .toList();
 
     _loading = false;
     _setCategories();
@@ -110,7 +129,6 @@ class MemoriesProvider extends ChangeNotifier {
     _pendingDeletionId = memory.id;
 
     _memories.remove(memory);
-    _unreviewed.remove(memory);
     _setCategories();
     notifyListeners();
 
@@ -145,10 +163,6 @@ class MemoriesProvider extends ChangeNotifier {
     _pendingDeletionId = null;
 
     _memories.add(_lastDeletedMemory!);
-    if (!_lastDeletedMemory!.reviewed &&
-        _lastDeletedMemory!.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))) {
-      _unreviewed.add(_lastDeletedMemory!);
-    }
 
     _setCategories();
     notifyListeners();
@@ -163,7 +177,6 @@ class MemoriesProvider extends ChangeNotifier {
     final int countBeforeDeletion = _memories.length;
     await deleteAllMemoriesServer();
     _memories.clear();
-    _unreviewed.clear();
     if (countBeforeDeletion > 0) {
       MixpanelManager().memoriesAllDeleted(countBeforeDeletion);
     }
@@ -184,7 +197,7 @@ class MemoriesProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         conversationId: null,
-        reviewed: false,
+        reviewed: true,
         manuallyAdded: true,
         visibility: visibility,
       );
@@ -203,7 +216,6 @@ class MemoriesProvider extends ChangeNotifier {
       Memory memoryToUpdate = _memories[idx];
       memoryToUpdate.visibility = visibility;
       _memories[idx] = memoryToUpdate;
-      _unreviewed.removeWhere((m) => m.id == memory.id);
 
       MixpanelManager().memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
@@ -224,46 +236,11 @@ class MemoriesProvider extends ChangeNotifier {
         memory.edited = true;
         _memories[idx] = memory;
 
-        // Remove from unreviewed if it was there
-        final unreviewedIdx = _unreviewed.indexWhere((m) => m.id == memory.id);
-        if (unreviewedIdx != -1) {
-          _unreviewed.removeAt(unreviewedIdx);
-        }
-
         _setCategories();
       }
     }
 
     return success;
-  }
-
-  void reviewMemory(Memory memory, bool approved, String source) async {
-    MixpanelManager().memoryReviewed(memory, approved, source);
-
-    await reviewMemoryServer(memory.id, approved);
-
-    final idx = _memories.indexWhere((m) => m.id == memory.id);
-    if (idx != -1) {
-      memory.reviewed = true;
-      memory.userReview = approved;
-
-      if (!approved) {
-        memory.deleted = true;
-        _memories.removeAt(idx);
-        _unreviewed.remove(memory);
-        // Don't call deleteMemory again because it would be a duplicate deletion
-      } else {
-        _memories[idx] = memory;
-
-        // Remove from unreviewed list
-        final unreviewedIdx = _unreviewed.indexWhere((m) => m.id == memory.id);
-        if (unreviewedIdx != -1) {
-          _unreviewed.removeAt(unreviewedIdx);
-        }
-      }
-
-      _setCategories();
-    }
   }
 
   Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
