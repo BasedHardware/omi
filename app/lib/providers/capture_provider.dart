@@ -209,6 +209,8 @@ class CaptureProvider extends ChangeNotifier
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
+  Timer? _voiceCommandTimeoutTimer; // Auto-discard timeout for ask-question sessions
+  static const int _voiceCommandTimeoutSeconds = 15; // 15s timeout for accidental press detection
 
   StreamSubscription? _storageStream;
 
@@ -412,7 +414,7 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  // Just incase the ble connection get loss
+  // Just in case the BLE connection gets lost - watch for button state changes
   void _watchVoiceCommands(String deviceId, DateTime session) {
     Timer.periodic(const Duration(seconds: 3), (t) async {
       debugPrint("voice command watch");
@@ -425,8 +427,11 @@ class CaptureProvider extends ChangeNotifier
       var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("watch device button $buttonState");
 
-      // Force process
-      if (buttonState == 5 && session == _voiceCommandSession) {
+      // Force process if we detect a single tap (buttonState == 1) to end session
+      // This handles edge cases where the BLE notification was missed
+      if (buttonState == 1 && session == _voiceCommandSession) {
+        debugPrint("Force ending voice command session via watch");
+        _voiceCommandTimeoutTimer?.cancel(); // Cancel the timeout timer
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
         _commandBytes = [];
@@ -443,6 +448,41 @@ class CaptureProvider extends ChangeNotifier
       if (snapshot.isEmpty || snapshot.length < 4) return;
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("device button $buttonState");
+
+      // single tap (buttonState == 1) - toggle ask-question (voice command) session
+      if (buttonState == 1) {
+        debugPrint("Single tap detected");
+
+        if (_voiceCommandSession == null) {
+          // Start ask-question session
+          debugPrint("Single tap: starting ask-question session");
+          _voiceCommandSession = DateTime.now();
+          _commandBytes = [];
+          _watchVoiceCommands(deviceId, _voiceCommandSession!);
+          _playSpeakerHaptic(deviceId, 1);
+
+          // Start auto-discard timeout (15s) to handle accidental presses
+          _voiceCommandTimeoutTimer?.cancel();
+          _voiceCommandTimeoutTimer = Timer(Duration(seconds: _voiceCommandTimeoutSeconds), () {
+            if (_voiceCommandSession != null) {
+              debugPrint(
+                  "Ask-question session timed out after ${_voiceCommandTimeoutSeconds}s - discarding as accidental press");
+              _voiceCommandSession = null;
+              _commandBytes = [];
+              // No processing - this was likely an accidental press
+            }
+          });
+        } else {
+          // End ask-question session and process
+          debugPrint("Single tap: ending ask-question session");
+          _voiceCommandTimeoutTimer?.cancel(); // Cancel the timeout timer
+          _voiceCommandSession = null; // end session
+          var data = List<List<int>>.from(_commandBytes);
+          _commandBytes = [];
+          _processVoiceCommandBytes(deviceId, data);
+        }
+        return;
+      }
 
       // double tap
       if (buttonState == 2) {
@@ -495,20 +535,17 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
 
-      // start long press (for voice commands)
-      if (buttonState == 3 && _voiceCommandSession == null) {
-        _voiceCommandSession = DateTime.now();
-        _commandBytes = [];
-        _watchVoiceCommands(deviceId, _voiceCommandSession!);
-        _playSpeakerHaptic(deviceId, 1);
+      // Long press (buttonState == 3) - no longer used for voice commands
+      // Voice commands now triggered by single tap toggle
+      // Keeping the event logging for debugging purposes
+      if (buttonState == 3) {
+        debugPrint("Long press detected (ignored - voice commands now use single tap toggle)");
       }
 
-      // release (end voice command)
-      if (buttonState == 5 && _voiceCommandSession != null) {
-        _voiceCommandSession = null; // end session
-        var data = List<List<int>>.from(_commandBytes);
-        _commandBytes = [];
-        _processVoiceCommandBytes(deviceId, data);
+      // Release (buttonState == 5) - no longer used for voice command end
+      // Voice commands now ended by second single tap
+      if (buttonState == 5) {
+        debugPrint("Release detected (ignored - voice commands now use single tap toggle)");
       }
     });
   }

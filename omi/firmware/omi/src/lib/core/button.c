@@ -147,15 +147,17 @@ static inline void notify_long_tap()
 #define BUTTON_PRESSED 1
 #define BUTTON_RELEASED 0
 
-#define TAP_THRESHOLD 300     // 300 ms for single tap
-#define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 1000  // 1000 ms for long press
+#define TAP_THRESHOLD 300       // 300 ms for single tap
+#define DOUBLE_TAP_WINDOW 600   // 600 ms maximum for double-tap
+#define LONG_PRESS_TIME 1000    // 1000 ms for long press
+#define HOLD_POWEROFF_TIME 4500 // 4500 ms (4.5s) for hold-to-poweroff
 
 typedef enum {
     BUTTON_EVENT_NONE,
     BUTTON_EVENT_SINGLE_TAP,
     BUTTON_EVENT_DOUBLE_TAP,
     BUTTON_EVENT_LONG_PRESS,
+    BUTTON_EVENT_HOLD_POWEROFF,
     BUTTON_EVENT_RELEASE
 } ButtonEvent;
 
@@ -208,18 +210,22 @@ void check_button_level(struct k_work *work_item)
         }
     }
 
-    // Check for long press
-    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME) {
+    // Check for long press (1s) - used for voice command start notification
+    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME &&
+        (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL < HOLD_POWEROFF_TIME) {
         event = BUTTON_EVENT_LONG_PRESS;
     }
 
-    // Single tap
+    // Check for hold-to-poweroff (4.5s) - triggers device shutdown
+    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= HOLD_POWEROFF_TIME) {
+        event = BUTTON_EVENT_HOLD_POWEROFF;
+    }
+
+    // Single tap - notify only, no power off (power off moved to long hold)
     if (event == BUTTON_EVENT_SINGLE_TAP) {
         LOG_INF("single tap detected\n");
         btn_last_event = event;
         notify_tap();
-
-        turnoff_all();
     }
 
     // Double tap
@@ -229,11 +235,18 @@ void check_button_level(struct k_work *work_item)
         notify_double_tap();
     }
 
-    // Long press, one time event
+    // Long press, one time event (still notified for voice command compatibility)
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
         LOG_INF("long press detected\n");
         btn_last_event = event;
         notify_long_tap();
+    }
+
+    // Hold-to-poweroff (4.5s), one time event - triggers device shutdown
+    if (event == BUTTON_EVENT_HOLD_POWEROFF && btn_last_event != BUTTON_EVENT_HOLD_POWEROFF) {
+        LOG_INF("hold-to-poweroff detected (4.5s hold)\n");
+        btn_last_event = event;
+        turnoff_all();
     }
 
     // Releases, one time event
