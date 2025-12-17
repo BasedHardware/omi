@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
 from database import users as users_db
-from utils.llm.knowledge_graph import extract_knowledge_from_memory
+from utils.llm.knowledge_graph import extract_knowledge_from_memory, rebuild_knowledge_graph
 from utils.other import endpoints as auth
 
 
@@ -47,6 +47,28 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
         edges=graph.get('edges', [])
     )
 
+def _rebuild_graph_task(uid: str, user_name: str):
+    memories = memories_db.get_memories(uid, limit=500)
+    rebuild_knowledge_graph(uid, memories, user_name)
+
+
+@router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
+def rebuild_graph(
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.get_current_user_uid)
+):
+    user = users_db.get_user_store_recording_permission(uid)
+    user_name = user.get('name', 'User') if user else 'User'
+    
+    kg_db.delete_knowledge_graph(uid)
+    
+    background_tasks.add_task(_rebuild_graph_task, uid, user_name)
+    
+    return RebuildResponse(
+        status="rebuilding",
+        nodes_count=0,
+        edges_count=0
+    )
 
 
 

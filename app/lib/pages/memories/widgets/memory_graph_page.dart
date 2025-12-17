@@ -283,6 +283,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
+      await KnowledgeGraphApi.rebuildKnowledgeGraph();
+      if (!mounted) return;
+
+      // Wait for backend to process
+      await Future.delayed(const Duration(seconds: 3));
+      if (!mounted) return;
+
       await _loadGraph();
       if (!mounted) return;
 
@@ -462,11 +469,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         centerTitle: true,
         leading: const BackButton(color: Colors.white),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share, color: Colors.white),
-            onPressed: _shareGraph,
-            tooltip: 'Share',
-          ),
+          if (simulation.nodes.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.ios_share, color: Colors.white),
+              onPressed: _shareGraph,
+              tooltip: 'Share',
+            ),
         ],
       ),
       body: _buildBody(),
@@ -510,25 +518,44 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     if (simulation.nodes.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
-            const SizedBox(height: 16),
-            const Text('No knowledge graph yet', style: TextStyle(color: Colors.white70, fontSize: 18)),
-            const SizedBox(height: 8),
-            const Text('Tap rebuild to generate from your memories', style: TextStyle(color: Colors.white38)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _isRebuilding ? null : _rebuildGraph,
-              icon: const Icon(Icons.auto_fix_high),
-              label: const Text('Refresh Graph'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purpleAccent.withOpacity(0.2),
-                foregroundColor: Colors.purpleAccent,
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
+              const SizedBox(height: 16),
+              const Text('No knowledge graph yet', style: TextStyle(color: Colors.white70, fontSize: 18)),
+              const SizedBox(height: 12),
+              Text(
+                _isRebuilding 
+                  ? 'Building your knowledge graph from memories...'
+                  : 'Your knowledge graph will be built automatically as you create new memories.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white38, fontSize: 14),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+              if (_isRebuilding)
+                SizedBox(
+                  width: 200,
+                  child: LinearProgressIndicator(
+                    backgroundColor: Colors.white10,
+                    color: Colors.purpleAccent,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                )
+              else
+                ElevatedButton.icon(
+                  onPressed: _rebuildGraph,
+                  icon: const Icon(Icons.auto_fix_high),
+                  label: const Text('Build Graph'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purpleAccent.withOpacity(0.2),
+                    foregroundColor: Colors.purpleAccent,
+                  ),
+                ),
+            ],
+          ),
         ),
       );
     }

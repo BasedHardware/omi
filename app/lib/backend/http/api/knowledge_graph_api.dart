@@ -21,6 +21,21 @@ class KnowledgeGraphApi {
     }
   }
 
+  static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
+    final response = await makeApiCall(
+      url: '$_baseUrl/rebuild',
+      headers: {},
+      body: '{}',
+      method: 'POST',
+    );
+
+    if (response != null && response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to rebuild knowledge graph: ${response?.body}');
+    }
+  }
+
 
 
   static Future<void> deleteKnowledgeGraph() async {
