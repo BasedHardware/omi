@@ -13,7 +13,6 @@ from subscription import main as subscription_router
 from notifications import hey_omi
 from notifications.mentor import main as omi_mentor
 from notifications.teacher import main as omi_teacher
-from webhook import main as webhook_router
 
 # from ahda import client as ahda_realtime_transcription_router
 # from advanced import openglass as advanced_openglass_router
@@ -95,7 +94,3 @@ app.include_router(subscription_router.router)
 app.include_router(hey_omi.router)
 app.include_router(omi_mentor.router)
 app.include_router(omi_teacher.router)
-
-# Webhook
-app.include_router(webhook_router.router)
-
