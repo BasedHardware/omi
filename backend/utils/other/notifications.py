@@ -94,7 +94,8 @@ def _send_summary_notification(user_data: tuple):
     )
     chat_db.add_summary_message(summary, uid)
     threading.Thread(target=day_summary_webhook, args=(uid, summary)).start()
-    send_notification(uid, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
+    tokens = user_data[1] if len(user_data) > 1 else None
+    send_notification(uid, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens)
 
 
 async def _send_bulk_summary_notification(users: list):
