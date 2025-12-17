@@ -121,7 +121,6 @@ class RichContent extends StatelessWidget {
           components.add(_TagsComponent(tags));
         }
       }
-      // Map
       else if (line.startsWith(':::map')) {
         if (buffer.isNotEmpty) {
           components.add(_TextComponent(buffer.toString().trim()));
@@ -130,14 +129,15 @@ class RichContent extends StatelessWidget {
         // :::map lat=37.7749 lng=-122.4194
         final latMatch = RegExp(r'lat=([-0-9.]+)').firstMatch(line);
         final lngMatch = RegExp(r'lng=([-0-9.]+)').firstMatch(line);
-        
         if (latMatch != null && lngMatch != null) {
           final lat = double.tryParse(latMatch.group(1) ?? '0') ?? 0;
           final lng = double.tryParse(lngMatch.group(1) ?? '0') ?? 0;
-          components.add(_MapComponent(lat, lng));
+          // Validate latitude and longitude ranges
+          if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            components.add(_MapComponent(lat, lng));
+          }
         }
       }
-      // Share Location
       else if (line.startsWith(':::shareLocation')) {
          if (buffer.isNotEmpty) {
           components.add(_TextComponent(buffer.toString().trim()));
