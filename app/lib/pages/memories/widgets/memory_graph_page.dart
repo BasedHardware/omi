@@ -307,13 +307,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
-      // Wait for backend to process
-      await Future.delayed(const Duration(seconds: 3));
+      // Clean polling approach with timeout
+      final data = await KnowledgeGraphApi.waitForGraphStability();
       if (!mounted) return;
 
-      await _loadGraph();
-      if (!mounted) return;
-
+      _populateGraph(data);
+      _runLayoutSync();
+      
       simulation.wake();
     } catch (e) {
       if (!mounted) return;
