@@ -610,7 +610,7 @@ class RichContent extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       alignment: Alignment.centerLeft,
       child: ElevatedButton.icon(
-        onPressed: () => onAction?.call('shareLocation', {}),
+        onPressed: onAction != null ? () => onAction!.call('shareLocation', {}) : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blueAccent,
           foregroundColor: Colors.white,
