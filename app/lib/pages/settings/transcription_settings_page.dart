@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:device_info_plus/device_info_plus.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -601,6 +602,163 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
+  Future<void> _switchToOnDevice() async {
+    bool isLowSpec = false;
+    String specDetails = '';
+
+      final deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        // Check RAM using /proc/meminfo as reliable fallback
+        try {
+            final memInfo = await File('/proc/meminfo').readAsString();
+            final totalMemLine = memInfo.split('\n').firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
+            if (totalMemLine.isNotEmpty) {
+                final parts = totalMemLine.split(RegExp(r'\s+'));
+                // MemTotal: 123456 kB
+                if (parts.length >= 2) {
+                    final kb = int.tryParse(parts[1]);
+                    if (kb != null) {
+                        final gb = kb / 1024 / 1024;
+                         // < 3.5 GB
+                         if (gb < 3.5) {
+                            isLowSpec = true;
+                            specDetails = 'Detected RAM: ${gb.toStringAsFixed(1)} GB. Minimum recommended: 4 GB.';
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            debugPrint('Error reading meminfo: $e');
+        }
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        final machine = iosInfo.utsname.machine;
+        debugPrint('Device Model: $machine');
+        
+        // Logical check for older iPhones (iPhone X and older are < 11)
+        // iPhone11,x = XS/XR (3GB/4GB)
+        // iPhone10,x = X/8 (3GB/2GB) -> Block
+        if (machine.startsWith('iPhone')) {
+          final match = RegExp(r'iPhone(\d+),').firstMatch(machine);
+          if (match != null) {
+             final version = int.tryParse(match.group(1) ?? '0') ?? 0;
+             if (version < 11) {
+               isLowSpec = true;
+               specDetails = 'Detected Model: $machine (Older than iPhone XS). Minimum recommended: iPhone 11 or newer.';
+             }
+          }
+        }
+      }
+
+    if (!mounted) return;
+
+    // 2. Show appropriate dialog
+    bool proceed = false;
+
+    if (isLowSpec) {
+      // "Not Compatible" Dialog for low-end devices
+      proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red, size: 24),
+              SizedBox(width: 8),
+              Text('Device Not Compatible', style: TextStyle(color: Colors.white, fontSize: 18)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Your device does not meet the requirements for On-Device transcription.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                specDetails,
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Enabling this will likely cause the app to crash or freeze.',
+                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          actions: [
+             // Hidden "Proceed Anyway" button
+             TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Available anyway', style: TextStyle(color: Colors.white12, fontSize: 10)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, false), // Close
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Close', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+          actionsAlignment: MainAxisAlignment.spaceBetween,
+        ),
+      ) ?? false;
+    } else {
+      // Standard "High Resource Usage" Warning for capable devices
+      proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Row(
+            children: [
+              Icon(Icons.battery_alert, color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Text('High Resource Usage', style: TextStyle(color: Colors.white, fontSize: 18)),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'On-Device transcription is computationally intensive.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              SizedBox(height: 12),
+              Text(
+                '• Battery drain will increase significantly.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              Text(
+                '• Device may warm up during extended use.',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('I Understand', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ) ?? false;
+    }
+
+    if (!proceed) return;
+
+    setState(() {
+      _useCustomStt = true;
+      _selectedProvider = SttProvider.onDeviceWhisper;
+      _checkLocalModel();
+      MixpanelManager().transcriptionSourceSelected(source: 'custom_on_device');
+    });
+  }
+
   Widget _buildSourceSelector() {
     // Determine current active tab
     // 0: Omi (default)
@@ -638,16 +796,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               child: _buildTabOption(
                 isSelected: currentTab == 1,
                 title: 'On-Device',
-                onTap: () {
-                  setState(() {
-                    _useCustomStt = true;
-                    _selectedProvider = SttProvider.onDeviceWhisper;
-                    _checkLocalModel(); // Ensure model check is triggered
-                    
-                    // Track source selection
-                    MixpanelManager().transcriptionSourceSelected(source: 'custom_on_device');
-                  });
-                },
+                onTap: _switchToOnDevice,
               ),
             ),
             const SizedBox(width: 8),
