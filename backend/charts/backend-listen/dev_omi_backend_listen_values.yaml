@@ -146,7 +146,7 @@ env:
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
-    value: "http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal"
+    value: "http://pusher.omiapi.com"
   - name: BUCKET_PLUGINS_LOGOS
     value: "plugin_resources"
   - name: GOOGLE_APPLICATION_CREDENTIALS

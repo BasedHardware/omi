@@ -1,111 +1,154 @@
 ---
 title: "Building the Device"
-description: "Follow this step-by-step guide to build your own OMI device"
+description: "Step-by-step guide to assemble your own Omi device from parts."
 ---
 
-## Assembly Instructions[​](#assembly-instructions "Direct link to Assembly Instructions")
+## Before You Start
 
-### **Step 0: Prepare the Components**[​](#step-0-prepare-the-components "Direct link to step-0-prepare-the-components")
+<CardGroup cols={2}>
+  <Card title="Parts List" icon="list-check" href="/doc/assembly/Buying_Guide">
+    Make sure you have all required components
+  </Card>
+  <Card title="3D Print Case" icon="cube" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/triangle%20v1">
+    Download and print the case STL files
+  </Card>
+</CardGroup>
 
-1. Ensure you've purchased all required components from the [Buying Guide](https://docs.omi.me/doc/assembly/Buying_Guide).
-2. Download and print the case using the provided `.stl` file: [Case Design](https://github.com/BasedHardware/omi/tree/main/omi/hardware/triangle%20v1).
-   * If you don't have access to a 3D printer, use a 3D printing service or check [Makerspace](https://makerspace.com/) for printing locations.
+<Tip>
+If you don't have access to a 3D printer, check [Makerspace.com](https://makerspace.com/) for printing locations near you, or use an online 3D printing service.
+</Tip>
 
-![components](/images/docs/assembly/images/latest_assembly/components.png)
+---
 
-***
+## Assembly Instructions
 
-### **Step 1: Cut the Black Wire**[​](#step-1-cut-the-black-wire "Direct link to step-1-cut-the-black-wire")
+<Steps>
+  <Step title="Prepare the Components">
+    Gather all your parts: XIAO board, battery, switch, wires, and 3D printed case.
 
-Cut the black wire approximately **2/3" from the base**.
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/components.png" alt="All components laid out" />
+    </Frame>
+  </Step>
 
-![battery](/images/docs/assembly/images/latest_assembly/1.png)
+  <Step title="Cut the Black Wire">
+    Cut the black wire approximately **2/3 inch (17mm)** from the base of the battery connector.
 
-***
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/1.png" alt="Cutting the black wire" />
+    </Frame>
+  </Step>
 
-### **Step 2: Strip the Wire Ends**[​](#step-2-strip-the-wire-ends "Direct link to step-2-strip-the-wire-ends")
+  <Step title="Strip the Wire Ends">
+    Remove a small portion of insulation from both ends of the cut wire using a wire stripper.
 
-Remove a small portion of insulation from both ends of the cut wire using a wire stripper.
+    <Note>
+    Use the **28 AWG** notch on your wire stripper for best results.
+    </Note>
 
-* Use the *28 AWG* notch for best results.
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/2.png" alt="Stripped wire ends" />
+    </Frame>
+  </Step>
 
-![wire](/images/docs/assembly/images/latest_assembly/2.png)
+  <Step title="Solder the Components">
+    Follow the soldering diagram to connect the battery to the board. The switch goes in-line with the black (ground) wire.
 
-***
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/3.png" alt="Soldering diagram" />
+    </Frame>
 
-### **Step 3: Solder the Components**[​](#step-3-solder-the-components "Direct link to step-3-solder-the-components")
+    <Warning>
+    Be careful with soldering! Use proper ventilation and safety equipment.
+    </Warning>
+  </Step>
 
-Follow the soldering diagram to connect the battery to the board.
+  <Step title="Secure the Switch">
+    Insert the switch securely into the battery connector circuit.
 
-![soldering](/images/docs/assembly/images/latest_assembly/3.png)
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/4.png" alt="Switch secured" />
+    </Frame>
+  </Step>
 
-***
+  <Step title="Place Battery and Board in Case">
+    Carefully place the battery and board into the 3D-printed case.
 
-### **Step 4: Secure the Switch**[​](#step-4-secure-the-switch "Direct link to step-4-secure-the-switch")
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/5.png" alt="Components in case" />
+    </Frame>
+  </Step>
 
-Insert the switch securely into the battery connector.
+  <Step title="Position the Switch">
+    Insert the switch into the notch next to the USB-C slot.
 
-![battery](/images/docs/assembly/images/latest_assembly/4.png) ![electronics](/images/docs/assembly/images/latest_assembly/electronics.png) ![case](/images/docs/assembly/images/latest_assembly/case.png)
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/6.png" alt="Switch in notch" />
+    </Frame>
+  </Step>
 
-***
+  <Step title="Manage the Wires">
+    Twist the longer red wire gently to help organize it within the case.
 
-### **Step 5: Assemble the Battery and Board**[​](#step-5-assemble-the-battery-and-board "Direct link to step-5-assemble-the-battery-and-board")
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/7.png" alt="Twisted wire" />
+    </Frame>
+  </Step>
 
-Place the battery and board into the 3D-printed case.
+  <Step title="Curl the Wire">
+    Carefully curl the twisted wire and place it to the side to ensure it fits within the case.
 
-![case](/images/docs/assembly/images/latest_assembly/5.png)
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/8.png" alt="Curled wire placement" />
+    </Frame>
+  </Step>
 
-***
+  <Step title="Attach the Lid">
+    Align the lid with the case using the ridges as a guide and snap it into place.
 
-### **Step 6: Insert the Switch**[​](#step-6-insert-the-switch "Direct link to step-6-insert-the-switch")
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/9.png" alt="Attaching the lid" />
+    </Frame>
+  </Step>
 
-Position the switch into the notch next to the USB-C slot.
+  <Step title="Secure the Case">
+    Apply even pressure around the edges to ensure the seams snap securely into place.
 
-![notch](/images/docs/assembly/images/latest_assembly/6.png)
+    <Frame>
+      <img src="/images/docs/assembly/images/latest_assembly/10.png" alt="Secured case" />
+    </Frame>
+  </Step>
+</Steps>
 
-***
+---
 
-### **Step 7: Manage the Wires**[​](#step-7-manage-the-wires "Direct link to step-7-manage-the-wires")
+## Charging Instructions
 
-Twist the longer red wire gently to help organize it within the case.
+<Warning>
+**Important:** Omi can only charge when it is powered **ON**. The device will not charge if powered off.
+</Warning>
 
-![twist](/images/docs/assembly/images/latest_assembly/7.png)
+- Use a standard USB-C cable to charge
+- The LED will indicate charging status
+- A full charge takes approximately 1-2 hours
 
-***
+---
 
-### **Step 8: Curl the Wire**[​](#step-8-curl-the-wire "Direct link to step-8-curl-the-wire")
+## Congratulations!
 
-Carefully curl the twisted wire and place it to the side to ensure it fits within the case.
+You now have a fully assembled Omi device!
 
-![twist](/images/docs/assembly/images/latest_assembly/8.png)
-
-***
-
-### **Step 9: Attach the Lid**[​](#step-9-attach-the-lid "Direct link to step-9-attach-the-lid")
-
-Align the lid with the case using the ridges as a guide and snap it into place.
-
-![lid](/images/docs/assembly/images/latest_assembly/9.png)
-
-***
-
-### **Step 10: Secure the Case**[​](#step-10-secure-the-case "Direct link to step-10-secure-the-case")
-
-Apply even pressure around the edges to ensure the seams snap securely into place.
-
-![seams](/images/docs/assembly/images/latest_assembly/10.png)
-
-***
-
-### Charging Instructions[​](#charging-instructions "Direct link to Charging Instructions")
-
-**Important:**
-
-* OMI can only charge when it is powered on.
-* The device will not charge if powered off.
-
-***
-
-## 🎉 Congratulations\![​](#-congratulations "Direct link to 🎉 Congratulations!")
-
-You now have a fully assembled and functional OMI device! Enjoy exploring its features and capabilities.
+<CardGroup cols={2}>
+  <Card title="Flash Firmware" icon="bolt" href="/doc/get_started/Flash_device">
+    Install the latest firmware on your device
+  </Card>
+  <Card title="Set Up the App" icon="mobile" href="/doc/get_started/introduction">
+    Download and configure the Omi app
+  </Card>
+  <Card title="Get Support" icon="wrench" href="/doc/info/Support">
+    Having issues? Get help from our community or contact support
+  </Card>
+  <Card title="Join Community" icon="discord" href="http://discord.omi.me">
+    Get help from the community on Discord
+  </Card>
+</CardGroup>

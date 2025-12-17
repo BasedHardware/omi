@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -263,6 +264,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildDoubleTapSetting() {
+    int currentAction = SharedPreferencesUtil().doubleTapAction;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -274,78 +277,112 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Double Tap Action',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
+          const Text(
+            'Double Tap Action',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Choose what happens when you double tap the device button',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Option 0: End & Process Conversation
+          _buildDoubleTapOption(
+            icon: Icons.stop,
+            title: 'End & Process Conversation',
+            isSelected: currentAction == 0,
+            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 0),
+          ),
+          const SizedBox(height: 8),
+          // Option 1: Pause/Resume Recording
+          _buildDoubleTapOption(
+            icon: Icons.pause,
+            title: 'Pause/Resume Recording',
+            isSelected: currentAction == 1,
+            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 1),
+          ),
+          const SizedBox(height: 8),
+          // Option 2: Star Ongoing Conversation
+          _buildDoubleTapOption(
+            icon: FontAwesomeIcons.star,
+            title: 'Star Ongoing Conversation',
+            subtitle: 'Mark to star when conversation ends',
+            isSelected: currentAction == 2,
+            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 2),
+            iconColor: Colors.amber,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDoubleTapOption({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required bool isSelected,
+    required VoidCallback onTap,
+    Color? iconColor,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.deepPurple.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected ? Border.all(color: Colors.deepPurple, width: 1) : null,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: iconColor ?? (isSelected ? Colors.white : Colors.grey.shade400),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isSelected ? Colors.white : Colors.grey.shade300,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                     ),
-                    SizedBox(height: 4),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      'Choose what happens when you double tap the device button',
+                      subtitle,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        height: 1.3,
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
                       ),
                     ),
                   ],
-                ),
+                ],
               ),
-              Switch(
-                value: SharedPreferencesUtil().doubleTapPausesMuting,
-                activeColor: Colors.white,
-                activeTrackColor: const Color(0xFF7C3AED),
-                inactiveThumbColor: Colors.grey.shade400,
-                inactiveTrackColor: Colors.grey.shade700,
-                onChanged: (bool value) {
-                  setState(() {
-                    SharedPreferencesUtil().doubleTapPausesMuting = value;
-                  });
-                },
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_circle,
+                size: 18,
+                color: Colors.deepPurple,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  SharedPreferencesUtil().doubleTapPausesMuting ? Icons.pause : Icons.stop,
-                  size: 16,
-                  color: Colors.grey.shade400,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    SharedPreferencesUtil().doubleTapPausesMuting
-                        ? 'Pause/Resume Recording'
-                        : 'End & Process Conversation',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade300,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

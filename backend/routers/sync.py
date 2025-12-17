@@ -5,7 +5,7 @@ import struct
 import threading
 import time
 import wave
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
@@ -16,7 +16,7 @@ from pydub import AudioSegment
 from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
-from models.conversation import CreateConversation
+from models.conversation import CreateConversation, ConversationSource, Conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
 from utils.other import endpoints as auth
@@ -282,7 +282,33 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
         segmented_paths.add(segment_path)
 
 
-def process_segment(path: str, uid: str, response: dict):
+def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
+    """
+    Reprocess a conversation after new segments have been added.
+    This checks if the conversation should still be discarded and regenerates
+    the summary/structured data if it now has sufficient content.
+    """
+    # Fetch the updated conversation with all segments
+    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation_data:
+        print(f'Conversation {conversation_id} not found for reprocessing')
+        return
+
+    # Convert to Conversation object
+    conversation = Conversation(**conversation_data)
+
+    process_conversation(
+        uid=uid,
+        language_code=language or 'en',
+        conversation=conversation,
+        force_process=True,
+        is_reprocess=True,
+    )
+
+    print(f'Successfully reprocessed conversation {conversation_id}')
+
+
+def process_segment(path: str, uid: str, response: dict, source: ConversationSource = ConversationSource.omi):
     url = get_syncing_file_temporal_signed_url(path)
 
     def delete_file():
@@ -298,17 +324,22 @@ def process_segment(path: str, uid: str, response: dict):
         return
 
     timestamp = get_timestamp_from_path(path)
-    closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, timestamp + transcript_segments[-1].end)
+    segment_end_timestamp = timestamp + transcript_segments[-1].end
+    closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
     if not closest_memory:
+        started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        finished_at = datetime.fromtimestamp(segment_end_timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
-            started_at=datetime.fromtimestamp(timestamp),
-            finished_at=datetime.fromtimestamp(timestamp + transcript_segments[-1].end),
+            started_at=started_at,
+            finished_at=finished_at,
             transcript_segments=transcript_segments,
+            source=source,
         )
         created = process_conversation(uid, language, create_memory)
         response['new_memories'].add(created.id)
     else:
+
         transcript_segments = [s.dict() for s in transcript_segments]
 
         # assign timestamps to each segment
@@ -327,18 +358,40 @@ def process_segment(path: str, uid: str, response: dict):
             segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
             segment['end'] = segment['start'] + duration
 
+        # Calculate new finished_at based on the latest segment
+        last_segment_end = segments[-1]['end'] if segments else 0
+        new_finished_at = datetime.fromtimestamp(
+            closest_memory['started_at'].timestamp() + last_segment_end, tz=timezone.utc
+        )
+
+        # Ensure finished_at doesn't go backwards
+        if new_finished_at < closest_memory['finished_at']:
+            new_finished_at = closest_memory['finished_at']
+
         # remove timestamp field
         for segment in segments:
             segment.pop('timestamp')
 
-        # save
+        # save with updated finished_at
         response['updated_memories'].add(closest_memory['id'])
-        update_conversation_segments(uid, closest_memory['id'], segments)
+        update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
+
+        # If the conversation was previously discarded, reprocess it with the new segments
+        if closest_memory.get('discarded', False):
+            print(f'Conversation {closest_memory["id"]} was discarded, checking if it should be reprocessed')
+            _reprocess_conversation_after_update(uid, closest_memory['id'], language)
 
 
 @router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # Improve a version without timestamp, to consider uploads from the stored in v2 device bytes.
+    # Detect source from filenames
+    source = ConversationSource.omi
+    for f in files:
+        if f.filename and 'limitless' in f.filename.lower():
+            source = ConversationSource.limitless
+            break
+
     paths = retrieve_file_paths(files, uid)
     wav_paths = decode_files_to_wav(paths)
 
@@ -362,6 +415,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
                 path,
                 uid,
                 response,
+                source,
             ),
         )
         for path in segmented_paths

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -14,9 +13,11 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
@@ -64,7 +65,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       });
     }
 
-    Structured structured = widget.conversation.structured;
     return Consumer<ConversationProvider>(builder: (context, provider, child) {
       return GestureDetector(
         onTap: () async {
@@ -73,7 +73,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             routeToPage(context, const UsagePage(showUpgradeDialog: true));
             return;
           }
-
           // Calculate time difference
           int hoursSinceConversation = DateTime.now().difference(widget.conversation.createdAt).inHours;
 
@@ -95,7 +94,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             );
           }
 
-          context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+          context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);
 
@@ -118,10 +117,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
             width: double.maxFinite,
             decoration: BoxDecoration(
               color: const Color(0xFF1F1F25),
-              borderRadius: BorderRadius.circular(16.0),
+              borderRadius: BorderRadius.circular(24.0),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(16.0),
+              borderRadius: BorderRadius.circular(24.0),
               child: Dismissible(
                 key: UniqueKey(),
                 direction: DismissDirection.endToStart,
@@ -164,16 +163,20 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
                 },
                 child: Padding(
-                  padding: const EdgeInsetsDirectional.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _getConversationHeader(),
-                      const SizedBox(height: 16),
-                      _buildConversationBody(context),
-                    ],
-                  ),
+                  padding: PlatformService.isMobile
+                      ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
+                      : const EdgeInsetsDirectional.all(16),
+                  child: PlatformService.isMobile
+                      ? _buildMobileLayout(context)
+                      : Column(
+                          mainAxisSize: MainAxisSize.max,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _getConversationHeader(),
+                            const SizedBox(height: 16),
+                            _buildConversationBody(context),
+                          ],
+                        ),
                 ),
               ),
             ),
@@ -181,6 +184,104 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ),
       );
     });
+  }
+
+  Widget _buildMobileLayout(BuildContext context) {
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Emoji + Title row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!widget.conversation.discarded)
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF35343B),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                if (!widget.conversation.discarded) const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.conversation.discarded
+                            ? widget.conversation.getTranscript(maxCount: 100)
+                            : widget.conversation.structured.title.decodeString,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      // Duration and time below title (or New status)
+                      isNew
+                          ? Row(
+                              children: [
+                                const ConversationNewStatusIndicator(text: "New 🚀"),
+                                const Spacer(),
+                                if (widget.conversation.starred)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4.0),
+                                    child: FaIcon(
+                                      FontAwesomeIcons.solidStar,
+                                      size: 12,
+                                      color: Colors.amber,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Text(
+                                  dateTimeFormat(
+                                    'h:mm a',
+                                    widget.conversation.startedAt ?? widget.conversation.createdAt,
+                                  ),
+                                  style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  maxLines: 1,
+                                ),
+                                if (_getConversationDuration().isNotEmpty) ...[
+                                  const Text(
+                                    ' • ',
+                                    style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  ),
+                                  Text(
+                                    _getConversationDuration(),
+                                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                    maxLines: 1,
+                                  ),
+                                ],
+                                const Spacer(),
+                                if (widget.conversation.starred)
+                                  const Padding(
+                                    padding: EdgeInsets.only(right: 4.0),
+                                    child: FaIcon(
+                                      FontAwesomeIcons.solidStar,
+                                      size: 12,
+                                      color: Colors.amber,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        if (widget.conversation.isLocked) _buildLockedOverlay(),
+      ],
+    );
   }
 
   Widget _buildConversationBody(BuildContext context) {
@@ -216,12 +317,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     }
 
-    final structured = widget.conversation.structured;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          structured.title.decodeString,
+          widget.conversation.structured.title.decodeString,
           style: Theme.of(context).textTheme.titleLarge,
           maxLines: 1,
         ),
@@ -237,7 +337,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             if (widget.conversation.isLocked) _buildLockedOverlay(),
           ],
         ),
-        const SizedBox(height: 8),
       ],
     );
   }
@@ -246,7 +345,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     return Positioned.fill(
       child: ClipRRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -311,7 +410,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           const SizedBox(width: 12),
 
-          // 🕒 Timestamp + Duration or New
+          // 🕒 Timestamp + Duration or New + Starred
           FittedBox(
             fit: BoxFit.scaleDown,
             child: isNew
@@ -341,6 +440,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               style: const TextStyle(color: Colors.white, fontSize: 11),
                               maxLines: 1,
                             ),
+                          ),
+                        ),
+                      if (widget.conversation.starred)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8.0),
+                          child: FaIcon(
+                            FontAwesomeIcons.solidStar,
+                            size: 12,
+                            color: Colors.amber,
                           ),
                         ),
                     ],

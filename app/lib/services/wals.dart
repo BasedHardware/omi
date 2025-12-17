@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +16,7 @@ const chunkSizeInSeconds = 60;
 const flushIntervalInSeconds = 90;
 const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
+const framesPerFlashPage = 8; // Average number of Opus frames per flash page
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(double percentage); // 0..1
@@ -66,12 +68,14 @@ enum WalStorage {
   mem,
   disk,
   sdcard,
+  flashPage,
 }
 
 class WalStats {
   final int totalFiles;
   final int phoneFiles;
   final int sdcardFiles;
+  final int limitlessFiles;
   final int phoneSize; // in bytes
   final int sdcardSize; // in bytes
   final int syncedFiles;
@@ -81,6 +85,7 @@ class WalStats {
     required this.totalFiles,
     required this.phoneFiles,
     required this.sdcardFiles,
+    required this.limitlessFiles,
     required this.phoneSize,
     required this.sdcardSize,
     required this.syncedFiles,
@@ -653,6 +658,664 @@ class SDCardWalSync implements IWalSync {
   }
 }
 
+class FlashPageWalSync implements IWalSync {
+  static const int pagesPerChunk = 25;
+  static const String _pendingFilesKey = 'flash_page_pending_uploads';
+  static const Duration _persistBatchDuration = Duration(seconds: 90);
+
+  List<Wal> _wals = const [];
+  BtDevice? _device;
+
+  StreamSubscription? _pageStream;
+
+  // Sync state
+  int _oldestPage = 0;
+  int _newestPage = 0;
+  int _currentSession = 0;
+
+  // Sync state tracking - distinct phases
+  // isSyncing: true when receiving data from pendant (pendant → phone)
+  // isUploading: true when uploading files to cloud (phone → cloud)
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+
+  bool _isUploading = false;
+  bool get isUploading => _isUploading;
+
+  IWalSyncListener listener;
+
+  FlashPageWalSync(this.listener);
+
+  /// Get list of pending upload files from SharedPreferences
+  List<String> _getPendingFiles() {
+    return SharedPreferencesUtil().getStringList(_pendingFilesKey);
+  }
+
+  /// Save pending upload files to SharedPreferences
+  void _savePendingFiles(List<String> files) {
+    SharedPreferencesUtil().saveStringList(_pendingFilesKey, files);
+  }
+
+  /// Add a file to pending uploads
+  void _addPendingFile(String filePath) {
+    final files = List<String>.from(_getPendingFiles());
+    if (!files.contains(filePath)) {
+      files.add(filePath);
+      _savePendingFiles(files);
+    }
+  }
+
+  /// Remove a file from pending uploads
+  void _removePendingFile(String filePath) {
+    final files = List<String>.from(_getPendingFiles());
+    files.remove(filePath);
+    _savePendingFiles(files);
+  }
+
+  /// Check for and upload any orphaned files from previous failed syncs
+  /// This runs automatically on app start in the background
+  Future<SyncLocalFilesResponse> uploadOrphanedFiles() async {
+    final pendingFiles = _getPendingFiles();
+    if (pendingFiles.isEmpty) {
+      return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    }
+
+    _isUploading = true;
+    listener.onWalUpdated();
+    debugPrint("FlashPageSync: Uploading ${pendingFiles.length} orphaned files with sequential batches");
+
+    try {
+      final result = await _uploadAllPendingFilesSequential();
+      return result;
+    } finally {
+      _isUploading = false;
+      listener.onWalUpdated();
+    }
+  }
+
+  /// Check if there are orphaned files waiting to be uploaded
+  bool get hasOrphanedFiles => _getPendingFiles().isNotEmpty;
+
+  /// Get count of orphaned files
+  int get orphanedFilesCount => _getPendingFiles().length;
+
+  Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return null;
+
+    try {
+      final limitlessConnection = connection as LimitlessDeviceConnection;
+      return await limitlessConnection.getStorageStatus();
+    } catch (e) {
+      debugPrint('FlashPageSync: Not a Limitless device or getStorageStatus not available: $e');
+      return null;
+    }
+  }
+
+  Future<void> _acknowledgeProcessedData(String deviceId, int upToIndex) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection is LimitlessDeviceConnection) {
+      try {
+        await connection.acknowledgeProcessedData(upToIndex);
+      } catch (e) {
+        debugPrint('FlashPageSync: Could not acknowledge processed data: $e');
+      }
+    }
+  }
+
+  /// Switch back to real-time mode after sync
+  Future<void> _enableRealTimeMode(String deviceId) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    if (connection == null) return;
+
+    if (connection is LimitlessDeviceConnection) {
+      try {
+        await connection.enableRealTimeMode();
+      } catch (e) {
+        debugPrint('FlashPageSync: Could not enable real-time mode: $e');
+      }
+    }
+  }
+
+  @override
+  Future deleteWal(Wal wal) async {
+    _wals.removeWhere((w) => w.id == wal.id);
+
+    // If the WAL has been synced, acknowledge to delete from pendant
+    if (_device != null && wal.status == WalStatus.synced) {
+      await _acknowledgeProcessedData(_device!.id, wal.storageTotalBytes);
+    }
+
+    listener.onWalUpdated();
+  }
+
+  Future<List<Wal>> _getMissingWals() async {
+    if (_device == null) return [];
+
+    if (_device!.type != DeviceType.limitless) return [];
+
+    String deviceId = _device!.id;
+    List<Wal> wals = [];
+
+    var storageStatus = await _getStorageStatus(deviceId);
+    if (storageStatus == null || storageStatus.isEmpty) return [];
+
+    _oldestPage = storageStatus['oldest_flash_page'] ?? 0;
+    _newestPage = storageStatus['newest_flash_page'] ?? 0;
+    _currentSession = storageStatus['current_storage_session'] ?? 0;
+
+    int pageCount = _newestPage - _oldestPage + 1;
+    if (pageCount <= 0) return [];
+
+    // Estimate duration: ~2 seconds per page
+    int estimatedSeconds = pageCount * 2;
+
+    // Only create WAL if there's meaningful data (> 30 pages)
+    if (pageCount > 30) {
+      int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
+
+      // Device model
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      var pd = await _device!.getDeviceInfo(connection);
+      String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
+
+      wals.add(Wal(
+        codec: BleAudioCodec.opus,
+        timerStart: timerStart,
+        status: WalStatus.miss,
+        storage: WalStorage.flashPage,
+        seconds: estimatedSeconds,
+        storageOffset: _oldestPage,
+        storageTotalBytes: _newestPage,
+        fileNum: _currentSession,
+        device: _device!.id,
+        deviceModel: deviceModel,
+        totalFrames: pageCount * framesPerFlashPage,
+        syncedFrameOffset: 0,
+      ));
+    }
+
+    return wals;
+  }
+
+  @override
+  Future<List<Wal>> getMissingWals() async {
+    return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
+  }
+
+  @override
+  Future start() async {
+    _wals = await _getMissingWals();
+    listener.onWalUpdated();
+
+    // Check for and upload any orphaned files from previous sessions
+    if (hasOrphanedFiles) {
+      uploadOrphanedFiles();
+    }
+  }
+
+  @override
+  Future stop() async {
+    _wals = [];
+    await _pageStream?.cancel();
+  }
+
+  @override
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
+    if (wals.isEmpty) {
+      debugPrint("FlashPageSync: All synced!");
+      return null;
+    }
+
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    for (var i = wals.length - 1; i >= 0; i--) {
+      var wal = wals[i];
+
+      wal.isSyncing = true;
+      wal.syncStartedAt = DateTime.now();
+      listener.onWalUpdated();
+
+      var partialRes = await _syncWal(wal, progress);
+      if (partialRes != null) {
+        resp.newConversationIds
+            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      }
+
+      wal.status = WalStatus.synced;
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+      listener.onWalUpdated();
+    }
+
+    return resp;
+  }
+
+  @override
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    var walToSync = _wals.where((w) => w == wal).toList().first;
+
+    walToSync.isSyncing = true;
+    walToSync.syncStartedAt = DateTime.now();
+    listener.onWalUpdated();
+
+    var resp = await _syncWal(walToSync, progress);
+
+    walToSync.status = WalStatus.synced;
+    walToSync.isSyncing = false;
+    walToSync.syncStartedAt = null;
+    walToSync.syncEtaSeconds = null;
+
+    listener.onWalUpdated();
+    return resp;
+  }
+
+  Future<SyncLocalFilesResponse> _uploadAllPendingFilesSequential({bool continuous = false}) async {
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+
+    debugPrint("FlashPageSync: Starting sequential batch upload${continuous ? ' (continuous mode)' : ''}");
+
+    const batchSize = 2;
+    int totalBatchesProcessed = 0;
+
+    while (true) {
+      final pendingFiles = _getPendingFiles();
+      if (pendingFiles.isEmpty) {
+        if (continuous && _isSyncing) {
+          // In continuous mode during sync, wait and check again
+          await Future.delayed(const Duration(seconds: 3));
+          continue;
+        }
+        // No more files to upload
+        break;
+      }
+
+      // Sort by timestamp for chronological order
+      final sortedFiles = List<String>.from(pendingFiles);
+      sortedFiles.sort((a, b) {
+        final tsA = _extractTimestampFromFilename(a);
+        final tsB = _extractTimestampFromFilename(b);
+        return tsA.compareTo(tsB);
+      });
+
+      // Take up to batchSize files
+      final batchPaths = sortedFiles.take(batchSize).toList();
+      totalBatchesProcessed++;
+
+      debugPrint(
+          "FlashPageSync: Uploading batch #$totalBatchesProcessed (${batchPaths.length} files, ${pendingFiles.length - batchPaths.length} remaining)");
+
+      // Wait for this batch to fully complete before starting next
+      final result = await _uploadBatch(batchPaths);
+
+      final batchResp = result['response'] as SyncLocalFilesResponse?;
+      if (batchResp != null) {
+        resp.newConversationIds
+            .addAll(batchResp.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(batchResp.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      }
+
+      // Small delay before next batch to avoid overwhelming backend
+      await Future.delayed(const Duration(seconds: 1));
+    }
+
+    debugPrint(
+        "FlashPageSync: Upload complete. Processed $totalBatchesProcessed batches. Total conversations: ${resp.newConversationIds.length} new, ${resp.updatedConversationIds.length} updated. Remaining files: ${_getPendingFiles().length}");
+    return resp;
+  }
+
+  /// Upload a single batch of files and return result with metadata
+  Future<Map<String, dynamic>> _uploadBatch(List<String> batchPaths) async {
+    final batchFiles = <File>[];
+    final validPaths = <String>[];
+
+    // Collect valid files for this batch
+    for (final filePath in batchPaths) {
+      final file = File(filePath);
+      if (await file.exists()) {
+        batchFiles.add(file);
+        validPaths.add(filePath);
+      } else {
+        // File doesn't exist, remove from pending
+        _removePendingFile(filePath);
+      }
+    }
+
+    if (batchFiles.isEmpty) {
+      return {'response': null, 'paths': <String>[]};
+    }
+
+    try {
+      debugPrint("FlashPageSync: Uploading batch of ${batchFiles.length} files");
+      final partialResp = await syncLocalFiles(batchFiles);
+
+      // Delete files and remove from pending list after successful upload
+      for (final filePath in validPaths) {
+        try {
+          await File(filePath).delete();
+          _removePendingFile(filePath);
+        } catch (e) {
+          debugPrint("FlashPageSync: Failed to delete file $filePath: $e");
+        }
+      }
+
+      return {'response': partialResp, 'paths': validPaths};
+    } catch (e) {
+      debugPrint("FlashPageSync: Failed to upload batch: $e");
+      // Files stay in pending list for next upload cycle
+      return {'response': null, 'paths': <String>[]};
+    }
+  }
+
+  Future<SyncLocalFilesResponse?> _syncWal(Wal wal, IWalSyncProgressListener? progress) async {
+    if (_device == null) return null;
+
+    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    String deviceId = _device!.id;
+
+    try {
+      var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) {
+        debugPrint("FlashPageSync: Could not get connection");
+        return null;
+      }
+
+      final limitlessConnection = connection as LimitlessDeviceConnection;
+      limitlessConnection.clearBuffer();
+      await limitlessConnection.enableBatchMode();
+      debugPrint("FlashPageSync: Batch mode enabled");
+
+      // Mark as syncing (pendant → phone)
+      _isSyncing = true;
+      listener.onWalUpdated();
+
+      int totalPages = wal.storageTotalBytes - wal.storageOffset + 1;
+      int emptyExtractions = 0;
+      const maxEmptyExtractions = 60; // 30 seconds of no data = done
+      int? lastProcessedIndex; // Track actual flash page index for ACK
+
+      // Accumulate frames and persist to disk
+      List<List<int>> accumulatedFrames = [];
+      int? batchMinTimestamp;
+      DateTime lastSaveTime = DateTime.now();
+      int filesSaved = 0;
+
+      bool syncComplete = false;
+
+      // Start background upload after first few files are saved
+      bool uploadStarted = false;
+      Future<SyncLocalFilesResponse>? backgroundUpload;
+
+      while (!syncComplete) {
+        final pageData = limitlessConnection.extractFramesWithSessionInfo();
+        bool shouldSave = false;
+
+        // Frames to carry over after save (for session-start pages)
+        List<List<int>>? pendingFrames;
+        int? pendingTimestamp;
+
+        if (pageData != null) {
+          emptyExtractions = 0;
+
+          final opusFrames = pageData['opus_frames'] as List<List<int>>? ?? [];
+          final timestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+          final maxIndex = pageData['max_index'] as int?;
+          final didStartSession =
+              (pageData['did_start_session'] as bool? ?? false) || (pageData['did_start_recording'] as bool? ?? false);
+          final didStopSession =
+              (pageData['did_stop_session'] as bool? ?? false) || (pageData['did_stop_recording'] as bool? ?? false);
+
+          // Track the highest flash page index we've processed for ACK
+          if (maxIndex != null && (lastProcessedIndex == null || maxIndex > lastProcessedIndex)) {
+            lastProcessedIndex = maxIndex;
+          }
+
+          if (opusFrames.isNotEmpty) {
+            // If new timestamp is >2 min different, save current batch first
+            // This prevents mixing recordings from different sessions (e.g., yesterday + today)
+            const sessionGapThresholdMs = 120000;
+            if (batchMinTimestamp != null && accumulatedFrames.isNotEmpty) {
+              final gap = (timestampMs - batchMinTimestamp).abs();
+              if (gap > sessionGapThresholdMs) {
+                shouldSave = true;
+                pendingFrames = opusFrames;
+                pendingTimestamp = timestampMs;
+              }
+            }
+
+            // New session starting with existing frames - save first, carry over new frames
+            if (!shouldSave && didStartSession && accumulatedFrames.isNotEmpty) {
+              shouldSave = true;
+              pendingFrames = opusFrames;
+              pendingTimestamp = timestampMs;
+            }
+
+            // If not saving yet, accumulate frames normally
+            if (!shouldSave) {
+              if (batchMinTimestamp == null || timestampMs < batchMinTimestamp) {
+                batchMinTimestamp = timestampMs;
+              }
+              accumulatedFrames.addAll(opusFrames);
+            }
+
+            if (didStopSession && accumulatedFrames.isNotEmpty) {
+              shouldSave = true;
+            }
+          }
+        } else {
+          emptyExtractions++;
+        }
+
+        // If 60 seconds elapsed - save batch to disk
+        if (!shouldSave && accumulatedFrames.isNotEmpty) {
+          if (DateTime.now().difference(lastSaveTime) >= _persistBatchDuration) {
+            shouldSave = true;
+          }
+        }
+
+        // Save batch to local file (upload timer will pick it up)
+        if (shouldSave && accumulatedFrames.isNotEmpty) {
+          final filePath = await _saveBatchToFile(
+            accumulatedFrames,
+            batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
+          );
+
+          if (filePath != null) {
+            filesSaved++;
+            debugPrint(
+                "FlashPageSync: Saved batch #$filesSaved to disk (${accumulatedFrames.length} frames, ts=$batchMinTimestamp)");
+            progress?.onWalSyncedProgress((filesSaved / (totalPages / 50)).clamp(0.0, 0.8));
+
+            // Send incremental ACK - device can clear pages up to this point
+            if (lastProcessedIndex != null) {
+              try {
+                await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
+                debugPrint("FlashPageSync: Incremental ACK sent for page $lastProcessedIndex");
+              } catch (e) {
+                debugPrint("FlashPageSync: Incremental ACK failed: $e");
+              }
+            }
+
+            // Start background upload after first 3 files saved
+            if (!uploadStarted && filesSaved >= 2) {
+              uploadStarted = true;
+              _isUploading = true;
+              listener.onWalUpdated();
+              debugPrint("FlashPageSync: Starting background upload while syncing continues");
+              backgroundUpload = _uploadAllPendingFilesSequential(continuous: true);
+            }
+          }
+
+          accumulatedFrames.clear();
+          batchMinTimestamp = null;
+          lastSaveTime = DateTime.now();
+
+          // Carry over pending frames from new session/gap
+          if (pendingFrames != null && pendingFrames.isNotEmpty) {
+            accumulatedFrames.addAll(pendingFrames);
+            batchMinTimestamp = pendingTimestamp;
+          }
+        }
+
+        if (emptyExtractions >= maxEmptyExtractions) {
+          debugPrint("FlashPageSync: No more data from device");
+          syncComplete = true;
+        }
+
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // Save remaining frames
+      if (accumulatedFrames.isNotEmpty) {
+        final filePath = await _saveBatchToFile(
+          accumulatedFrames,
+          batchMinTimestamp ?? DateTime.now().millisecondsSinceEpoch,
+        );
+        if (filePath != null) {
+          filesSaved++;
+          debugPrint("FlashPageSync: Saved final batch #$filesSaved to disk");
+
+          // Send final ACK for remaining pages - use actual highest index processed
+          if (lastProcessedIndex != null) {
+            try {
+              await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
+              debugPrint("FlashPageSync: Final ACK sent for page $lastProcessedIndex");
+            } catch (e) {
+              debugPrint("FlashPageSync: Final ACK failed: $e");
+            }
+          }
+        }
+      }
+
+      // Syncing from pendant complete
+      _isSyncing = false;
+      listener.onWalUpdated();
+
+      // Send one final ACK if we haven't already (in case last batch wasn't saved)
+      if (lastProcessedIndex != null) {
+        try {
+          await limitlessConnection.acknowledgeProcessedData(lastProcessedIndex);
+          debugPrint("FlashPageSync: Sent final ACK for index $lastProcessedIndex before switching to real-time");
+        } catch (e) {
+          debugPrint("FlashPageSync: Final cleanup ACK failed: $e");
+        }
+      }
+
+      // Switch back to real-time mode
+      await limitlessConnection.enableRealTimeMode();
+
+      // Wait for background upload to complete if it was started
+      if (backgroundUpload != null) {
+        debugPrint("FlashPageSync: Waiting for background upload to complete");
+        final uploadResult = await backgroundUpload;
+        resp.newConversationIds.addAll(uploadResult.newConversationIds);
+        resp.updatedConversationIds.addAll(uploadResult.updatedConversationIds);
+      }
+
+      // Upload any remaining files that weren't picked up by background upload
+      final remainingFiles = _getPendingFiles();
+      if (remainingFiles.isNotEmpty) {
+        if (!uploadStarted) {
+          _isUploading = true;
+          listener.onWalUpdated();
+        }
+        debugPrint("FlashPageSync: Uploading ${remainingFiles.length} remaining files");
+        final uploadResult = await _uploadAllPendingFilesSequential();
+        resp.newConversationIds.addAll(uploadResult.newConversationIds);
+        resp.updatedConversationIds.addAll(uploadResult.updatedConversationIds);
+      }
+
+      _isUploading = false;
+      listener.onWalUpdated();
+
+      debugPrint("FlashPageSync: Completed. $filesSaved files saved, uploads processed");
+      progress?.onWalSyncedProgress(1.0);
+    } catch (e) {
+      debugPrint("FlashPageSync: Error: $e");
+      _isSyncing = false;
+      _isUploading = false;
+      listener.onWalUpdated();
+      try {
+        await _enableRealTimeMode(deviceId);
+      } catch (_) {}
+    }
+
+    return resp;
+  }
+
+  /// Save a batch of frames to a local file, returns file path or null on error
+  /// Also tracks the file in SharedPreferences for recovery if app crashes
+  Future<String?> _saveBatchToFile(List<List<int>> frames, int timestampMs) async {
+    if (frames.isEmpty) return null;
+
+    try {
+      final random = DateTime.now().microsecondsSinceEpoch % 10000;
+      final tempDir = await getApplicationDocumentsDirectory();
+      final fileName = 'audio_limitless_opus_16000_1_fs320_r${random}_$timestampMs.bin';
+      final filePath = '${tempDir.path}/$fileName';
+
+      final file = File(filePath);
+      final sink = file.openWrite();
+      for (final frame in frames) {
+        sink.add([
+          frame.length & 0xFF,
+          (frame.length >> 8) & 0xFF,
+          (frame.length >> 16) & 0xFF,
+          (frame.length >> 24) & 0xFF,
+        ]);
+        sink.add(frame);
+      }
+      await sink.close();
+
+      // Track file for recovery if app crashes before upload
+      _addPendingFile(filePath);
+
+      return filePath;
+    } catch (e) {
+      debugPrint("FlashPageSync: Save batch error: $e");
+      return null;
+    }
+  }
+
+  /// Extract timestamp from filename for sorting
+  /// Filename format: audio_limitless_opus_16000_1_fs320_r{random}_{timestamp}.bin
+  int _extractTimestampFromFilename(String filePath) {
+    try {
+      final fileName = filePath.split('/').last;
+      final parts = fileName.split('_');
+      if (parts.isNotEmpty) {
+        final lastPart = parts.last.replaceAll('.bin', '');
+        return int.tryParse(lastPart) ?? 0;
+      }
+    } catch (e) {
+      debugPrint("FlashPageSync: Failed to extract timestamp from $filePath: $e");
+    }
+    return 0;
+  }
+
+  void setDevice(BtDevice? device) async {
+    _device = device;
+    if (device != null && device.type == DeviceType.limitless) {
+      _wals = await _getMissingWals();
+    } else {
+      _wals = [];
+    }
+    listener.onWalUpdated();
+  }
+
+  Future<void> deleteAllSyncedWals() async {
+    final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
+    for (final wal in syncedWals) {
+      await deleteWal(wal);
+    }
+  }
+}
+
 class LocalWalSync implements IWalSync {
   List<Wal> _wals = const [];
 
@@ -1102,17 +1765,22 @@ class WalSyncs implements IWalSync {
   late SDCardWalSync _sdcardSync;
   SDCardWalSync get sdcard => _sdcardSync;
 
+  late FlashPageWalSync _flashPageSync;
+  FlashPageWalSync get flashPage => _flashPageSync;
+
   IWalSyncListener listener;
 
   WalSyncs(this.listener) {
     _phoneSync = LocalWalSync(listener);
     _sdcardSync = SDCardWalSync(listener);
+    _flashPageSync = FlashPageWalSync(listener);
   }
 
   @override
   Future deleteWal(Wal wal) async {
     await _phoneSync.deleteWal(wal);
     await _sdcardSync.deleteWal(wal);
+    await _flashPageSync.deleteWal(wal);
   }
 
   @override
@@ -1120,6 +1788,7 @@ class WalSyncs implements IWalSync {
     List<Wal> wals = [];
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
+    wals.addAll(await _flashPageSync.getMissingWals());
     return wals;
   }
 
@@ -1127,6 +1796,7 @@ class WalSyncs implements IWalSync {
     List<Wal> wals = [];
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getAllWals());
+    wals.addAll(await _flashPageSync.getMissingWals());
     return wals;
   }
 
@@ -1134,6 +1804,7 @@ class WalSyncs implements IWalSync {
     final allWals = await getAllWals();
     int phoneFiles = 0;
     int sdcardFiles = 0;
+    int limitlessFiles = 0;
     int phoneSize = 0;
     int sdcardSize = 0;
     int syncedFiles = 0;
@@ -1143,6 +1814,8 @@ class WalSyncs implements IWalSync {
       if (wal.storage == WalStorage.sdcard) {
         sdcardFiles++;
         sdcardSize += _estimateWalSize(wal);
+      } else if (wal.storage == WalStorage.flashPage) {
+        limitlessFiles++;
       } else {
         phoneFiles++;
         phoneSize += _estimateWalSize(wal);
@@ -1159,6 +1832,7 @@ class WalSyncs implements IWalSync {
       totalFiles: allWals.length,
       phoneFiles: phoneFiles,
       sdcardFiles: sdcardFiles,
+      limitlessFiles: limitlessFiles,
       phoneSize: phoneSize,
       sdcardSize: sdcardSize,
       syncedFiles: syncedFiles,
@@ -1190,18 +1864,21 @@ class WalSyncs implements IWalSync {
   Future<void> deleteAllSyncedWals() async {
     await _phoneSync.deleteAllSyncedWals();
     await _sdcardSync.deleteAllSyncedWals();
+    await _flashPageSync.deleteAllSyncedWals();
   }
 
   @override
   void start() {
     _phoneSync.start();
     _sdcardSync.start();
+    _flashPageSync.start();
   }
 
   @override
   Future stop() async {
     await _phoneSync.stop();
     await _sdcardSync.stop();
+    await _flashPageSync.stop();
   }
 
   @override
@@ -1226,6 +1903,15 @@ class WalSyncs implements IWalSync {
           .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     }
 
+    // flash pages (Limitless)
+    partialRes = await _flashPageSync.syncAll(progress: progress);
+    if (partialRes != null) {
+      resp.newConversationIds
+          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+    }
+
     return resp;
   }
 
@@ -1233,6 +1919,8 @@ class WalSyncs implements IWalSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) {
     if (wal.storage == WalStorage.sdcard) {
       return _sdcardSync.syncWal(wal: wal, progress: progress);
+    } else if (wal.storage == WalStorage.flashPage) {
+      return _flashPageSync.syncWal(wal: wal, progress: progress);
     } else {
       return _phoneSync.syncWal(wal: wal, progress: progress);
     }

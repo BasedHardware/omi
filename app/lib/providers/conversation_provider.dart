@@ -17,6 +17,8 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  bool showShortConversations = false; // conversations < 2 minutes
+  bool showStarredOnly = false; // filter to show only starred conversations
   DateTime? selectedDate;
 
   String previousQuery = '';
@@ -162,6 +164,17 @@ class ConversationProvider extends ChangeNotifier {
     MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
   }
 
+  void toggleShortConversations() {
+    showShortConversations = !showShortConversations;
+    groupConversationsByDate();
+  }
+
+  void toggleStarredFilter() {
+    showStarredOnly = !showStarredOnly;
+    groupConversationsByDate();
+    notifyListeners();
+  }
+
   void setLoadingConversations(bool value) {
     isLoadingConversations = value;
     notifyListeners();
@@ -277,6 +290,21 @@ class ConversationProvider extends ChangeNotifier {
         }
       }
 
+      // Filter out short conversations (< 2 minutes) unless explicitly showing them
+      if (!showShortConversations) {
+        final durationSeconds = convo.getDurationInSeconds();
+        if (durationSeconds < 60) {
+          return false;
+        }
+      }
+
+      // Filter by starred status if enabled
+      if (showStarredOnly) {
+        if (!convo.starred) {
+          return false;
+        }
+      }
+
       // Apply date filter if selected
       if (selectedDate != null) {
         var effectiveDate = convo.startedAt ?? convo.createdAt;
@@ -300,9 +328,10 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // Re-apply grouping with date filter
-    groupConversationsByDate();
+    groupedConversations = {};
     notifyListeners();
+
+    await fetchConversations();
   }
 
   /// Clear the date filter
@@ -315,9 +344,10 @@ class ConversationProvider extends ChangeNotifier {
     totalSearchPages = 0;
     searchedConversations = [];
 
-    // Re-apply grouping without date filter
-    groupConversationsByDate();
+    groupedConversations = {};
     notifyListeners();
+
+    await fetchConversations();
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
@@ -364,8 +394,23 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  (DateTime?, DateTime?) _getDateFilterRange() {
+    if (selectedDate == null) return (null, null);
+    final date = selectedDate!;
+    return (
+      DateTime(date.year, date.month, date.day, 0, 0, 0),
+      DateTime(date.year, date.month, date.day, 23, 59, 59),
+    );
+  }
+
   Future _getConversationsFromServer() async {
-    return await getConversations(includeDiscarded: showDiscardedConversations);
+    final (startDate, endDate) = _getDateFilterRange();
+
+    return await getConversations(
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
   }
 
   void updateActionItemState(String convoId, bool state, int i, DateTime date) {
@@ -379,8 +424,16 @@ class ConversationProvider extends ChangeNotifier {
     if (conversations.length % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
-    var newConversations =
-        await getConversations(offset: conversations.length, includeDiscarded: showDiscardedConversations);
+
+    // Date filter if selected
+    final (startDate, endDate) = _getDateFilterRange();
+
+    var newConversations = await getConversations(
+      offset: conversations.length,
+      includeDiscarded: showDiscardedConversations,
+      startDate: startDate,
+      endDate: endDate,
+    );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
@@ -432,7 +485,8 @@ class ConversationProvider extends ChangeNotifier {
     var memDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
     if (groupedConversations.containsKey(memDate)) {
       var convoEffectiveDate = conversation.startedAt ?? conversation.createdAt;
-      idx = groupedConversations[memDate]!.indexWhere((element) => (element.startedAt ?? element.createdAt).isBefore(convoEffectiveDate));
+      idx = groupedConversations[memDate]!
+          .indexWhere((element) => (element.startedAt ?? element.createdAt).isBefore(convoEffectiveDate));
       if (idx == -1) {
         groupedConversations[memDate]!.insert(0, conversation);
         idx = 0;
@@ -668,6 +722,12 @@ class ConversationProvider extends ChangeNotifier {
       groupedConversations[date]!.add(conversation);
     }
     return (date, idx);
+  }
+
+  int getConversationIndexById(String id, DateTime date) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final list = groupedConversations[normalizedDate] ?? [];
+    return list.indexWhere((c) => c.id == id);
   }
 
   void updateSyncedConversation(ServerConversation conversation) {

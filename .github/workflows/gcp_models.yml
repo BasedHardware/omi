@@ -25,13 +25,20 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
       id-token: 'write'
 
     runs-on: ubuntu-latest-m
     steps:
+      - name: Validate Environment Input
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+
       # To workaround "no space left on device" issue of GitHub-hosted runner
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache

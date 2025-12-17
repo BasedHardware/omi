@@ -631,3 +631,52 @@ def set_calendar_integration(uid: str, app_key: str, data: dict) -> None:
 def delete_calendar_integration(uid: str, app_key: str) -> bool:
     """Legacy function name - use delete_integration instead."""
     return delete_integration(uid, app_key)
+
+
+# **************************************
+# ***** Transcription Preferences ******
+# **************************************
+
+
+def get_user_transcription_preferences(uid: str) -> dict:
+    """
+    Get the user's transcription preferences.
+
+    Returns:
+        dict with 'single_language_mode' (bool) and 'vocabulary' (List[str])
+    """
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get()
+
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        prefs = user_data.get('transcription_preferences', {})
+        return {
+            'single_language_mode': prefs.get('single_language_mode', False),
+            'vocabulary': prefs.get('vocabulary', []),
+        }
+
+    return {'single_language_mode': False, 'vocabulary': []}
+
+
+def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
+    """
+    Set the user's transcription preferences.
+
+    Args:
+        uid: User ID
+        single_language_mode: If True, use exact language instead of multi-language detection
+        vocabulary: List of custom keywords/terms for better transcription accuracy
+    """
+    user_ref = db.collection('users').document(uid)
+    update_data = {}
+
+    if single_language_mode is not None:
+        update_data['transcription_preferences.single_language_mode'] = single_language_mode
+
+    if vocabulary is not None:
+        # Limit vocabulary to 100 terms max
+        update_data['transcription_preferences.vocabulary'] = vocabulary[:100]
+
+    if update_data:
+        user_ref.update(update_data)

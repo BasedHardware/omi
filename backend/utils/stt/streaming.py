@@ -2,8 +2,8 @@ import asyncio
 import os
 import random
 import time
-from typing import List
 from enum import Enum
+from typing import Callable, List, Optional
 
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
@@ -30,7 +30,7 @@ class STTService(str, Enum):
 
 
 # Languages supported by Soniox
-soniox_supported_languages = [
+soniox_languages = {
     'multi',
     'en',
     'af',
@@ -92,74 +92,40 @@ soniox_supported_languages = [
     'ur',
     'vi',
     'cy',
-]
-soniox_multi_languages = soniox_supported_languages
-
-# Languages supported by Deepgram, nova-2/nova-3 model
-deepgram_supported_languages = {
-    'multi',
-    'bg',
-    'ca',
-    'zh',
-    'zh-CN',
-    'zh-Hans',
-    'zh-TW',
-    'zh-Hant',
-    'zh-HK',
-    'cs',
-    'da',
-    'da-DK',
-    'nl',
-    'en',
-    'en-US',
-    'en-AU',
-    'en-GB',
-    'en-NZ',
-    'en-IN',
-    'et',
-    'fi',
-    'nl-BE',
-    'fr',
-    'fr-CA',
-    'de',
-    'de-CH',
-    'el' 'hi',
-    'hu',
-    'id',
-    'it',
-    'ja',
-    'ko',
-    'ko-KR',
-    'lv',
-    'lt',
-    'ms',
-    'no',
-    'pl',
-    'pt',
-    'pt-BR',
-    'pt-PT',
-    'ro',
-    'ru',
-    'sk',
-    'es',
-    'es-419',
-    'sv',
-    'sv-SE',
-    'th',
-    'th-TH',
-    'tr',
-    'uk',
-    'vi',
 }
-deepgram_nova2_multi_languages = ['multi', 'en', 'es']
-deepgram_nova3_multi_languages = [
+soniox_multi_languages = soniox_languages
+
+# bg, ca, zh, zh-CN, zh-Hans, zh-TW, zh-Hant, zh-HK, cs, da, da-DK, nl, en, en-US, en-AU, en-GB, en-NZ, en-IN, et, fi, nl-BE, fr, fr-CA, de, de-CH, el, hi, hu, id, it, ja, ko, ko-KR, lv, lt, ms, no, pl, pt, pt-BR, pt-PT, ro, ru, sk, es, es-419, sv, sv-SE, th, th-TH, tr, uk, vi
+# Language codes supported in nova-2 but NOT in nova-3
+deepgram_nova2_languages = {
+    "zh",
+    "zh-CN",
+    "zh-Hans",
+    "zh-TW",
+    "zh-Hant",
+    "zh-HK",
+    "th",
+    "th-TH",
+}
+deepgram_nova2_multi_languages = {
+    'multi',
+    "en",
+    "en-US",
+    "en-AU",
+    "en-GB",
+    "en-IN",
+    "en-NZ",
+    "es",
+    "es-419",
+}
+deepgram_nova3_multi_languages = {
     "multi",
     "en",
     "en-US",
     "en-AU",
     "en-GB",
-    "en-NZ",
     "en-IN",
+    "en-NZ",
     "es",
     "es-419",
     "fr",
@@ -173,41 +139,94 @@ deepgram_nova3_multi_languages = [
     "ja",
     "it",
     "nl",
+}
+deepgram_nova3_languages = {
+    "bg",
+    "ca",
+    "cs",
+    "da",
+    "da-DK",
+    "nl",
+    "en",
+    "en-US",
+    "en-AU",
+    "en-GB",
+    "en-IN",
+    "en-NZ",
+    "et",
+    "fi",
     "nl-BE",
-]
+    "fr",
+    "fr-CA",
+    "de",
+    "de-CH",
+    "el",
+    "hi",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "ko",
+    "ko-KR",
+    "lv",
+    "lt",
+    "ms",
+    "no",
+    "pl",
+    "pt",
+    "pt-BR",
+    "pt-PT",
+    "ro",
+    "ru",
+    "sk",
+    "es",
+    "es-419",
+    "sv",
+    "sv-SE",
+    "tr",
+    "uk",
+    "vi",
+}
 
 # Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
-def get_stt_service_for_language(language: str):
+def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True):
     # Picking STT service and STT language by following the order
     for m in stt_service_models:
         # Soniox
         if m == 'soniox-stt-rt':
-            if language in soniox_multi_languages:
+            if multi_lang_enabled and language in soniox_multi_languages:
                 return STTService.soniox, 'multi', 'stt-rt-preview'
+            if language in soniox_languages:
+                return STTService.soniox, language, 'stt-rt-preview'
         # DeepGram Nova-3
         elif m == 'dg-nova-3':
-            if language in deepgram_nova3_multi_languages:
+            if multi_lang_enabled and language in deepgram_nova3_multi_languages:
                 return STTService.deepgram, 'multi', 'nova-3'
+            if language in deepgram_nova3_languages:
+                return STTService.deepgram, language, 'nova-3'
         # DeepGram Nova-2
         elif m == 'dg-nova-2':
-            if language in deepgram_nova2_multi_languages:
+            if multi_lang_enabled and language in deepgram_nova2_multi_languages:
                 return STTService.deepgram, 'multi', 'nova-2-general'
-            if language in deepgram_supported_languages:
+            if language in deepgram_nova2_languages:
                 return STTService.deepgram, language, 'nova-2-general'
 
-    # Fallback to DeepGram Nova-2 en
-    return STTService.deepgram, 'en', 'nova-2-general'
+    # Fallback to deepgram nova-3
+    return STTService.deepgram, 'en', 'nova-3'
 
 
-async def send_initial_file_path(file_path: str, transcript_socket_async_send):
+async def send_initial_file_path(file_path: str, transcript_socket_async_send, is_active: Optional[Callable] = None):
     print('send_initial_file_path')
     start = time.time()
     # Reading and sending in chunks
     with open(file_path, "rb") as file:
         while True:
+            if is_active and not is_active():
+                print('send_initial_file_path stopped early via is_active check')
+                break
             chunk = file.read(320)
             if not chunk:
                 break
@@ -236,8 +255,8 @@ async def send_initial_file(data: List[List[int]], transcript_socket):
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
 deepgram_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
 
-deepgram_beta_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
-deepgram_beta_options.url = "https://api.beta.deepgram.com"
+deepgram_cloud_options = DeepgramClientOptions(options={"keepalive": "true", "termination_exception_connect": "true"})
+deepgram_cloud_options.url = "https://api.deepgram.com"
 
 if is_dg_self_hosted:
     dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
@@ -245,13 +264,13 @@ if is_dg_self_hosted:
         raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
     # Override only the URL while keeping all other options
     deepgram_options.url = dg_self_hosted_url
-    deepgram_beta_options.url = dg_self_hosted_url
+    deepgram_cloud_options.url = dg_self_hosted_url
     print(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
 
 deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_options)
 
 # unused fn
-deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_beta_options)
+deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), deepgram_cloud_options)
 
 
 async def process_audio_dg(
@@ -261,6 +280,7 @@ async def process_audio_dg(
     channels: int,
     preseconds: int = 0,
     model: str = 'nova-2-general',
+    keywords: List[str] = [],
 ):
     print('process_audio_dg', language, sample_rate, channels, preseconds)
 
@@ -312,7 +332,7 @@ async def process_audio_dg(
         print(f"Error: {error}")
 
     print("Connecting to Deepgram")  # Log before connection attempt
-    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model)
+    return connect_to_deepgram_with_backoff(on_message, on_error, language, sample_rate, channels, model, keywords)
 
 
 # Calculate backoff with jitter
@@ -323,12 +343,19 @@ def calculate_backoff_with_jitter(attempt, base_delay=1000, max_delay=32000):
 
 
 def connect_to_deepgram_with_backoff(
-    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, retries=3
+    on_message,
+    on_error,
+    language: str,
+    sample_rate: int,
+    channels: int,
+    model: str,
+    keywords: List[str] = [],
+    retries=3,
 ):
     print("connect_to_deepgram_with_backoff")
     for attempt in range(retries):
         try:
-            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model)
+            return connect_to_deepgram(on_message, on_error, language, sample_rate, channels, model, keywords)
         except Exception as error:
             print(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -340,7 +367,18 @@ def connect_to_deepgram_with_backoff(
     raise Exception(f'Could not open socket: All retry attempts failed.')
 
 
-def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, channels: int, model: str):
+def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
+    if options.model in ['nova-3']:
+        options.keyterm = keywords
+        return options
+
+    options.keywords = keywords
+    return options
+
+
+def connect_to_deepgram(
+    on_message, on_error, language: str, sample_rate: int, channels: int, model: str, keywords: List[str] = []
+):
     try:
         dg_connection = deepgram.listen.websocket.v("1")
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
@@ -386,6 +424,9 @@ def connect_to_deepgram(on_message, on_error, language: str, sample_rate: int, c
             sample_rate=sample_rate,
             encoding='linear16',
         )
+        if len(keywords) > 0:
+            options = _dg_keywords_set(options, keywords)
+
         result = dg_connection.start(options)
         print('Deepgram connection started:', result)
         return dg_connection

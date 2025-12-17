@@ -28,6 +28,10 @@ from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
 )
+from database.users import (
+    get_user_transcription_preferences,
+    set_user_transcription_preferences,
+)
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -349,6 +353,42 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
+    return {'status': 'ok'}
+
+
+# *************************************************
+# ********** Transcription Preferences ************
+# *************************************************
+
+
+class TranscriptionPreferencesResponse(BaseModel):
+    single_language_mode: bool = False
+    vocabulary: List[str] = []
+
+
+class TranscriptionPreferencesUpdate(BaseModel):
+    single_language_mode: Optional[bool] = None
+    vocabulary: Optional[List[str]] = None
+
+
+@router.get('/v1/users/transcription-preferences', tags=['v1'], response_model=TranscriptionPreferencesResponse)
+def get_transcription_preferences_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Get user's transcription preferences (single language mode, vocabulary)."""
+    prefs = get_user_transcription_preferences(uid)
+    return prefs
+
+
+@router.patch('/v1/users/transcription-preferences', tags=['v1'])
+def update_transcription_preferences_endpoint(
+    data: TranscriptionPreferencesUpdate, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Update user's transcription preferences.
+
+    - single_language_mode: If True, uses exact language for higher accuracy but disables translation
+    - vocabulary: List of custom keywords/terms (max 100) for better transcription accuracy
+    """
+    set_user_transcription_preferences(uid, single_language_mode=data.single_language_mode, vocabulary=data.vocabulary)
     return {'status': 'ok'}
 
 

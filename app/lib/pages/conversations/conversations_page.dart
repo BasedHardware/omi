@@ -7,6 +7,7 @@ import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
@@ -154,21 +155,41 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 12)), // above search widget
-            const SliverToBoxAdapter(child: SearchWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
+            Consumer2<HomeProvider, ConversationProvider>(
+              builder: (context, homeProvider, convoProvider, _) {
+                // Show search bar if explicitly shown OR if there's an active search query
+                bool shouldShowSearchBar = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+                if (!shouldShowSearchBar) {
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+                }
+                return const SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      SizedBox(height: 12), // above search widget
+                      SearchWidget(),
+                      SizedBox(height: 12), //below search widget
+                    ],
+                  ),
+                );
+              },
+            ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
-              const SliverToBoxAdapter(
+            if (convoProvider.groupedConversations.isEmpty &&
+                !convoProvider.isLoadingConversations &&
+                !convoProvider.isFetchingConversations)
+              SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(),
+                    padding: const EdgeInsets.only(top: 32.0),
+                    child: EmptyConversationsWidget(
+                      isStarredFilterActive: convoProvider.showStarredOnly,
+                    ),
                   ),
                 ),
               )
-            else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
+            else if (convoProvider.groupedConversations.isEmpty &&
+                (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
               _buildLoadingShimmer()
             else
               SliverList(

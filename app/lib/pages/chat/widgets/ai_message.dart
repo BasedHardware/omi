@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -21,6 +22,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'markdown_message_widget.dart';
@@ -128,21 +130,21 @@ String? _getIntegrationLogoPath(String thinkingText) {
 IconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
-    return Icons.psychology;
+    return FontAwesomeIcons.brain;
   } else if (text.contains('searching the web') || text.contains('searching web')) {
-    return Icons.search;
+    return FontAwesomeIcons.magnifyingGlass;
   } else if (text.contains('conversations')) {
-    return Icons.chat;
+    return FontAwesomeIcons.comments;
   } else if (text.contains('memories')) {
-    return Icons.memory;
+    return FontAwesomeIcons.lightbulb;
   } else if (text.contains('action item')) {
-    return Icons.checklist;
+    return FontAwesomeIcons.listCheck;
   } else if (text.contains('product info')) {
-    return Icons.info;
+    return FontAwesomeIcons.circleInfo;
   } else if (text.contains('search')) {
-    return Icons.search;
+    return FontAwesomeIcons.magnifyingGlass;
   }
-  return Icons.psychology; // Default brain icon
+  return FontAwesomeIcons.brain; // Default brain icon
 }
 
 /// Build the thinking icon widget - either an integration logo or a fallback icon
@@ -156,7 +158,7 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Icon(
+        errorBuilder: (context, error, stackTrace) => FaIcon(
           _getThinkingIcon(thinkingText),
           size: size,
           color: color,
@@ -164,7 +166,7 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
       ),
     );
   }
-  return Icon(
+  return FaIcon(
     _getThinkingIcon(thinkingText),
     size: size,
     color: color,
@@ -333,6 +335,7 @@ class DaySummaryWidget extends StatelessWidget {
                 ],
               )
             : daySummaryMessagesList(messageText),
+        if (messageText.isNotEmpty && !showTypingIndicator) MessageActionBar(messageText: messageText),
       ],
     );
   }
@@ -469,18 +472,8 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
       children: [
         FilesHandlerWidget(message: widget.message),
         widget.showTypingIndicator && widget.messageText.isEmpty
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
-                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -562,19 +555,15 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         //     : const SizedBox.shrink(),
         widget.messageText.isEmpty
             ? const SizedBox.shrink()
-            : Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
+            : Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: getMarkdownWidget(context, widget.messageText),
               ),
+        if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
+          MessageActionBar(
+            messageText: widget.messageText,
+            setMessageNps: widget.setMessageNps,
+          ),
       ],
     );
   }
@@ -666,18 +655,8 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         //   ),
         // ),
         widget.showTypingIndicator && widget.messageText == '...'
-            ? Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1f1f25),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4.0),
-                    topRight: Radius.circular(16.0),
-                    bottomRight: Radius.circular(16.0),
-                    bottomLeft: Radius.circular(16.0),
-                  ),
-                ),
-                margin: EdgeInsets.only(top: previousThinkingText != null ? 0 : 8),
+            ? Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -756,6 +735,11 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     ],
                   )
                 : getMarkdownWidget(context, widget.messageText),
+        if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
+          MessageActionBar(
+            messageText: widget.messageText,
+            setMessageNps: widget.setMessageNps,
+          ),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
@@ -770,7 +754,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   idx = memProvider.groupedConversations[date]?.indexWhere((element) => element.id == data.$2.id) ?? -1;
 
                   if (idx != -1) {
-                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
+                    context.read<ConversationDetailProvider>().updateConversation(data.$2.id, date);
                     var m = memProvider.groupedConversations[date]![idx];
                     MixpanelManager().chatMessageConversationClicked(m);
                     await Navigator.of(context).push(
@@ -788,7 +772,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     (idx, date) = memProvider.addConversationWithDateGrouped(m);
                     MixpanelManager().chatMessageConversationClicked(m);
                     setState(() => conversationDetailLoading[data.$1] = false);
-                    context.read<ConversationDetailProvider>().updateConversation(idx, date);
+                    context.read<ConversationDetailProvider>().updateConversation(m.id, date);
                     await Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (c) => ConversationDetailPage(
@@ -864,6 +848,117 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     } catch (e) {
       return text;
     }
+  }
+}
+
+class MessageActionBar extends StatefulWidget {
+  final String messageText;
+  final Function(int)? setMessageNps;
+  final int? currentNps;
+
+  const MessageActionBar({
+    super.key,
+    required this.messageText,
+    this.setMessageNps,
+    this.currentNps,
+  });
+
+  @override
+  State<MessageActionBar> createState() => _MessageActionBarState();
+}
+
+class _MessageActionBarState extends State<MessageActionBar> {
+  int? _selectedNps;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedNps = widget.currentNps;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, left: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Copy button
+          _buildActionButton(
+            icon: FontAwesomeIcons.copy,
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await Clipboard.setData(ClipboardData(text: widget.messageText));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Message copied to clipboard',
+                      style: TextStyle(color: Colors.white, fontSize: 12.0),
+                    ),
+                    duration: Duration(milliseconds: 1500),
+                  ),
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 20),
+          // Thumbs up button
+          _buildActionButton(
+            icon: _selectedNps == 1 ? FontAwesomeIcons.solidThumbsUp : FontAwesomeIcons.thumbsUp,
+            isSelected: _selectedNps == 1,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _selectedNps = _selectedNps == 1 ? null : 1;
+              });
+              widget.setMessageNps?.call(_selectedNps ?? 0);
+            },
+          ),
+          const SizedBox(width: 20),
+          // Thumbs down button
+          _buildActionButton(
+            icon: _selectedNps == -1 ? FontAwesomeIcons.solidThumbsDown : FontAwesomeIcons.thumbsDown,
+            isSelected: _selectedNps == -1,
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _selectedNps = _selectedNps == -1 ? null : -1;
+              });
+              widget.setMessageNps?.call(_selectedNps ?? 0);
+            },
+          ),
+          const SizedBox(width: 20),
+          // Share button
+          _buildActionButton(
+            icon: FontAwesomeIcons.shareNodes,
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await Share.share(widget.messageText);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isSelected = false,
+  }) {
+    return InkWell(
+      splashColor: Colors.transparent,
+      focusColor: Colors.transparent,
+      hoverColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      onTap: onTap,
+      child: FaIcon(
+        icon,
+        color: isSelected ? Colors.white : Colors.grey.shade600,
+        size: 16,
+      ),
+    );
   }
 }
 

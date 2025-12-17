@@ -10,7 +10,7 @@ from typing import Optional
 from pydantic import BaseModel
 from openai import OpenAI
 
-from utils.llm.clients import llm_medium
+from utils.llm.clients import llm_medium, llm_mini
 
 
 # App categories available in the system
@@ -186,3 +186,55 @@ async def download_image_from_url(url: str) -> bytes:
         response = await client.get(url)
         response.raise_for_status()
         return response.content
+
+
+def generate_description(app_name: str, description: str) -> str:
+    """
+    Generate an improved app description from a basic one.
+    Used by the app submission flow.
+    """
+    prompt = f"""
+    You are an AI assistant specializing in crafting detailed and engaging descriptions for apps.
+    You will be provided with the app's name and a brief description which might not be that good. Your task is to expand on the given information, creating a captivating and detailed app description that highlights the app's features, functionality, and benefits.
+    The description should be concise, professional, and not more than 40 words, ensuring clarity and appeal. Respond with only the description, tailored to the app's concept and purpose.
+    App Name: {app_name}
+    Description: {description}
+    """
+    prompt = prompt.replace('    ', '').strip()
+    return llm_mini.invoke(prompt).content
+
+
+def generate_description_and_emoji(app_name: str, prompt: str) -> dict:
+    """
+    Generate an app description and a representative emoji for the app.
+    Used by the quick template creator feature.
+    """
+    system_prompt = """You are an AI assistant that creates app descriptions and selects representative emojis.
+
+Given an app name and what it should do, respond with a JSON object containing:
+1. "description": A concise, engaging description (max 40 words) highlighting what the app does
+2. "emoji": A single emoji that best represents the app's purpose
+
+Respond ONLY with the JSON object, no other text."""
+
+    user_prompt = f"""App Name: {app_name}
+What it does: {prompt}"""
+
+    response = llm_mini.invoke([{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}])
+
+    content = response.content.strip()
+
+    # Parse JSON from response
+    if content.startswith("```"):
+        lines = content.split("\n")
+        content = "\n".join(lines[1:-1])
+
+    try:
+        result = json.loads(content)
+        return {
+            "description": result.get("description", f"A custom app that {prompt}"),
+            "emoji": result.get("emoji", "✨"),
+        }
+    except (json.JSONDecodeError, KeyError):
+        # Fallback if JSON parsing fails
+        return {"description": f"A custom app that {prompt}", "emoji": "✨"}

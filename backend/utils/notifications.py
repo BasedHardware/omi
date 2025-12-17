@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import math
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
@@ -15,6 +16,9 @@ from .llm.notifications import (
     generate_silent_user_notification,
 )
 
+# iOS bundle ID for APNs
+IOS_BUNDLE_ID = 'com.friend-app-with-wearable.ios12'
+
 # Error codes that indicate a token is permanently invalid
 PERMANENT_FAILURE_CODES = frozenset(
     [
@@ -24,38 +28,125 @@ PERMANENT_FAILURE_CODES = frozenset(
 )
 
 
-def _handle_send_error(e: Exception, token: str) -> None:
-    """Handle FCM send errors and remove permanently invalid tokens."""
-    error_code = getattr(e, 'code', None)
-
-    if error_code in PERMANENT_FAILURE_CODES:
-        notification_db.remove_invalid_token(token)
-        print(f'Removed invalid token - Error: {error_code}')
-    else:
-        print(f'FCM send failed: {e}({error_code})')
+def _generate_tag(content: str) -> str:
+    """Generate a 16-char hash tag for deduplication."""
+    return hashlib.md5(content.encode()).hexdigest()[:16]
 
 
-def send_notification(user_id: str, title: str, body: str, data: dict = None):
-    """Send notification to all user's devices"""
-    print(f'send_notification to user {user_id}')
-    tokens = notification_db.get_all_tokens(user_id)
+def _generate_notification_tag(user_id: str, title: str, body: str, data: dict = None) -> str:
+    """Generate a tag for notification deduplication based on content."""
+    content = f"{user_id}:{title}:{body}"
+    if data:
+        unique_id = data.get('action_item_id') or data.get('app_id') or data.get('type', '')
+        content += f":{unique_id}"
+    return _generate_tag(content)
 
+
+def _build_android_config(tag: str, priority: str = 'normal', is_data_only: bool = False) -> messaging.AndroidConfig:
+    """Build Android configuration with deduplication."""
+    config_kwargs = {
+        'collapse_key': tag,
+        'priority': priority,
+    }
+    # Only add notification config if not data-only (Android shows empty notification otherwise)
+    if not is_data_only:
+        config_kwargs['notification'] = messaging.AndroidNotification(tag=tag)
+    return messaging.AndroidConfig(**config_kwargs)
+
+
+def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSConfig:
+    """Build APNs configuration with deduplication."""
+    headers = {'apns-collapse-id': tag}
+
+    if is_background:
+        headers.update(
+            {
+                'apns-push-type': 'background',
+                'apns-priority': '5',
+                'apns-topic': IOS_BUNDLE_ID,
+            }
+        )
+        return messaging.APNSConfig(
+            headers=headers,
+            payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+        )
+
+    return messaging.APNSConfig(headers=headers)
+
+
+def _build_message(
+    token: str,
+    tag: str,
+    notification: messaging.Notification = None,
+    data: dict = None,
+    is_background: bool = False,
+    priority: str = 'normal',
+) -> messaging.Message:
+    """Build a complete FCM message with proper platform configs."""
+    return messaging.Message(
+        token=token,
+        notification=notification,
+        data=data,
+        android=_build_android_config(tag, priority, is_data_only=(notification is None)),
+        apns=_build_apns_config(tag, is_background),
+    )
+
+
+def _send_to_user(
+    user_id: str,
+    tag: str,
+    notification: messaging.Notification = None,
+    data: dict = None,
+    is_background: bool = False,
+    priority: str = 'normal',
+    tokens: list = None,
+) -> int:
+    """Send a message to all user's devices using batch send. Returns count of successful sends."""
+    if tokens is None:
+        tokens = notification_db.get_all_tokens(user_id)
     if not tokens:
         print(f"No tokens found for user {user_id}")
-        return
+        return 0
 
+    # Build messages for all tokens
+    messages = [_build_message(token, tag, notification, data, is_background, priority) for token in tokens]
+
+    try:
+        response = messaging.send_each(messages)
+
+        # Collect invalid tokens and count successes
+        invalid_tokens = []
+        success_count = 0
+
+        for idx, result in enumerate(response.responses):
+            if result.success:
+                success_count += 1
+            elif result.exception:
+                error_code = getattr(result.exception, 'code', None)
+                if error_code in PERMANENT_FAILURE_CODES:
+                    invalid_tokens.append(tokens[idx])
+                    print(f'Invalid token removed - Error: {error_code}')
+                else:
+                    print(f'FCM send failed: {result.exception}({error_code})')
+
+        # Remove invalid tokens in bulk
+        if invalid_tokens:
+            notification_db.remove_bulk_tokens(invalid_tokens)
+
+        print(f'FCM batch send: {success_count}/{len(tokens)} successful')
+        return success_count
+
+    except Exception as e:
+        print(f'FCM batch send error: {e}')
+        return 0
+
+
+def send_notification(user_id: str, title: str, body: str, data: dict = None, tokens: list = None):
+    """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
+    print(f'send_notification to user {user_id}')
+    tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
-
-    for token in tokens:
-        message = messaging.Message(notification=notification, token=token)
-        if data:
-            message.data = data
-
-        try:
-            response = messaging.send(message)
-            print(f'send_notification success to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
 async def send_subscription_paid_personalized_notification(user_id: str, data: dict = None):
@@ -160,50 +251,42 @@ def send_training_data_submitted_notification(user_id: str):
 
 
 async def send_bulk_notification(user_tokens: list, title: str, body: str):
+    """Send notification to multiple users in batches."""
     try:
         batch_size = 500
         num_batches = math.ceil(len(user_tokens) / batch_size)
+        tag = _generate_tag(f"bulk:{title}:{body}")
+        notification = messaging.Notification(title=title, body=body)
 
-        def send_batch(batch_users):
-            messages = [
-                messaging.Message(notification=messaging.Notification(title=title, body=body), token=token)
-                for token in batch_users
-            ]
+        def send_batch(batch_tokens):
+            messages = [_build_message(token, tag, notification=notification) for token in batch_tokens]
             response = messaging.send_each(messages)
 
-            # Only remove tokens that are definitively invalid (not temporary network issues)
+            # Collect permanently invalid tokens
             invalid_tokens = []
             for idx, result in enumerate(response.responses):
                 if not result.success and result.exception:
                     error_code = getattr(result.exception, 'code', None)
-
                     if error_code in PERMANENT_FAILURE_CODES:
-                        invalid_tokens.append(batch_users[idx])
+                        invalid_tokens.append(batch_tokens[idx])
                         print(f"Invalid token found - Error: {error_code}")
 
             return response, invalid_tokens
 
-        tasks = []
-        for i in range(num_batches):
-            start = i * batch_size
-            end = start + batch_size
-            batch_users = user_tokens[start:end]
-            task = asyncio.to_thread(send_batch, batch_users)
-            tasks.append(task)
-
+        tasks = [
+            asyncio.to_thread(send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
+            for i in range(num_batches)
+        ]
         results = await asyncio.gather(*tasks)
 
         # Remove invalid tokens
-        invalid_tokens = []
-        for response, batch_invalid_tokens in results:
-            invalid_tokens.extend(batch_invalid_tokens)
-
+        invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
         if invalid_tokens:
             print(f"Removing {len(invalid_tokens)} invalid tokens")
             notification_db.remove_bulk_tokens(invalid_tokens)
 
     except Exception as e:
-        print("Error sending message:", e)
+        print("Error sending bulk notification:", e)
 
 
 def send_app_review_reply_notification(
@@ -234,49 +317,16 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     """
     Sends a data-only FCM message for action item reminder scheduling.
     The app receives this in the background and schedules a local notification.
-
-    Args:
-        user_id: The user's Firebase UID
-        action_item_id: The action item ID
-        description: The action item description
-        due_at: ISO format datetime string for when the action item is due
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        print(f"No notification tokens found for user {user_id}")
-        return
-
-    # Data-only message
-    # This allows the app to handle it in background and schedule local notification
+    print(f'send_action_item_data_message to user {user_id}')
     data = {
         'type': 'action_item_reminder',
         'action_item_id': action_item_id,
         'description': description,
         'due_at': due_at,
     }
-
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            # Set high priority to ensure delivery even when app is in background
-            android=messaging.AndroidConfig(priority='high'),
-            # iOS requires specific headers for background data-only messages
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-push-type': 'background',
-                    'apns-priority': '5',
-                    'apns-topic': 'com.friend-app-with-wearable.ios12',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
-
-        try:
-            response = messaging.send(message)
-            print(f'Action item data message sent to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+    tag = _generate_tag(f"{user_id}:action_item_reminder:{action_item_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
@@ -284,39 +334,15 @@ def send_action_item_update_message(user_id: str, action_item_id: str, descripti
     Sends a data-only FCM message when an action item is updated.
     The app receives this and reschedules the local notification.
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        print(f"No notification tokens found for user {user_id}")
-        return
-
+    print(f'send_action_item_update_message to user {user_id}')
     data = {
         'type': 'action_item_update',
         'action_item_id': action_item_id,
         'description': description,
         'due_at': due_at,
     }
-
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            android=messaging.AndroidConfig(priority='high'),
-            # iOS requires specific headers for background data-only messages
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-push-type': 'background',
-                    'apns-priority': '5',
-                    'apns-topic': 'com.friend-app-with-wearable.ios12',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
-
-        try:
-            response = messaging.send(message)
-            print(f'Action item update message sent to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+    tag = _generate_tag(f"{user_id}:action_item_update:{action_item_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_deletion_message(user_id: str, action_item_id: str):
@@ -324,37 +350,13 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
     Sends a data-only FCM message when an action item is deleted.
     The app receives this and cancels the scheduled local notification.
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        print(f"No notification tokens found for user {user_id}")
-        return
-
+    print(f'send_action_item_deletion_message to user {user_id}')
     data = {
         'type': 'action_item_delete',
         'action_item_id': action_item_id,
     }
-
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            android=messaging.AndroidConfig(priority='high'),
-            # iOS requires specific headers for background data-only messages
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-push-type': 'background',
-                    'apns-priority': '5',
-                    'apns-topic': 'com.friend-app-with-wearable.ios12',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
-
-        try:
-            response = messaging.send(message)
-            print(f'Action item deletion message sent to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+    tag = _generate_tag(f"{user_id}:action_item_delete:{action_item_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_created_notification(user_id: str, action_item_description: str):

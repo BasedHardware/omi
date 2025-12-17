@@ -1,20 +1,131 @@
 ---
-title: "Part List"
-description: "Please note that availability and prices may vary by region."
+title: "Parts List"
+description: "Everything you need to build your own Omi device. Availability and prices may vary by region."
 ---
 
+## Required Components
 
-| **Item** | **Where to Buy** | **Unit Price** |
-| --- | --- | --- |
-| **Seeed Studio XIAO nRF52840 Sense Board** | - [\$15 Seeed Studio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html)<br/>- [\$24Amazon US](https://amzn.to/3TZD1pO)<br/>- [Amazon EU](https://amzn.eu/d/3eG6gaA)<br/>- [Robu.in India](https://robu.in/product/seeed-studio-xiao-nrf52840-sense-tinyml-tensorflow-lite-imu-microphone-bluetooth5-0/) | **$15/unit** |
-| **Rechargeable Battery** | - [$7 on Amazon US](https://amzn.to/3TXlE9f) | **$7/unit** |
-| **Slider Switch** | - [$8 for 30+ units on Amazon US](https://www.amazon.com/dp/B099MRCDG8)<br/>- [Amazon EU](https://www.amazon.de/dp/B09TVFF6KW)<br/>- [Amazon UK](https://www.amazon.co.uk/dp/B09TVFF6KW)<br/>*(Model: SS12D00-G3, 3mm)*<br/>*(Only one switch is needed)* | **$1/unit** |
-| **Wires** | - [Various options on Amazon US](https://www.amazon.com/dp/B09X4629C1) | **Varies** |
-| **Case** | - [3D-print design available on GitHub](https://github.com/BasedHardware/Omi/tree/main/Omi/hardware/triangle%20v1) | **Varies** |
+<CardGroup cols={2}>
+  <Card title="Microcontroller" icon="microchip">
+    Seeed Studio XIAO nRF52840 Sense
+  </Card>
+  <Card title="Power" icon="battery-full">
+    Rechargeable LiPo battery
+  </Card>
+  <Card title="Switch" icon="toggle-on">
+    Slider switch for power control
+  </Card>
+  <Card title="Case" icon="cube">
+    3D printed enclosure
+  </Card>
+</CardGroup>
 
-***
+---
 
-## Notes:[​](#notes "Direct link to Notes:")
+## Parts List
 
-1. The provided links are third-party providers; we do not guarantee product availability or quality.
-2. Pricing is approximate and may vary depending on your location and shipping fees.
+### Seeed Studio XIAO nRF52840 Sense Board
+
+The brain of your Omi device - a compact Bluetooth LE board with built-in microphone.
+
+| Region | Store | Price |
+|--------|-------|-------|
+| Global | [Seeed Studio](https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html) | $15 |
+| US | [Amazon US](https://amzn.to/3TZD1pO) | $24 |
+| EU | [Amazon EU](https://amzn.eu/d/3eG6gaA) | Varies |
+| India | [Robu.in](https://robu.in/product/seeed-studio-xiao-nrf52840-sense-tinyml-tensorflow-lite-imu-microphone-bluetooth5-0/) | Varies |
+
+<Tip>
+The Seeed Studio direct store offers the best price at $15/unit.
+</Tip>
+
+---
+
+### Rechargeable Battery
+
+A small LiPo battery to power your device.
+
+| Region | Store | Price |
+|--------|-------|-------|
+| US | [Amazon US](https://amzn.to/3TXlE9f) | $7 |
+
+---
+
+### Slider Switch
+
+Power switch to turn your device on/off. Model: **SS12D00-G3, 3mm**
+
+| Region | Store | Price |
+|--------|-------|-------|
+| US | [Amazon US](https://www.amazon.com/dp/B099MRCDG8) | $8 for 30+ units |
+| EU | [Amazon EU](https://www.amazon.de/dp/B09TVFF6KW) | Varies |
+| UK | [Amazon UK](https://www.amazon.co.uk/dp/B09TVFF6KW) | Varies |
+
+<Note>
+You only need one switch per device. The packs include many extras.
+</Note>
+
+---
+
+### Wires
+
+Thin wires for connecting components.
+
+| Region | Store | Price |
+|--------|-------|-------|
+| US | [Amazon US](https://www.amazon.com/dp/B09X4629C1) | Varies |
+
+---
+
+### 3D Printed Case
+
+The enclosure for your Omi device.
+
+<Card title="Download STL Files" icon="download" href="https://github.com/BasedHardware/omi/tree/main/omi/hardware/triangle%20v1">
+  Get the 3D print files from GitHub
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Don't have a 3D printer?" icon="cube">
+    Options for getting your case printed:
+
+    - **Local makerspaces** - Check [Makerspace.com](https://makerspace.com/) for locations near you
+    - **Online services** - Use services like Shapeways, Craftcloud, or PCBWay
+    - **Local libraries** - Many public libraries now have 3D printers available
+    - **University labs** - Students may have access to campus maker labs
+  </Accordion>
+  <Accordion title="Printing tips" icon="lightbulb">
+    - **Material**: PLA or PETG recommended
+    - **Layer height**: 0.2mm for good detail
+    - **Infill**: 20% is sufficient
+    - **Supports**: May be needed depending on orientation
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Important Notes
+
+<Warning>
+The provided links are to third-party vendors. We do not guarantee product availability or quality.
+</Warning>
+
+- Pricing is approximate and may vary by location and shipping fees
+- Some components may have long shipping times from certain vendors
+- Consider buying extras of small components like switches
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Build Guide" icon="screwdriver-wrench" href="/doc/assembly/Build_the_device">
+    Step-by-step assembly instructions
+  </Card>
+  <Card title="Flash Firmware" icon="bolt" href="/doc/get_started/Flash_device">
+    Install firmware on your device
+  </Card>
+  <Card title="App Setup" icon="mobile" href="/doc/get_started/introduction">
+    Set up the Omi app
+  </Card>
+</CardGroup>

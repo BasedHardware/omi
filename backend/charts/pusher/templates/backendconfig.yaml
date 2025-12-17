@@ -1,0 +1,11 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ .Values.service.backendConfig }}
+spec:
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    port: {{ .Values.service.port }}
+    type: HTTP
+    requestPath: /health  # Ensure this path returns 200 OK
