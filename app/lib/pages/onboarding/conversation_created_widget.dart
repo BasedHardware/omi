@@ -14,7 +14,7 @@ Future updateConvoDetailProvider(BuildContext context, ServerConversation conver
   return Future.microtask(() {
     context.read<ConversationProvider>().addConversation(conversation);
     var date = DateTime(conversation.createdAt.year, conversation.createdAt.month, conversation.createdAt.day);
-    context.read<ConversationDetailProvider>().updateConversation(0, date);
+    context.read<ConversationDetailProvider>().updateConversation(conversation.id, date);
   });
 }
 

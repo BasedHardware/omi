@@ -724,6 +724,12 @@ class ConversationProvider extends ChangeNotifier {
     return (date, idx);
   }
 
+  int getConversationIndexById(String id, DateTime date) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final list = groupedConversations[normalizedDate] ?? [];
+    return list.indexWhere((c) => c.id == id);
+  }
+
   void updateSyncedConversation(ServerConversation conversation) {
     updateConversationInSortedList(conversation);
     notifyListeners();
