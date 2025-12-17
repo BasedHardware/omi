@@ -1016,14 +1016,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.2"
-  graphview:
-    dependency: "direct main"
-    description:
-      name: graphview
-      sha256: a683865b36172cc8c470f45f6d34bb901ba5b4e80fc345f6a0021abc57fa8f4c
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.5.1"
   group_button:
     dependency: transitive
     description:

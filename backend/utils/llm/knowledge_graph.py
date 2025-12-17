@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 import uuid
+import logging
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -143,8 +144,8 @@ def extract_knowledge_from_memory(
             'edges': created_edges,
         }
         
-    except Exception as e:
-        print(f'Error extracting knowledge graph from memory: {e}')
+    except Exception:
+        logging.exception(f"Error extracting knowledge graph from memory_id: {memory_id}")
         return {'nodes': [], 'edges': []}
 
 

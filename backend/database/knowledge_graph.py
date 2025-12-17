@@ -153,10 +153,12 @@ def upsert_knowledge_node(uid: str, node_data: Dict[str, Any]) -> Dict[str, Any]
         node_data['updated_at'] = datetime.now(timezone.utc)
         node_data['created_at'] = existing_data.get('created_at', datetime.now(timezone.utc))
         node_data['label_lower'] = node_data.get('label', '').lower()
+        node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
     else:
         node_data['created_at'] = datetime.now(timezone.utc)
         node_data['updated_at'] = datetime.now(timezone.utc)
         node_data['label_lower'] = node_data.get('label', '').lower()
+        node_data['aliases_lower'] = [a.lower() for a in node_data.get('aliases', [])]
     
     node_ref.set(node_data)
     return node_data
@@ -166,19 +168,19 @@ def find_node_by_label_or_alias(uid: str, label: str) -> Optional[Dict[str, Any]
     if not label:
         return None
         
-    user_ref = db.collection(users_collection).document(uid)
-    nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    
-    label_lower = label.lower()
-    
+    nodes_ref = db.collection(users_collection).document(uid).collection(knowledge_nodes_collection)
     label_lower = label.lower()
     
     query = nodes_ref.where(filter=FieldFilter('label_lower', '==', label_lower)).limit(1)
     results = list(query.stream())
-    
     if results:
         return results[0].to_dict()
-        
+    
+    query = nodes_ref.where(filter=FieldFilter('aliases_lower', 'array_contains', label_lower)).limit(1)
+    results = list(query.stream())
+    if results:
+        return results[0].to_dict()
+    
     return None
 
 
@@ -229,10 +231,18 @@ def get_knowledge_graph(uid: str) -> Dict[str, Any]:
 def delete_knowledge_graph(uid: str) -> None:
     user_ref = db.collection(users_collection).document(uid)
     
+    def _batch_delete(coll_ref):
+        while True:
+            docs = list(coll_ref.limit(500).stream())
+            if not docs:
+                break
+            batch = db.batch()
+            for doc in docs:
+                batch.delete(doc.reference)
+            batch.commit()
+    
     nodes_ref = user_ref.collection(knowledge_nodes_collection)
-    for doc in nodes_ref.stream():
-        doc.reference.delete()
+    _batch_delete(nodes_ref)
     
     edges_ref = user_ref.collection(knowledge_edges_collection)
-    for doc in edges_ref.stream():
-        doc.reference.delete()
+    _batch_delete(edges_ref)

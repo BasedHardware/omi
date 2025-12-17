@@ -3,6 +3,7 @@ import random
 import re
 import threading
 import uuid
+import logging
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -336,8 +337,8 @@ def _extract_memories(uid: str, conversation: Conversation):
                     continue
                 extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
                 set_memory_kg_extracted(uid, memory_db_obj.id)
-        except Exception as e:
-            print(f"Error extracting knowledge graph: {e}")
+        except Exception:
+            logging.exception("Error extracting knowledge graph from memory.")
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
