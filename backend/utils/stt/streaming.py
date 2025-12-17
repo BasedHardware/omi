@@ -463,7 +463,7 @@ async def process_audio_soniox(
         'sample_rate': sample_rate,
         'num_channels': 1,
         'enable_speaker_tags': True,
-        'language_hints': [l if l != 'pt-BR' else 'pt' for l in language_hints],
+        'language_hints': language_hints,
     }
 
     # Add speaker identification if available
@@ -614,10 +614,6 @@ async def process_audio_soniox(
 async def process_audio_speechmatics(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
     api_key = os.getenv('SPEECHMATICS_API_KEY')
     uri = 'wss://eu2.rt.speechmatics.com/v2'
-
-        # Speechmatics doesn't support pt-BR
-    if language == 'pt-BR':
-        language = 'pt'
 
     request = {
         "message": "StartRecognition",
