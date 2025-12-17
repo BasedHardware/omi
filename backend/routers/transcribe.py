@@ -391,7 +391,21 @@ async def _listen(
         conversation_creation_timeout = 120
 
     # Stream transcript
-    async def _create_conversation(conversation_data: dict):
+    # Callback for when pusher finishes processing a conversation
+    def on_conversation_processed(conversation_id: str):
+        conversation_data = conversations_db.get_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation = Conversation(**conversation_data)
+            _send_message_event(ConversationEvent(event_type="memory_created", memory=conversation, messages=[]))
+
+    def on_conversation_processing_started(conversation_id: str):
+        conversation_data = conversations_db.get_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation = Conversation(**conversation_data)
+            _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
+
+    # Fallback for when pusher is not available
+    async def _create_conversation_fallback(conversation_data: dict):
         conversation = Conversation(**conversation_data)
         if conversation.status != ConversationStatus.processing:
             _send_message_event(ConversationEvent(event_type="memory_processing_started", memory=conversation))
@@ -422,7 +436,10 @@ async def _listen(
             return
 
         for conversation in processing:
-            await _create_conversation(conversation)
+            if PUSHER_ENABLED:
+                await request_conversation_processing(conversation['id'])
+            else:
+                await _create_conversation_fallback(conversation)
 
     async def process_pending_conversations(timed_out_id: Optional[str]):
         await asyncio.sleep(7.0)
@@ -480,7 +497,11 @@ async def _listen(
         if conversation:
             has_content = conversation.get('transcript_segments') or conversation.get('photos')
             if has_content:
-                await _create_conversation(conversation)
+                if PUSHER_ENABLED:
+                    on_conversation_processing_started(conversation_id)
+                    await request_conversation_processing(conversation_id)
+                else:
+                    await _create_conversation_fallback(conversation)
             else:
                 print(f'Clean up the conversation {conversation_id}, reason: no content', uid, session_id)
                 conversations_db.delete_conversation(uid, conversation_id)
@@ -755,9 +776,34 @@ async def _listen(
 
         last_synced_conversation_id = None
 
+        # Conversation processing
+        pending_conversation_requests = set()
+
         def transcript_send(segments):
             nonlocal segment_buffers
             segment_buffers.extend(segments)
+
+        async def request_conversation_processing(conversation_id: str):
+            """Request pusher to process a conversation."""
+            nonlocal pusher_ws, pusher_connected, pending_conversation_requests
+            if not pusher_connected or not pusher_ws:
+                print(f"Pusher not connected, falling back to local processing for {conversation_id}", uid, session_id)
+                return False
+            try:
+                pending_conversation_requests.add(conversation_id)
+                data = bytearray()
+                data.extend(struct.pack("I", 104))
+                data.extend(bytes(json.dumps({
+                    "conversation_id": conversation_id,
+                    "language": language
+                }), "utf-8"))
+                await pusher_ws.send(data)
+                print(f"Sent process_conversation request to pusher: {conversation_id}", uid, session_id)
+                return True
+            except Exception as e:
+                print(f"Failed to send process_conversation request: {e}", uid, session_id)
+                pending_conversation_requests.discard(conversation_id)
+                return False
 
         async def _transcript_flush(auto_reconnect: bool = True):
             nonlocal segment_buffers
@@ -854,6 +900,39 @@ async def _listen(
                 if len(audio_buffers) > 0:
                     await _audio_bytes_flush(auto_reconnect=True)
 
+        async def pusher_receive():
+            """Receive and handle messages from pusher."""
+            nonlocal websocket_active, pusher_ws, pusher_connected, pending_conversation_requests
+            while websocket_active:
+                if not pusher_connected or not pusher_ws:
+                    await asyncio.sleep(1)
+                    continue
+                try:
+                    msg = await pusher_ws.recv()
+                    if not msg or len(msg) < 4:
+                        continue
+                    header_type = struct.unpack('<I', msg[:4])[0]
+                    
+                    # Conversation processed response
+                    if header_type == 201:
+                        result = json.loads(msg[4:].decode("utf-8"))
+                        conversation_id = result.get("conversation_id")
+                        pending_conversation_requests.discard(conversation_id)
+                        
+                        if "error" in result:
+                            print(f"Conversation processing failed: {result['error']}", uid, session_id)
+                            continue
+                        
+                        if result.get("success"):
+                            print(f"Conversation processed by pusher: {conversation_id}", uid, session_id)
+                            on_conversation_processed(conversation_id)
+                            
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    print(f"Pusher receive error: {e}", uid, session_id)
+                    await asyncio.sleep(1)
+
         async def _flush():
             await _audio_bytes_flush(auto_reconnect=False)
             await _transcript_flush(auto_reconnect=False)
@@ -903,6 +982,8 @@ async def _listen(
             transcript_consume,
             audio_bytes_send if audio_bytes_enabled else None,
             audio_bytes_consume if audio_bytes_enabled else None,
+            request_conversation_processing,
+            pusher_receive,
         )
 
     transcript_send = None
@@ -911,6 +992,8 @@ async def _listen(
     audio_bytes_consume = None
     pusher_close = None
     pusher_connect = None
+    request_conversation_processing = None
+    pusher_receive = None
 
     # Transcripts
     #
@@ -1361,6 +1444,8 @@ async def _listen(
                 transcript_consume,
                 audio_bytes_send,
                 audio_bytes_consume,
+                request_conversation_processing,
+                pusher_receive,
             ) = create_pusher_task_handler()
 
             # Pusher tasks
@@ -1369,6 +1454,8 @@ async def _listen(
                 pusher_tasks.append(asyncio.create_task(transcript_consume()))
             if audio_bytes_consume is not None:
                 pusher_tasks.append(asyncio.create_task(audio_bytes_consume()))
+            if pusher_receive is not None:
+                pusher_tasks.append(asyncio.create_task(pusher_receive()))
 
         # Tasks
         data_process_task = asyncio.create_task(
