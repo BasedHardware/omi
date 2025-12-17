@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -339,6 +340,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
 def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: List[float]) -> bytes:
     """
     Download and merge audio chunks on-demand, handling mixed encryption states.
+    Downloads chunks in parallel.
     Normalizes all chunks to unencrypted PCM format for consistent merging.
 
     Args:
@@ -349,13 +351,12 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
     Returns:
         Merged audio bytes (PCM16)
     """
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
-    merged_data = bytearray()
 
-    for timestamp in timestamps:
-        # Format timestamp to match upload format (3 decimal places)
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
+        """Download a single chunk and return (timestamp, pcm_data)."""
         formatted_timestamp = f'{timestamp:.3f}'
-        # Try encrypted path first
         chunk_path_enc = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
         chunk_path_bin = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
 
@@ -373,7 +374,7 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
             is_encrypted = False
         else:
             print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-            continue
+            return (timestamp, None)
 
         # Normalize to PCM (decrypt if needed)
         if is_encrypted:
@@ -381,7 +382,25 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
         else:
             pcm_data = chunk_data
 
-        merged_data.extend(pcm_data)
+        return (timestamp, pcm_data)
+
+    # Download chunks in parallel
+    chunk_results = {}
+    max_workers = min(10, len(timestamps))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_timestamp = {executor.submit(download_single_chunk, ts): ts for ts in timestamps}
+
+        for future in as_completed(future_to_timestamp):
+            timestamp, pcm_data = future.result()
+            if pcm_data is not None:
+                chunk_results[timestamp] = pcm_data
+
+    # Merge chunks
+    merged_data = bytearray()
+    for timestamp in timestamps:
+        if timestamp in chunk_results:
+            merged_data.extend(chunk_results[timestamp])
 
     if not merged_data:
         raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
