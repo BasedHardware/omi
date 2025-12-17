@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -199,7 +200,7 @@ class MemoryGraphPage extends StatefulWidget {
   State<MemoryGraphPage> createState() => _MemoryGraphPageState();
 }
 
-class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin {
+class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late ForceDirectedSimulation3D simulation;
   late Ticker _ticker;
 
@@ -220,11 +221,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   String? _error;
 
   final _repaintNotifier = ValueNotifier<int>(0);
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     simulation = ForceDirectedSimulation3D();
+    WidgetsBinding.instance.addObserver(this);
 
     _ticker = createTicker((elapsed) {
       if (simulation.tick()) {
@@ -235,13 +238,31 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     _loadGraph();
+    _startAutoRefresh();
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
     _repaintNotifier.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadGraph();
+    }
+  }
+
+  void _startAutoRefresh() {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && !_isLoading && !_isRebuilding) {
+        _loadGraph();
+      }
+    });
   }
 
   void _runLayoutSync() {
