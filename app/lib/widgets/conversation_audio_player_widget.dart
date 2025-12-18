@@ -88,9 +88,6 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
     try {
       final headers = await getAudioHeaders();
 
-      debugPrint('Setting up audio player for conversation: ${widget.conversation.id}');
-      debugPrint('Number of audio files: ${widget.conversation.audioFiles.length}');
-
       final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
       final urls = getConversationAudioUrls(
         conversationId: widget.conversation.id,
@@ -98,7 +95,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
         format: 'wav',
       );
 
-      // Create concatenating audio source for seamless gapless playback
+      // Create concatenating audio source for gapless playback
       final playlist = ConcatenatingAudioSource(
         useLazyPreparation: true,
         children: urls.map((url) {
@@ -129,7 +126,6 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
         playlist,
         preload: true,
       );
-      debugPrint('Audio source set successfully!');
 
       _retryCount = 0;
 
