@@ -17,6 +17,7 @@ import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -304,6 +305,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               builder: (context) => const MemoriesPage(),
             ),
           );
+          break;
+        case "daily-summary":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailySummaryDetailPage(summaryId: detailPageId!),
+                  ),
+                );
+              }
+            });
+          }
           break;
         default:
       }
