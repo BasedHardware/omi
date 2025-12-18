@@ -8,6 +8,8 @@ import 'models/followups_data.dart';
 import 'models/story_briefing_data.dart';
 import 'models/highlight_data.dart';
 import 'models/study_data.dart';
+import 'models/task_data.dart';
+import 'models/flow_data.dart';
 import 'parsers/parsers.dart';
 
 /// Base class for parsed content segments
@@ -85,6 +87,20 @@ class StudySegment extends ContentSegment {
   const StudySegment(this.data);
 }
 
+/// A segment containing a single task with steps and transcript references
+class TaskSegment extends ContentSegment {
+  final TaskData data;
+
+  const TaskSegment(this.data);
+}
+
+/// A segment containing a flow/use case with steps
+class FlowSegment extends ContentSegment {
+  final FlowData data;
+
+  const FlowSegment(this.data);
+}
+
 /// Main parser for extracting custom XML tags from markdown content.
 ///
 /// Uses modular [BaseTagParser] implementations for each tag type.
@@ -102,6 +118,8 @@ class XmlTagParser {
     ChartParser(),
     AccordionParser(),
     StudyParser(),
+    TaskParser(),
+    FlowParser(),
   ];
 
   /// Journalist component parsers (these get aggregated into Story Briefing)
@@ -115,6 +133,8 @@ class XmlTagParser {
         ChartParser().containsTag(content) ||
         AccordionParser().containsTag(content) ||
         StudyParser().containsTag(content) ||
+        TaskParser().containsTag(content) ||
+        FlowParser().containsTag(content) ||
         TimelineParser().containsTag(content) ||
         QuoteBoardParser().containsTag(content) ||
         FollowupsParser().containsTag(content);

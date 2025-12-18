@@ -10,6 +10,8 @@ export 'models/quote_board_data.dart';
 export 'models/followups_data.dart';
 export 'models/story_briefing_data.dart';
 export 'models/study_data.dart';
+export 'models/task_data.dart';
+export 'models/flow_data.dart';
 
 // Parsers (modular tag parsers for easy extension)
 export 'parsers/parsers.dart';
@@ -30,7 +32,14 @@ export 'widgets/story_briefing_card.dart';
 export 'widgets/story_briefing_screen.dart';
 export 'widgets/study_card.dart';
 export 'widgets/study_screen.dart';
+export 'widgets/task_card.dart';
+export 'widgets/task_screen.dart';
+export 'widgets/task_create_sheet.dart';
+export 'widgets/flow_card.dart';
 export 'widgets/in_app_browser.dart';
+
+// Services
+export 'services/task_integration_service.dart';
 
 // Main renderer
 export 'generative_markdown_widget.dart';
