@@ -24,6 +24,7 @@ from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
     download_audio_chunks_and_merge,
+    get_or_create_merged_audio,
 )
 from utils import encryption
 from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
@@ -85,9 +86,10 @@ def parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | N
             start = int(start_str)
             end = int(end_str)
 
-        if start < 0 or end >= file_size or start > end:
+        # RFC 7233: start must be valid, end can exceed file size and gets clamped
+        if start < 0 or start >= file_size or start > end:
             return None
-
+        end = min(end, file_size - 1)
         return (start, end)
     except (ValueError, IndexError):
         return None
@@ -137,27 +139,30 @@ def download_audio_file_endpoint(
     if not audio_file:
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
-    # Get PCM data by merging chunks on-demand
+    # Get audio data - use cache if available, otherwise merge and cache
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
-        pcm_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+        if format == "wav":
+            audio_data, was_cached = get_or_create_merged_audio(
+                uid=uid,
+                conversation_id=conversation_id,
+                audio_file_id=audio_file_id,
+                timestamps=audio_file['chunk_timestamps'],
+                pcm_to_wav_func=pcm_to_wav,
+            )
+            content_type = "audio/wav"
+            extension = "wav"
+        else:
+            audio_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+            content_type = "application/octet-stream"
+            extension = "pcm"
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Audio chunks not found in storage")
     except Exception as e:
         print(f"Error downloading audio file: {e}")
         raise HTTPException(status_code=500, detail="Failed to download audio file")
-
-    # Convert to requested format
-    if format == "wav":
-        audio_data = pcm_to_wav(pcm_data)
-        content_type = "audio/wav"
-        extension = "wav"
-    else:  # pcm (raw)
-        audio_data = pcm_data
-        content_type = "application/octet-stream"
-        extension = "pcm"
 
     # Create descriptive filename
     filename = f"conversation_{conversation_id}_audio_{audio_file_id}.{extension}"
