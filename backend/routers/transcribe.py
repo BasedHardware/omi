@@ -795,6 +795,7 @@ async def _listen(
 
         # Conversation processing
         pending_conversation_requests = set()
+        pending_request_event = asyncio.Event()
 
         def transcript_send(segments):
             nonlocal segment_buffers
@@ -802,12 +803,13 @@ async def _listen(
 
         async def request_conversation_processing(conversation_id: str):
             """Request pusher to process a conversation."""
-            nonlocal pusher_ws, pusher_connected, pending_conversation_requests
+            nonlocal pusher_ws, pusher_connected, pending_conversation_requests, pending_request_event
             if not pusher_connected or not pusher_ws:
                 print(f"Pusher not connected, falling back to local processing for {conversation_id}", uid, session_id)
                 return False
             try:
                 pending_conversation_requests.add(conversation_id)
+                pending_request_event.set()  # Signal the receiver
                 data = bytearray()
                 data.extend(struct.pack("I", 104))
                 data.extend(bytes(json.dumps({"conversation_id": conversation_id, "language": language}), "utf-8"))
@@ -916,13 +918,22 @@ async def _listen(
 
         async def pusher_receive():
             """Receive and handle messages from pusher."""
-            nonlocal websocket_active, pusher_ws, pusher_connected, pending_conversation_requests
+            nonlocal websocket_active, pusher_ws, pusher_connected, pending_conversation_requests, pending_request_event
             while websocket_active:
+                # Wait efficiently until there's work to do
+                if not pending_conversation_requests:
+                    pending_request_event.clear()
+                    try:
+                        await asyncio.wait_for(pending_request_event.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        continue  # Check websocket_active
+
                 if not pusher_connected or not pusher_ws:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
                     continue
+
                 try:
-                    msg = await pusher_ws.recv()
+                    msg = await asyncio.wait_for(pusher_ws.recv(), timeout=5.0)
                     if not msg or len(msg) < 4:
                         continue
                     header_type = struct.unpack('<I', msg[:4])[0]
@@ -941,6 +952,8 @@ async def _listen(
                             print(f"Conversation processed by pusher: {conversation_id}", uid, session_id)
                             on_conversation_processed(conversation_id)
 
+                except asyncio.TimeoutError:
+                    continue  # Check loop conditions again
                 except asyncio.CancelledError:
                     break
                 except ConnectionClosed as e:
@@ -948,7 +961,7 @@ async def _listen(
                     pusher_connected = False
                 except Exception as e:
                     print(f"Pusher receive error: {e}", uid, session_id)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)
 
                 # Reconnect outside try/except (same pattern as flush functions)
                 if pusher_connected is False and websocket_active:
