@@ -727,6 +727,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
+                      conversation: conversation,
                       hasSegments: conversation.transcriptSegments.isNotEmpty ||
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
@@ -1006,7 +1007,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   }
 }
 
-class SummaryTab extends StatelessWidget {
+class SummaryTab extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1019,12 +1020,21 @@ class SummaryTab extends StatelessWidget {
   });
 
   @override
+  State<SummaryTab> createState() => _SummaryTabState();
+}
+
+class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Listener(
         onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
-          if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-            onTapWhenSearchEmpty!();
+          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+            widget.onTapWhenSearchEmpty!();
           }
         },
         child: GestureDetector(
@@ -1032,8 +1042,8 @@ class SummaryTab extends StatelessWidget {
           onTap: () {
             FocusScope.of(context).unfocus();
             // If search is empty, call the callback to close search
-            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-              onTapWhenSearchEmpty!();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
             }
           },
           child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
@@ -1048,7 +1058,8 @@ class SummaryTab extends StatelessWidget {
                       const GetSummaryWidgets(),
                       data.item1
                           ? const ReprocessDiscardedWidget()
-                          : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
+                          : GetAppsWidgets(
+                              searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
                       const SizedBox(height: 150)
                     ],
                   ),
@@ -1060,7 +1071,7 @@ class SummaryTab extends StatelessWidget {
   }
 }
 
-class TranscriptWidgets extends StatelessWidget {
+class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1073,20 +1084,29 @@ class TranscriptWidgets extends StatelessWidget {
   });
 
   @override
+  State<TranscriptWidgets> createState() => _TranscriptWidgetsState();
+}
+
+class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Listener(
         onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
-          if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-            onTapWhenSearchEmpty!();
+          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+            widget.onTapWhenSearchEmpty!();
           }
         },
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () {
             FocusScope.of(context).unfocus();
-            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-              onTapWhenSearchEmpty!();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
             }
           },
           child: Consumer<ConversationDetailProvider>(
@@ -1121,9 +1141,9 @@ class TranscriptWidgets extends StatelessWidget {
                 canDisplaySeconds: provider.canDisplaySeconds,
                 isConversationDetail: true,
                 bottomMargin: 150,
-                searchQuery: searchQuery,
-                currentResultIndex: currentResultIndex,
-                onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+                searchQuery: widget.searchQuery,
+                currentResultIndex: widget.currentResultIndex,
+                onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {
