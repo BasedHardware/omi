@@ -295,14 +295,15 @@ async def process_audio_dg(
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
             if word.start < preseconds:
-                # print('Skipping word', word.start)
+                # Skip words that are part of the speech profile
                 continue
+
             if not segments:
                 segments.append(
                     {
                         'speaker': f"SPEAKER_{word.speaker}",
-                        'start': word.start - preseconds,
-                        'end': word.end - preseconds,
+                        'start': word.start,
+                        'end': word.end,
                         'text': word.punctuated_word,
                         'is_user': is_user,
                         'person_id': None,
