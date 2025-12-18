@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/conversation_bottom_bar.dart';
-import 'package:omi/widgets/photos_grid.dart';
-import 'package:omi/providers/people_provider.dart';
 
 import 'package:provider/provider.dart';
 
@@ -33,6 +32,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   TabController? _controller;
   late bool showSummarizeConfirmation;
   late AnimationController _animationController;
+  bool _isMuted = false;
 
   @override
   void initState() {
@@ -44,6 +44,48 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
     super.initState();
+  }
+
+  Future<void> _toggleMute(CaptureProvider provider) async {
+    if (_isMuted) {
+      // Unmute - resume recording
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _isMuted = false;
+      });
+
+      if (PlatformService.isDesktop) {
+        // Desktop - system audio
+        await provider.resumeSystemAudioRecording();
+      } else if (provider.havingRecordingDevice) {
+        // Device recording (Omi device)
+        await provider.resumeDeviceRecording();
+      } else {
+        // Phone mic
+        await provider.streamRecording();
+        MixpanelManager().phoneMicRecordingStarted();
+      }
+    } else {
+      // Mute - pause recording with interesting haptic
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 80));
+      HapticFeedback.lightImpact();
+      setState(() {
+        _isMuted = true;
+      });
+
+      if (PlatformService.isDesktop) {
+        // Desktop - system audio
+        await provider.pauseSystemAudioRecording();
+      } else if (provider.havingRecordingDevice) {
+        // Device recording (Omi device)
+        await provider.pauseDeviceRecording();
+      } else {
+        // Phone mic
+        await provider.stopStreamRecording();
+        MixpanelManager().phoneMicRecordingStopped();
+      }
+    }
   }
 
   @override
@@ -68,16 +110,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     String twoDigits(int n) => n.toString().padLeft(2, '0');
 
     return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
-  }
-
-  void _pushNewConversation(BuildContext context, conversation) async {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (c) => ConversationDetailPage(
-          conversation: conversation,
-        ),
-      ));
-    });
   }
 
   Future<void> _stopConversation(CaptureProvider provider) async {
@@ -167,9 +199,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
                   ),
                   const SizedBox(width: 4),
-                  Text(provider.photos.isNotEmpty ? "📸" : "🎙️"),
+                  Text(provider.photos.isNotEmpty ? "📸" : (_isMuted ? "🔇" : "🎙️")),
                   const SizedBox(width: 4),
-                  const Expanded(child: Text("Listening")),
+                  Expanded(child: Text(_isMuted ? "Muted" : "Listening")),
                 ],
               ),
             ),
@@ -255,30 +287,75 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             ),
             floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
             floatingActionButton: (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                ? Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.25),
-                          spreadRadius: 2,
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Process Now button
+                      GestureDetector(
+                        onTap: () => _stopConversation(provider),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFB800),
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                spreadRadius: 2,
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FaIcon(
+                                FontAwesomeIcons.stop,
+                                color: Colors.black,
+                                size: 16.0,
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Process Now',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                    child: IconButton(
-                      onPressed: () => _stopConversation(provider),
-                      icon: const FaIcon(
-                        FontAwesomeIcons.stop,
-                        color: Colors.white,
-                        size: 20.0,
                       ),
-                      padding: EdgeInsets.zero,
-                    ),
+                      const SizedBox(width: 12),
+                      // Mute button
+                      GestureDetector(
+                        onTap: () => _toggleMute(provider),
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: _isMuted ? Colors.red : const Color(0xFF35343B),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.25),
+                                spreadRadius: 2,
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.mic_off,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ],
                   )
                 : null,
           ),

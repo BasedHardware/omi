@@ -4,20 +4,15 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
-import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
+import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
-import 'package:omi/pages/settings/privacy.dart';
-import 'package:omi/pages/settings/import_history_page.dart';
+import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/providers/user_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/persona/persona_profile.dart';
 
 import 'delete_account.dart';
 
@@ -38,7 +33,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
         children: children,
@@ -49,20 +44,22 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildProfileItem({
     required String title,
     String? subtitle,
+    String? chipValue,
     required Widget icon,
     required VoidCallback onTap,
     bool showSubtitle = true,
     bool showBetaTag = false,
+    bool showChevron = true,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           child: Row(
             children: [
               SizedBox(
@@ -106,7 +103,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ],
                     ),
-                    if (showSubtitle && subtitle != null) ...[
+                    if (showSubtitle && subtitle != null && chipValue == null) ...[
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
@@ -120,76 +117,32 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: Color(0xFF3C3C43),
-                size: 20,
-              ),
+              if (chipValue != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A2E),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    chipValue,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (showChevron) const SizedBox(width: 8),
+              ],
+              if (showChevron)
+                const Icon(
+                  Icons.chevron_right,
+                  color: Color(0xFF3C3C43),
+                  size: 20,
+                ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreferenceToggle({
-    required String title,
-    required bool value,
-    required Function(bool) onChanged,
-    required VoidCallback onInfoTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: GestureDetector(
-                onTap: onInfoTap,
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            GestureDetector(
-              onTap: () => onChanged(!value),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: value ? const Color(0xFF007AFF) : Colors.transparent,
-                  border: Border.all(
-                    color: value ? const Color(0xFF007AFF) : const Color(0xFF8E8E93),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                width: 24,
-                height: 24,
-                child: value
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 16,
-                      )
-                    : null,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -223,7 +176,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
-                  title: SharedPreferencesUtil().givenName.isEmpty ? 'Set Your Name' : 'Change Your Name',
+                  title: 'Name',
+                  chipValue: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
                   icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Name');
@@ -234,6 +188,14 @@ class _ProfilePageState extends State<ProfilePage> {
                       },
                     ).whenComplete(() => setState(() {}));
                   },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Email',
+                  chipValue: SharedPreferencesUtil().email.isEmpty ? 'Not set' : SharedPreferencesUtil().email,
+                  icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {},
+                  showChevron: false,
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 Consumer<HomeProvider>(
@@ -249,7 +211,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                     return _buildProfileItem(
                       title: 'Language',
-                      subtitle: languageName,
+                      chipValue: languageName,
                       icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
                       onTap: () {
                         routeToPage(context, const LanguageSettingsPage());
@@ -259,19 +221,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Persona',
-                  icon: const FaIcon(FontAwesomeIcons.solidCircleUser, color: Color(0xFF8E8E93), size: 20),
-                  showBetaTag: true,
+                  title: 'Custom Vocabulary',
+                  icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const PersonaProfilePage(),
-                        settings: const RouteSettings(
-                          arguments: 'from_settings',
-                        ),
-                      ),
-                    );
-                    MixpanelManager().pageOpened('Profile Persona Settings');
+                    routeToPage(context, const CustomVocabularyPage());
                   },
                 ),
               ],
@@ -297,27 +250,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const UserPeoplePage());
                   },
                 ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: 'Conversation Timeout',
-                  icon: const FaIcon(FontAwesomeIcons.clock, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    ConversationTimeoutDialog.show(context);
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: 'Import Data',
-                  icon: const FaIcon(FontAwesomeIcons.fileImport, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const ImportHistoryPage());
-                  },
-                ),
               ],
             ),
             const SizedBox(height: 32),
 
-            // PAYMENT SECTION
+            // PAYMENT & PRIVACY SECTION
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
@@ -327,44 +264,45 @@ class _ProfilePageState extends State<ProfilePage> {
                     routeToPage(context, const PaymentsPage());
                   },
                 ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Data & Privacy',
+                  icon: const FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const DataPrivacyPage(),
+                      ),
+                    );
+                  },
+                ),
               ],
-            ),
-            const SizedBox(height: 32),
-
-            // PREFERENCES SECTION
-            _buildPreferenceToggle(
-              title: 'Help improve Omi by sharing anonymized analytics data',
-              value: SharedPreferencesUtil().optInAnalytics,
-              onChanged: (value) {
-                setState(() {
-                  SharedPreferencesUtil().optInAnalytics = value;
-                  value ? MixpanelManager().optInTracking() : MixpanelManager().optOutTracking();
-                });
-              },
-              onInfoTap: () {
-                routeToPage(context, const PrivacyInfoPage());
-                MixpanelManager().pageOpened('Share Analytics Data Details');
-              },
             ),
             const SizedBox(height: 32),
 
             // ACCOUNT SECTION
             _buildSectionContainer(
               children: [
-                _buildProfileItem(
-                  title: 'User ID',
-                  subtitle: SharedPreferencesUtil().uid,
-                  icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: SharedPreferencesUtil().uid));
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                Builder(
+                  builder: (context) {
+                    final uid = SharedPreferencesUtil().uid;
+                    final truncatedUid =
+                        uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
+                    return _buildProfileItem(
+                      title: 'User ID',
+                      chipValue: truncatedUid,
+                      icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: uid));
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                      },
+                    );
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: 'Delete Account',
-                  subtitle: 'Delete your account and all data',
                   icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
                   onTap: () {
                     MixpanelManager().pageOpened('Profile Delete Account Dialog');

@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum IntegrationApp {
   whoop,
@@ -104,7 +105,7 @@ extension IntegrationAppExtension on IntegrationApp {
   }
 
   bool get isAvailable {
-  //  return true; // All integrations are available
+    //  return true; // All integrations are available
     return this != IntegrationApp.googleCalendar;
   }
 
@@ -367,12 +368,27 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     );
   }
 
-  Widget _buildAppTile(IntegrationApp app) {
+  Widget _buildShimmerButton() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade600,
+      child: Container(
+        width: 70,
+        height: 28,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppTile(IntegrationApp app, bool isLoading) {
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
 
     return GestureDetector(
-      onTap: isAvailable
+      onTap: isAvailable && !isLoading
           ? () {
               if (isConnected) {
                 // If GitHub is connected, open settings page
@@ -463,42 +479,21 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                           ),
                   ),
             const SizedBox(width: 16),
-            // App Name and Status
+            // App Name
             Expanded(
-              child: Row(
-                children: [
-                  Text(
-                    app.displayName,
-                    style: TextStyle(
-                      color: isAvailable ? Colors.white : Colors.grey,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  // Connected chip
-                  if (isConnected) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Text(
-                        'Linked',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+              child: Text(
+                app.displayName,
+                style: TextStyle(
+                  color: isAvailable ? Colors.white : Colors.grey,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
-            // Action Button
-            if (!isConnected)
+            // Action Button - Show shimmer while loading
+            if (isLoading)
+              _buildShimmerButton()
+            else if (!isConnected)
               // Connect button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -598,7 +593,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     // Watch provider to rebuild when it changes
-    context.watch<IntegrationProvider>();
+    final provider = context.watch<IntegrationProvider>();
+    final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
@@ -629,7 +625,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               Expanded(
                 child: ListView(
                   children: [
-                    ...IntegrationApp.values.map(_buildAppTile).toList(),
+                    ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)).toList(),
                     _buildCreateYourOwnAppTile(),
                   ],
                 ),

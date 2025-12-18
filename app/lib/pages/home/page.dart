@@ -38,6 +38,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
+import 'package:flutter/cupertino.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
@@ -90,6 +91,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
+  StreamSubscription? _notificationStreamSubscription;
 
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
@@ -316,7 +318,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _listenToMessagesFromNotification() {
-    NotificationService.instance.listenForServerMessages.listen((message) {
+    _notificationStreamSubscription = NotificationService.instance.listenForServerMessages.listen((message) {
       if (mounted) {
         var selectedApp = Provider.of<AppProvider>(context, listen: false).getSelectedApp();
         if (selectedApp == null || message.appId == selectedApp.id) {
@@ -442,7 +444,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Consumer2<HomeProvider, DeviceProvider>(
                         builder: (context, home, deviceProvider, child) {
                           if (home.isChatFieldFocused ||
-                              home.isConvoSearchFieldFocused ||
                               home.isAppsSearchFieldFocused ||
                               home.isMemoriesSearchFieldFocused) {
                             return const SizedBox.shrink();
@@ -622,7 +623,51 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       },
                                     ),
                                   ),
-                                // Remove the floating chat button - moving it to app bar
+                                // Floating Chat Button - Bottom Right (only on homepage)
+                                if (home.selectedIndex == 0)
+                                  Positioned(
+                                    right: 20,
+                                    bottom: 100, // Position above the bottom navigation bar
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.mediumImpact();
+                                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                                        // Navigate to chat page
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const ChatPage(isPivotBottom: false),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(28),
+                                          color: Colors.deepPurple,
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              FontAwesomeIcons.solidComment,
+                                              size: 20,
+                                              color: Colors.white,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Ask Omi',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             );
                           }
@@ -709,9 +754,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           color: isSyncing
-                              ? Colors.deepPurple.withOpacity(0.2)
+                              ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPending
-                                  ? Colors.orange.withOpacity(0.15)
+                                  ? Colors.orange.withValues(alpha: 0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
@@ -730,6 +775,190 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   return const SizedBox.shrink();
                 },
               ),
+              // Search and Calendar buttons - only on home page
+              Consumer2<HomeProvider, ConversationProvider>(
+                builder: (context, homeProvider, convoProvider, _) {
+                  // Only show search and calendar buttons on home page (index 0)
+                  if (homeProvider.selectedIndex != 0) {
+                    return const SizedBox.shrink();
+                  }
+
+                  // Hide search button if there's an active search query
+                  bool shouldShowSearchButton = convoProvider.previousQuery.isEmpty;
+                  return Row(
+                    children: [
+                      // Search button - show when no active search, clicking closes search bar
+                      if (shouldShowSearchButton)
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: homeProvider.showConvoSearchBar
+                                ? Colors.deepPurple.withValues(alpha: 0.5)
+                                : const Color(0xFF1F1F25),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              Icons.search,
+                              size: 18,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              // Toggle search bar visibility
+                              homeProvider.toggleConvoSearchBar();
+                            },
+                          ),
+                        ),
+                      if (shouldShowSearchButton) const SizedBox(width: 8),
+                      // Calendar button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: convoProvider.selectedDate != null
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            convoProvider.selectedDate != null
+                                ? FontAwesomeIcons.calendarDay
+                                : FontAwesomeIcons.calendarDays,
+                            size: 16,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () async {
+                            HapticFeedback.mediumImpact();
+                            if (convoProvider.selectedDate != null) {
+                              await convoProvider.clearDateFilter();
+                              MixpanelManager().calendarFilterCleared();
+                            } else {
+                              // Open date picker
+                              DateTime selectedDate = DateTime.now();
+                              await showCupertinoModalPopup<void>(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return Container(
+                                    height: 300,
+                                    padding: const EdgeInsets.only(top: 6.0),
+                                    margin: EdgeInsets.only(
+                                      bottom: MediaQuery.of(context).viewInsets.bottom,
+                                    ),
+                                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                                    child: SafeArea(
+                                      top: false,
+                                      child: Column(
+                                        children: [
+                                          // Header with Cancel and Done buttons
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF1F1F25),
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                  color: Color(0xFF35343B),
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                CupertinoButton(
+                                                  padding: EdgeInsets.zero,
+                                                  onPressed: () => Navigator.of(context).pop(),
+                                                  child: const Text(
+                                                    'Cancel',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                CupertinoButton(
+                                                  padding: EdgeInsets.zero,
+                                                  onPressed: () async {
+                                                    Navigator.of(context).pop();
+                                                    if (context.mounted) {
+                                                      final provider =
+                                                          Provider.of<ConversationProvider>(context, listen: false);
+                                                      await provider.filterConversationsByDate(selectedDate);
+                                                      MixpanelManager().calendarFilterApplied(selectedDate);
+                                                    }
+                                                  },
+                                                  child: const Text(
+                                                    'Done',
+                                                    style: TextStyle(
+                                                      color: Colors.deepPurple,
+                                                      fontSize: 16,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          // Date picker
+                                          Expanded(
+                                            child: Container(
+                                              color: const Color(0xFF1F1F25),
+                                              child: CupertinoDatePicker(
+                                                mode: CupertinoDatePickerMode.date,
+                                                initialDateTime: DateTime.now(),
+                                                minimumDate: DateTime(2020),
+                                                maximumDate: DateTime.now(),
+                                                onDateTimeChanged: (DateTime newDate) {
+                                                  selectedDate = newDate;
+                                                },
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Star filter button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: convoProvider.showStarredOnly
+                              ? Colors.amber.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                            size: 16,
+                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            convoProvider.toggleStarredFilter();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  );
+                },
+              ),
+              // Settings button - always visible
               Container(
                 width: 36,
                 height: 36,
@@ -761,69 +990,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   },
                 ),
               ),
-              // Chat Button - Shows on all pages
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  MixpanelManager().bottomNavigationTabClicked('Chat');
-                  // Navigate to chat page
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ChatPage(isPivotBottom: false),
-                    ),
-                  );
-                },
-                child: Container(
-                  height: 36,
-                  margin: const EdgeInsets.only(left: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                        Colors.purpleAccent.withValues(alpha: 0.2),
-                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                        Colors.purpleAccent.withValues(alpha: 0.2),
-                        Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Container(
-                    margin: const EdgeInsets.all(0.5),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(17.5),
-                      border: Border.all(
-                        color: Colors.pink.withValues(alpha: 0.3),
-                        width: 0.5,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          FontAwesomeIcons.solidComment,
-                          size: 14,
-                          color: Colors.white70,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Chat',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ],
@@ -836,6 +1002,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Cancel stream subscription to prevent memory leak
+    _notificationStreamSubscription?.cancel();
+    // Remove foreground task callback to prevent memory leak
+    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();
     super.dispose();
   }

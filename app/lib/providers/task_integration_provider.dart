@@ -12,6 +12,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
   bool _isLoading = false;
+  bool _hasLoaded = false;
 
   TaskIntegrationProvider()
       : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
@@ -19,6 +20,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
   bool get isLoading => _isLoading;
+  bool get hasLoaded => _hasLoaded;
 
   /// Load default app and connection details from backend
   Future<void> loadFromBackend() async {
@@ -54,6 +56,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       debugPrint('Error loading task integrations from backend: $e');
     } finally {
       _isLoading = false;
+      _hasLoaded = true;
       notifyListeners();
     }
   }

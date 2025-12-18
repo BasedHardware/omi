@@ -70,6 +70,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
+  // Toggle to show/hide speaker names globally
+  bool _showSpeakerNames = false;
+
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
     Color(0xFF3A2E26), // Dark warm brown
@@ -84,19 +87,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Color(0xFF8B5CF6).withOpacity(0.8);
+      return const Color(0xFF8B5CF6).withValues(alpha: 0.8);
     }
     // Use speakerId to get consistent color for each speaker
     final colorIndex = speakerId % _speakerColors.length;
-    return _speakerColors[colorIndex].withOpacity(0.8);
+    return _speakerColors[colorIndex].withValues(alpha: 0.8);
   }
 
   Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
     if (isUser) {
-      return Color(0xFF8B5CF6).withOpacity(0.3);
+      return const Color(0xFF8B5CF6).withValues(alpha: 0.3);
     }
     final colorIndex = speakerId % _speakerColors.length;
-    return _speakerColors[colorIndex].withOpacity(0.3);
+    return _speakerColors[colorIndex].withValues(alpha: 0.3);
   }
 
   @override
@@ -128,14 +131,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     if (widget.searchQuery.isEmpty) return;
 
     final searchQuery = widget.searchQuery.toLowerCase();
-    int globalMatchCount = 0;
 
     for (var segment in widget.segments) {
       final text = _getDecodedText(segment.text).toLowerCase();
       final matches = RegExp(RegExp.escape(searchQuery), caseSensitive: false).allMatches(text);
       for (final _ in matches) {
         _matchKeys.add(GlobalKey());
-        globalMatchCount++;
       }
     }
   }
@@ -440,24 +441,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
   }
 
+  void _toggleShowSpeakerNames() {
+    setState(() {
+      _showSpeakerNames = !_showSpeakerNames;
+    });
+  }
+
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
     final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
-
     return Container(
         key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
-        child: GestureDetector(
-          onTap: () {
-            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-              widget.onTapWhenSearchEmpty!();
-            }
-            widget.editSegment?.call(data.id, data.speakerId);
-            MixpanelManager().tagSheetOpened();
-          },
-          child: Padding(
+        child: Padding(
             padding: EdgeInsetsDirectional.fromSTEB(
                 widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
             child: Row(
@@ -465,21 +463,24 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               children: [
                 if (!isUser) ...[
                   // Avatar for other speakers (left side)
-                  Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                        child: Image.asset(
-                          person != null
-                              ? speakerImagePath[person.colorIdx!]
-                              : speakerImagePath[data.speakerId % speakerImagePath.length],
-                          width: 24,
-                          height: 24,
+                  GestureDetector(
+                    onTap: _toggleShowSpeakerNames,
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                          child: Image.asset(
+                            person != null
+                                ? speakerImagePath[person.colorIdx!]
+                                : speakerImagePath[data.speakerId % speakerImagePath.length],
+                            width: 24,
+                            height: 24,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
+                        const SizedBox(height: 2),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -489,21 +490,27 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      // Speaker name (only for non-user messages and only if needed)
-                      if (!isUser) ...[
+                      // Speaker name (only shown when toggled)
+                      if (!isUser && _showSpeakerNames) ...[
                         Padding(
                           padding: const EdgeInsets.only(left: 4, bottom: 2),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                suggestion != null && person == null
-                                    ? '${suggestion.personName}?'
-                                    : (person != null ? person.name : 'Speaker ${data.speakerId}'),
-                                style: TextStyle(
-                                  color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                              GestureDetector(
+                                onTap: () {
+                                  widget.editSegment?.call(data.id, data.speakerId);
+                                  MixpanelManager().tagSheetOpened();
+                                },
+                                child: Text(
+                                  suggestion != null && person == null
+                                      ? '${suggestion.personName}?'
+                                      : (person != null ? person.name : 'Speaker ${data.speakerId}'),
+                                  style: TextStyle(
+                                    color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                               if (!data.speechProfileProcessed && (data.personId ?? "").isEmpty) ...[
@@ -568,7 +575,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
+                                    color: Colors.black.withValues(alpha: 0.15),
                                     blurRadius: 4,
                                     offset: const Offset(0, 1),
                                   ),
@@ -622,8 +629,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       const SizedBox(height: 4),
                                       _buildTranslationNotice(),
                                     ],
-                                    // Timestamp and provider inside bubble (bottom right)
-                                    if (widget.canDisplaySeconds || data.sttProvider != null) ...[
+                                    // Timestamp and provider (only shown when toggled)
+                                    if (_showSpeakerNames && (widget.canDisplaySeconds || data.sttProvider != null)) ...[
                                       const SizedBox(height: 4),
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
@@ -632,9 +639,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                             Text(
                                               SttProviderConfig.getDisplayName(data.sttProvider),
                                               style: TextStyle(
-                                                color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.5)
-                                                    : Colors.grey.shade500,
+                                                color:
+                                                    isUser ? Colors.white.withValues(alpha: 0.5) : Colors.grey.shade500,
                                                 fontSize: 10,
                                                 fontStyle: FontStyle.italic,
                                               ),
@@ -677,24 +683,26 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 if (isUser) ...[
                   const SizedBox(width: 8),
                   // Avatar for user (right side)
-                  Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                        child: Image.asset(
-                          Assets.images.speaker0Icon.path,
-                          width: 24,
-                          height: 24,
+                  GestureDetector(
+                    onTap: _toggleShowSpeakerNames,
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                          child: Image.asset(
+                            Assets.images.speaker0Icon.path,
+                            width: 24,
+                            height: 24,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
+                        const SizedBox(height: 2),
+                      ],
+                    ),
                   ),
                 ],
               ],
             ),
-          ),
         ));
   }
 
@@ -724,7 +732,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       },
       child: const Opacity(
         opacity: 0.5,
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
@@ -760,7 +768,9 @@ class LiteTranscriptWidget extends StatelessWidget {
     if (segments.isEmpty) return null;
 
     var text = getLastTranscript(segments, maxCount: 70, includeTimestamps: false);
-    return text.replaceAll(RegExp(r"\s+|\n+"), " ");
+    text = text.replaceAll(RegExp(r"\s+|\n+"), " ");
+    // Add ellipsis at the start to indicate there's more content before
+    return '...$text';
   }
 
   @override
@@ -770,12 +780,18 @@ class LiteTranscriptWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Text(
-      processedText,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-      textAlign: TextAlign.right,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(7, 0, 8, 0),
+      child: Text(
+        processedText,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+              color: Colors.grey.shade300.withValues(alpha: 0.6),
+              height: 1.3,
+            ),
+        textAlign: TextAlign.right,
+      ),
     );
   }
 }
