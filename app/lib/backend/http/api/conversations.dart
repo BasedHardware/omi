@@ -480,19 +480,22 @@ Future<bool> updateActionItemStateByMetadata(
 /// Response from the merge conversations API
 class MergeConversationsResponse {
   final String status;
-  final String primaryConversationId;
+  final String message;
+  final String? warning;
   final List<String> conversationIds;
 
   MergeConversationsResponse({
     required this.status,
-    required this.primaryConversationId,
+    required this.message,
+    this.warning,
     required this.conversationIds,
   });
 
   factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
     return MergeConversationsResponse(
       status: json['status'] ?? 'merging',
-      primaryConversationId: json['primary_conversation_id'],
+      message: json['message'] ?? 'Merge started',
+      warning: json['warning'],
       conversationIds: List<String>.from(json['conversation_ids'] ?? []),
     );
   }

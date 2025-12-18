@@ -748,8 +748,21 @@ class ConversationProvider extends ChangeNotifier {
   // ***************************************
 
   /// Check if a conversation is currently being merged
+  /// Checks both local state and the conversation's actual status from server
   bool isConversationMerging(String conversationId) {
-    return mergingConversationIds.contains(conversationId);
+    // Check local tracking
+    if (mergingConversationIds.contains(conversationId)) {
+      return true;
+    }
+    // Check actual conversation status from server
+    final convo = conversations.firstWhere(
+      (c) => c.id == conversationId,
+      orElse: () => conversations.isNotEmpty ? conversations.first : conversations.first,
+    );
+    if (convo.id == conversationId && convo.status == ConversationStatus.merging) {
+      return true;
+    }
+    return false;
   }
 
   /// Enter selection mode for merge
@@ -766,6 +779,15 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<String> markSelectedAsMergingAndExit() {
+    final idsToMerge = selectedConversationIds.toList();
+    mergingConversationIds.addAll(idsToMerge);
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    notifyListeners();
+    return idsToMerge;
+  }
+
   /// Toggle selection of a conversation
   void toggleConversationSelection(String conversationId) {
     if (isConversationMerging(conversationId)) {
@@ -780,40 +802,8 @@ class ConversationProvider extends ChangeNotifier {
       }
     } else {
       selectedConversationIds.add(conversationId);
-      // Auto-select any conversations that fall between the selected range
-      _autoSelectIntermediateConversations();
     }
     notifyListeners();
-  }
-
-  /// Auto-select conversations that fall between the earliest and latest selected conversations
-  void _autoSelectIntermediateConversations() {
-    if (selectedConversationIds.length < 2) return;
-
-    // Get selected conversations with their times
-    final selectedConvos = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
-
-    if (selectedConvos.length < 2) return;
-
-    // Find the time range of selected conversations
-    DateTime earliest = selectedConvos.first.createdAt;
-    DateTime latest = selectedConvos.first.createdAt;
-
-    for (final convo in selectedConvos) {
-      if (convo.createdAt.isBefore(earliest)) earliest = convo.createdAt;
-      if (convo.createdAt.isAfter(latest)) latest = convo.createdAt;
-    }
-
-    // Find and auto-select any conversations between earliest and latest
-    for (final convo in conversations) {
-      if (selectedConversationIds.contains(convo.id)) continue;
-      if (isConversationMerging(convo.id)) continue;
-
-      // Check if this conversation falls within the selected range
-      if (convo.createdAt.isAfter(earliest) && convo.createdAt.isBefore(latest)) {
-        selectedConversationIds.add(convo.id);
-      }
-    }
   }
 
   /// Check if a conversation is selected
@@ -828,26 +818,14 @@ class ConversationProvider extends ChangeNotifier {
     return selected;
   }
 
-  /// Maximum time gap allowed between consecutive conversations for merging (15 minutes)
-  static const Duration maxMergeTimeGap = Duration(minutes: 15);
-
   /// Check if a conversation is eligible for merge selection
   ///
   /// A conversation is eligible if:
-  /// 1. Nothing is selected yet (any completed conversation can start)
-  /// 2. OR it's already selected
-  /// 3. OR it's within 15 minutes of the time range of selected conversations
+  /// - It's not locked
+  /// - It's not currently being merged
+  ///
+  /// No time gap restrictions - user can merge any conversations they want.
   bool isConversationEligibleForMerge(String conversationId) {
-    // Always eligible if nothing selected
-    if (selectedConversationIds.isEmpty) {
-      return true;
-    }
-
-    // Already selected means eligible
-    if (selectedConversationIds.contains(conversationId)) {
-      return true;
-    }
-
     // Find the conversation
     final convo = conversations.firstWhere(
       (c) => c.id == conversationId,
@@ -855,55 +833,37 @@ class ConversationProvider extends ChangeNotifier {
     );
     if (convo.id != conversationId) return false;
 
-    // Check if within 15 minutes of any selected conversation's time range
-    final selected = selectedConversations;
-    if (selected.isEmpty) return true;
-
-    // Get the earliest start and latest end of selected conversations
-    DateTime earliestStart = selected.first.startedAt ?? selected.first.createdAt;
-    DateTime latestEnd = selected.first.finishedAt ?? selected.first.createdAt;
-
-    for (final sel in selected) {
-      final start = sel.startedAt ?? sel.createdAt;
-      final end = sel.finishedAt ?? sel.createdAt;
-      if (start.isBefore(earliestStart)) earliestStart = start;
-      if (end.isAfter(latestEnd)) latestEnd = end;
+    if (convo.isLocked) {
+      return false;
     }
 
-    // Check if candidate is within 15 minutes of the selected range
-    final candidateStart = convo.startedAt ?? convo.createdAt;
-    final candidateEnd = convo.finishedAt ?? convo.createdAt;
+    if (mergingConversationIds.contains(conversationId)) {
+      return false;
+    }
 
-    // Candidate ends within 15 mins before earliest selected starts
-    final endsBeforeRange = candidateEnd.isBefore(earliestStart);
-    final withinGapBefore = earliestStart.difference(candidateEnd) <= maxMergeTimeGap;
-
-    // Candidate starts within 15 mins after latest selected ends
-    final startsAfterRange = candidateStart.isAfter(latestEnd);
-    final withinGapAfter = candidateStart.difference(latestEnd) <= maxMergeTimeGap;
-
-    // Candidate overlaps with selected range
-    final overlaps = !(candidateEnd.isBefore(earliestStart) || candidateStart.isAfter(latestEnd));
-
-    return overlaps || (endsBeforeRange && withinGapBefore) || (startsAfterRange && withinGapAfter);
+    return true;
   }
 
   /// Check if merge is allowed (at least 2 conversations selected)
   bool get canMerge => selectedConversationIds.length >= 2;
 
   /// Initiate merge of selected conversations
-  Future<MergeConversationsResponse?> initiateConversationMerge() async {
-    if (!canMerge) return null;
-
-    final conversationIds = selectedConversationIds.toList();
+  Future<MergeConversationsResponse?> initiateConversationMerge({List<String>? conversationIds}) async {
+    final idsToMerge = conversationIds ?? selectedConversationIds.toList();
+    if (idsToMerge.length < 2) return null;
 
     // Call merge API
-    final response = await mergeConversations(conversationIds);
+    final response = await mergeConversations(idsToMerge);
 
-    if (response != null) {
-      // Mark all as merging
-      mergingConversationIds.addAll(conversationIds);
-      // Exit selection mode
+    if (response == null) {
+      if (conversationIds != null) {
+        for (final id in conversationIds) {
+          mergingConversationIds.remove(id);
+        }
+        notifyListeners();
+      }
+    } else if (conversationIds == null) {
+      mergingConversationIds.addAll(idsToMerge);
       exitSelectionMode();
       notifyListeners();
     }

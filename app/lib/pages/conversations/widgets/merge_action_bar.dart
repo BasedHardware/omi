@@ -156,7 +156,9 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
       provider.selectedConversations,
     );
     if (confirmed && context.mounted) {
-      final response = await provider.initiateConversationMerge();
+      final idsToMerge = provider.markSelectedAsMergingAndExit();
+
+      final response = await provider.initiateConversationMerge(conversationIds: idsToMerge);
 
       if (context.mounted) {
         if (response != null) {
