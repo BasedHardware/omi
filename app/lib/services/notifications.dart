@@ -72,4 +72,20 @@ class NotificationUtil {
     MyApp.navigatorKey.currentState
         ?.pushReplacement(MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)));
   }
+
+  static Future<void> triggerFallNotification() async {
+    final allowed = await AwesomeNotifications().isNotificationAllowed();
+    if (!allowed) return;
+
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: 6,
+        channelKey: 'channel',
+        actionType: ActionType.Default,
+        title: 'ouch',
+        body: 'did you fall?',
+        wakeUpScreen: true,
+      ),
+    );
+  }
 }
