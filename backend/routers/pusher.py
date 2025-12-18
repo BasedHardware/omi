@@ -55,8 +55,13 @@ async def _process_conversation_task(uid: str, conversation_id: str, language: s
                 geolocation = Geolocation(**geolocation)
                 conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-            conversation = process_conversation(uid, language, conversation)
-            messages = trigger_external_integrations(uid, conversation)
+            # Run blocking operations in thread pool to avoid blocking event loop
+            conversation = await asyncio.to_thread(
+                process_conversation, uid, language, conversation
+            )
+            messages = await asyncio.to_thread(
+                trigger_external_integrations, uid, conversation
+            )
         except Exception as e:
             print(f"Error processing conversation: {e}", uid, conversation_id)
             conversations_db.set_conversation_as_discarded(uid, conversation.id)
@@ -147,8 +152,8 @@ async def _websocket_util_trigger(
                     # Update conversation_id from transcript if provided
                     if memory_id:
                         current_conversation_id = memory_id
-                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, memory_id), loop)
-                    asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
+                    asyncio.create_task(trigger_realtime_integrations(uid, segments, memory_id))
+                    asyncio.create_task(realtime_transcript_webhook(uid, segments))
                     continue
 
                 # Process conversation request

@@ -943,9 +943,16 @@ async def _listen(
 
                 except asyncio.CancelledError:
                     break
+                except ConnectionClosed as e:
+                    print(f"Pusher receive connection closed: {e}", uid, session_id)
+                    pusher_connected = False
                 except Exception as e:
                     print(f"Pusher receive error: {e}", uid, session_id)
                     await asyncio.sleep(1)
+
+                # Reconnect outside try/except (same pattern as flush functions)
+                if pusher_connected is False and websocket_active:
+                    await connect()
 
         async def _flush():
             await _audio_bytes_flush(auto_reconnect=False)
@@ -989,6 +996,9 @@ async def _listen(
             if pusher_ws:
                 await pusher_ws.close(code)
 
+        def is_connected():
+            return pusher_connected
+
         return (
             connect,
             close,
@@ -998,6 +1008,7 @@ async def _listen(
             audio_bytes_consume if audio_bytes_enabled else None,
             request_conversation_processing,
             pusher_receive,
+            is_connected,
         )
 
     transcript_send = None
@@ -1008,6 +1019,7 @@ async def _listen(
     pusher_connect = None
     request_conversation_processing = None
     pusher_receive = None
+    pusher_is_connected = None
 
     # Transcripts
     #
@@ -1481,8 +1493,6 @@ async def _listen(
         # Init STT (fast - profile file loads and sends in background)
         _send_message_event(MessageServiceStatusEvent(status="stt_initiating", status_text="STT Service Starting"))
         speech_profile_task = await _process_stt()
-        # Don't await speech_profile_task here - let it run concurrently with receive_data
-        # so realtime audio goes to profile_socket until profile send completes
 
         # Init pusher
         pusher_tasks = []
@@ -1496,10 +1506,17 @@ async def _listen(
                 audio_bytes_consume,
                 request_conversation_processing,
                 pusher_receive,
+                pusher_is_connected,
             ) = create_pusher_task_handler()
 
+            # Pusher connection
+            await pusher_connect()
+            if not pusher_is_connected():
+                print("Pusher connection failed after retries", uid, session_id)
+                await websocket.close(code=1011, reason="Pusher connection failed")
+                return
+
             # Pusher tasks
-            pusher_tasks.append(asyncio.create_task(pusher_connect()))
             if transcript_consume is not None:
                 pusher_tasks.append(asyncio.create_task(transcript_consume()))
             if audio_bytes_consume is not None:
