@@ -212,35 +212,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   @override
-  void onInternetConnectionFailed() {
-    debugPrint("onInternetConnectionFailed");
-
-    // Send notification
-    NotificationService.instance.clearNotification(3);
-    NotificationService.instance.createNotification(
-      notificationId: 3,
-      title: 'Internet Connection Lost',
-      body: 'Your device is offline. Transcription is paused until connection is restored.',
-    );
-    DebugLogManager.logEvent('internet_connection_lost', {});
-  }
-
-  @override
-  void onMaxRetriesReach() {
-    debugPrint("onMaxRetriesReach");
-
-    // Send notification
-    NotificationService.instance.clearNotification(2);
-    NotificationService.instance.createNotification(
-      notificationId: 2,
-      title: 'Connection Issue 🚨',
-      body: 'Unable to connect to the transcript service.'
-          ' Please restart the app or contact support if the problem persists.',
-    );
-    DebugLogManager.logEvent('transcription_socket_max_retries', {});
-  }
-
-  @override
   void onConnected() {
     _listeners.forEach((k, v) {
       v.onConnected();
