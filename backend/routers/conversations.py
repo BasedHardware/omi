@@ -656,14 +656,20 @@ async def merge_conversations(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
-    Initiate merge of multiple conversations (async).
+    Merge multiple conversations into a new conversation (async).
 
     Flow:
-    1. Validates conversations and sets status to 'merging'
+    1. Validates conversations (locked? completed?)
     2. Returns immediately with 200 OK
-    3. Background task performs actual merge
-    4. FCM data message sent on completion
+    3. Background task creates new merged conversation
+    4. Background task deletes source conversations
+    5. FCM notification sent on completion
 
+    The merged conversation will have:
+    - A new ID (source conversations are deleted)
+    - Merged transcript segments with adjusted timestamps
+    - Copied audio chunks
+    - Regenerated title, summary, action items, memories via process_conversation()
     """
     from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
 
@@ -679,16 +685,12 @@ async def merge_conversations(
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         conversations.append(conv)
 
-    # Validate merge compatibility
-    is_valid, error_message = validate_merge_compatibility(conversations)
+    # Validate merge compatibility (returns warning for large gaps but doesn't reject)
+    is_valid, error_message, warning_message = validate_merge_compatibility(conversations)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
 
-    # Determine primary (earliest by started_at)
-    sorted_convs = sorted(conversations, key=lambda c: c['started_at'])
-    primary_id = sorted_convs[0]['id']
-
-    # Immediately set all conversations to 'merging' status
+    # Set all source conversations to 'merging' status so user knows they're being processed
     for conv_id in request.conversation_ids:
         conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.merging)
 
@@ -697,12 +699,12 @@ async def merge_conversations(
         perform_merge_async,
         uid=uid,
         conversation_ids=request.conversation_ids,
-        primary_id=primary_id,
         reprocess=request.reprocess,
     )
 
     return MergeConversationsResponse(
         status="merging",
-        primary_conversation_id=primary_id,
+        message="Merge started",
+        warning=warning_message,
         conversation_ids=request.conversation_ids,
     )

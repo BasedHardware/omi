@@ -520,5 +520,6 @@ class MergeConversationsResponse(BaseModel):
     """Response model for merge initiation."""
 
     status: str = Field(default="merging", description="Current merge status")
-    primary_conversation_id: str = Field(description="ID of the primary (merged) conversation")
+    message: str = Field(default="Merge started", description="Status message")
+    warning: Optional[str] = Field(default=None, description="Warning message (e.g., large time gaps)")
     conversation_ids: List[str] = Field(description="All conversation IDs being merged")

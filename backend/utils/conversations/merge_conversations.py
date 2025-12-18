@@ -1,367 +1,384 @@
 """
-Conversation Merge Utilities
+Conversation Merge Utilities (Simplified)
 
 This module provides functions for merging multiple conversations into one.
-The merge process is asynchronous - conversations are marked as 'merging'
-and the actual merge happens in a background task.
+1. Creates a NEW conversation with merged raw data
+2. Calls process_conversation() to generate all derived data
+3. Deletes ALL source conversations
+
 """
 
+import copy
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
-import copy
 
 import database.conversations as conversations_db
 from database.vector_db import delete_vector
-from utils.conversations.process_conversation import save_structured_vector
 from models.conversation import (
+    AudioFile,
     Conversation,
     ConversationStatus,
+    Structured,
+)
+from utils.other.storage import (
+    delete_conversation_audio_files,
+    list_audio_chunks,
+    storage_client,
+    private_cloud_sync_bucket,
 )
 
 
-# Maximum allowed time gap between consecutive conversations (in minutes)
-MAX_TIME_GAP_MINUTES = 15
-
-
 def validate_merge_compatibility(
-    conversations: List[Dict], max_time_gap_minutes: int = MAX_TIME_GAP_MINUTES
-) -> Tuple[bool, Optional[str]]:
+    conversations: List[Dict],
+) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Validate if conversations can be merged.
 
     Args:
         conversations: List of conversation dictionaries
-        max_time_gap_minutes: Maximum allowed gap between consecutive conversations
 
     Returns:
-        Tuple of (is_valid, error_message)
+        Tuple of (is_valid, error_message, warning_message)
 
-    Validation rules:
-    - At least 2 conversations
-    - All conversations completed (not processing or merging)
-    - None are locked
-    - Time gaps between consecutive conversations ≤ max_time_gap_minutes
+    Rejection criteria (hard failures):
+    - Less than 2 conversations
+    - Any conversation is locked
+    - Any conversation is not completed (processing/merging/in_progress)
+
+    Warning criteria (soft, user informed but not blocked):
+    - Large time gaps between conversations (> 1 hour)
     """
     if len(conversations) < 2:
-        return False, "At least 2 conversations required to merge"
+        return False, "At least 2 conversations required to merge", None
+
+    # Check none are locked
+    for conv in conversations:
+        if conv.get('is_locked', False):
+            return False, "Cannot merge locked conversations. Please unlock them first.", None
 
     # Check all are completed
     for conv in conversations:
         status = conv.get('status', 'completed')
         if status != 'completed':
-            return False, f"Conversation {conv['id']} is not ready (status: {status}). Wait for it to complete."
+            return False, f"Conversation {conv['id']} is not ready (status: {status}). Wait for it to complete.", None
 
-    # Check none are locked
-    for conv in conversations:
-        if conv.get('is_locked', False):
-            return False, "Cannot merge locked conversations. Please unlock them first."
+    # Generate warnings for large gaps (but don't reject)
+    warnings = []
+    sorted_convs = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
 
-    # Sort by started_at
-    sorted_convs = sorted(conversations, key=lambda c: c['started_at'])
-
-    # Check time gaps between consecutive conversations
-    max_gap_seconds = max_time_gap_minutes * 60
     for i in range(1, len(sorted_convs)):
-        prev_conv = sorted_convs[i - 1]
-        current_conv = sorted_convs[i]
+        prev_finished = sorted_convs[i - 1].get('finished_at')
+        curr_started = sorted_convs[i].get('started_at')
+        if prev_finished and curr_started:
+            gap_hours = (curr_started - prev_finished).total_seconds() / 3600
+            if gap_hours > 1:
+                warnings.append(f"{gap_hours:.1f}h gap detected")
 
-        prev_finished = prev_conv.get('finished_at')
-        current_started = current_conv.get('started_at')
-
-        if prev_finished and current_started:
-            time_gap = (current_started - prev_finished).total_seconds()
-
-            if time_gap > max_gap_seconds:
-                gap_minutes = time_gap / 60
-                return (
-                    False,
-                    f"Time gap between conversations is {gap_minutes:.0f} minutes (max allowed: {max_time_gap_minutes} minutes)",
-                )
-
-    return True, None
+    warning_msg = "; ".join(warnings) if warnings else None
+    return True, None, warning_msg
 
 
-def merge_transcript_segments_sequential(conversations: List[Dict]) -> List[Dict]:
+def perform_merge_async(
+    uid: str,
+    conversation_ids: List[str],
+    reprocess: bool = True,
+) -> None:
     """
-    Merge transcript segments from multiple conversations sequentially.
+    Background task to perform conversation merge.
 
-    Conversations are ordered by started_at, and each conversation's segments
-    are appended after the previous conversation's segments with timestamp
-    adjustments that preserve the actual timeline including gaps.
+    Simplified flow:
+    1. Fetch all source conversations
+    2. Merge raw data (transcripts, photos)
+    3. Copy audio chunks with adjusted timestamps
+    4. Create NEW conversation with merged raw data
+    5. Process conversation (generates title, summary, action items, memories, etc.)
+    6. Delete ALL source conversations
+    7. Send FCM notification
 
     Args:
-        conversations: List of conversation dictionaries sorted by started_at
+        uid: User ID
+        conversation_ids: List of conversation IDs to merge
+        reprocess: Whether to process merged conversation (generate summary, etc.)
+    """
+    from utils.conversations.process_conversation import process_conversation
+    from utils.notifications import send_merge_completed_message
+
+    try:
+        # 1. Fetch all source conversations
+        conversations = []
+        for conv_id in conversation_ids:
+            conv = conversations_db.get_conversation(uid, conv_id)
+            if conv:
+                conversations.append(conv)
+
+        if len(conversations) < 2:
+            print(f"Merge failed: Not enough conversations found for uid={uid}")
+            _handle_merge_failure(uid, conversation_ids)
+            return
+
+        # Sort by started_at (earliest first)
+        sorted_convs = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
+
+        # 2. Merge raw data
+        merged_segments = _merge_transcript_segments(sorted_convs)
+        merged_photos = _collect_all_photos(uid, sorted_convs)
+
+        # 3. Generate new conversation ID and copy audio chunks
+        new_conversation_id = str(uuid.uuid4())
+        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id)
+
+        # 4. Determine basic fields from source conversations
+        # Use earliest conversation's dates
+        created_at = sorted_convs[0].get('created_at', datetime.now(timezone.utc))
+        started_at = sorted_convs[0].get('started_at')
+        finished_at = max(c.get('finished_at', datetime.min) for c in sorted_convs)
+        language = sorted_convs[0].get('language', 'en')
+        source = sorted_convs[0].get('source', 'omi')
+
+        # Visibility: most restrictive wins
+        visibility = _determine_visibility(sorted_convs)
+
+        # Private cloud sync: True if any has it
+        private_cloud_sync_enabled = any(c.get('private_cloud_sync_enabled', False) for c in sorted_convs)
+
+        # Discarded: only if ALL are discarded
+        discarded = all(c.get('discarded', False) for c in sorted_convs)
+
+        # Geolocation: use first conversation's
+        geolocation = sorted_convs[0].get('geolocation')
+
+        # 5. Create merge metadata
+        merge_metadata = {
+            'merged_at': datetime.now(timezone.utc).isoformat(),
+            'source_conversation_ids': conversation_ids,
+            'source_details': [
+                {
+                    'id': c['id'],
+                    'started_at': c.get('started_at').isoformat() if c.get('started_at') else None,
+                    'finished_at': c.get('finished_at').isoformat() if c.get('finished_at') else None,
+                    'source': c.get('source', 'unknown'),
+                }
+                for c in sorted_convs
+            ],
+        }
+
+        # 6. Create new conversation object
+        new_conversation = Conversation(
+            id=new_conversation_id,
+            created_at=created_at,
+            started_at=started_at,
+            finished_at=finished_at,
+            structured=Structured(),  # Empty - will be generated by process_conversation
+            language=language,
+            source=source,
+            transcript_segments=merged_segments,
+            photos=merged_photos,
+            audio_files=merged_audio_files,
+            geolocation=geolocation,
+            visibility=visibility,
+            private_cloud_sync_enabled=private_cloud_sync_enabled,
+            discarded=discarded,
+            status=ConversationStatus.processing,
+            external_data={'merge_metadata': merge_metadata},
+        )
+
+        # 7. Save stub conversation to database
+        conversations_db.upsert_conversation(uid, new_conversation.dict())
+
+        # Store photos in subcollection if any
+        if merged_photos:
+            conversations_db.store_conversation_photos(uid, new_conversation_id, merged_photos)
+
+        # 8. Process conversation to generate title, summary, action items, memories, etc.
+        if reprocess:
+            try:
+                processed_conversation = process_conversation(
+                    uid,
+                    new_conversation.language or 'en',
+                    new_conversation,
+                    force_process=True,
+                    is_reprocess=False,  # Not a reprocess - this is a new conversation
+                )
+            except Exception as e:
+                print(f"Error processing merged conversation: {e}")
+                # Even if processing fails, continue with cleanup
+                # Mark conversation as completed
+                conversations_db.update_conversation_status(uid, new_conversation_id, ConversationStatus.completed)
+        else:
+            # If not reprocessing, just mark as completed
+            conversations_db.update_conversation_status(uid, new_conversation_id, ConversationStatus.completed)
+
+        # 9. Delete ALL source conversations and their related data
+        for conv in sorted_convs:
+            _delete_conversation_and_related_data(uid, conv['id'])
+
+        # 10. Send FCM notification
+        send_merge_completed_message(uid, new_conversation_id, conversation_ids)
+
+        print(f"Merge completed: uid={uid}, new_id={new_conversation_id}, merged={len(conversation_ids)} conversations")
+
+    except Exception as e:
+        print(f"Merge failed with exception: {e}")
+        import traceback
+
+        traceback.print_exc()
+        _handle_merge_failure(uid, conversation_ids)
+
+
+def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
+    """
+    Merge transcript segments from all conversations sequentially.
+
+    Strategy:
+    - Sort conversations by started_at
+    - Append segments sequentially
+    - Adjust timestamps to account for gaps between conversations
+
+    Args:
+        conversations: List of conversation dictionaries (already sorted by started_at)
 
     Returns:
         List of merged transcript segment dictionaries
     """
-    # Sort conversations by started_at (earliest first)
-    sorted_conversations = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
-
-    merged_segments = []
+    merged = []
     cumulative_offset = 0.0
 
-    for i, conversation in enumerate(sorted_conversations):
-        segments = conversation.get('transcript_segments', [])
+    for i, conv in enumerate(conversations):
+        segments = conv.get('transcript_segments', [])
 
         if i == 0:
             # First conversation - use segments as-is
-            merged_segments.extend(copy.deepcopy(segments))
-
-            # Calculate where this conversation ended
+            merged.extend([copy.deepcopy(s) for s in segments])
             if segments:
-                cumulative_offset = max(seg.get('end', 0) for seg in segments)
-            elif conversation.get('finished_at') and conversation.get('started_at'):
-                # No segments but have duration
-                cumulative_offset = (conversation['finished_at'] - conversation['started_at']).total_seconds()
+                cumulative_offset = max(s.get('end', 0) for s in segments)
+            elif conv.get('finished_at') and conv.get('started_at'):
+                cumulative_offset = (conv['finished_at'] - conv['started_at']).total_seconds()
         else:
-            # Calculate time gap between this and previous conversation
-            prev_conversation = sorted_conversations[i - 1]
-            prev_finished = prev_conversation.get('finished_at')
-            current_started = conversation.get('started_at')
+            # Calculate gap from previous conversation
+            prev_finished = conversations[i - 1].get('finished_at')
+            curr_started = conv.get('started_at')
 
-            time_gap = 0.0
-            if prev_finished and current_started:
-                time_gap = (current_started - prev_finished).total_seconds()
-                time_gap = max(0, time_gap)  # Ensure non-negative
+            gap = 0.0
+            if prev_finished and curr_started:
+                gap = max(0, (curr_started - prev_finished).total_seconds())
 
-            # Offset includes both previous content and the gap
-            offset = cumulative_offset + time_gap
+            offset = cumulative_offset + gap
 
-            # Adjust all segments in this conversation
-            for segment in segments:
-                adjusted_segment = copy.deepcopy(segment)
-                adjusted_segment['start'] = segment.get('start', 0) + offset
-                adjusted_segment['end'] = segment.get('end', 0) + offset
-                # Keep original segment.id (already unique)
-                merged_segments.append(adjusted_segment)
+            # Adjust timestamps for this conversation's segments
+            for seg in segments:
+                seg_copy = copy.deepcopy(seg)
+                seg_copy['start'] = seg.get('start', 0) + offset
+                seg_copy['end'] = seg.get('end', 0) + offset
+                merged.append(seg_copy)
 
             # Update cumulative offset for next conversation
             if segments:
-                last_end = max(seg.get('end', 0) for seg in segments)
-                cumulative_offset = offset + last_end
-            elif conversation.get('finished_at') and conversation.get('started_at'):
-                duration = (conversation['finished_at'] - conversation['started_at']).total_seconds()
+                cumulative_offset = offset + max(s.get('end', 0) for s in segments)
+            elif conv.get('finished_at') and conv.get('started_at'):
+                duration = (conv['finished_at'] - conv['started_at']).total_seconds()
                 cumulative_offset = offset + duration
 
-    return merged_segments
+    return merged
 
 
-def merge_action_items(conversations: List[Dict], primary_id: str) -> List[Dict]:
+def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
     """
-    Merge action items with deduplication.
-
-    Deduplication Strategy:
-    - Compare descriptions (case-insensitive, trimmed)
-    - If duplicate found, keep the one with earliest created_at
-    - Preserve completion status from most recent update
-
-    Args:
-        conversations: List of conversation dictionaries
-        primary_id: ID of the primary (merged) conversation
-
-    Returns:
-        List of merged action item dictionaries
-    """
-    seen_descriptions = {}  # key -> action_item
-    merged_items = []
-
-    for conversation in sorted(conversations, key=lambda c: c.get('started_at', datetime.min)):
-        structured = conversation.get('structured', {})
-        action_items = structured.get('action_items', [])
-
-        for item in action_items:
-            description = item.get('description', '')
-            key = description.lower().strip()
-
-            if key not in seen_descriptions:
-                # Update conversation_id to primary
-                item_copy = copy.deepcopy(item)
-                item_copy['conversation_id'] = primary_id
-                seen_descriptions[key] = item_copy
-                merged_items.append(item_copy)
-            else:
-                # Update if this one is completed and existing is not
-                existing = seen_descriptions[key]
-                if item.get('completed') and not existing.get('completed'):
-                    existing['completed'] = True
-                    existing['completed_at'] = item.get('completed_at')
-
-    return merged_items
-
-
-def merge_events(conversations: List[Dict]) -> List[Dict]:
-    """
-    Merge events with deduplication.
-
-    Deduplication Strategy:
-    - Compare title and start time (within 5 minute window)
-    - If duplicate found, keep the one with more detailed description
-
-    Args:
-        conversations: List of conversation dictionaries
-
-    Returns:
-        List of merged event dictionaries
-    """
-    merged_events = []
-
-    for conversation in conversations:
-        structured = conversation.get('structured', {})
-        events = structured.get('events', [])
-
-        for event in events:
-            # Check for duplicates
-            is_duplicate = False
-            for existing in merged_events:
-                event_start = event.get('start')
-                existing_start = existing.get('start')
-
-                if event_start and existing_start:
-                    time_diff = abs((event_start - existing_start).total_seconds())
-                    if event.get('title') == existing.get('title') and time_diff < 300:  # 5 minutes
-                        is_duplicate = True
-                        # Update if this description is longer
-                        if len(event.get('description', '')) > len(existing.get('description', '')):
-                            existing['description'] = event.get('description', '')
-                        # Update created status if any was created
-                        if event.get('created'):
-                            existing['created'] = True
-                        break
-
-            if not is_duplicate:
-                merged_events.append(copy.deepcopy(event))
-
-    return merged_events
-
-
-def merge_photos(conversations: List[Dict]) -> List[Dict]:
-    """
-    Merge photos from all conversations.
+    Fetch and merge photos from all conversation subcollections.
 
     Strategy:
-    - Collect all photos from all conversations
+    - Fetch photos from each conversation's subcollection
+    - Deduplicate by photo ID
     - Sort by created_at
-    - Keep unique IDs
 
     Args:
+        uid: User ID
         conversations: List of conversation dictionaries
 
     Returns:
-        List of merged photo dictionaries
+        List of photo dictionaries
     """
     all_photos = []
     seen_ids = set()
 
-    for conversation in conversations:
-        photos = conversation.get('photos', [])
-        for photo in photos:
-            photo_id = photo.get('id')
-            if photo_id and photo_id not in seen_ids:
-                all_photos.append(copy.deepcopy(photo))
-                seen_ids.add(photo_id)
+    for conv in conversations:
+        try:
+            photos = conversations_db.get_conversation_photos(uid, conv['id'])
+            for photo in photos:
+                photo_id = photo.get('id')
+                if photo_id and photo_id not in seen_ids:
+                    all_photos.append(photo)
+                    seen_ids.add(photo_id)
+        except Exception as e:
+            print(f"Error fetching photos for {conv['id']}: {e}")
 
     # Sort by creation time
     all_photos.sort(key=lambda p: p.get('created_at', datetime.min))
-
     return all_photos
 
 
-def merge_audio_files(conversations: List[Dict], primary_id: str) -> List[Dict]:
+def _copy_audio_chunks_for_merge(
+    uid: str,
+    conversations: List[Dict],
+    new_conversation_id: str,
+) -> List[AudioFile]:
     """
-    Merge audio files from all conversations.
+    Copy audio chunks from all source conversations to new conversation.
+
+    Audio chunks are stored in GCS at:
+        chunks/{uid}/{conversation_id}/{timestamp}.bin  (or .enc for encrypted)
+
+    The timestamps in chunk filenames are absolute Unix timestamps (when chunk was recorded).
+    We keep the original timestamps since they represent the actual recording time.
 
     Strategy:
-    - Collect all audio files from all conversations
-    - Keep chunk references as-is (chunks stay at original GCS paths)
-    - Update conversation_id metadata to point to merged conversation
-    - Sort by started_at for chronological ordering
-
-    Note: The physical audio chunks in GCS remain at their original paths
-    (e.g., chunks/{uid}/{original_conversation_id}/{timestamp}.bin).
-    Only the AudioFile metadata is updated.
-
-    Args:
-        conversations: List of conversation dictionaries
-        primary_id: ID of the merged conversation
-
-    Returns:
-        List of merged audio file dictionaries
-    """
-    all_audio_files = []
-
-    for conversation in sorted(conversations, key=lambda c: c.get('started_at', datetime.min)):
-        audio_files = conversation.get('audio_files', [])
-        for audio_file in audio_files:
-            audio_copy = copy.deepcopy(audio_file)
-            # Update metadata reference to merged conversation
-            audio_copy['conversation_id'] = primary_id
-            all_audio_files.append(audio_copy)
-
-    # Sort by started_at for chronological ordering
-    all_audio_files.sort(key=lambda af: af.get('started_at', datetime.min))
-
-    return all_audio_files
-
-
-def deep_merge_dicts(dict1: dict, dict2: dict) -> dict:
-    """Recursively merge dict2 into dict1."""
-    result = dict1.copy()
-    for key, value in dict2.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge_dicts(result[key], value)
-        else:
-            result[key] = value
-    return result
-
-
-def merge_external_data(conversations: List[Dict]) -> Optional[Dict]:
-    """
-    Deep merge external_data dictionaries from all conversations.
-
-    Strategy:
-    - Iterate through all conversations in chronological order
-    - Merge dictionaries recursively
-    - Later conversations' data overrides earlier ones for conflicting keys
-
-    Args:
-        conversations: List of conversation dictionaries
-
-    Returns:
-        Merged external_data dictionary or None if no data
-    """
-    # Sort conversations by started_at
-    sorted_conversations = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
-
-    merged_external_data = {}
-    for conversation in sorted_conversations:
-        external_data = conversation.get('external_data')
-        if external_data:
-            merged_external_data = deep_merge_dicts(merged_external_data, external_data)
-
-    return merged_external_data if merged_external_data else None
-
-
-def migrate_photos_to_primary(uid: str, primary_id: str, secondary_ids: List[str]) -> None:
-    """
-    Copy photos from secondary conversations to primary BEFORE deletion.
+    - Copy all chunks from all conversations to new conversation path
+    - Keep original timestamps (they're absolute, not relative)
+    - Create AudioFile records from the copied chunks
 
     Args:
         uid: User ID
-        primary_id: Primary conversation ID
-        secondary_ids: List of secondary conversation IDs
+        conversations: List of conversation dictionaries (sorted by started_at)
+        new_conversation_id: ID for the new merged conversation
+
+    Returns:
+        List of AudioFile objects
     """
-    for secondary_id in secondary_ids:
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    has_chunks = False
+
+    for conv in conversations:
+        conv_id = conv['id']
+
+        # List and copy chunks for this conversation
         try:
-            photos = conversations_db.get_conversation_photos(uid, secondary_id)
-            if photos:
-                # Store photos in primary conversation
-                conversations_db.store_conversation_photos(uid, primary_id, photos)
+            chunks = list_audio_chunks(uid, conv_id)
+            for chunk in chunks:
+                has_chunks = True
+                original_ts = chunk['timestamp']
+
+                # Determine extension from original path
+                ext = 'enc' if chunk['path'].endswith('.enc') else 'bin'
+
+                # Copy to new path with same timestamp (it's absolute Unix time)
+                new_path = f'chunks/{uid}/{new_conversation_id}/{original_ts:.3f}.{ext}'
+                source_blob = bucket.blob(chunk['path'])
+                bucket.copy_blob(source_blob, bucket, new_path)
+
         except Exception as e:
-            print(f"Error migrating photos from {secondary_id}: {e}")
+            print(f"Error copying chunks for {conv_id}: {e}")
+
+    # Create AudioFile records from copied chunks
+    if has_chunks:
+        try:
+            return conversations_db.create_audio_files_from_chunks(uid, new_conversation_id)
+        except Exception as e:
+            print(f"Error creating audio files: {e}")
+
+    return []
 
 
-def determine_visibility(conversations: List[Dict]) -> str:
+def _determine_visibility(conversations: List[Dict]) -> str:
     """
     Determine visibility for merged conversation.
 
@@ -382,169 +399,67 @@ def determine_visibility(conversations: List[Dict]) -> str:
     return min_visibility
 
 
-def perform_merge_async(
-    uid: str,
-    conversation_ids: List[str],
-    primary_id: str,
-    reprocess: bool = True,
-) -> None:
+def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> None:
     """
-    Background task to perform the actual conversation merge.
+    Delete a conversation and all its generated/related data.
 
-    This function is called asynchronously after the API returns.
-    On completion, it sends an FCM data message to notify the app.
-
-    Args:
-        uid: User ID
-        conversation_ids: List of all conversation IDs to merge
-        primary_id: ID of the primary conversation (earliest)
-        reprocess: Whether to regenerate summary from merged content
+    Deletes:
+    - Memories linked to this conversation
+    - Action items linked to this conversation (standalone collection)
+    - Photos subcollection
+    - Audio chunks in GCS
+    - Vector embedding
+    - Conversation document
     """
-    from utils.notifications import send_merge_completed_message
+    # Import here to avoid circular imports
+    import database.memories as memories_db
+    import database.action_items as action_items_db
 
     try:
-        # Fetch all conversations with full data
-        conversations = []
-        for conv_id in conversation_ids:
-            conv = conversations_db.get_conversation(uid, conv_id)
-            if conv:
-                conversations.append(conv)
-
-        if len(conversations) < 2:
-            print(f"Merge failed: Not enough conversations found for uid={uid}")
-            _handle_merge_failure(uid, conversation_ids)
-            return
-
-        # Sort by started_at to determine order
-        sorted_convs = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
-        primary_conv = sorted_convs[0]
-        secondary_ids = [c['id'] for c in sorted_convs[1:]]
-
-        # 1. Migrate photos before we delete anything
-        migrate_photos_to_primary(uid, primary_id, secondary_ids)
-
-        # 2. Merge all data
-        merged_segments = merge_transcript_segments_sequential(conversations)
-        merged_action_items = merge_action_items(conversations, primary_id)
-        merged_events = merge_events(conversations)
-        merged_photos = merge_photos(conversations)
-        merged_audio_files = merge_audio_files(conversations, primary_id)
-        merged_external_data = merge_external_data(conversations)
-
-        # 3. Determine merged field values
-        finished_at = max(c.get('finished_at', datetime.min) for c in conversations)
-
-        # visibility: most restrictive wins
-        visibility = determine_visibility(conversations)
-
-        # is_locked: True if any is locked (shouldn't happen, we validated)
-        is_locked = any(c.get('is_locked', False) for c in conversations)
-
-        # discarded: False if any is not discarded
-        discarded = all(c.get('discarded', False) for c in conversations)
-
-        # private_cloud_sync_enabled: True if any has it enabled
-        private_cloud_sync_enabled = any(c.get('private_cloud_sync_enabled', False) for c in conversations)
-
-        # 4. Build merged conversation data
-        merged_data = {
-            'finished_at': finished_at,
-            'transcript_segments': merged_segments,
-            'photos': merged_photos,
-            'audio_files': merged_audio_files,
-            'external_data': merged_external_data,
-            'visibility': visibility,
-            'is_locked': is_locked,
-            'discarded': discarded,
-            'private_cloud_sync_enabled': private_cloud_sync_enabled,
-            'status': ConversationStatus.completed.value,
-        }
-
-        # Update structured data
-        merged_structured = copy.deepcopy(primary_conv.get('structured', {}))
-        merged_structured['action_items'] = merged_action_items
-        merged_structured['events'] = merged_events
-        merged_data['structured'] = merged_structured
-
-        # Add merge metadata to external_data
-        if merged_data['external_data'] is None:
-            merged_data['external_data'] = {}
-        merged_data['external_data']['merge_metadata'] = {
-            'merged_at': datetime.now(timezone.utc).isoformat(),
-            'source_conversation_ids': conversation_ids,
-            'source_conversation_times': [
-                {
-                    'id': c['id'],
-                    'started_at': c.get('started_at').isoformat() if c.get('started_at') else None,
-                    'finished_at': c.get('finished_at').isoformat() if c.get('finished_at') else None,
-                }
-                for c in sorted_convs
-            ],
-        }
-
-        # 5. Update primary conversation
-        conversations_db.update_conversation_merged_data(uid, primary_id, merged_data)
-
-        # 6. Delete secondary conversations
-        for secondary_id in secondary_ids:
-            try:
-                # Delete photos subcollection first
-                _delete_photos_subcollection(uid, secondary_id)
-                # Delete the conversation document
-                conversations_db.delete_conversation(uid, secondary_id)
-                # Delete vector embedding
-                delete_vector(uid, secondary_id)
-            except Exception as e:
-                print(f"Error deleting secondary conversation {secondary_id}: {e}")
-
-        # 7. Update vector embedding for merged conversation
-        try:
-            merged_conv = conversations_db.get_conversation(uid, primary_id)
-            if merged_conv:
-                save_structured_vector(uid, Conversation(**merged_conv))
-        except Exception as e:
-            print(f"Error updating vector for merged conversation: {e}")
-
-        # 8. Reprocess if requested (regenerate summary)
-        if reprocess:
-            try:
-                from utils.conversations.process_conversation import process_conversation
-
-                merged_conv = conversations_db.get_conversation(uid, primary_id)
-                if merged_conv:
-                    conversation_obj = Conversation(**merged_conv)
-                    process_conversation(
-                        uid, conversation_obj.language or 'en', conversation_obj, force_process=True, is_reprocess=True
-                    )
-            except Exception as e:
-                print(f"Error reprocessing merged conversation: {e}")
-
-        # 9. Send FCM notification
-        send_merge_completed_message(uid, primary_id, secondary_ids)
-
-        print(
-            f"Merge completed successfully: uid={uid}, primary_id={primary_id}, merged={len(secondary_ids)} conversations"
-        )
-
+        # Delete memories
+        memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:
-        print(f"Merge failed with exception: {e}")
-        _handle_merge_failure(uid, conversation_ids)
+        print(f"Error deleting memories for {conversation_id}: {e}")
 
-
-def _delete_photos_subcollection(uid: str, conversation_id: str) -> None:
-    """Delete all photos in a conversation's photos subcollection."""
     try:
-        deleted_count = conversations_db.delete_conversation_photos(uid, conversation_id)
-        if deleted_count > 0:
-            print(f"Deleted {deleted_count} photos from conversation {conversation_id}")
+        # Delete action items from standalone collection
+        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
-        print(f"Error deleting photos subcollection for {conversation_id}: {e}")
+        print(f"Error deleting action items for {conversation_id}: {e}")
+
+    try:
+        # Delete photos subcollection
+        conversations_db.delete_conversation_photos(uid, conversation_id)
+    except Exception as e:
+        print(f"Error deleting photos for {conversation_id}: {e}")
+
+    try:
+        # Delete audio chunks from GCS
+        delete_conversation_audio_files(uid, conversation_id)
+    except Exception as e:
+        print(f"Error deleting audio files for {conversation_id}: {e}")
+
+    try:
+        # Delete vector embedding
+        delete_vector(uid, conversation_id)
+    except Exception as e:
+        print(f"Error deleting vector for {conversation_id}: {e}")
+
+    try:
+        # Delete conversation document
+        conversations_db.delete_conversation(uid, conversation_id)
+    except Exception as e:
+        print(f"Error deleting conversation {conversation_id}: {e}")
 
 
 def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
     """
     Handle merge failure by resetting conversation statuses.
+
+    Since source conversations were set to 'merging' status, we need to
+    reset them back to 'completed' so the user can try again or continue using them.
     """
+    print(f"Merge failed for conversations: {conversation_ids}")
     for conv_id in conversation_ids:
         try:
             conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.completed)
