@@ -762,7 +762,11 @@ async def _listen(
 
                 # Stabilization delay before switching to main socket
                 if is_active():
-                    print(f"Speech profile sent, waiting {SPEECH_PROFILE_STABILIZE_DELAY}s for stabilization", uid, session_id)
+                    print(
+                        f"Speech profile sent, waiting {SPEECH_PROFILE_STABILIZE_DELAY}s for stabilization",
+                        uid,
+                        session_id,
+                    )
                     await asyncio.sleep(SPEECH_PROFILE_STABILIZE_DELAY)
 
             except Exception as e:
@@ -1287,9 +1291,9 @@ async def _listen(
         last_audio_received_time = timer_start
         last_activity_time = timer_start
 
-        # STT audio buffer - accumulate 100ms before sending for better transcription quality
+        # STT audio buffer - accumulate 30ms before sending for better transcription quality
         stt_audio_buffer = bytearray()
-        stt_buffer_flush_size = int(sample_rate * 2 * 0.1)  # 100ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
+        stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
             nonlocal stt_audio_buffer, soniox_profile_socket, deepgram_profile_socket
@@ -1317,6 +1321,7 @@ async def _listen(
                             await asyncio.sleep(5)
                             socket_to_close.finish()
                             print('Closed deepgram_profile_socket after 5s delay', uid, session_id)
+
                         asyncio.create_task(close_dg_profile())
                 else:
                     deepgram_profile_socket.send(chunk)
@@ -1333,6 +1338,7 @@ async def _listen(
                             await asyncio.sleep(5)
                             await socket_to_close.close()
                             print('Closed soniox_profile_socket after 5s delay', uid, session_id)
+
                         asyncio.create_task(close_soniox_profile())
                 else:
                     await soniox_profile_socket.send(chunk)
@@ -1503,7 +1509,9 @@ async def _listen(
 
         # Tasks
         data_process_task = asyncio.create_task(
-            receive_data(deepgram_socket, deepgram_profile_socket, soniox_socket, soniox_profile_socket, speechmatics_socket)
+            receive_data(
+                deepgram_socket, deepgram_profile_socket, soniox_socket, soniox_profile_socket, speechmatics_socket
+            )
         )
         stream_transcript_task = asyncio.create_task(stream_transcript_process())
         record_usage_task = asyncio.create_task(_record_usage_periodically())

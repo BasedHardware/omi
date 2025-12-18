@@ -321,8 +321,6 @@ async def process_audio_dg(
         if len(sentence) == 0:
             return
         # print(sentence)
-        words = result.channel.alternatives[0].words
-        print(f"DG-{preseconds}: {words[0].start} - {words[-1].end}: {words[-1].punctuated_word}")
         segments = []
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
