@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,8 +28,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
-  bool _showLogs = false;
+  bool _showLogs = true;
   bool _isSaving = false;
+  Timer? _logRefreshTimer;
   String? _validationError;
 
   // Device codec compatibility
@@ -65,6 +67,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     super.initState();
     _loadConfig();
     _checkConnectedDevice();
+    _startLogRefreshTimer();
+  }
+
+  void _startLogRefreshTimer() {
+    _logRefreshTimer?.cancel();
+    _logRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_showLogs && mounted) {
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _checkConnectedDevice() async {
@@ -112,6 +124,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Initialize JSON configs for all providers
       _initializeJsonConfigs();
+
+      // Auto-expand advanced if current provider has modified configs
+      if (_requestJsonCustomized[_selectedProvider] == true) {
+        _showAdvanced = true;
+      }
     });
   }
 
@@ -858,7 +875,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                       _regenerateRequestJson(provider);
                     }
 
-                    if (provider == SttProvider.custom) {
+                    // Auto-expand advanced if provider has custom config or is custom type
+                    if (provider == SttProvider.custom || _requestJsonCustomized[provider] == true) {
                       _showAdvanced = true;
                     }
                   });
@@ -1516,54 +1534,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   size: 18,
                 ),
                 const Spacer(),
-                if (_showLogs) ...[
-                  if (logs.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: logService.logsAsText));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
-                        );
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.copy, color: Colors.grey.shade500, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Copy',
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                  ],
+                if (_showLogs && logs.isNotEmpty) ...[
                   GestureDetector(
-                    onTap: () => setState(() {}),
-                    child: Row(
-                      children: [
-                        Icon(Icons.refresh, color: Colors.grey.shade500, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Refresh',
-                          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                        ),
-                      ],
-                    ),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: logService.logsAsText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
+                      );
+                    },
+                    child: Icon(Icons.copy, color: Colors.grey.shade500, size: 16),
                   ),
-                  if (logs.isNotEmpty) ...[
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: () {
-                        logService.clear();
-                        setState(() {});
-                      },
-                      child: Text(
-                        'Clear',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                      ),
-                    ),
-                  ],
                 ],
               ],
             ),
@@ -1703,6 +1683,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   @override
   void dispose() {
+    _logRefreshTimer?.cancel();
     _apiKeyController.dispose();
     _hostController.dispose();
     _portController.dispose();
