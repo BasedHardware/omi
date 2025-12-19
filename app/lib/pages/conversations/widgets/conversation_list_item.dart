@@ -319,12 +319,26 @@ class _ConversationListItemState extends State<ConversationListItem> {
       );
     }
 
+    final structured = widget.conversation.structured;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           widget.conversation.structured.title.decodeString,
           style: Theme.of(context).textTheme.titleLarge,
+          maxLines: 1,
+        ),
+        const SizedBox(height: 8),
+        Stack(
+          children: [
+            Text(
+              structured.overview.decodeString.stripMarkdownForPreview,
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (widget.conversation.isLocked) _buildLockedOverlay(),
+          ],
         ),
       ],
     );

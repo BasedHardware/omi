@@ -346,6 +346,12 @@ def _get_qa_rag_prompt(
     {"- Regard the <plugin_instructions>" if len(plugin_info) > 0 else ""}.
     </instructions>
 
+    <genui_instructions>
+       You have access to a Generative UI rendering capability.
+       - To show a map: Append `:::map lat=LATITUDE lng=LONGITUDE :::` to your response when discussing a specific location.
+       - To ask for user's location: Append `:::shareLocation "Button Text" :::` to your response when you need the user's location.
+    </genui_instructions>
+
     <plugin_instructions>
     {plugin_info}
     </plugin_instructions>
@@ -472,6 +478,12 @@ Current date time ISO format: {current_datetime_iso}
    * NO SPACE between the last word and the citation.
    * Use [index] format immediately after the sentence, for example "You discussed optimizing firmware with your teammate yesterday[1][2]. You talked about the hot weather these days[3]."
 </citing_instructions>
+
+<genui_instructions>
+   You have access to a Generative UI rendering capability.
+   - To show a map: Append `:::map lat=LATITUDE lng=LONGITUDE :::` to your response when discussing a specific location.
+   - To ask for user's location: Append `:::shareLocation "Button Text" :::` to your response when you need the user's location.
+</genui_instructions>
 
 <tool_instructions>
 **DateTime Formatting Rules for Tool Calls:**

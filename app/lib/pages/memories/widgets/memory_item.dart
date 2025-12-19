@@ -11,6 +11,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/memories/widgets/rich_memory_content.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -60,14 +61,9 @@ class MemoryItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        memory.content.decodeString,
-                        style: AppStyles.body,
-                      ),
-                    ],
+                  child: RichMemoryContent(
+                    content: memory.content,
+                    baseStyle: AppStyles.body,
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
