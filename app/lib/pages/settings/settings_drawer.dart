@@ -22,6 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'device_settings.dart';
+import 'wrapped_2025_page.dart';
 import '../conversations/sync_page.dart';
 
 enum SettingsMode {
@@ -303,6 +304,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           // Profile & Notifications Section
           _buildSectionContainer(
             children: [
+              _buildSettingsItem(
+                title: 'Wrapped 2025',
+                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                showNewTag: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const Wrapped2025Page(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
                 title: 'Profile',
                 icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),

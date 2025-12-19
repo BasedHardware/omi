@@ -34,6 +34,7 @@ from routers import (
     developer,
     updates,
     imports,
+    wrapped,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -81,6 +82,7 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(developer.router)
 app.include_router(imports.router)
+app.include_router(wrapped.router)
 
 
 methods_timeout = {
