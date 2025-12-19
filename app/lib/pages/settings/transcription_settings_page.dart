@@ -48,6 +48,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   final Map<SttProvider, String> _schemaJsonPerProvider = {};
   final Map<SttProvider, bool> _requestJsonCustomized = {};
 
+  // Version counter to force autocomplete rebuild after JSON edits
+  int _configSyncVersion = 0;
+
   bool _showApiKey = false;
 
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
@@ -167,10 +170,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void _initializeJsonConfigs() {
     // Initialize JSON configs for all providers
     for (final config in SttProviderConfig.allProviders) {
-      _regenerateRequestJson(config.provider);
-      final template = CustomSttConfig.getFullTemplateJson(config.provider);
-      _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
-      _requestJsonCustomized[config.provider] = false;
+      // Skip if already loaded as customized (from _populateUIFromConfig)
+      if (_requestJsonCustomized[config.provider] != true) {
+        _regenerateRequestJson(config.provider);
+        _requestJsonCustomized[config.provider] = false;
+      }
+      // Only set schema if not already set
+      if (_schemaJsonPerProvider[config.provider] == null) {
+        final template = CustomSttConfig.getFullTemplateJson(config.provider);
+        _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+      }
     }
   }
 
@@ -749,7 +758,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
         const SizedBox(height: 10),
         Autocomplete<String>(
-          key: ValueKey('${_selectedProvider.name}_$label'),
+          key: ValueKey('${_selectedProvider.name}_${label}_$_configSyncVersion'),
           initialValue: TextEditingValue(text: value),
           optionsBuilder: (TextEditingValue textEditingValue) {
             if (textEditingValue.text.isEmpty) {
@@ -1226,9 +1235,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             }
           } catch (_) {}
 
-          // Update stored config with values from JSON
+          // Update stored config with values from JSON and force UI sync
           if (newLanguage != null || newModel != null) {
             _updateCurrentProviderConfig(language: newLanguage, model: newModel);
+            // Increment version to force autocomplete widgets to rebuild with new values
+            _configSyncVersion++;
           }
 
           // Mark as customized if it differs from auto-generated
