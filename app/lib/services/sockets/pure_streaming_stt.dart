@@ -88,7 +88,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
   GeminiStreamingSttSocket({
     required this.apiKey,
-    this.model = 'gemini-2.0-flash-live-001',
+    this.model = 'gemini-2.5-flash-native-audio-preview-12-2025',
     this.language = 'en',
     this.sampleRate = 16000,
     this.transcoder,
@@ -100,7 +100,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 
   String get _wsUrl =>
-      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey';
+      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey';
 
   @override
   Future<bool> connect() async {
@@ -169,18 +169,9 @@ class GeminiStreamingSttSocket implements IPureSocket {
       'setup': {
         'model': 'models/$model',
         'generationConfig': {
-          'responseModalities': ['TEXT'],
+          'responseModalities': ['AUDIO'],
         },
-        'systemInstruction': {
-          'parts': [
-            {
-              'text': 'You are a speech-to-text transcription service. '
-                  'Listen to the audio and transcribe it accurately in $language. '
-                  'Return only the transcription text, no explanations or formatting. '
-                  'If you cannot understand the audio, return an empty string.',
-            }
-          ]
-        }
+        'inputAudioTranscription': {},
       }
     };
 
@@ -222,18 +213,21 @@ class GeminiStreamingSttSocket implements IPureSocket {
         return;
       }
 
+      // Handle server content with inputTranscription
+      final serverContent = json['serverContent'];
+      if (serverContent == null) return;
+
+      // Check for turn complete
+      if (serverContent['turnComplete'] == true) {
+        CustomSttLogService.instance.info('GeminiStreaming', 'Turn complete');
+        return;
+      }
+
+      // Extract input transcription (the new response format)
+      final inputTranscription = serverContent['inputTranscription'];
       String? text;
-      if (json.containsKey('serverContent')) {
-        final serverContent = json['serverContent'];
-        if (serverContent != null && serverContent.containsKey('modelTurn')) {
-          final modelTurn = serverContent['modelTurn'];
-          if (modelTurn != null && modelTurn.containsKey('parts')) {
-            final parts = modelTurn['parts'] as List?;
-            if (parts != null && parts.isNotEmpty) {
-              text = parts[0]['text'] as String?;
-            }
-          }
-        }
+      if (inputTranscription != null) {
+        text = inputTranscription['text'] as String?;
       }
 
       if (text != null && text.trim().isNotEmpty) {
