@@ -4,6 +4,7 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
@@ -87,7 +88,12 @@ class MemoriesProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
-    _memories = await getMemories();
+    if (DevConstants.useMockData) {
+      _memories = _generateMockMemories();
+    } else {
+      _memories = await getMemories();
+    }
+
     _unreviewed = _memories
         .where(
             (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
@@ -95,6 +101,164 @@ class MemoriesProvider extends ChangeNotifier {
 
     _loading = false;
     _setCategories();
+  }
+
+  List<Memory> _generateMockMemories() {
+    const uuid = Uuid();
+    const mockUid = 'mock-user-123';
+
+    return [
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Flutter is a cross-platform framework developed by Google for building mobile, web, and desktop applications.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 1)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Remembered to buy groceries: milk, eggs, bread, and coffee for the week.',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        updatedAt: DateTime.now().subtract(const Duration(hours: 3)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Team meeting scheduled for next Monday at 10 AM to discuss Q4 objectives.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Favorite programming quote: "Code is like humor. When you have to explain it, it\'s bad."',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 5)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 1, hours: 5)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Learned about Provider state management in Flutter. It simplifies passing data through the widget tree.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 2)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 2)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Birthday reminder: Mom\'s birthday is on the 15th. Need to plan something special.',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 12)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 2, hours: 12)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Great coffee shop recommendation: The Local Brew on Main Street. Amazing espresso!',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 3)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 3)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Project deadline: Submit final report by Friday 5 PM. Need to finish sections 3 and 4.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 8)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 3, hours: 8)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Interesting fact: The first computer bug was an actual bug - a moth found in a computer in 1947.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 4)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 4)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Gym membership renewal due next month. Check for any new promotional rates.',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now().subtract(const Duration(days: 4, hours: 6)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 4, hours: 6)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Book recommendation from Sarah: "The Pragmatic Programmer" - must read for developers.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 5)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 5)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Dentist appointment scheduled for next Wednesday at 2 PM. Remember to floss beforehand!',
+        category: MemoryCategory.manual,
+        createdAt: DateTime.now().subtract(const Duration(days: 5, hours: 10)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 5, hours: 10)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'New feature idea: Add dark mode toggle to improve user experience in low-light environments.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 6)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 6)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Password for Netflix changed. New password saved in password manager.',
+        category: MemoryCategory.system,
+        createdAt: DateTime.now().subtract(const Duration(days: 6, hours: 4)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 6, hours: 4)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+      Memory(
+        id: uuid.v4(),
+        uid: mockUid,
+        content: 'Vacation plans: Thinking about visiting Japan in spring to see the cherry blossoms.',
+        category: MemoryCategory.interesting,
+        createdAt: DateTime.now().subtract(const Duration(days: 7)),
+        updatedAt: DateTime.now().subtract(const Duration(days: 7)),
+        visibility: MemoryVisibility.private,
+        reviewed: true,
+      ),
+    ];
   }
 
   Memory? _lastDeletedMemory;

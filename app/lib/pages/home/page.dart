@@ -43,6 +43,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 
 import 'widgets/battery_info_widget.dart';
+import 'widgets/stats_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -432,6 +433,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
+                          const StatsWidget(),
                           Expanded(
                             child: IndexedStack(
                               index: context.watch<HomeProvider>().selectedIndex,
