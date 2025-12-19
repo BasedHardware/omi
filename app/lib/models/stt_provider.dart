@@ -161,7 +161,7 @@ class SttProviderConfig {
     ),
     SttProvider.openaiDiarize: SttProviderConfig(
       provider: SttProvider.openaiDiarize,
-      displayName: 'OpenAI GPT-4o (Speaker)',
+      displayName: 'OpenAI GPT-4o Transcribe Diarize',
       description: 'GPT-4o Transcribe with speaker diarization',
       icon: FontAwesomeIcons.userGroup,
       requiresApiKey: true,
