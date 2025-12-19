@@ -815,7 +815,7 @@ class _AddAppPageState extends State<AddAppPage> {
                     const SizedBox(height: 10),
                     GestureDetector(
                       onTap: () {
-                        launchUrl(Uri.parse('https://omi.me/privacy'));
+                        launchUrl(Uri.parse('https://omi.me/pages/privacy'));
                       },
                       child: Text.rich(
                         TextSpan(
