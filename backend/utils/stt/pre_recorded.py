@@ -1,10 +1,104 @@
+import os
 from collections import defaultdict
-from typing import List
+from typing import List, Tuple, Union
 
 import fal_client
+from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
 from utils.other.endpoints import timeit
+
+# Initialize Deepgram client for pre-recorded transcription
+_deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
+_is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
+if _is_dg_self_hosted:
+    _dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
+    if _dg_self_hosted_url:
+        _deepgram_options.url = _dg_self_hosted_url
+
+_deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
+
+
+@timeit
+def deepgram_prerecorded(
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    """
+    Transcribe audio using Deepgram's pre-recorded API.
+    Returns words in same format as fal_whisperx for compatibility with existing postprocessing.
+
+    Args:
+        audio_url: URL to the audio file
+        speakers_count: Hint for number of speakers (not used by Deepgram, kept for API compatibility)
+        attempts: Current retry attempt number
+        return_language: If True, returns (words, language) tuple
+
+    Returns:
+        List of word dicts with format: {'timestamp': [start, end], 'speaker': 'SPEAKER_XX', 'text': 'word'}
+        Or tuple of (words, language) if return_language=True
+    """
+    print('deepgram_prerecorded', audio_url, speakers_count, attempts)
+
+    try:
+        options = {
+            "model": "nova-3",
+            "smart_format": True,
+            "punctuate": True,
+            "diarize": True,
+            "detect_language": True,
+            "utterances": True,
+        }
+
+        response = _deepgram_client.listen.rest.v("1").transcribe_url({"url": audio_url}, options)
+
+        # Extract words from response
+        result = response.to_dict()
+        channels = result.get('results', {}).get('channels', [])
+        if not channels:
+            raise Exception('No channels found in response')
+
+        alternatives = channels[0].get('alternatives', [])
+        if not alternatives:
+            raise Exception('No alternatives found in response')
+
+        dg_words = alternatives[0].get('words', [])
+        if not dg_words:
+            raise Exception('No words found in response')
+
+        # Convert Deepgram format to fal_whisperx compatible format
+        # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
+        # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
+        words = []
+        for w in dg_words:
+            speaker_id = w.get('speaker', 0)
+            words.append(
+                {
+                    'timestamp': [w['start'], w['end']],
+                    'speaker': f"SPEAKER_{speaker_id:02d}" if speaker_id is not None else None,
+                    'text': w.get('punctuated_word', w['word']),
+                }
+            )
+
+        if return_language:
+            # Deepgram returns detected_language in the channel
+            detected_lang = channels[0].get('detected_language', 'en')
+            # Normalize language code (Deepgram might return 'en-US', we want 'en')
+            if detected_lang and '-' in detected_lang:
+                detected_lang = detected_lang.split('-')[0]
+            return words, detected_lang or 'en'
+
+        return words
+
+    except Exception as e:
+        print(f'Deepgram prerecorded error: {e}')
+        if attempts < 2:
+            return deepgram_prerecorded(audio_url, speakers_count, attempts + 1, return_language)
+        if return_language:
+            return [], 'en'
+        return []
 
 
 @timeit
