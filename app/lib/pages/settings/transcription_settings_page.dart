@@ -400,6 +400,202 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
   }
 
+  Future<void> _exportConfig() async {
+    final config = _buildCurrentConfig();
+    
+    // Build exportable config (exclude sensitive API key)
+    final exportableConfig = <String, dynamic>{
+      'provider': config.provider.name,
+      'language': config.language ?? _currentConfig.defaultLanguage,
+      'model': config.model ?? _currentConfig.defaultModel,
+      if (config.url != null) 'url': config.url,
+      if (config.host != null) 'host': config.host,
+      if (config.port != null) 'port': config.port,
+      if (config.requestType != null) 'request_type': config.requestType,
+      if (config.headers != null) 'headers': _sanitizeHeaders(config.headers!),
+      if (config.params != null) 'params': config.params,
+      if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
+      if (config.schemaJson != null) 'schema': config.schemaJson,
+    };
+
+    final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
+    
+    await Clipboard.setData(ClipboardData(text: jsonString));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Configuration copied to clipboard'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Map<String, String> _sanitizeHeaders(Map<String, String> headers) {
+    // Remove or mask sensitive header values
+    return headers.map((key, value) {
+      final lowerKey = key.toLowerCase();
+      if (lowerKey == 'authorization' || lowerKey.contains('api') || lowerKey.contains('key')) {
+        return MapEntry(key, '<YOUR_API_KEY>');
+      }
+      return MapEntry(key, value);
+    });
+  }
+
+  Future<void> _importConfig() async {
+    final controller = TextEditingController();
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Import Configuration',
+          style: TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Paste your JSON configuration below:',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0D0D),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade800),
+                ),
+                child: TextField(
+                  controller: controller,
+                  maxLines: null,
+                  expands: true,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '{\n  "provider": "deepgramLive",\n  ...\n}',
+                    hintStyle: TextStyle(color: Colors.grey.shade700),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'You\'ll need to add your own API key after importing',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+              if (clipboardData?.text != null) {
+                controller.text = clipboardData!.text!;
+              }
+            },
+            child: const Text('Paste', style: TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Import', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      _parseAndApplyConfig(result);
+    }
+  }
+
+  void _parseAndApplyConfig(String jsonString) {
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      final config = CustomSttConfig.fromJson(json);
+      
+      // Validate provider
+      if (config.provider == SttProvider.omi) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Invalid provider in configuration'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _selectedProvider = config.provider;
+        _configsPerProvider[_selectedProvider] = config;
+        
+        // Update UI fields
+        _apiKeyController.text = config.apiKey ?? '';
+        _urlController.text = config.url ?? '';
+        _hostController.text = config.host ?? '127.0.0.1';
+        _portController.text = (config.port ?? 8080).toString();
+        
+        // Update JSON configs
+        if (config.requestType != null || config.headers != null || config.params != null) {
+          final requestConfig = <String, dynamic>{};
+          if (config.url != null) requestConfig['url'] = config.url;
+          if (config.requestType != null) requestConfig['request_type'] = config.requestType;
+          if (config.headers != null) requestConfig['headers'] = config.headers;
+          if (config.params != null) requestConfig['params'] = config.params;
+          if (config.audioFieldName != null) requestConfig['audio_field_name'] = config.audioFieldName;
+          
+          _requestJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
+          _requestJsonCustomized[_selectedProvider] = true;
+        } else {
+          _regenerateRequestJson(_selectedProvider);
+          _requestJsonCustomized[_selectedProvider] = false;
+        }
+        
+        if (config.schemaJson != null) {
+          _schemaJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
+        }
+        
+        _configSyncVersion++;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Imported ${SttProviderConfig.get(_selectedProvider).displayName} configuration'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Invalid JSON: ${e.toString().split('\n').first}'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -412,6 +608,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           icon: const Icon(Icons.arrow_back_ios, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          if (_useCustomStt) ...[
+            IconButton(
+              icon: const Icon(Icons.file_download_outlined, size: 20),
+              tooltip: 'Import configuration',
+              onPressed: _importConfig,
+            ),
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              tooltip: 'Export configuration',
+              onPressed: _exportConfig,
+            ),
+          ],
+        ],
       ),
       body: Column(
         children: [
