@@ -17,7 +17,8 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
-  bool showShortConversations = false; // conversations < 2 minutes
+  bool showShortConversations = false;
+  int shortConversationThreshold = 60; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
   DateTime? selectedDate;
 
@@ -43,7 +44,10 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   _preload() async {
-    // Initialization logic if needed
+    // Load persisted filter preferences
+    showShortConversations = SharedPreferencesUtil().showShortConversations;
+    showDiscardedConversations = SharedPreferencesUtil().showDiscardedMemories;
+    shortConversationThreshold = SharedPreferencesUtil().shortConversationThreshold;
   }
 
   void resetGroupedConvos() {
@@ -150,6 +154,7 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
+    SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -166,7 +171,32 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleShortConversations() {
     showShortConversations = !showShortConversations;
-    groupConversationsByDate();
+    SharedPreferencesUtil().showShortConversations = showShortConversations;
+
+    // Clear and refresh to reflect the change
+    groupedConversations = {};
+    notifyListeners();
+
+    if (previousQuery.isNotEmpty) {
+      searchConversations(previousQuery, showShimmer: true);
+    } else {
+      fetchConversations();
+    }
+  }
+
+  void setShortConversationThreshold(int seconds) {
+    shortConversationThreshold = seconds;
+    SharedPreferencesUtil().shortConversationThreshold = seconds;
+
+    // Clear and refresh to reflect the change
+    groupedConversations = {};
+    notifyListeners();
+
+    if (previousQuery.isNotEmpty) {
+      searchConversations(previousQuery, showShimmer: true);
+    } else {
+      fetchConversations();
+    }
   }
 
   void toggleStarredFilter() {
@@ -278,22 +308,16 @@ class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
       // Filter by discarded status
-      if (showDiscardedConversations) {
-        // When showing discarded conversations, only show discarded ones
-        if (!convo.discarded) {
-          return false;
-        }
-      } else {
-        // When not showing discarded conversations, only show non-discarded ones
-        if (convo.discarded) {
-          return false;
-        }
+      // When showDiscardedConversations is true, show all conversations (including discarded)
+      // When showDiscardedConversations is false, hide discarded conversations
+      if (!showDiscardedConversations && convo.discarded) {
+        return false;
       }
 
-      // Filter out short conversations (< 2 minutes) unless explicitly showing them
+      // Filter out short conversations unless explicitly showing them
       if (!showShortConversations) {
         final durationSeconds = convo.getDurationInSeconds();
-        if (durationSeconds < 60) {
+        if (durationSeconds < shortConversationThreshold) {
           return false;
         }
       }
