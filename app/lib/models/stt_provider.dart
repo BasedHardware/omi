@@ -161,7 +161,7 @@ class SttProviderConfig {
     ),
     SttProvider.openaiDiarize: SttProviderConfig(
       provider: SttProvider.openaiDiarize,
-      displayName: 'OpenAI GPT-4o (Speaker)',
+      displayName: 'OpenAI GPT-4o Transcribe Diarize',
       description: 'GPT-4o Transcribe with speaker diarization',
       icon: FontAwesomeIcons.userGroup,
       requiresApiKey: true,
@@ -240,9 +240,9 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.streaming,
       supportedLanguages: SttLanguages.geminiSupported,
-      supportedModels: const ['gemini-2.0-flash-live-001'],
+      supportedModels: const ['gemini-2.5-flash-native-audio-preview-12-2025'],
       defaultLanguage: 'en',
-      defaultModel: 'gemini-2.0-flash-live-001',
+      defaultModel: 'gemini-2.5-flash-native-audio-preview-12-2025',
       responseSchema: SttResponseSchema.geminiLive,
       apiKeyUrl: 'https://aistudio.google.com/apikey',
       docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini',
@@ -431,9 +431,9 @@ class SttProviderConfig {
 
       case SttProvider.geminiLive:
         config['url'] =
-            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
+            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
         config['params'] = {
-          'model': mdl.isNotEmpty ? mdl : 'gemini-2.0-flash-live-001',
+          'model': mdl.isNotEmpty ? mdl : 'gemini-2.5-flash-native-audio-preview-12-2025',
           'language': lang,
         };
         break;
