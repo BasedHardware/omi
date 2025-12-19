@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omi Wrapped 2025 - Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #FF6B9D, #c44569);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            color: #888;
+            margin-bottom: 40px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #333;
+            border-radius: 12px;
+            background: #0d0d1a;
+            color: white;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #FF6B9D;
+        }
+        
+        button {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(90deg, #FF6B9D, #c44569);
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 12px;
+            background: #0d0d1a;
+            display: none;
+        }
+        
+        .status.visible {
+            display: block;
+        }
+        
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .status-icon {
+            font-size: 24px;
+        }
+        
+        .status-title {
+            font-weight: 600;
+            font-size: 18px;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #FF6B9D, #c44569);
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        
+        .step-text {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .result {
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .error {
+            color: #ff6b6b;
+        }
+        
+        .success {
+            color: #4ecdc4;
+        }
+        
+        .info {
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(255, 107, 157, 0.1);
+            border: 1px solid rgba(255, 107, 157, 0.3);
+            border-radius: 12px;
+        }
+        
+        .info h3 {
+            color: #FF6B9D;
+            margin-bottom: 10px;
+        }
+        
+        .info p {
+            color: #aaa;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(90deg, #4ecdc4, #44a08d);
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Omi Wrapped 2025</h1>
+        <p class="subtitle">Test your Wrapped experience</p>
+        
+        <div class="form-group">
+            <label>Your User ID (UID)</label>
+            <input type="text" id="uid" placeholder="Enter your Firebase UID">
+        </div>
+        
+        <button id="generateBtn" onclick="generateWrapped()">Generate My Wrapped</button>
+        <button id="viewBtn" class="btn-secondary" onclick="viewWrapped()">View Existing Wrapped</button>
+        
+        <div class="status" id="status">
+            <div class="status-header">
+                <span class="status-icon" id="statusIcon">⏳</span>
+                <span class="status-title" id="statusTitle">Processing...</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <p class="step-text" id="stepText">Starting...</p>
+            <div class="result" id="result"></div>
+        </div>
+        
+        <div class="info">
+            <h3>How to find your UID</h3>
+            <p>
+                1. Open the Omi app<br>
+                2. Go to Settings → Developer<br>
+                3. Your UID is shown there<br><br>
+                Generation takes 1-2 minutes. You'll see real-time progress below.
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        let pollInterval = null;
+        
+        async function generateWrapped() {
+            const uid = document.getElementById('uid').value.trim();
+            
+            if (!uid) {
+                alert('Please enter your UID');
+                return;
+            }
+            
+            const statusDiv = document.getElementById('status');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const progressFill = document.getElementById('progressFill');
+            const stepText = document.getElementById('stepText');
+            const resultDiv = document.getElementById('result');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            statusDiv.classList.add('visible');
+            generateBtn.disabled = true;
+            statusIcon.textContent = '⏳';
+            statusTitle.textContent = 'Starting generation...';
+            statusTitle.classList.remove('error', 'success');
+            resultDiv.textContent = '';
+            progressFill.style.width = '0%';
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/wrapped/2025/test/generate?uid=${uid}`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to start generation');
+                }
+                
+                pollInterval = setInterval(() => pollStatus(uid), 3000);
+                
+            } catch (error) {
+                statusIcon.textContent = '❌';
+                statusTitle.textContent = 'Error';
+                statusTitle.classList.add('error');
+                stepText.textContent = error.message;
+                generateBtn.disabled = false;
+            }
+        }
+        
+        async function viewWrapped() {
+            const uid = document.getElementById('uid').value.trim();
+            
+            if (!uid) {
+                alert('Please enter your UID');
+                return;
+            }
+            
+            const statusDiv = document.getElementById('status');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            
+            statusDiv.classList.add('visible');
+            statusIcon.textContent = '🔍';
+            statusTitle.textContent = 'Fetching...';
+            statusTitle.classList.remove('error', 'success');
+            
+            await pollStatus(uid);
+        }
+        
+        async function pollStatus(uid) {
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const progressFill = document.getElementById('progressFill');
+            const stepText = document.getElementById('stepText');
+            const resultDiv = document.getElementById('result');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/wrapped/2025/test?uid=${uid}`);
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch status');
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'processing') {
+                    const pct = (data.progress?.pct || 0) * 100;
+                    progressFill.style.width = `${pct}%`;
+                    stepText.textContent = data.progress?.step || 'Processing...';
+                    statusTitle.textContent = `Generating... ${Math.round(pct)}%`;
+                    
+                } else if (data.status === 'done') {
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                    statusIcon.textContent = '✅';
+                    statusTitle.textContent = 'Complete!';
+                    statusTitle.classList.add('success');
+                    progressFill.style.width = '100%';
+                    stepText.textContent = 'Your Wrapped is ready! Check the app to view it.';
+                    resultDiv.textContent = JSON.stringify(data.result, null, 2);
+                    generateBtn.disabled = false;
+                    
+                } else if (data.status === 'error') {
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                    }
+                    statusIcon.textContent = '❌';
+                    statusTitle.textContent = 'Error';
+                    statusTitle.classList.add('error');
+                    stepText.textContent = data.error || 'Generation failed';
+                    generateBtn.disabled = false;
+                    
+                } else if (data.status === 'not_generated') {
+                    statusIcon.textContent = '📭';
+                    statusTitle.textContent = 'Not Generated Yet';
+                    stepText.textContent = 'Click "Generate My Wrapped" to create your Wrapped 2025';
+                    generateBtn.disabled = false;
+                }
+                
+            } catch (error) {
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+                statusIcon.textContent = '❌';
+                statusTitle.textContent = 'Error';
+                statusTitle.classList.add('error');
+                stepText.textContent = error.message;
+                generateBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

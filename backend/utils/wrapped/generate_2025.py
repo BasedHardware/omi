@@ -182,51 +182,127 @@ def _get_hour_histogram(conversations: List[Conversation]) -> Dict[int, int]:
     return dict(hour_counts)
 
 
-def _determine_archetype(stats: Dict[str, Any]) -> Dict[str, str]:
-    """Determine decision style archetype based on stats."""
-    # Simple heuristic-based selection
-    completion_rate = stats.get("action_items_completion_rate", 0)
-    conv_count = stats.get("total_conversations", 0)
-    avg_duration = stats.get("avg_conversation_duration_seconds", 300)
-    top_category = stats.get("dominant_category", "other")
+def _determine_archetype_with_llm(conversations: List[Conversation], stats: Dict[str, Any]) -> Dict[str, str]:
+    """Use Gemini to determine decision style archetype based on conversation patterns."""
+    print(f"[Wrapped]   - Starting decision style analysis with Gemini...")
 
-    # Score each archetype
-    scores = {}
+    try:
+        context = _build_conversations_context(conversations, max_chars=300000)
+        print(f"[Wrapped]     - Built context: {len(context)} chars")
 
-    for archetype in DECISION_ARCHETYPES:
-        score = 0
-        traits = archetype["traits"]
+        archetypes_str = "\n".join([f"- {a['name']}: {a['description']}" for a in DECISION_ARCHETYPES])
 
-        if "high_completion_rate" in traits and completion_rate > 0.6:
-            score += 2
-        if "high_conversation_count" in traits and conv_count > 100:
-            score += 2
-        if "short_conversations" in traits and avg_duration < 300:
-            score += 1
-        if "long_conversations" in traits and avg_duration > 600:
-            score += 1
-        if "high_action_items" in traits and stats.get("total_action_items", 0) > 50:
-            score += 1
-        if "work_or_business_focus" in traits and top_category in ["work", "business"]:
-            score += 1
-        if "technology_or_business_focus" in traits and top_category in ["technology", "business"]:
-            score += 1
-        if "diverse_categories" in traits and len(stats.get("top_categories", [])) >= 4:
-            score += 1
+        prompt = f"""Analyze these conversation summaries and determine this person's DECISION STYLE and PERSONALITY archetype.
 
-        scores[archetype["name"]] = score
+CONVERSATIONS:
+{context}
 
-    # Pick the highest scoring archetype
-    best = max(scores.items(), key=lambda x: x[1])
-    selected = next(a for a in DECISION_ARCHETYPES if a["name"] == best[0])
+STATS:
+- Total conversations: {stats.get('total_conversations', 0)}
+- Total hours: {stats.get('total_time_hours', 0)}
+- Action item completion rate: {round(stats.get('action_items_completion_rate', 0) * 100)}%
+- Top categories: {', '.join(stats.get('top_categories', [])[:3])}
 
-    return {
-        "name": selected["name"],
-        "description": selected["description"],
-    }
+Based on HOW they talk, WHAT they discuss, and their patterns, pick ONE archetype that fits best:
+{archetypes_str}
+
+Return as JSON (no markdown):
+{{
+    "name": "Archetype Name",
+    "description": "A personalized 1-sentence description of their style based on actual conversation patterns"
+}}
+
+Make the description specific to THIS person based on what you see in their conversations, not generic."""
+
+        print(f"[Wrapped]     - Calling Gemini for decision style...")
+        response = llm_gemini_flash.invoke(prompt)
+        content = response.content.strip()
+        print(f"[Wrapped]     - Gemini response received: {len(content)} chars")
+
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+
+        result = json.loads(content)
+        if isinstance(result, list) and len(result) > 0:
+            result = result[0]
+
+        print(f"[Wrapped]     - Decision style: {result.get('name')}")
+        return result
+
+    except Exception as e:
+        print(f"[Wrapped]     - ERROR in decision style analysis: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return {"name": "Reflective Executor", "description": "You think deeply, then move decisively."}
 
 
-def _find_what_mattered_most_with_llm(conversations: List[Conversation]) -> Dict[str, str]:
+def _find_top_phrases_with_llm(conversations: List[Conversation]) -> List[Dict[str, Any]]:
+    """Use Gemini to find the user's top 5 most used phrases."""
+    print(f"[Wrapped]   - Starting top phrases analysis with Gemini...")
+
+    try:
+        context = _build_conversations_context(conversations, max_chars=400000)
+        print(f"[Wrapped]     - Built context: {len(context)} chars")
+
+        prompt = f"""Analyze these conversation summaries and identify this person's TOP 5 MOST USED PHRASES or expressions.
+
+CONVERSATIONS:
+{context}
+
+Look for:
+- Repeated phrases they use often
+- Catchphrases or verbal habits
+- Common expressions in their speech
+- Things they say frequently when making points
+- Signature ways they start or end statements
+
+Return as JSON (no markdown):
+{{
+    "phrases": [
+        {{"phrase": "the phrase", "context": "when/how they use it"}},
+        {{"phrase": "another phrase", "context": "when/how they use it"}},
+        {{"phrase": "third phrase", "context": "when/how they use it"}},
+        {{"phrase": "fourth phrase", "context": "when/how they use it"}},
+        {{"phrase": "fifth phrase", "context": "when/how they use it"}}
+    ]
+}}
+
+Be specific with actual phrases from their conversations. Avoid generic filler words like "um", "like", "you know"."""
+
+        print(f"[Wrapped]     - Calling Gemini for top phrases...")
+        response = llm_gemini_flash.invoke(prompt)
+        content = response.content.strip()
+        print(f"[Wrapped]     - Gemini response received: {len(content)} chars")
+
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+
+        result = json.loads(content)
+        phrases = result.get("phrases", []) if isinstance(result, dict) else result
+
+        print(f"[Wrapped]     - Found {len(phrases)} top phrases")
+        return phrases[:5]
+
+    except Exception as e:
+        print(f"[Wrapped]     - ERROR in top phrases analysis: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return [
+            {"phrase": "Let's do this", "context": "When starting something new"},
+            {"phrase": "Makes sense", "context": "When agreeing with ideas"},
+            {"phrase": "I think", "context": "When sharing opinions"},
+            {"phrase": "We should", "context": "When suggesting actions"},
+            {"phrase": "Sounds good", "context": "When approving plans"},
+        ]
+
+
+def _determine_archetype_fallback(stats: Dict[str, Any]) -> Dict[str, str]:
     """Use Gemini to find the single word that captures what mattered most to this person in 2025."""
     print(f"[Wrapped]   - Starting 'what mattered most' analysis with Gemini...")
 
@@ -879,116 +955,124 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         print(f"[Wrapped] Step 3 complete: Statistics computed (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Total hours: {result.get('total_time_hours', 0)}")
         print(f"[Wrapped]   - Top categories: {result.get('top_categories', [])}")
-        print(f"[Wrapped]   - Decision style: {result.get('decision_style', {}).get('name', 'Unknown')}")
         print(f"[Wrapped]   - Signature phrase: {result.get('signature_phrase', {})}")
 
-        # Step 4: Find what mattered most with Gemini
+        # Step 4: Determine decision style with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding what mattered most...", 0.7)
-        print(f"[Wrapped] Step 4: Finding what mattered most with Gemini...")
+        _update_progress(uid, year, "Analyzing your personality...", 0.50)
+        print(f"[Wrapped] Step 4: Analyzing decision style with Gemini...")
 
-        what_mattered = _find_what_mattered_most_with_llm(conversations)
-        result["what_mattered_most"] = what_mattered
-        print(f"[Wrapped] Step 4 complete: What mattered most found (took {time.time() - step_start:.2f}s)")
-        print(f"[Wrapped]   - Word: {what_mattered.get('word')}")
-        print(f"[Wrapped]   - Reason: {what_mattered.get('reason')}")
+        decision_style = _determine_archetype_with_llm(conversations, result)
+        result["decision_style"] = decision_style
+        print(f"[Wrapped] Step 4 complete: Decision style analyzed (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped]   - Archetype: {decision_style.get('name')}")
 
-        # Step 5: Analyze memorable days with Gemini
+        # Step 5: Find top phrases with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding your memorable days...", 0.75)
-        print(f"[Wrapped] Step 5: Analyzing memorable days with Gemini...")
+        _update_progress(uid, year, "Finding your catchphrases...", 0.58)
+        print(f"[Wrapped] Step 5: Finding top phrases with Gemini...")
+
+        top_phrases = _find_top_phrases_with_llm(conversations)
+        result["top_phrases"] = top_phrases
+        print(f"[Wrapped] Step 5 complete: Top phrases found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped]   - Top phrases: {len(top_phrases)} found")
+
+        # Step 6: Analyze memorable days with Gemini
+        step_start = time.time()
+        _update_progress(uid, year, "Finding your memorable days...", 0.65)
+        print(f"[Wrapped] Step 6: Analyzing memorable days with Gemini...")
 
         memorable_days = _analyze_memorable_days_with_llm(conversations)
         result["memorable_days"] = memorable_days
-        print(f"[Wrapped] Step 5 complete: Memorable days analyzed (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 6 complete: Memorable days analyzed (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Most fun day: {memorable_days.get('most_fun_day', {}).get('title', 'N/A')}")
         print(f"[Wrapped]   - Most productive day: {memorable_days.get('most_productive_day', {}).get('title', 'N/A')}")
         print(f"[Wrapped]   - Most stressful day: {memorable_days.get('most_stressful_day', {}).get('title', 'N/A')}")
 
-        # Step 6: Find funniest event with Gemini
+        # Step 7: Find funniest event with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding your funniest moment...", 0.82)
-        print(f"[Wrapped] Step 6: Finding funniest event with Gemini...")
+        _update_progress(uid, year, "Finding your funniest moment...", 0.72)
+        print(f"[Wrapped] Step 7: Finding funniest event with Gemini...")
 
         funniest_event = _find_funniest_event_with_llm(conversations)
         result["funniest_event"] = funniest_event
-        print(f"[Wrapped] Step 6 complete: Funniest event found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 7 complete: Funniest event found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Funniest: {funniest_event.get('title', 'N/A')}")
 
-        # Step 7: Find most embarrassing event with Gemini
+        # Step 8: Find most embarrassing event with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding your most cringe moment...", 0.88)
-        print(f"[Wrapped] Step 7: Finding most embarrassing event with Gemini...")
+        _update_progress(uid, year, "Finding your most cringe moment...", 0.78)
+        print(f"[Wrapped] Step 8: Finding most embarrassing event with Gemini...")
 
         embarrassing_event = _find_most_embarrassing_event_with_llm(conversations)
         result["most_embarrassing_event"] = embarrassing_event
-        print(f"[Wrapped] Step 7 complete: Embarrassing event found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 8 complete: Embarrassing event found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Most embarrassing: {embarrassing_event.get('title', 'N/A')}")
 
-        # Step 8: Find favorites with Gemini
+        # Step 9: Find favorites with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding your favorites...", 0.88)
-        print(f"[Wrapped] Step 8: Finding favorites with Gemini...")
+        _update_progress(uid, year, "Finding your favorites...", 0.82)
+        print(f"[Wrapped] Step 9: Finding favorites with Gemini...")
 
         favorites = _find_favorites_with_llm(conversations)
         result["favorites"] = favorites
-        print(f"[Wrapped] Step 8 complete: Favorites found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 9 complete: Favorites found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Favorites: {favorites}")
 
-        # Step 9: Find most hated with Gemini
+        # Step 10: Find most hated with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding what you hated...", 0.92)
-        print(f"[Wrapped] Step 9: Finding most hated with Gemini...")
+        _update_progress(uid, year, "Finding what you hated...", 0.86)
+        print(f"[Wrapped] Step 10: Finding most hated with Gemini...")
 
         most_hated = _find_most_hated_with_llm(conversations)
         result["most_hated"] = most_hated
-        print(f"[Wrapped] Step 9 complete: Most hated found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 10 complete: Most hated found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Most hated: {most_hated}")
 
-        # Step 10: Find obsessions (shows, movies, books, celebrities)
+        # Step 11: Find obsessions (shows, movies, books, celebrities)
         step_start = time.time()
-        _update_progress(uid, year, "Finding your obsessions...", 0.90)
-        print(f"[Wrapped] Step 10: Finding obsessions with Gemini...")
+        _update_progress(uid, year, "Finding your obsessions...", 0.88)
+        print(f"[Wrapped] Step 11: Finding obsessions with Gemini...")
 
         obsessions = _find_obsessions_with_llm(conversations)
         result["obsessions"] = obsessions
-        print(f"[Wrapped] Step 10 complete: Obsessions found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 11 complete: Obsessions found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Obsessions: {obsessions}")
 
-        # Step 11: Find movie recommendations
+        # Step 12: Find movie recommendations
         step_start = time.time()
-        _update_progress(uid, year, "Generating movie recommendations...", 0.92)
-        print(f"[Wrapped] Step 11: Finding movie recommendations with Gemini...")
+        _update_progress(uid, year, "Generating movie recommendations...", 0.91)
+        print(f"[Wrapped] Step 12: Finding movie recommendations with Gemini...")
 
         movie_recs = _find_movie_recommendations_with_llm(conversations)
         result["movie_recommendations"] = movie_recs
-        print(f"[Wrapped] Step 11 complete: Movie recommendations found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 12 complete: Movie recommendations found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Movies: {movie_recs}")
 
-        # Step 12: Find struggles and wins
+        # Step 13: Find struggles and wins
         step_start = time.time()
         _update_progress(uid, year, "Finding your wins and struggles...", 0.94)
-        print(f"[Wrapped] Step 12: Finding struggles and wins with Gemini...")
+        print(f"[Wrapped] Step 13: Finding struggles and wins with Gemini...")
 
         struggles_wins = _find_struggles_and_wins_with_llm(conversations)
         result["struggle"] = struggles_wins.get("struggle", {})
         result["personal_win"] = struggles_wins.get("personal_win", {})
         result["professional_win"] = struggles_wins.get("professional_win", {})
-        print(f"[Wrapped] Step 12 complete: Struggles and wins found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 13 complete: Struggles and wins found (took {time.time() - step_start:.2f}s)")
 
-        # Step 13: Save result
+        # Step 14: Save result
         step_start = time.time()
         _update_progress(uid, year, "Saving your Wrapped...", 0.98)
-        print(f"[Wrapped] Step 13: Saving result to Firestore...")
+        print(f"[Wrapped] Step 14: Saving result to Firestore...")
 
         wrapped_db.update_wrapped_status(uid, year, WrappedStatus.DONE, result=result)
-        print(f"[Wrapped] Step 13 complete: Result saved (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 14 complete: Result saved (took {time.time() - step_start:.2f}s)")
 
-        # Step 14: Send notification
+        # Step 15: Send notification
         step_start = time.time()
-        print(f"[Wrapped] Step 14: Sending notification...")
+        print(f"[Wrapped] Step 15: Sending notification...")
         _send_wrapped_ready_notification(uid)
-        print(f"[Wrapped] Step 14 complete: Notification sent (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 15 complete: Notification sent (took {time.time() - step_start:.2f}s)")
 
         total_time = time.time() - start_time
         print(f"[Wrapped] ========== Wrapped 2025 generation completed for user {uid} ==========")
@@ -1013,6 +1097,14 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
     print(f"[Wrapped]   - Section 1: Year in Numbers...")
     total_conversations = len(conversations)
     result["total_conversations"] = total_conversations
+
+    # Days active (unique days with conversations)
+    active_days = set()
+    for conv in conversations:
+        if conv.created_at:
+            active_days.add(conv.created_at.date())
+    result["days_active"] = len(active_days)
+    print(f"[Wrapped]     - Days active: {len(active_days)}")
 
     # Total time
     total_seconds = sum(_compute_conversation_duration(c) for c in conversations)
@@ -1189,10 +1281,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
     # Average duration for archetype calculation
     result["avg_conversation_duration_seconds"] = total_seconds / total_conversations if total_conversations > 0 else 0
 
-    # === Section 6: Decision Style ===
-    print(f"[Wrapped]   - Section 6: Decision Style...")
-    result["decision_style"] = _determine_archetype(result)
-    print(f"[Wrapped]     - Archetype: {result['decision_style'].get('name', 'Unknown')}")
+    # Note: Decision style and top phrases computed via LLM in main function
 
     print(f"[Wrapped]   - All stats computed successfully")
     return result

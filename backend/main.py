@@ -84,6 +84,19 @@ app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 
+# Serve static files for wrapped test page
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+if os.path.exists('static'):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/wrapped-test")
+async def wrapped_test_page():
+    """Serve the Wrapped 2025 test page."""
+    return FileResponse('static/wrapped_test.html')
+
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
