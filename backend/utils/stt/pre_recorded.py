@@ -9,13 +9,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.other.endpoints import timeit
 
 # Initialize Deepgram client for pre-recorded transcription
+# WARN: the pre-recorded transcription is available on deepgram cloud
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-_is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-if _is_dg_self_hosted:
-    _dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
-    if _dg_self_hosted_url:
-        _deepgram_options.url = _dg_self_hosted_url
-
 _deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
 
 
