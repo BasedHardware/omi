@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 class ConversationDisplaySettings extends StatefulWidget {
@@ -11,6 +12,12 @@ class ConversationDisplaySettings extends StatefulWidget {
 }
 
 class _ConversationDisplaySettingsState extends State<ConversationDisplaySettings> {
+  @override
+  void initState() {
+    super.initState();
+    MixpanelManager().conversationDisplaySettingsOpened();
+  }
+
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
       decoration: BoxDecoration(
@@ -193,6 +200,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                 child: GestureDetector(
                   onTap: () {
                     provider.setShortConversationThreshold(threshold.$1);
+                    MixpanelManager().shortConversationThresholdChanged(threshold.$1);
                     setState(() {});
                   },
                   child: Container(
@@ -259,7 +267,10 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                       title: 'Show Short Conversations',
                       description: 'Display conversations shorter than the threshold',
                       value: provider.showShortConversations,
-                      onChanged: (_) => provider.toggleShortConversations(),
+                      onChanged: (_) {
+                        provider.toggleShortConversations();
+                        MixpanelManager().showShortConversationsToggled(provider.showShortConversations);
+                      },
                     ),
                     const Divider(height: 1, color: Color(0xFF3C3C43)),
                     _buildToggleItem(
@@ -267,7 +278,10 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                       title: 'Show Discarded Conversations',
                       description: 'Include conversations marked as discarded',
                       value: provider.showDiscardedConversations,
-                      onChanged: (_) => provider.toggleDiscardConversations(),
+                      onChanged: (_) {
+                        provider.toggleDiscardConversations();
+                        MixpanelManager().showDiscardedConversationsToggled(provider.showDiscardedConversations);
+                      },
                     ),
                   ],
                 ),

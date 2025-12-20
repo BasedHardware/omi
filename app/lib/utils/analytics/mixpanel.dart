@@ -404,6 +404,20 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
+  // Conversation Display Settings Events
+  void conversationDisplaySettingsOpened() => track('Conversation Display Settings Opened');
+
+  void showShortConversationsToggled(bool showShort) =>
+      track('Show Short Conversations Toggled', properties: {'show_short': showShort});
+
+  void showDiscardedConversationsToggled(bool showDiscarded) =>
+      track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
+
+  void shortConversationThresholdChanged(int thresholdSeconds) => track(
+        'Short Conversation Threshold Changed',
+        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+      );
+
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
