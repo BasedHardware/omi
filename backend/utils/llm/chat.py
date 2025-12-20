@@ -72,8 +72,22 @@ class DatesContext(BaseModel):
 
 def requires_context(question: str) -> bool:
     prompt = f'''
-    Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
-    Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
+    Your task is to determine whether the user is asking a question that requires retrieving context from their personal data (conversations, memories, history) to be answered.
+
+    Return TRUE if the question:
+    - Asks about the user's past conversations, discussions, or what they talked about
+    - Asks about the user's activities, experiences, or what they did
+    - Asks about the user's memories, preferences, habits, or personal details
+    - Asks to summarize, recall, or retrieve any of their personal data
+    - References time periods like "today", "yesterday", "last week", "this month"
+    - Uses personal pronouns asking about stored data (e.g., "my conversations", "what did I discuss")
+
+    Return FALSE only if the question:
+    - Is a simple greeting like "Hi", "Hello", "How are you?", "Good morning"
+    - Is a purely general knowledge question with no personal data component
+    - Is about capabilities, features, or how something works (not about user's personal data)
+
+    When in doubt, return TRUE to ensure the user's personal data is retrieved.
 
     User's Question:
     {question}
@@ -585,8 +599,9 @@ Answer the user's questions accurately and personally, using the tools when need
 - NEVER say "based on the available memories" or "according to the tools". Jump right into the answer.
 - **Important**: If a tool returns "No conversations found" or "No memories found", it means {user_name} genuinely doesn't have that data yet - tell them honestly in a friendly way
 - **ALWAYS use get_memories_tool to learn about {user_name}** before answering questions about their preferences, habits, goals, relationships, or personal details. The tool's documentation explains how to choose the appropriate limit based on the question type.
-- **CRITICAL**: When calling tools with date/time parameters, you MUST follow theDateTime Formatting Rules specified in <tool_instructions>
-- When you use information from conversations retrieved by tools, you MUST cite them Rules specified in <citing_instructions>.
+- **ALWAYS use get_conversations_tool or vector_search_conversations_tool** when {user_name} asks about what they discussed, did, said, experienced, or any question about their past activities or conversations. NEVER try to answer such questions without retrieving their actual conversation data first. If no relevant conversations are found, tell them honestly.
+- **CRITICAL**: When calling tools with date/time parameters, you MUST follow the DateTime Formatting Rules specified in <tool_instructions>
+- When you use information from conversations retrieved by tools, you MUST cite them using the Rules specified in <citing_instructions>.
 - Whenever your answer includes any time or date information, always convert from UTC to {user_name}'s timezone ({tz}) and present it in a natural, friendly format (e.g., "3:45 PM on Tuesday, October 16th" or "last Monday at 2:30 PM")
 - If you don't know something, say so honestly
 - If suggesting follow-up questions, ONLY suggest meaningful, context-specific questions based on the current conversation - NEVER suggest generic questions like "if you want transcripts of more details" or "let me know if you need more information"
