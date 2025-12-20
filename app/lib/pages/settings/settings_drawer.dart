@@ -22,7 +22,6 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'device_settings.dart';
-import 'conversation_display_settings.dart';
 import '../conversations/sync_page.dart';
 
 enum SettingsMode {
@@ -325,7 +324,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               color: Colors.amber.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Row(
+                            child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 FaIcon(
@@ -333,8 +332,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                                   color: Colors.amber,
                                   size: 10,
                                 ),
-                                const SizedBox(width: 4),
-                                const Text(
+                                SizedBox(width: 4),
+                                Text(
                                   'PRO',
                                   style: TextStyle(
                                     color: Colors.amber,
@@ -380,19 +379,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const DeviceSettings(),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Conversation Display',
-                icon: const FaIcon(FontAwesomeIcons.list, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const ConversationDisplaySettings(),
                     ),
                   );
                 },
@@ -627,8 +613,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             child: Stack(
               children: [
                 // Centered title
-                Center(
-                  child: const Text(
+                const Center(
+                  child: Text(
                     'Settings',
                     style: TextStyle(
                       color: Colors.white,
