@@ -58,7 +58,7 @@ enum ConversationPostProcessingStatus { not_started, in_progress, completed, can
 
 enum ConversationPostProcessingModel { fal_whisperx, custom_whisperx }
 
-enum ConversationStatus { in_progress, processing, completed, failed }
+enum ConversationStatus { in_progress, processing, merging, completed, failed }
 
 class ConversationPostProcessing {
   final ConversationPostProcessingStatus status;

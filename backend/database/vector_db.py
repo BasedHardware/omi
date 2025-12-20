@@ -131,7 +131,12 @@ def query_vectors_by_metadata(
     return conversations_id[:limit] if len(conversations_id) > limit else conversations_id
 
 
-def delete_vector(conversation_id: str):
-    # TODO: does this work?
-    result = index.delete(ids=[conversation_id], namespace="ns1")
-    print('delete_vector', result)
+def delete_vector(uid: str, conversation_id: str):
+    """
+    Delete a conversation vector from Pinecone.
+
+    Note: Vectors are stored with ID format '{uid}-{conversation_id}'
+    """
+    vector_id = f'{uid}-{conversation_id}'
+    result = index.delete(ids=[vector_id], namespace="ns1")
+    print('delete_vector', vector_id, result)

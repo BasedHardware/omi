@@ -9,13 +9,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.other.endpoints import timeit
 
 # Initialize Deepgram client for pre-recorded transcription
+# WARN: the pre-recorded transcription is available on deepgram cloud
 _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-_is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-if _is_dg_self_hosted:
-    _dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
-    if _dg_self_hosted_url:
-        _deepgram_options.url = _dg_self_hosted_url
-
 _deepgram_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _deepgram_options)
 
 
@@ -25,6 +20,7 @@ def deepgram_prerecorded(
     speakers_count: int = None,
     attempts: int = 0,
     return_language: bool = False,
+    diarize: bool = True,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
@@ -47,8 +43,8 @@ def deepgram_prerecorded(
             "model": "nova-3",
             "smart_format": True,
             "punctuate": True,
-            "diarize": True,
-            "detect_language": True,
+            "diarize": diarize,
+            "detect_language": return_language,
             "utterances": True,
         }
 
@@ -95,7 +91,7 @@ def deepgram_prerecorded(
     except Exception as e:
         print(f'Deepgram prerecorded error: {e}')
         if attempts < 2:
-            return deepgram_prerecorded(audio_url, speakers_count, attempts + 1, return_language)
+            return deepgram_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize)
         if return_language:
             return [], 'en'
         return []
@@ -241,7 +237,7 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
     ]
 
 
-def fal_postprocessing(
+def postprocess_words(
     words: List[dict], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
 ) -> List[TranscriptSegment]:
     words: List[dict] = _words_cleaning(words)
