@@ -34,13 +34,25 @@ class MarkdownStyleHelper {
       // Delete/strikethrough
       del: style.copyWith(decoration: TextDecoration.lineThrough),
 
-      // Blockquote
-      blockquote: style,
-      blockquoteDecoration: BoxDecoration(
-        color: const Color(0xFF35343B),
-        borderRadius: BorderRadius.circular(4),
+      // Blockquote - styled with left border accent
+      blockquote: style.copyWith(
+        color: Colors.white.withOpacity(0.85),
+        fontStyle: FontStyle.italic,
       ),
-      blockquotePadding: const EdgeInsets.all(12),
+      blockquoteDecoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        border: const Border(
+          left: BorderSide(
+            color: Color(0xFF8B5CF6),
+            width: 3,
+          ),
+        ),
+        borderRadius: const BorderRadius.only(
+          topRight: Radius.circular(4),
+          bottomRight: Radius.circular(4),
+        ),
+      ),
+      blockquotePadding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
 
       // Code
       code: style.copyWith(

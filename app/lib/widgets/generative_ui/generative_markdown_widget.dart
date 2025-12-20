@@ -11,6 +11,8 @@ import 'widgets/accordion_widget.dart';
 import 'widgets/story_briefing_card.dart';
 import 'widgets/highlight_widget.dart';
 import 'widgets/study_card.dart';
+import 'widgets/task_card.dart';
+import 'widgets/flow_card.dart';
 import 'widgets/in_app_browser.dart';
 
 /// Main widget that renders markdown content with embedded generative UI components
@@ -28,6 +30,10 @@ class GenerativeMarkdownWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('=== GenerativeMarkdownWidget content ===');
+    debugPrint(content);
+    debugPrint('=== END content ===');
+
     final parser = XmlTagParser();
     final segments = parser.parse(content);
 
@@ -67,6 +73,10 @@ class GenerativeMarkdownWidget extends StatelessWidget {
       return HighlightWidget(data: segment.data);
     } else if (segment is StudySegment) {
       return StudyCard(data: segment.data);
+    } else if (segment is TaskSegment) {
+      return TaskCard(data: segment.data);
+    } else if (segment is FlowSegment) {
+      return FlowCard(data: segment.data);
     }
     return const SizedBox.shrink();
   }
@@ -84,12 +94,10 @@ class GenerativeMarkdownWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    // Preprocess markdown to ensure proper spacing around headings and horizontal rules
-    // This fixes issues where text directly before/after --- becomes a setext heading
+    // Preprocess markdown to fix common formatting issues
     var processedContent = markdownContent;
 
     // Convert <highlight> tags to bold markdown (** **) so they render inline
-    // This preserves the text while giving it visual emphasis
     processedContent = processedContent.replaceAllMapped(
       RegExp(r'<highlight(?:\s+color="[^"]*")?>([^<]*)</highlight>', caseSensitive: false),
       (match) => '**${match.group(1)}**',
