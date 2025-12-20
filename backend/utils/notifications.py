@@ -2,6 +2,7 @@ import asyncio
 import math
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
+from utils.config import get_app_name_lower
 from database.redis_db import (
     set_credit_limit_notification_sent,
     has_credit_limit_notification_been_sent,
@@ -75,7 +76,7 @@ async def send_subscription_paid_personalized_notification(user_id: str, data: d
     # Generate welcome message for unlimited plan with user context
     title, body = await generate_notification_message(user_id, name, "unlimited")
 
-    send_notification(user_id, "omi", body, data)
+    send_notification(user_id, get_app_name_lower(), body, data)
 
 
 async def send_credit_limit_notification(user_id: str):
@@ -152,7 +153,7 @@ def send_training_data_submitted_notification(user_id: str):
         print(f"Error getting user info from Firebase Auth: {e}")
         name = "there"
 
-    title = "omi"
+    title = get_app_name_lower()
     body = f"Hey {name}! Thanks for your interest in our training data program. We've received your request and our team will review it shortly. We'll notify you as soon as it's approved!"
 
     send_notification(user_id, title, body)

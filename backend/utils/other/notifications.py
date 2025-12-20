@@ -7,6 +7,7 @@ from datetime import time
 import pytz
 
 import database.chat as chat_db
+from utils.config import get_app_name_lower
 import database.conversations as conversations_db
 import database.notifications as notification_db
 from models.notification_message import NotificationMessage
@@ -66,7 +67,7 @@ def _send_summary_notification(user_data: tuple):
         from_integration='false',
         type='day_summary',
         notification_type='daily_summary',
-        navigate_to="/chat/omi",  # omi ~ no select
+        navigate_to=f"/chat/{get_app_name_lower()}",
     )
     chat_db.add_summary_message(summary, uid)
     threading.Thread(target=day_summary_webhook, args=(uid, summary)).start()
@@ -82,8 +83,8 @@ async def _send_bulk_summary_notification(users: list):
 
 async def send_daily_notification():
     try:
-        morning_alert_title = "omi says"
-        morning_alert_body = "Wear your omi and capture your conversations today."
+        morning_alert_title = f"{get_app_name_lower()} says"
+        morning_alert_body = f"Wear your {get_app_name_lower()} and capture your conversations today."
         morning_target_time = "08:00"
 
         await _send_notification_for_time(morning_target_time, morning_alert_title, morning_alert_body)

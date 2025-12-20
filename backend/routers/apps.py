@@ -8,6 +8,7 @@ import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 
+from utils.config import get_app_name
 from database.apps import (
     change_app_approval_status,
     get_unapproved_public_apps_db,
@@ -828,25 +829,25 @@ def get_app_capabilities():
                     'title': 'Create conversations',
                     'id': 'create_conversation',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
-                    'description': 'Extend user conversations by making a POST request to the OMI System.',
+                    'description': f'Extend user conversations by making a POST request to the {get_app_name().upper()} System.',
                 },
                 {
                     'title': 'Create memories',
                     'id': 'create_facts',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
-                    'description': 'Create new memories for the user through the OMI System.',
+                    'description': f'Create new memories for the user through the {get_app_name().upper()} System.',
                 },
                 {
                     'title': 'Read conversations',
                     'id': 'read_conversations',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
-                    'description': 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.',
+                    'description': f'Access and read all user conversations through the {get_app_name().upper()} System. This gives the app access to all conversation history.',
                 },
                 {
                     'title': 'Read memories',
                     'id': 'read_memories',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
-                    'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.',
+                    'description': f'Access and read all user memories through the {get_app_name().upper()} System. This gives the app access to all stored memories.',
                 },
             ],
         },
