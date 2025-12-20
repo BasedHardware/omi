@@ -418,6 +418,35 @@ class MixpanelManager {
         properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
       );
 
+  // Conversation Merge Events
+  void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
+
+  void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
+
+  void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
+        'Conversation Selected For Merge',
+        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+      );
+
+  void conversationMergeInitiated(List<String> conversationIds) => track(
+        'Conversation Merge Initiated',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
+
+  void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
+        'Conversation Merge Completed',
+        properties: {
+          'merged_conversation_id': mergedConversationId,
+          'removed_count': removedConversationIds.length,
+          'removed_conversation_ids': removedConversationIds,
+        },
+      );
+
+  void conversationMergeFailed(List<String> conversationIds) => track(
+        'Conversation Merge Failed',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
+
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 

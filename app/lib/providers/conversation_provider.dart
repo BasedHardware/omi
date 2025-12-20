@@ -790,6 +790,7 @@ class ConversationProvider extends ChangeNotifier {
   void enterSelectionMode() {
     isSelectionModeActive = true;
     selectedConversationIds.clear();
+    MixpanelManager().conversationMergeSelectionModeEntered();
     notifyListeners();
   }
 
@@ -797,6 +798,7 @@ class ConversationProvider extends ChangeNotifier {
   void exitSelectionMode() {
     isSelectionModeActive = false;
     selectedConversationIds.clear();
+    MixpanelManager().conversationMergeSelectionModeExited();
     notifyListeners();
   }
 
@@ -823,6 +825,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     } else {
       selectedConversationIds.add(conversationId);
+      MixpanelManager().conversationSelectedForMerge(conversationId, selectedConversationIds.length);
     }
     notifyListeners();
   }
@@ -875,8 +878,10 @@ class ConversationProvider extends ChangeNotifier {
 
     // Call merge API
     final response = await mergeConversations(idsToMerge);
+    MixpanelManager().conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
+      MixpanelManager().conversationMergeFailed(idsToMerge);
       if (conversationIds != null) {
         for (final id in conversationIds) {
           mergingConversationIds.remove(id);
@@ -899,6 +904,8 @@ class ConversationProvider extends ChangeNotifier {
     for (final id in removedConversationIds) {
       mergingConversationIds.remove(id);
     }
+
+    MixpanelManager().conversationMergeCompleted(mergedConversationId, removedConversationIds);
 
     // Remove deleted conversations from local state
     for (final id in removedConversationIds) {
