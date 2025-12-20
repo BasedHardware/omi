@@ -248,41 +248,38 @@ Stream<String> makeStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    String pendingData = '';
     await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
       chunkCount++;
       debugPrint('📦 [STREAM CLIENT] Received raw chunk #$chunkCount (len=${data.length}): ${data.length > 50 ? "${data.substring(0, 50)}..." : data.replaceAll('\n', '\\n')}');
 
+      // Prepend any pending data from previous chunk
+      data = pendingData + data;
+      pendingData = '';
+
+      // Split by SSE delimiter
       var lines = data.split('\n\n');
       debugPrint('📦 [STREAM CLIENT] Split into ${lines.length} lines');
 
+      // The last element might be incomplete (not followed by \n\n)
+      // Only process it if the data ended with \n\n, otherwise buffer it
+      if (!data.endsWith('\n\n') && lines.isNotEmpty) {
+        pendingData = lines.removeLast();
+        debugPrint('📦 [STREAM CLIENT] Buffering incomplete last line (len=${pendingData.length}): ${pendingData.length > 30 ? "${pendingData.substring(0, 30)}..." : pendingData}');
+      }
+
       for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          debugPrint('📦 [STREAM CLIENT] Buffering long line (len=${line.length})');
-          buffers.add(line);
-          continue;
-        }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          debugPrint('📦 [STREAM CLIENT] Merging ${buffers.length} buffers with current line');
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
         yieldCount++;
         debugPrint('✅ [STREAM CLIENT] Yielding line #$yieldCount (len=${line.length}): ${line.length > 50 ? "${line.substring(0, 50)}..." : line}');
         yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      debugPrint('📦 [STREAM CLIENT] Flushing remaining ${buffers.length} buffers');
+    // Flush any remaining pending data
+    if (pendingData.isNotEmpty) {
+      debugPrint('📦 [STREAM CLIENT] Flushing remaining pending data (len=${pendingData.length})');
       yieldCount++;
-      yield buffers.join();
+      yield pendingData;
     }
 
     debugPrint('🏁 [STREAM CLIENT] Stream completed. Received $chunkCount raw chunks, yielded $yieldCount lines');
@@ -319,30 +316,29 @@ Stream<String> makeMultipartStreamingApiCall({
       return;
     }
 
-    var buffers = <String>[];
+    String pendingData = '';
     await for (var data in response.stream.transform(utf8.decoder)) {
+      // Prepend any pending data from previous chunk
+      data = pendingData + data;
+      pendingData = '';
+
+      // Split by SSE delimiter
       var lines = data.split('\n\n');
+
+      // The last element might be incomplete (not followed by \n\n)
+      // Only process it if the data ended with \n\n, otherwise buffer it
+      if (!data.endsWith('\n\n') && lines.isNotEmpty) {
+        pendingData = lines.removeLast();
+      }
+
       for (var line in lines.where((line) => line.isNotEmpty)) {
-        // Handle package splitting by 1024 bytes in dart
-        if (line.length >= 1024) {
-          buffers.add(line);
-          continue;
-        }
-
-        // Merge packages if needed
-        if (buffers.isNotEmpty) {
-          buffers.add(line);
-          line = buffers.join();
-          buffers.clear();
-        }
-
         yield line;
       }
     }
 
-    // Flush remaining buffers
-    if (buffers.isNotEmpty) {
-      yield buffers.join();
+    // Flush any remaining pending data
+    if (pendingData.isNotEmpty) {
+      yield pendingData;
     }
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
