@@ -9,6 +9,7 @@ import database.users as users_db
 from database.vector_db import delete_vector
 from models.conversation import (
     BaseModel,
+    CalendarMeetingContext,
     Conversation,
     ConversationPhoto,
     ConversationStatus,
