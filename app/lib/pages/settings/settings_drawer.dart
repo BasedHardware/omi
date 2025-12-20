@@ -324,7 +324,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                               color: Colors.amber.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: Row(
+                            child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 FaIcon(
@@ -332,8 +332,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                                   color: Colors.amber,
                                   size: 10,
                                 ),
-                                const SizedBox(width: 4),
-                                const Text(
+                                SizedBox(width: 4),
+                                Text(
                                   'PRO',
                                   style: TextStyle(
                                     color: Colors.amber,
@@ -613,8 +613,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             child: Stack(
               children: [
                 // Centered title
-                Center(
-                  child: const Text(
+                const Center(
+                  child: Text(
                     'Settings',
                     style: TextStyle(
                       color: Colors.white,
