@@ -22,6 +22,7 @@ class StatsDetailSheet extends StatefulWidget {
 
 class _StatsDetailSheetState extends State<StatsDetailSheet> {
   late final PageController _pageController;
+  late final Map<String, dynamic> _stats;
 
   // UI Constants
   static const double _cardViewportFraction = 0.52;
@@ -76,6 +77,8 @@ class _StatsDetailSheetState extends State<StatsDetailSheet> {
     super.initState();
     // Show roughly two cards at once with a TikTok-style vertical swipe.
     _pageController = PageController(viewportFraction: _cardViewportFraction);
+    // Compute stats once during initialization to avoid expensive recalculations on every rebuild
+    _stats = _buildStats();
   }
 
   @override
@@ -282,19 +285,18 @@ class _StatsDetailSheetState extends State<StatsDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final stats = _buildStats();
-    final dailyCounts = stats['dailyCounts'] as Map<String, int>;
-    final topCategories = stats['topCategories'] as List<MapEntry<String, int>>;
-    final streak = stats['streak'] as int;
-    final bestDay = stats['bestDay'] as MapEntry<String, int>?;
-    final topWords = stats['topWords'] as List<MapEntry<String, int>>;
-    final timeOfDayBuckets = stats['timeOfDayBuckets'] as Map<String, int>;
-    final avgWordsPerConvo = stats['avgWordsPerConvo'] as double;
-    final avgWpm = stats['avgWpm'] as double;
-    final longestDurationMinutes = stats['longestDurationMinutes'] as double;
-    final maxWordsInConvo = stats['maxWordsInConvo'] as int;
-    final memoriesPerConvo = stats['memoriesPerConvo'] as double;
-    final categoryMomentum = stats['categoryMomentum'] as List<_CategoryMomentum>;
+    final dailyCounts = _stats['dailyCounts'] as Map<String, int>;
+    final topCategories = _stats['topCategories'] as List<MapEntry<String, int>>;
+    final streak = _stats['streak'] as int;
+    final bestDay = _stats['bestDay'] as MapEntry<String, int>?;
+    final topWords = _stats['topWords'] as List<MapEntry<String, int>>;
+    final timeOfDayBuckets = _stats['timeOfDayBuckets'] as Map<String, int>;
+    final avgWordsPerConvo = _stats['avgWordsPerConvo'] as double;
+    final avgWpm = _stats['avgWpm'] as double;
+    final longestDurationMinutes = _stats['longestDurationMinutes'] as double;
+    final maxWordsInConvo = _stats['maxWordsInConvo'] as int;
+    final memoriesPerConvo = _stats['memoriesPerConvo'] as double;
+    final categoryMomentum = _stats['categoryMomentum'] as List<_CategoryMomentum>;
     final pages = [
       _buildChartCard(
         title: 'Daily cadence',
@@ -304,9 +306,9 @@ class _StatsDetailSheetState extends State<StatsDetailSheet> {
       _buildHeroCard(
         title: 'Words captured',
         subtitle: 'This week total',
-        bigNumber: stats['thisWeekWords'] as int,
+        bigNumber: _stats['thisWeekWords'] as int,
         label: 'Words',
-        footer: _trendChip('vs last week', stats['thisWeekWords'] as int, stats['lastWeekWords'] as int),
+        footer: _trendChip('vs last week', _stats['thisWeekWords'] as int, _stats['lastWeekWords'] as int),
       ),
       _buildWordCloudCard(topWords),
       _buildCategoryBreakdownCard(topCategories),
@@ -315,9 +317,9 @@ class _StatsDetailSheetState extends State<StatsDetailSheet> {
       _buildHeroCard(
         title: 'This week',
         subtitle: 'Conversation momentum',
-        bigNumber: stats['thisWeekConvos'] as int,
+        bigNumber: _stats['thisWeekConvos'] as int,
         label: 'Conversations',
-        footer: _trendChip('vs last week', stats['thisWeekConvos'] as int, stats['lastWeekConvos'] as int),
+        footer: _trendChip('vs last week', _stats['thisWeekConvos'] as int, _stats['lastWeekConvos'] as int),
       ),
       _buildStreakCard(streak: streak, bestDay: bestDay),
 
