@@ -495,6 +495,8 @@ class ConversationProvider extends ChangeNotifier {
     groupConversationsByDate();
 
     notifyListeners();
+  }
+
   void _setupMergeListener() {
     _mergeCompletedSubscription = MergeNotificationHandler.onMergeCompleted.listen((event) {
       onMergeCompleted(event.mergedConversationId, event.removedConversationIds);
