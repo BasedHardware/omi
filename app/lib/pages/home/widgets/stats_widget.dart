@@ -41,7 +41,6 @@ class StatsWidget extends StatelessWidget {
         final wordsCount = _calculateTotalWords(conversationProvider.conversations);
 
         return SizedBox(
-          height: 60,
           width: double.infinity,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
