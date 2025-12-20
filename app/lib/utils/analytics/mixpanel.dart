@@ -442,6 +442,11 @@ class MixpanelManager {
         },
       );
 
+  void conversationMergeFailed(List<String> conversationIds) => track(
+        'Conversation Merge Failed',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
+
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 

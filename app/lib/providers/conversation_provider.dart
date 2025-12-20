@@ -881,6 +881,7 @@ class ConversationProvider extends ChangeNotifier {
     MixpanelManager().conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
+      MixpanelManager().conversationMergeFailed(idsToMerge);
       if (conversationIds != null) {
         for (final id in conversationIds) {
           mergingConversationIds.remove(id);
