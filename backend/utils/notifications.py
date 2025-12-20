@@ -329,6 +329,51 @@ def send_action_item_data_message(user_id: str, action_item_id: str, description
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
+def send_merge_completed_message(user_id: str, merged_conversation_id: str, removed_conversation_ids: list):
+    """
+    Sends a data-only FCM message when conversation merge completes.
+
+    The app receives this and:
+    - Foreground: Shows toast "Conversations merged successfully"
+    - Background: Shows local notification
+
+    Args:
+        user_id: The user's Firebase UID
+        merged_conversation_id: ID of the primary (merged) conversation
+        removed_conversation_ids: List of secondary conversation IDs that were removed
+    """
+    tokens = notification_db.get_all_tokens(user_id)
+    if not tokens:
+        print(f"No notification tokens found for user {user_id} for merge notification")
+        return
+
+    # FCM data values must be strings
+    data = {
+        'type': 'merge_completed',
+        'merged_conversation_id': merged_conversation_id,
+        'removed_conversation_ids': ','.join(removed_conversation_ids),
+    }
+
+    for token in tokens:
+        message = messaging.Message(
+            data=data,
+            token=token,
+            android=messaging.AndroidConfig(priority='high'),
+            apns=messaging.APNSConfig(
+                headers={
+                    'apns-priority': '10',
+                },
+                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+            ),
+        )
+
+        try:
+            response = messaging.send(message)
+            print(f'Merge completed message sent to device: {response}')
+        except Exception as e:
+            _handle_send_error(e, token)
+
+
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
     """
     Sends a data-only FCM message when an action item is updated.
