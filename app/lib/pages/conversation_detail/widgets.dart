@@ -7,6 +7,7 @@ import 'package:omi/backend/http/webhooks.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -15,7 +16,9 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -109,30 +112,100 @@ class GetSummaryWidgets extends StatelessWidget {
     }
   }
 
-  Widget _buildInfoChips(ServerConversation conversation) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // Date chip
-        _buildChip(
-          label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
-          icon: Icons.calendar_today,
+  Widget _buildInfoChips(BuildContext context, ServerConversation conversation) {
+    return Consumer<FolderProvider>(
+      builder: (context, folderProvider, _) {
+        final folder = conversation.folderId != null ? folderProvider.getFolderById(conversation.folderId!) : null;
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            // Date chip
+            _buildChip(
+              label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
+              icon: Icons.calendar_today,
+            ),
+            // Time chip
+            _buildChip(
+              label: conversation.source == ConversationSource.sdcard
+                  ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+                  : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
+              icon: Icons.access_time,
+            ),
+            // Duration chip
+            if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
+              _buildChip(
+                label: _getDuration(conversation),
+                icon: Icons.timelapse,
+              ),
+            // Folder chip
+            _buildFolderChip(
+              context: context,
+              folder: folder,
+              conversationId: conversation.id,
+              currentFolderId: conversation.folderId,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFolderChip({
+    required BuildContext context,
+    required Folder? folder,
+    required String conversationId,
+    required String? currentFolderId,
+  }) {
+    return GestureDetector(
+      onTap: () async {
+        HapticFeedback.selectionClick();
+        final folderProvider = Provider.of<FolderProvider>(context, listen: false);
+        if (folderProvider.folders.isEmpty) {
+          await folderProvider.loadFolders();
+        }
+        final newFolderId = await showMoveToFolderSheet(
+          context,
+          conversationId: conversationId,
+          currentFolderId: currentFolderId,
+        );
+        // If folder was changed, update locally immediately for instant UI feedback
+        if (newFolderId != null && context.mounted) {
+          context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: folder != null ? folder.colorValue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
         ),
-        // Time chip
-        _buildChip(
-          label: conversation.source == ConversationSource.sdcard
-              ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-              : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-          icon: Icons.access_time,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              folder?.icon ?? '📁',
+              style: const TextStyle(fontSize: 14),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              folder?.name ?? 'No Folder',
+              style: TextStyle(
+                color: folder != null ? folder.colorValue : Colors.grey.shade300,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: folder != null ? folder.colorValue : Colors.grey.shade300,
+            ),
+          ],
         ),
-        // Duration chip (only if segments exist)
-        if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
-          _buildChip(
-            label: _getDuration(conversation),
-            icon: Icons.timelapse,
-          ),
-      ],
+      ),
     );
   }
 
@@ -189,7 +262,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
                   ),
             const SizedBox(height: 16),
-            _buildInfoChips(conversation),
+            _buildInfoChips(context, conversation),
             const SizedBox(height: 16),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
           ],

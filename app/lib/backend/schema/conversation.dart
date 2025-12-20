@@ -149,6 +149,7 @@ class ServerConversation {
   final bool deleted;
   final bool isLocked;
   bool starred;
+  String? folderId;
 
   // local label
   bool isNew = false;
@@ -172,6 +173,7 @@ class ServerConversation {
     this.status = ConversationStatus.completed,
     this.isLocked = false,
     this.starred = false,
+    this.folderId,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -203,6 +205,7 @@ class ServerConversation {
           : ConversationStatus.completed,
       isLocked: json['is_locked'] ?? false,
       starred: json['starred'] ?? false,
+      folderId: json['folder_id'],
     );
   }
 
@@ -226,6 +229,7 @@ class ServerConversation {
       'status': status.toString().split('.').last,
       'is_locked': isLocked,
       'starred': starred,
+      'folder_id': folderId,
     };
   }
 

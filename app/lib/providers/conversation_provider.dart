@@ -19,6 +19,7 @@ class ConversationProvider extends ChangeNotifier {
   bool showShortConversations = false; // conversations < 2 minutes
   bool showStarredOnly = false; // filter to show only starred conversations
   DateTime? selectedDate;
+  String? selectedFolderId;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -182,6 +183,23 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Filter conversations by folder
+  Future<void> filterByFolder(String? folderId) async {
+    if (selectedFolderId == folderId) return;
+    selectedFolderId = folderId;
+
+    // Clear search when applying folder filter
+    previousQuery = "";
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    searchedConversations = [];
+
+    groupedConversations = {};
+    notifyListeners();
+
+    await fetchConversations();
+  }
+
   void setLoadingConversations(bool value) {
     isLoadingConversations = value;
     notifyListeners();
@@ -265,9 +283,12 @@ class ConversationProvider extends ChangeNotifier {
 
     // completed convos
     conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
-    if (conversations.isEmpty) {
+
+    // Only use cache when no folder filter is applied
+    if (conversations.isEmpty && selectedFolderId == null) {
       conversations = SharedPreferencesUtil().cachedConversations;
-    } else {
+    } else if (selectedFolderId == null) {
+      // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
     }
     if (searchedConversations.isEmpty) {
@@ -321,6 +342,14 @@ class ConversationProvider extends ChangeNotifier {
           return false;
         }
       }
+
+      // Filter by folder if selected
+      if (selectedFolderId != null) {
+        if (convo.folderId != selectedFolderId) {
+          return false;
+        }
+      }
+
       return true;
     }).toList();
   }
@@ -417,6 +446,7 @@ class ConversationProvider extends ChangeNotifier {
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
+      folderId: selectedFolderId,
     );
   }
 
@@ -440,6 +470,7 @@ class ConversationProvider extends ChangeNotifier {
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
+      folderId: selectedFolderId,
     );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
