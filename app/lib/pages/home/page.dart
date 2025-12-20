@@ -41,6 +41,7 @@ import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
 import 'package:flutter/cupertino.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
 
@@ -672,6 +673,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           }
                         },
                       ),
+                      // Merge action bar - floats above bottom nav when in selection mode
+                      if (homeProvider.selectedIndex == 0)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: MergeActionBar(),
+                        ),
                     ],
                   ),
                 ),
