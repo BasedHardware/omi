@@ -151,22 +151,32 @@ def send_message(
 
     async def generate_stream():
         callback_data = {}
+        chunk_count = 0
         # Using the new agentic system via graph routing
+        print(f"🚀 [STREAM DEBUG] Starting generate_stream for user {uid}")
         async for chunk in execute_graph_chat_stream(
             uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
         ):
             if chunk:
+                chunk_count += 1
+                print(f"📤 [STREAM DEBUG] Chunk #{chunk_count}: {chunk[:50]}..." if len(chunk) > 50 else f"📤 [STREAM DEBUG] Chunk #{chunk_count}: {chunk}")
                 msg = chunk.replace("\n", "__CRLF__")
                 yield f'{msg}\n\n'
             else:
+                print(f"🏁 [STREAM DEBUG] Stream ended. Total chunks: {chunk_count}")
+                print(f"📊 [STREAM DEBUG] callback_data: {list(callback_data.keys())}")
                 response = callback_data.get('answer')
+                print(f"💬 [STREAM DEBUG] Answer length: {len(response) if response else 0}")
                 if response:
                     ai_message, ask_for_nps = process_message(response, callback_data)
                     ai_message_dict = ai_message.dict()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    print(f"✅ [STREAM DEBUG] Sending done message")
                     yield f"done: {data}\n\n"
+                else:
+                    print(f"⚠️ [STREAM DEBUG] No answer received! callback_data: {callback_data}")
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
