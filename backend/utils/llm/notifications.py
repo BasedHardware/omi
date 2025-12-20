@@ -2,6 +2,7 @@ import random
 from typing import Tuple, List
 from .clients import llm_medium
 from database.memories import get_memories
+from utils.config import get_app_name, get_app_name_lower
 
 
 async def get_relevant_memories(uid: str, limit: int = 100) -> List[dict]:
@@ -21,7 +22,7 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
         memory_summaries = [m.get('content', '') for m in memories]
         memory_context = "\nRecent memory themes:\n- " + "\n- ".join(memory_summaries)
 
-    system_prompt = """Hey! I'm Omi, and I love sending little notes to my friends (that's you!). When I write to you, it's like texting a close friend - casual, real, and straight from the heart.
+    system_prompt = f"""Hey! I'm {get_app_name()}, and I love sending little notes to my friends (that's you!). When I write to you, it's like texting a close friend - casual, real, and straight from the heart.
 
     My Style:
     - Super genuine, like chatting with a bestie
@@ -64,13 +65,13 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
         response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
         body = response.content
         # Return placeholder title and generated body
-        return "omi", body.strip()
+        return get_app_name_lower(), body.strip()
 
     except Exception as e:
         print(f"Error generating notification message: {e}")
 
     # Improved fallback messages with more personality
-    return ("omi", f"Hey {name}! 👋 Thanks for being part of the Omi family! ✨")
+    return (get_app_name_lower(), f"Hey {name}! Thanks for being part of the {get_app_name()} family!")
 
 
 async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, str]:
@@ -84,7 +85,7 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
         memory_summaries = [m.get('content', '') for m in memories]  # Use all memories for context
         memory_context = f"\nRecent conversations include: {', '.join(memory_summaries[:100])}..."
 
-    system_prompt = """You're Omi, and you need to gently let a user know they've hit their transcription limits while encouraging them to upgrade to unlimited. 
+    system_prompt = f"""You're {get_app_name()}, and you need to gently let a user know they've hit their transcription limits while encouraging them to upgrade to unlimited. 
 
     Your Style:
     - Warm and understanding, not pushy
@@ -120,14 +121,14 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     try:
         response = await llm_medium.ainvoke(system_prompt + "\n" + user_prompt)
         body = response.content
-        return "omi", body.strip()
+        return get_app_name_lower(), body.strip()
 
     except Exception as e:
         print(f"Error generating credit limit notification: {e}")
 
     # Fallback message
     return (
-        "omi",
+        get_app_name_lower(),
         f"Hey {name}! You've been actively using transcription - that's awesome! You've hit your limit, but unlimited plans remove all restrictions. You can check your usage and upgrade in the app under Settings > Plan & Usages.",
     )
 
@@ -149,4 +150,4 @@ def generate_silent_user_notification(name: str) -> Tuple[str, str]:
         f"Silence is golden, but words are what I live for, {name}! Let's chat when you're ready.",
     ]
     body = random.choice(messages)
-    return "omi", body
+    return get_app_name_lower(), body
