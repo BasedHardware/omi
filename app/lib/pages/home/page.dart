@@ -433,7 +433,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
-                          const StatsWidget(),
+                          if (homeProvider.selectedIndex == 0) const StatsWidget(),
                           Expanded(
                             child: IndexedStack(
                               index: context.watch<HomeProvider>().selectedIndex,
