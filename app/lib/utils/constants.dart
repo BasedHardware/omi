@@ -23,6 +23,18 @@ class DevConstants {
   /// ❌ Real-time features - Notifications, syncing, etc. still require backend
   /// ❌ Plugin/App integrations - External integrations require real API calls
   ///
+  /// ⚠️ IMPORTANT: PHYSICAL DEVICE CONNECTION OVERRIDES MOCK DATA
+  /// When a physical Omi device is connected via Bluetooth:
+  /// - Mock conversations will be REPLACED by real conversations from the device
+  /// - WAL (Write-Ahead Log) sync system automatically fetches device data
+  /// - Device recording stream processes real audio/transcriptions
+  /// - This is BY DESIGN: Mock data is for UI testing WITHOUT a device
+  ///
+  /// BEHAVIOR SUMMARY:
+  /// - useMockData=true + NO device connected = Mock data shown ✅
+  /// - useMockData=true + Device connected = Real device data shown ✅
+  /// - useMockData=false = Always uses real API/device data ✅
+  ///
   /// WHEN TO USE EACH MODE:
   /// - Set to TRUE: Testing UI, layouts, navigation, stats without backend/microphone
   /// - Set to FALSE: Testing full app functionality, AI chat with memory context, production
