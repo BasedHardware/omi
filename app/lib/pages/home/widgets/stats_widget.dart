@@ -36,9 +36,10 @@ class StatsWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<ConversationProvider, MemoriesProvider>(
       builder: (context, conversationProvider, memoriesProvider, child) {
-        final conversationsCount = conversationProvider.conversations.length;
+        final filteredConversations = conversationProvider.filteredConversations;
+        final conversationsCount = filteredConversations.length;
         final memoriesCount = memoriesProvider.memories.length;
-        final wordsCount = _calculateTotalWords(conversationProvider.conversations);
+        final wordsCount = _calculateTotalWords(filteredConversations);
 
         return SizedBox(
           width: double.infinity,
@@ -50,7 +51,7 @@ class StatsWidget extends StatelessWidget {
                 isScrollControlled: true,
                 backgroundColor: Colors.transparent,
                 builder: (_) => StatsDetailSheet(
-                  conversations: conversationProvider.conversations,
+                  conversations: filteredConversations,
                   memoriesCount: memoriesCount,
                   wordsCount: wordsCount,
                 ),

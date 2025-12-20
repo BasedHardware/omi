@@ -18,6 +18,11 @@ class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> searchedConversations = [];
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
+  // Get filtered conversations as a flat list (matching what's displayed in the UI)
+  List<ServerConversation> get filteredConversations {
+    return groupedConversations.values.expand((list) => list).toList();
+  }
+
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
   bool showShortConversations = false;
@@ -50,6 +55,7 @@ class ConversationProvider extends ChangeNotifier {
 
   ConversationProvider() {
     _setupMergeListener();
+    _preload();
   }
 
   _preload() async {
