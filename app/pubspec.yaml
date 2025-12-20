@@ -70,6 +70,7 @@ dependencies:
       ref: master
 
   # Utils
+  pool: ^1.5.1
   collection: ^1.19.1
   flutter_blue_plus: 1.33.6
   flutter_blue_plus_windows: 1.24.21

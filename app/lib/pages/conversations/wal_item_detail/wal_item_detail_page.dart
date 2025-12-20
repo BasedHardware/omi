@@ -292,33 +292,33 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1F1F25),
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               leading: const Icon(Icons.info_outline, color: Colors.white),
-              title: Text('Recording Info', style: Theme.of(context).textTheme.bodyMedium),
+              title: Text('Recording Info', style: Theme.of(sheetContext).textTheme.bodyMedium),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 _showFileDetailsDialog(context);
               },
             ),
             ListTile(
               leading: const Icon(Icons.share, color: Colors.white),
-              title: Text('Share Recording', style: Theme.of(context).textTheme.bodyMedium),
+              title: Text('Share Recording', style: Theme.of(sheetContext).textTheme.bodyMedium),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(sheetContext);
                 _handleShare(context.read<SyncProvider>());
               },
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
-              title:
-                  Text('Delete Recording', style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.red)),
+              title: Text('Delete Recording',
+                  style: Theme.of(sheetContext).textTheme.bodyMedium!.copyWith(color: Colors.red)),
               onTap: () {
-                Navigator.pop(context); // Close options menu
+                Navigator.pop(sheetContext); // Close options menu
                 _showDeleteDialog(context);
               },
             ),

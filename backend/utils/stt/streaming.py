@@ -13,6 +13,11 @@ from utils.stt.soniox_util import *
 
 headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
 
+# Speech profile constants
+SPEECH_PROFILE_FIXED_DURATION = 30
+SPEECH_PROFILE_PADDING_DURATION = 5
+SPEECH_PROFILE_STABILIZE_DELAY = 35
+
 
 class STTService(str, Enum):
     deepgram = "deepgram"
@@ -218,23 +223,48 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
     return STTService.deepgram, 'en', 'nova-3'
 
 
-async def send_initial_file_path(file_path: str, transcript_socket_async_send, is_active: Optional[Callable] = None):
-    print('send_initial_file_path')
+async def send_initial_file_path(
+    file_path: str,
+    transcript_socket_async_send,
+    is_active: Optional[Callable] = None,
+    sample_rate: int = 16000,
+    target_duration: int = 30,
+    padding_seconds: int = 5,
+):
+    """Send speech profile file to STT socket, with silence padding.
+
+    Sends up to target_duration of audio from file, then pads with padding_seconds of silence.
+    """
+    print('send_initial_file_path', f'target_duration={target_duration}s', f'padding_seconds={padding_seconds}s')
     start = time.time()
-    # Reading and sending in chunks
+
+    chunk_size = 320
+    bytes_per_second = sample_rate * 2  # 16-bit PCM mono
+    max_file_bytes = target_duration * bytes_per_second
+    total_bytes = (target_duration + padding_seconds) * bytes_per_second
+    bytes_sent = 0
+
+    # Send file (up to target_duration)
     with open(file_path, "rb") as file:
-        while True:
+        while bytes_sent < max_file_bytes:
             if is_active and not is_active():
-                print('send_initial_file_path stopped early via is_active check')
-                break
-            chunk = file.read(320)
+                return bytes_sent
+            chunk = file.read(chunk_size)
             if not chunk:
                 break
-            # print('Uploading', len(chunk))
             await transcript_socket_async_send(bytes(chunk))
-            await asyncio.sleep(0.0001)  # if it takes too long to transcribe
+            bytes_sent += len(chunk)
 
-    print('send_initial_file_path', time.time() - start)
+    # Pad with silence to reach total (covers short files + extra padding)
+    silence_chunk = bytes(chunk_size)
+    while bytes_sent < total_bytes:
+        if is_active and not is_active():
+            return bytes_sent
+        await transcript_socket_async_send(silence_chunk)
+        bytes_sent += chunk_size
+
+    print('send_initial_file_path completed', f'bytes_sent={bytes_sent}', f'duration={time.time() - start:.2f}s')
+    return bytes_sent
 
 
 async def send_initial_file(data: List[List[int]], transcript_socket):
@@ -295,14 +325,15 @@ async def process_audio_dg(
         for word in result.channel.alternatives[0].words:
             is_user = True if word.speaker == 0 and preseconds > 0 else False
             if word.start < preseconds:
-                # print('Skipping word', word.start)
+                # Skip words that are part of the speech profile
                 continue
+
             if not segments:
                 segments.append(
                     {
                         'speaker': f"SPEAKER_{word.speaker}",
-                        'start': word.start - preseconds,
-                        'end': word.end - preseconds,
+                        'start': word.start,
+                        'end': word.end,
                         'text': word.punctuated_word,
                         'is_user': is_user,
                         'person_id': None,

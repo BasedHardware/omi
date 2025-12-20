@@ -404,6 +404,49 @@ class MixpanelManager {
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
 
+  // Conversation Display Settings Events
+  void conversationDisplaySettingsOpened() => track('Conversation Display Settings Opened');
+
+  void showShortConversationsToggled(bool showShort) =>
+      track('Show Short Conversations Toggled', properties: {'show_short': showShort});
+
+  void showDiscardedConversationsToggled(bool showDiscarded) =>
+      track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
+
+  void shortConversationThresholdChanged(int thresholdSeconds) => track(
+        'Short Conversation Threshold Changed',
+        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+      );
+
+  // Conversation Merge Events
+  void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
+
+  void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
+
+  void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
+        'Conversation Selected For Merge',
+        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+      );
+
+  void conversationMergeInitiated(List<String> conversationIds) => track(
+        'Conversation Merge Initiated',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
+
+  void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
+        'Conversation Merge Completed',
+        properties: {
+          'merged_conversation_id': mergedConversationId,
+          'removed_count': removedConversationIds.length,
+          'removed_conversation_ids': removedConversationIds,
+        },
+      );
+
+  void conversationMergeFailed(List<String> conversationIds) => track(
+        'Conversation Merge Failed',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
+
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 

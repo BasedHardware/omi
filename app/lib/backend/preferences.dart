@@ -253,9 +253,20 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
-  bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: true);
+  bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: false);
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  // Show short conversations - default is false (hidden)
+  bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
+
+  set showShortConversations(bool value) => saveBool('showShortConversations', value);
+
+  // Short conversation threshold in seconds - default is 60 (1 minute)
+  // Options: 60 (1 min), 120 (2 min), 180 (3 min), 240 (4 min), 300 (5 min)
+  int get shortConversationThreshold => getInt('shortConversationThreshold', defaultValue: 60);
+
+  set shortConversationThreshold(int value) => saveInt('shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
   bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
@@ -432,6 +443,23 @@ class SharedPreferencesUtil {
   set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
   String get calendarType => getString('calendarType2', defaultValue: 'manual');
+
+  set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
+
+  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled') ?? false;
+
+  // Calendar UI Settings
+  set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
+
+  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants') ?? false;
+
+  set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
+
+  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar') ?? true;
+
+  set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
+
+  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
 
   //--------------------------------- Auth ------------------------------------//
 

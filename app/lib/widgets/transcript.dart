@@ -70,6 +70,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
+  // Toggle to show/hide speaker names globally
+  bool _showSpeakerNames = false;
+
   // Define distinct muted colors for different speakers
   static const List<Color> _speakerColors = [
     Color(0xFF3A2E26), // Dark warm brown
@@ -438,24 +441,21 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     );
   }
 
+  void _toggleShowSpeakerNames() {
+    setState(() {
+      _showSpeakerNames = !_showSpeakerNames;
+    });
+  }
+
   Widget _buildSegmentItem(int segmentIdx) {
     final data = widget.segments[segmentIdx];
     final Person? person = data.personId != null ? _getPersonById(data.personId) : null;
     final suggestion = widget.suggestions[data.id];
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final bool isUser = data.isUser;
-
     return Container(
         key: segmentIdx >= 0 && segmentIdx < _segmentKeys.length ? _segmentKeys[segmentIdx] : null,
-        child: GestureDetector(
-          onTap: () {
-            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-              widget.onTapWhenSearchEmpty!();
-            }
-            widget.editSegment?.call(data.id, data.speakerId);
-            MixpanelManager().tagSheetOpened();
-          },
-          child: Padding(
+        child: Padding(
             padding: EdgeInsetsDirectional.fromSTEB(
                 widget.horizontalMargin ? 16 : 0, 4.0, widget.horizontalMargin ? 16 : 0, 4.0),
             child: Row(
@@ -463,21 +463,24 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               children: [
                 if (!isUser) ...[
                   // Avatar for other speakers (left side)
-                  Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                        child: Image.asset(
-                          person != null
-                              ? speakerImagePath[person.colorIdx!]
-                              : speakerImagePath[data.speakerId % speakerImagePath.length],
-                          width: 24,
-                          height: 24,
+                  GestureDetector(
+                    onTap: _toggleShowSpeakerNames,
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                          child: Image.asset(
+                            person != null
+                                ? speakerImagePath[person.colorIdx!]
+                                : speakerImagePath[data.speakerId % speakerImagePath.length],
+                            width: 24,
+                            height: 24,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
+                        const SizedBox(height: 2),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -487,21 +490,27 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   child: Column(
                     crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                     children: [
-                      // Speaker name (only for non-user messages and only if needed)
-                      if (!isUser) ...[
+                      // Speaker name (only shown when toggled)
+                      if (!isUser && _showSpeakerNames) ...[
                         Padding(
                           padding: const EdgeInsets.only(left: 4, bottom: 2),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                suggestion != null && person == null
-                                    ? '${suggestion.personName}?'
-                                    : (person != null ? person.name : 'Speaker ${data.speakerId}'),
-                                style: TextStyle(
-                                  color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                              GestureDetector(
+                                onTap: () {
+                                  widget.editSegment?.call(data.id, data.speakerId);
+                                  MixpanelManager().tagSheetOpened();
+                                },
+                                child: Text(
+                                  suggestion != null && person == null
+                                      ? '${suggestion.personName}?'
+                                      : (person != null ? person.name : 'Speaker ${data.speakerId}'),
+                                  style: TextStyle(
+                                    color: person == null && !isTagging ? Colors.grey.shade400 : Colors.grey.shade300,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                               if (!data.speechProfileProcessed && (data.personId ?? "").isEmpty) ...[
@@ -620,8 +629,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                       const SizedBox(height: 4),
                                       _buildTranslationNotice(),
                                     ],
-                                    // Timestamp and provider inside bubble (bottom right)
-                                    if (widget.canDisplaySeconds || data.sttProvider != null) ...[
+                                    // Timestamp and provider (only shown when toggled)
+                                    if (_showSpeakerNames && (widget.canDisplaySeconds || data.sttProvider != null)) ...[
                                       const SizedBox(height: 4),
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
@@ -674,24 +683,26 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 if (isUser) ...[
                   const SizedBox(width: 8),
                   // Avatar for user (right side)
-                  Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
-                        child: Image.asset(
-                          Assets.images.speaker0Icon.path,
-                          width: 24,
-                          height: 24,
+                  GestureDetector(
+                    onTap: _toggleShowSpeakerNames,
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                          child: Image.asset(
+                            Assets.images.speaker0Icon.path,
+                            width: 24,
+                            height: 24,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
+                        const SizedBox(height: 2),
+                      ],
+                    ),
                   ),
                 ],
               ],
             ),
-          ),
         ));
   }
 
