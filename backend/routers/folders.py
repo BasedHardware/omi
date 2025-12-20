@@ -143,13 +143,3 @@ def bulk_move_conversations(
 
     moved = folders_db.bulk_move_conversations_to_folder(uid, request.conversation_ids, folder_id)
     return {"status": "ok", "moved_count": moved}
-
-
-@router.post('/v1/folders/migrate', tags=['folders'])
-def trigger_migration(uid: str = Depends(auth.get_current_user_uid)):
-    """
-    Manually trigger migration of existing conversations to folders.
-    Safe to call multiple times - will skip if already migrated.
-    """
-    stats = folders_db.migrate_user_conversations_to_folders(uid)
-    return stats
