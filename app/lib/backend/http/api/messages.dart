@@ -51,33 +51,26 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
 }
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
-  debugPrint('🔍 [CLIENT DEBUG] parseMessageChunk received line (len=${line.length}): ${line.length > 100 ? "${line.substring(0, 100)}..." : line}');
-
   if (line.startsWith('think: ')) {
-    debugPrint('✅ [CLIENT DEBUG] Parsed as THINK chunk');
     return ServerMessageChunk(messageId, line.substring(7).replaceAll("__CRLF__", "\n"), MessageChunkType.think);
   }
 
   if (line.startsWith('data: ')) {
-    debugPrint('✅ [CLIENT DEBUG] Parsed as DATA chunk');
     return ServerMessageChunk(messageId, line.substring(6).replaceAll("__CRLF__", "\n"), MessageChunkType.data);
   }
 
   if (line.startsWith('done: ')) {
-    debugPrint('✅ [CLIENT DEBUG] Parsed as DONE chunk');
     var text = decodeBase64(line.substring(6));
     return ServerMessageChunk(messageId, text, MessageChunkType.done,
         message: ServerMessage.fromJson(json.decode(text)));
   }
 
   if (line.startsWith('message: ')) {
-    debugPrint('✅ [CLIENT DEBUG] Parsed as MESSAGE chunk');
     var text = decodeBase64(line.substring(9));
     return ServerMessageChunk(messageId, text, MessageChunkType.message,
         message: ServerMessage.fromJson(json.decode(text)));
   }
 
-  debugPrint('❌ [CLIENT DEBUG] PARSE FAILED - Unrecognized line format: "${line.length > 200 ? "${line.substring(0, 200)}..." : line}"');
   return null;
 }
 
@@ -88,31 +81,19 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
   }
 
   var messageId = "1000"; // Default new message
-  int lineCount = 0;
-  int successCount = 0;
-  debugPrint('🎯 [MESSAGE STREAM] Starting message stream to: $url');
 
   await for (var line in makeStreamingApiCall(
     url: url,
     body: jsonEncode({'text': text, 'file_ids': filesId}),
   )) {
-    lineCount++;
-    debugPrint('🔄 [MESSAGE STREAM] Processing line #$lineCount');
-
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
-      successCount++;
-      debugPrint('✅ [MESSAGE STREAM] Yielding chunk #$successCount (type=${messageChunk.type})');
       yield messageChunk;
     } else {
-      debugPrint('❌ [MESSAGE STREAM] Parse failed at line #$lineCount! Yielding error and stopping stream.');
-      debugPrint('❌ [MESSAGE STREAM] Failed line content: ${line.length > 500 ? "${line.substring(0, 500)}..." : line}');
       yield ServerMessageChunk.failedMessage();
       return;
     }
   }
-
-  debugPrint('🏁 [MESSAGE STREAM] Stream completed normally. Processed $lineCount lines, yielded $successCount chunks');
 }
 
 Future<ServerMessage> getInitialAppMessage(String? appId) {

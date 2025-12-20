@@ -224,10 +224,8 @@ def agentic_context_dependent_conversation(state: GraphState):
     streaming = state.get("streaming")
     if streaming:
         callback_data = {}
-        chunk_count = [0]  # Use list to allow mutation in nested function
 
         async def run_agentic_stream():
-            print(f"🤖 [AGENTIC DEBUG] Starting agentic stream")
             async for chunk in execute_agentic_chat_stream(
                 uid,
                 messages,
@@ -236,34 +234,22 @@ def agentic_context_dependent_conversation(state: GraphState):
                 chat_session=state.get("chat_session"),
             ):
                 if chunk:
-                    chunk_count[0] += 1
-                    print(f"🔄 [AGENTIC DEBUG] Chunk #{chunk_count[0]}: {chunk[:50]}..." if len(chunk) > 50 else f"🔄 [AGENTIC DEBUG] Chunk #{chunk_count[0]}: {chunk}")
                     # Forward streaming chunks through callback
                     if chunk.startswith("data: "):
                         state.get('callback').put_data_nowait(chunk.replace("data: ", ""))
                     elif chunk.startswith("think: "):
                         state.get('callback').put_thought_nowait(chunk.replace("think: ", ""))
-                    else:
-                        print(f"⚠️ [AGENTIC DEBUG] Unexpected chunk format: {chunk[:50]}")
-                else:
-                    print(f"🔄 [AGENTIC DEBUG] Received None from agentic stream")
-            print(f"🤖 [AGENTIC DEBUG] Agentic stream completed. Total chunks: {chunk_count[0]}")
-            print(f"🤖 [AGENTIC DEBUG] callback_data after stream: {list(callback_data.keys())}")
 
         # Run the async streaming
-        print(f"▶️ [AGENTIC DEBUG] Running asyncio.run()")
         asyncio.run(run_agentic_stream())
-        print(f"⏹️ [AGENTIC DEBUG] asyncio.run() completed")
 
         # Signal completion to the callback
         state.get('callback').end_nowait()
-        print(f"🏁 [AGENTIC DEBUG] Signaled end to callback")
 
         # Extract results from callback_data
         answer = callback_data.get('answer', '')
         memories_found = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
-        print(f"📝 [AGENTIC DEBUG] Final answer length: {len(answer)}")
 
         return {"answer": answer, "memories_found": memories_found, "ask_for_nps": ask_for_nps}
 
@@ -531,26 +517,18 @@ async def execute_graph_chat_stream(
         )
     )
 
-    chunk_count = 0
-    print(f"🎯 [GRAPH DEBUG] Starting stream loop")
     while True:
         try:
             chunk = await callback.queue.get()
             if chunk:
-                chunk_count += 1
-                print(f"📨 [GRAPH DEBUG] Queue chunk #{chunk_count}: {chunk[:50]}..." if len(chunk) > 50 else f"📨 [GRAPH DEBUG] Queue chunk #{chunk_count}: {chunk}")
                 yield chunk
             else:
-                print(f"🔚 [GRAPH DEBUG] Received None, ending stream. Total chunks: {chunk_count}")
                 break
         except asyncio.CancelledError:
-            print(f"❌ [GRAPH DEBUG] Stream cancelled")
             break
-    print(f"⏳ [GRAPH DEBUG] Awaiting task...")
+
     await task
     result = task.result()
-    print(f"📋 [GRAPH DEBUG] Task result keys: {list(result.keys()) if result else 'None'}")
-    print(f"📋 [GRAPH DEBUG] Answer from result: {len(result.get('answer', '')) if result else 0} chars")
     callback_data['answer'] = result.get("answer")
     callback_data['memories_found'] = result.get("memories_found", [])
     callback_data['ask_for_nps'] = result.get('ask_for_nps', False)

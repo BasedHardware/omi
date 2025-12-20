@@ -221,10 +221,6 @@ Stream<String> makeStreamingApiCall({
   String body = '',
   String method = 'POST',
 }) async* {
-  debugPrint('🚀 [STREAM CLIENT] Starting streaming request to: $url');
-  int chunkCount = 0;
-  int yieldCount = 0;
-
   try {
     var request = http.Request(method, Uri.parse(url));
 
@@ -240,52 +236,38 @@ Stream<String> makeStreamingApiCall({
     }
 
     var streamedResponse = await ApiClient._client.send(request);
-    debugPrint('📡 [STREAM CLIENT] Response status: ${streamedResponse.statusCode}');
 
     if (streamedResponse.statusCode != 200) {
       Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
-      debugPrint('❌ [STREAM CLIENT] Non-200 status: ${streamedResponse.statusCode}');
       return;
     }
 
     String pendingData = '';
     await for (var data in streamedResponse.stream.transform(utf8.decoder)) {
-      chunkCount++;
-      debugPrint('📦 [STREAM CLIENT] Received raw chunk #$chunkCount (len=${data.length}): ${data.length > 50 ? "${data.substring(0, 50)}..." : data.replaceAll('\n', '\\n')}');
-
       // Prepend any pending data from previous chunk
       data = pendingData + data;
       pendingData = '';
 
       // Split by SSE delimiter
       var lines = data.split('\n\n');
-      debugPrint('📦 [STREAM CLIENT] Split into ${lines.length} lines');
 
       // The last element might be incomplete (not followed by \n\n)
       // Only process it if the data ended with \n\n, otherwise buffer it
       if (!data.endsWith('\n\n') && lines.isNotEmpty) {
         pendingData = lines.removeLast();
-        debugPrint('📦 [STREAM CLIENT] Buffering incomplete last line (len=${pendingData.length}): ${pendingData.length > 30 ? "${pendingData.substring(0, 30)}..." : pendingData}');
       }
 
       for (var line in lines.where((line) => line.isNotEmpty)) {
-        yieldCount++;
-        debugPrint('✅ [STREAM CLIENT] Yielding line #$yieldCount (len=${line.length}): ${line.length > 50 ? "${line.substring(0, 50)}..." : line}');
         yield line;
       }
     }
 
     // Flush any remaining pending data
     if (pendingData.isNotEmpty) {
-      debugPrint('📦 [STREAM CLIENT] Flushing remaining pending data (len=${pendingData.length})');
-      yieldCount++;
       yield pendingData;
     }
-
-    debugPrint('🏁 [STREAM CLIENT] Stream completed. Received $chunkCount raw chunks, yielded $yieldCount lines');
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
-    debugPrint('❌ [STREAM CLIENT] Error: $e');
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
   }
 }
