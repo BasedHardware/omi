@@ -16,7 +16,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
-from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 
 
 def transcribe_voice_message_segment(path: str):
@@ -28,10 +28,10 @@ def transcribe_voice_message_segment(path: str):
 
     threading.Thread(target=delete_file).start()
 
-    words, language = fal_whisperx(url, 3, 2, True)
-    transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
+    words = deepgram_prerecorded(url, diarize=False)
+    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
-        print('failed to get fal segments')
+        print('failed to get deepgram segments')
         return None
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
@@ -51,10 +51,10 @@ def process_voice_message_segment(path: str, uid: str):
 
     threading.Thread(target=delete_file).start()
 
-    words, language = fal_whisperx(url, 3, 2, True)
-    transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
+    words = deepgram_prerecorded(url, diarize=False)
+    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
-        print('failed to get fal segments')
+        print('failed to get deepgram segments')
         return []
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
@@ -117,10 +117,10 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
 
     threading.Thread(target=delete_file).start()
 
-    words = fal_whisperx(audio_url=url, diarize=False, chunk_level="segment")
-    transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
+    words = deepgram_prerecorded(url, diarize=False)
+    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
-        print('failed to get fal segments')
+        print('failed to get deepgram segments')
         return
 
     text = " ".join([segment.text for segment in transcript_segments]).strip()
