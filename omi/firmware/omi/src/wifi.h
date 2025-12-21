@@ -1,0 +1,32 @@
+#ifndef _WIFI_H_
+#define _WIFI_H_
+
+#include <zephyr/kernel.h>
+#include <stdint.h>
+
+/* WiFi state machine states */
+typedef enum {
+	WIFI_STATE_OFF,          /* WiFi is off */
+	WIFI_STATE_SHUTDOWN,     /* WiFi is shutting down */
+	WIFI_STATE_ON,           /* WiFi is on but not connected */
+	WIFI_STATE_CONNECTING,   /* WiFi is connecting */
+	WIFI_STATE_CONNECTED,    /* WiFi connected but no UDP */
+	WIFI_STATE_UDP_CONNECTED /* WiFi and UDP connected */
+} wifi_state_t;
+
+/* API functions */
+int wifi_init(void);
+void wifi_turn_off(void);
+int wifi_turn_on(void);
+int wifi_connect_req(void);
+int wifi_disconnect_req(void);
+int setup_wifi_credentials(const char *ssid, const char *password);
+int setup_udp_server(const char *server_addr, uint16_t server_port);
+int wifi_start_tcp_connection(void);
+int wifi_send_data(const uint8_t *data, size_t len);
+wifi_state_t wifi_get_state(void);
+bool is_wifi_transport_ready(void);
+int wifi_setup_example(void);
+void net_mgmt_callback_init(void);
+static int register_wifi_ready(void);
+#endif

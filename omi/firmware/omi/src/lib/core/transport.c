@@ -737,7 +737,7 @@ static uint16_t buffer_offset = 0;
 
 //     return true;
 // }
-// for improving ble bandwidth
+
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 bool write_to_storage(void)

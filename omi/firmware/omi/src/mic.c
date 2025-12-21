@@ -26,12 +26,11 @@ LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
 /* Size of a block for 100 ms of audio data. */
 #define BLOCK_SIZE(sample_rate, number_of_channels) (BYTES_PER_SAMPLE * (sample_rate / 10) * number_of_channels)
 
-/* Driver will allocate blocks from this slab to receive audio data into them.
- * Application, after getting a given block from the driver and processing its
- * data, needs to free that block.
+/* Increased block count to prevent ENOMEM when Wi-Fi active
+ * PDM IRQ requests buffers faster than thread can process when CPU busy
  */
 #define MAX_BLOCK_SIZE BLOCK_SIZE(MAX_SAMPLE_RATE, 2)
-#define BLOCK_COUNT 4
+#define BLOCK_COUNT 8
 
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
 
@@ -95,6 +94,7 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
         int ret = dmic_read(dmic_dev, 0, &buffer, &size, READ_TIMEOUT);
         if (ret < 0) {
             LOG_ERR("Read failed: %d", ret);
+            k_sleep(K_MSEC(100));
             continue;
         }
 
@@ -104,7 +104,7 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
 }
 
 #define MIC_THREAD_STACK_SIZE 2048
-#define MIC_THREAD_PRIORITY 5
+#define MIC_THREAD_PRIORITY -1  /* High priority to process buffers quickly */
 K_THREAD_DEFINE(mic_thread_id,
                 MIC_THREAD_STACK_SIZE,
                 mic_thread_function,
