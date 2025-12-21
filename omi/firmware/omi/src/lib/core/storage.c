@@ -65,7 +65,7 @@ static struct k_work wifi_start_work;
 
 static void wifi_start_work_handler(struct k_work *work)
 {
-    mic_off();
+    mic_pause();
     wifi_turn_on();
 }
 K_THREAD_STACK_DEFINE(storage_stack, 4096);
@@ -327,7 +327,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
         case 0x03: // WIFI_SHUTDOWN
             LOG_INF("WIFI_SHUTDOWN command received");
             wifi_turn_off();
-            mic_on();
+            mic_resume();
             result_buffer[0] = 0;
             break;
 
