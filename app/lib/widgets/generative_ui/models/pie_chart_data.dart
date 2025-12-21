@@ -31,16 +31,47 @@ class PieChartSegmentData {
     );
   }
 
+  /// Named color map for common colors
+  static const _namedColors = <String, Color>{
+    'yellow': Color(0xFFF9D71C),
+    'orange': Color(0xFFF97316),
+    'green': Color(0xFF22C55E),
+    'blue': Color(0xFF3B82F6),
+    'purple': Color(0xFF8B5CF6),
+    'red': Color(0xFFEF4444),
+    'pink': Color(0xFFEC4899),
+    'cyan': Color(0xFF06B6D4),
+    'amber': Color(0xFFF59E0B),
+    'lime': Color(0xFF84CC16),
+    'teal': Color(0xFF14B8A6),
+    'indigo': Color(0xFF6366F1),
+    'white': Color(0xFFFFFFFF),
+    'black': Color(0xFF000000),
+    'gray': Color(0xFF6B7280),
+    'grey': Color(0xFF6B7280),
+  };
+
   static Color? _parseColor(String? colorString) {
     if (colorString == null || colorString.isEmpty) return null;
 
+    final normalized = colorString.trim().toLowerCase();
+
+    // Check for named color first
+    if (_namedColors.containsKey(normalized)) {
+      return _namedColors[normalized];
+    }
+
     // Handle hex colors like "#8B5CF6" or "8B5CF6"
-    String hex = colorString.replaceAll('#', '');
+    String hex = normalized.replaceAll('#', '');
     if (hex.length == 6) {
       hex = 'FF$hex'; // Add alpha
     }
     if (hex.length == 8) {
-      return Color(int.parse(hex, radix: 16));
+      try {
+        return Color(int.parse(hex, radix: 16));
+      } catch (_) {
+        return null;
+      }
     }
     return null;
   }

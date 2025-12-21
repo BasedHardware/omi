@@ -1,5 +1,6 @@
 import { Plugin, PluginStat } from '../components/types';
 import { headers } from 'next/headers';
+import { notFound } from 'next/navigation';
 import { CompactPluginCard } from '../components/plugin-card/compact';
 import { CategoryBreadcrumb } from '../components/category-breadcrumb';
 import { AppActionButton } from '../components/app-action-button';
@@ -172,7 +173,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
-    throw new Error('App not found');
+    notFound();
   }
 
   const statsResponse = await fetch(

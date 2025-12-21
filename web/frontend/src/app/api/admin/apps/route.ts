@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import envConfig from '@/src/constants/envConfig';
 
 const API_URL = process.env.API_URL || 'https://nooto.togodynamics.com';
 
 export async function GET(request: NextRequest) {
   const adminKey = request.headers.get('x-admin-key');
+  const showAll = request.nextUrl.searchParams.get('all') === 'true';
 
   if (!adminKey) {
     return NextResponse.json(
@@ -14,7 +14,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(`${API_URL}/v1/apps/public/unapproved`, {
+    const endpoint = showAll
+      ? `${API_URL}/v1/apps/admin/all`
+      : `${API_URL}/v1/apps/public/unapproved`;
+
+    const response = await fetch(endpoint, {
       headers: {
         'secret-key': adminKey,
       },
@@ -31,7 +35,7 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching unapproved apps:', error);
+    console.error('Error fetching apps:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

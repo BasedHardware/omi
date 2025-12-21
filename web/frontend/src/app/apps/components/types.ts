@@ -16,8 +16,12 @@ export interface Plugin {
   installs: number;
   rating_avg: number;
   rating_count: number;
-  capabilities: Set<string>;
+  capabilities: string[];
   created_at: string;
+  // System prompts
+  memory_prompt?: string;
+  chat_prompt?: string;
+  persona_prompt?: string;
 }
 
 export interface PluginStat {

@@ -1,0 +1,4 @@
+// Development configuration - DO NOT use for production
+// Note: Xcode project appends ".development" to APP_BUNDLE_IDENTIFIER for dev builds
+GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.706999278012-i2qvus5m706kju9jd5q1eokk6pi3d6gl
+APP_BUNDLE_IDENTIFIER=com.nooto-app-with-wearable.ios12

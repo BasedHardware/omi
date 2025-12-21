@@ -13,3 +13,4 @@ export 'highlight_parser.dart';
 export 'study_parser.dart';
 export 'task_parser.dart';
 export 'flow_parser.dart';
+export 'table_parser.dart';

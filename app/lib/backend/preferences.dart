@@ -248,6 +248,16 @@ class SharedPreferencesUtil {
 
   set showGetOmiCard(bool value) => saveBool('showGetOmiCard', value);
 
+  // A/B Test: Conversation card style (false = original, true = compact)
+  bool get useCompactConversationCard => getBool('useCompactConversationCard', defaultValue: false);
+
+  set useCompactConversationCard(bool value) => saveBool('useCompactConversationCard', value);
+
+  // A/B Test: Font family (false = SF Pro Display, true = Geist)
+  bool get useGeistFont => getBool('useGeistFont', defaultValue: false);
+
+  set useGeistFont(bool value) => saveBool('useGeistFont', value);
+
   List<App> get appsList {
     final apps = getStringList('appsList');
     return App.fromJsonList(apps.map((e) => jsonDecode(e)).toList());

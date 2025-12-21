@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Union
 import hashlib
 import os
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from pydantic import BaseModel
 
 from database import (
@@ -15,6 +15,7 @@ from database import (
     notifications as notification_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
+from database._client import get_users_uid, db
 from database.redis_db import (
     cache_user_geolocation,
     get_cached_user_geolocation,
@@ -643,3 +644,77 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
     )
+
+
+# *********************************************
+# ************** ADMIN ENDPOINTS **************
+# *********************************************
+
+
+def _verify_admin_key(secret_key: str):
+    if secret_key != os.getenv('ADMIN_KEY'):
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+
+class AdminUserInfo(BaseModel):
+    uid: str
+    email: str | None = None
+    created_at: str | None = None
+    conversation_count: int = 0
+
+
+@router.get('/v1/admin/users', tags=['admin'], response_model=List[AdminUserInfo])
+def admin_get_users(
+    limit: int = 100,
+    offset: int = 0,
+    secret_key: str = Header(None, alias='x-admin-key'),
+):
+    """
+    Admin endpoint to list all users with basic info.
+    Requires admin key in x-admin-key header.
+    """
+    _verify_admin_key(secret_key)
+
+    # Get all user UIDs
+    all_uids = get_users_uid()
+
+    # Apply pagination
+    paginated_uids = all_uids[offset : offset + limit]
+
+    users = []
+    for uid in paginated_uids:
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get()
+
+        user_info = AdminUserInfo(uid=uid)
+
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            user_info.email = user_data.get('email')
+            created_at = user_data.get('created_at')
+            if created_at:
+                user_info.created_at = str(created_at)
+
+        # Get conversation count
+        conversations_ref = user_ref.collection('conversations')
+        user_info.conversation_count = len(list(conversations_ref.limit(1000).stream()))
+
+        users.append(user_info)
+
+    # Sort by conversation count descending
+    users.sort(key=lambda x: x.conversation_count, reverse=True)
+
+    return users
+
+
+@router.get('/v1/admin/users/count', tags=['admin'])
+def admin_get_users_count(
+    secret_key: str = Header(None, alias='x-admin-key'),
+):
+    """
+    Admin endpoint to get total user count.
+    Requires admin key in x-admin-key header.
+    """
+    _verify_admin_key(secret_key)
+    all_uids = get_users_uid()
+    return {"count": len(all_uids)}
