@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
@@ -813,9 +816,41 @@ class CaptureProvider extends ChangeNotifier
     _broadcastRecordingState();
   }
 
+  /// Sends current geolocation to backend if location services are enabled and permission is granted
+  Future<void> _sendCurrentGeolocation() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        Logger.log('Location service is not enabled, skipping geolocation update');
+        return;
+      }
+
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        Logger.log('Location permission not granted, skipping geolocation update');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition();
+      final geolocation = Geolocation(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        altitude: position.altitude,
+        accuracy: position.accuracy,
+        time: position.timestamp.toUtc(),
+      );
+
+      await updateUserGeolocation(geolocation: geolocation);
+    } catch (e) {
+      Logger.error('Error sending geolocation: $e');
+    }
+  }
+
   streamRecording() async {
     updateRecordingState(RecordingState.initialising);
     await Permission.microphone.request();
+
+    // Send current location when conversation starts
+    _sendCurrentGeolocation();
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -846,6 +881,9 @@ class CaptureProvider extends ChangeNotifier
     if (device != null) _updateRecordingDevice(device);
 
     bool wasPaused = _isPaused;
+
+    // Send current location when conversation starts
+    _sendCurrentGeolocation();
 
     await _resetStateVariables();
     await _resetState();
