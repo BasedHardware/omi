@@ -37,7 +37,7 @@ deprecation==2.1.0
 distro==1.9.0
 dnspython==2.6.1
 docopt==0.6.2
-einops==0.8.0
+einops==0.8.1
 email_validator==2.2.0
 executing==2.0.1
 fal_client==0.4.1
@@ -76,7 +76,7 @@ httplib2==0.22.0
 httptools==0.6.1
 httpx==0.28.0
 httpx-sse==0.4.0
-huggingface-hub==0.24.5
+huggingface-hub==0.28.1
 humanfriendly==10.0
 hyperframe==6.0.1
 HyperPyYAML==1.2.2
@@ -154,7 +154,7 @@ proto-plus==1.24.0
 protobuf==4.25.4
 ptyprocess==0.7.0
 pure_eval==0.2.3
-pyannote.audio==3.3.1
+pyannote.audio==4.0.3
 pyannote.core==5.0.0
 pyannote.database==5.1.0
 pyannote.metrics==3.2.1

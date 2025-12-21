@@ -4,6 +4,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 
 from speech_profile_modal import ResponseItem, endpoint as speaker_identification_endpoint
 from vad_modal import vad_endpoint
+from diarization_modal import diarization_endpoint
 
 app = FastAPI()
 
@@ -19,6 +20,12 @@ def vad(file: UploadFile = File):
     print('vad')
     print(vad_endpoint)
     return vad_endpoint(file)
+
+
+@app.post('/v1/diarization')
+def diarization(file: UploadFile = File(...)):
+    print('diarization')
+    return diarization_endpoint(file)
 
 
 @app.get('/health')
