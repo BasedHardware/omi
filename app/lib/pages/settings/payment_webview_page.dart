@@ -4,8 +4,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 class PaymentWebViewPage extends StatefulWidget {
   final String checkoutUrl;
+  final String? title;
 
-  const PaymentWebViewPage({super.key, required this.checkoutUrl});
+  const PaymentWebViewPage({super.key, required this.checkoutUrl, this.title});
 
   @override
   State<PaymentWebViewPage> createState() => _PaymentWebViewPageState();
@@ -61,7 +62,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Complete Your Upgrade'),
+        title: Text(widget.title ?? 'Complete Your Upgrade'),
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(

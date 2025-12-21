@@ -6,9 +6,12 @@ import websockets
 PusherAPI = os.getenv('HOSTED_PUSHER_API_URL')
 
 
-async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3):
+async def connect_to_trigger_pusher(uid: str, sample_rate: int = 8000, retries: int = 3, is_active: callable = None):
     print("connect_to_trigger_pusher", uid)
     for attempt in range(retries):
+        if is_active is not None and not is_active():
+            print("Session ended, aborting Pusher retry", uid)
+            return None
         try:
             return await _connect_to_trigger_pusher(uid, sample_rate)
         except Exception as error:
@@ -28,7 +31,8 @@ async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
         ws_host = PusherAPI.replace("http", "ws")
         socket = await websockets.connect(
             f"{ws_host}/v1/trigger/listen?uid={uid}&sample_rate={sample_rate}",
-            ping_interval=15,
+            ping_interval=30,
+            ping_timeout=60,
         )
         print("Connected to Pusher transcripts trigger WebSocket.", uid)
         return socket

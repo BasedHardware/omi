@@ -22,11 +22,16 @@ class DevApi {
     }
   }
 
-  static Future<DevApiKeyCreated> createDevApiKey(String name) async {
+  static Future<DevApiKeyCreated> createDevApiKey(String name, {List<String>? scopes}) async {
+    final body = <String, dynamic>{'name': name};
+    if (scopes != null) {
+      body['scopes'] = scopes;
+    }
+
     final response = await makeApiCall(
       url: '$_baseUrl/keys',
       headers: {},
-      body: jsonEncode({'name': name}),
+      body: jsonEncode(body),
       method: 'POST',
     );
 

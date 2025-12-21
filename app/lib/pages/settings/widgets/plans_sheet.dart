@@ -522,21 +522,34 @@ class _PlansSheetState extends State<PlansSheet> {
       } else {
         // New subscription (for basic users or canceled subscriptions)
         final sessionData = await provider.createUserCheckoutSession(priceId: priceId);
-        if (sessionData != null && sessionData['url'] != null && mounted) {
-          final checkoutResult = await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => PaymentWebViewPage(
-                checkoutUrl: sessionData['url']!,
-              ),
-            ),
-          );
-
-          if (checkoutResult == true) {
-            AppSnackbar.showSnackbar('Upgrade successful! Your plan will update shortly.');
+        if (sessionData != null && mounted) {
+          // Check if this was a reactivation
+          if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
+            // Quick reactivation - no charge now
+            final message = sessionData['message'] as String? ??
+                'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+            AppSnackbar.showSnackbar(message);
             MixpanelManager().upgradeSucceeded();
+            await provider.fetchSubscription();
+          }
+          // Otherwise, this is a new subscription requiring checkout
+          else if (sessionData.containsKey('url') && sessionData['url'] != null) {
+            final checkoutResult = await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => PaymentWebViewPage(
+                  checkoutUrl: sessionData['url']!,
+                ),
+              ),
+            );
+
+            if (checkoutResult == true) {
+              AppSnackbar.showSnackbar('Subscription successful! You\'ve been charged for the new billing period.');
+              MixpanelManager().upgradeSucceeded();
+            } else {
+              MixpanelManager().upgradeCancelled();
+            }
           } else {
-            MixpanelManager().upgradeCancelled();
-            // Optional: handle cancellation or failure
+            AppSnackbar.showSnackbarError('Could not process subscription. Please try again.');
           }
         } else {
           AppSnackbar.showSnackbarError('Could not launch upgrade page. Please try again.');
@@ -898,11 +911,29 @@ class _PlansSheetState extends State<PlansSheet> {
                       }),
                       if (isUnlimited && isCancelled) ...[
                         const SizedBox(height: 8),
-                        Text(
-                          'Your plan is set to cancel on $renewalDate.\nSelect a new plan to resubscribe.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                        ),
+                        Builder(builder: (context) {
+                          // Check if subscription period has ended
+                          final sub = provider.subscription?.subscription;
+                          final periodEnded = sub?.currentPeriodEnd != null &&
+                              DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000)
+                                  .isBefore(DateTime.now());
+
+                          if (periodEnded) {
+                            // Scenario B: Must create new subscription
+                            return Text(
+                              'Your plan ended on $renewalDate.\nResubscribe now - you\'ll be charged immediately for a new billing period.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 14, color: Colors.orange.shade400),
+                            );
+                          } else {
+                            // Scenario A: Can reactivate without charge
+                            return Text(
+                              'Your plan is set to cancel on $renewalDate.\nResubscribe now to keep your benefits - no charge until $renewalDate.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 14, color: Colors.blue.shade400),
+                            );
+                          }
+                        }),
                       ] else if (isUnlimited && !isCancelled) ...[
                         const SizedBox(height: 8),
                         Builder(builder: (context) {
@@ -1428,6 +1459,39 @@ class _PlansSheetState extends State<PlansSheet> {
                       }),
                       const SizedBox(height: 16),
                       if (isUnlimited == true && !isCancelled) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final navigator = Navigator.of(context);
+                              final provider = context.read<UsageProvider>();
+                              final portalData = await provider.openCustomerPortal();
+                              if (portalData != null && portalData['url'] != null && mounted) {
+                                await navigator.push(
+                                  MaterialPageRoute(
+                                    builder: (context) => PaymentWebViewPage(
+                                      checkoutUrl: portalData['url']!,
+                                      title: "Manage Payment Method",
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                AppSnackbar.showSnackbarError('Could not open payment settings. Please try again.');
+                              }
+                            },
+                            icon: const Icon(Icons.credit_card, size: 20),
+                            label: const Text('Manage Payment Method'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white, width: 1),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         TextButton(
                           onPressed: () {
                             _handleCancelSubscription();
@@ -1493,6 +1557,7 @@ class _PlansSheetState extends State<PlansSheet> {
     String? saveTag,
     bool isPopular = false,
     bool isActive = false,
+    String? endsOnDate,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -1588,7 +1653,25 @@ class _PlansSheetState extends State<PlansSheet> {
                         ),
                       ),
                     ],
-                    if (isActive) ...[
+                    if (endsOnDate != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade800,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'Ends on $endsOnDate',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ] else if (isActive) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1716,6 +1799,21 @@ class _PlansSheetState extends State<PlansSheet> {
     final interval = planData['interval'] as String;
     final unitAmount = planData['unit_amount'] as int;
     final isActive = planData['is_active'] as bool? ?? false;
+    final planPriceId = planData['id'] as String;
+
+    // Check if subscription is canceled and get end date
+    final provider = context.read<UsageProvider>();
+    final sub = provider.subscription?.subscription;
+    final isCancelled = sub?.cancelAtPeriodEnd ?? false;
+    String? endsOnDate;
+
+    // Only show "Ends on [date]" badge if:
+    // 1. Subscription is canceled
+    // 2. This plan's price_id matches the current subscription's price_id
+    if (isCancelled && sub?.currentPeriodEnd != null && sub?.currentPriceId == planPriceId) {
+      final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
+      endsOnDate = DateFormat.yMMMd().format(date);
+    }
 
     return _buildHardcodedPlanOption(
       isSelected: isSelected,
@@ -1725,7 +1823,8 @@ class _PlansSheetState extends State<PlansSheet> {
       subtitle: interval == 'year' ? '12 months / \$${unitAmount / 100}' : null,
       monthlyPrice: priceString,
       onTap: isActive ? () {} : onTap,
-      isActive: isActive,
+      isActive: isActive && !isCancelled,
+      endsOnDate: endsOnDate,
     );
   }
 

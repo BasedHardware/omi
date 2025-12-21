@@ -7,6 +7,7 @@ import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
@@ -234,26 +235,91 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 0)), // above search widget
-            const SliverToBoxAdapter(child: SearchWidget()),
-            const SliverToBoxAdapter(child: SizedBox(height: 0)), //below search widget
+            Consumer2<HomeProvider, ConversationProvider>(
+              builder: (context, homeProvider, convoProvider, _) {
+                // Show search bar if explicitly shown OR if there's an active search query
+                bool shouldShowSearchBar = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+                if (!shouldShowSearchBar) {
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+                }
+                return const SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      SizedBox(height: 12), // above search widget
+                      SearchWidget(),
+                      SizedBox(height: 12), //below search widget
+                    ],
+                  ),
+                );
+              },
+            ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
-              const SliverToBoxAdapter(
+            if (convoProvider.groupedConversations.isEmpty &&
+                !convoProvider.isLoadingConversations &&
+                !convoProvider.isFetchingConversations)
+              SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 32.0),
-                    child: EmptyConversationsWidget(),
+                    padding: const EdgeInsets.only(top: 32.0),
+                    child: EmptyConversationsWidget(
+                      isStarredFilterActive: convoProvider.showStarredOnly,
+                    ),
                   ),
                 ),
               )
-            else if (convoProvider.groupedConversations.isEmpty && convoProvider.isLoadingConversations)
+            else if (convoProvider.groupedConversations.isEmpty &&
+                (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
               _buildLoadingShimmer()
             else
-              ..._buildConversationsWithStickyHeaders(convoProvider),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 80),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  childCount: convoProvider.groupedConversations.length + 1,
+                  (context, index) {
+                    if (index == convoProvider.groupedConversations.length) {
+                      debugPrint('loading more conversations');
+                      if (convoProvider.isLoadingConversations) {
+                        return _buildLoadMoreShimmer();
+                      }
+                      // widget.loadMoreMemories(); // CALL this only when visible
+                      return VisibilityDetector(
+                        key: const Key('conversations-key'),
+                        onVisibilityChanged: (visibilityInfo) {
+                          var provider = Provider.of<ConversationProvider>(context, listen: false);
+                          if (provider.previousQuery.isNotEmpty) {
+                            if (visibilityInfo.visibleFraction > 0 &&
+                                !provider.isLoadingConversations &&
+                                (provider.totalSearchPages > provider.currentSearchPage)) {
+                              provider.searchMoreConversations();
+                            }
+                          } else {
+                            if (visibilityInfo.visibleFraction > 0 && !convoProvider.isLoadingConversations) {
+                              convoProvider.getMoreConversationsFromServer();
+                            }
+                          }
+                        },
+                        child: const SizedBox(height: 20, width: double.maxFinite),
+                      );
+                    } else {
+                      var date = convoProvider.groupedConversations.keys.elementAt(index);
+                      List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (index == 0) const SizedBox(height: 10),
+                          ConversationsGroupWidget(
+                            isFirst: index == 0,
+                            conversations: memoriesForDate,
+                            date: date,
+                          ),
+                        ],
+                      );
+                    }
+                  },
+                ),
+              ),
+            SliverToBoxAdapter(
+              child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100),
             ),
           ],
         ),

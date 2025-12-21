@@ -241,6 +241,14 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                         appsList[index] = widget.app;
                                         SharedPreferencesUtil().appsList = appsList;
                                         MixpanelManager().appRated(widget.app.id.toString(), rating);
+
+                                        // Track review added
+                                        MixpanelManager().appDetailReviewAdded(
+                                          appId: widget.app.id,
+                                          rating: rating.toInt(),
+                                          hasComment: reviewController.text.trim().isNotEmpty,
+                                        );
+
                                         debugPrint('Refreshed apps list.');
                                         setState(() {});
                                       } else {

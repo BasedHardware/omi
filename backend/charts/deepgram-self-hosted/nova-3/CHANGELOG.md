@@ -6,12 +6,138 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+## [0.24.0] - 2025-11-18
+
+### Added
+
+- Added `use_v2_language_detection` feature flag to support 36-language detection (disabled by default).
+
+### Changed
+
+- Updated default container tags to November 2025 release (`release-251118`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-november-2025-release-251118) for additional details.
+- Updated `/v1/status` endpoint to raise four statuses: Initializing, Ready, Healthy, and Critical. See [status endpoint documentation](https://developers.deepgram.com/docs/self-hosted-status-endpoint) for details.
+
+## [0.23.1] - 2025-11-04
+
+### Fixed
+
+- Quoted Voice Agent LLM model names to fix periods breaking the TOML parser
+
+## [0.23.0] - 2025-10-29
+
+### Changed
+
+- Updated default container tags to October 2025 release (`release-251029`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-october-2025-release-251029) for additional details.
+- Updated sample cluster configuration files to use Kubernetes 1.33 (previously 1.30)
+- Updated Helm chart dependencies: cluster-autoscaler 9.52.1 (previously 9.46.3), prometheus-adapter 4.14.2 (previously 4.13.0)
+
+### Fixed
+
+- Fixed API templates to use correct `additionalLabels` reference
+
+## [0.22.0] - 2025-10-15
+
+### Added
+
+- Added Google as a 3rd party provider for Voice Agent helm chart
+- Added `topologySpreadConstraints`, which allows even distribution of pods from the same deployment across availability zones, among other criteria
+- Added `redactUsage` under api features which enables redaction of usage metadata
+
+### Changed
+
+- Updated default container tags to October 2025 release (`release-251015`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-october-2025-release-251015) for additional details.
+- Set `entity_redaction` to `true` by default, so redaction is automatically enabled if a valid NER model is available
+
+## [0.21.0] - 2025-09-29
+
+### Changed
+
+- Updated default container tags to September 2025 release (`release-250929`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-september-2025-release-250929) for additional details.
+
+## [0.20.0] - 2025-09-17
+
+### Added
+
+- Exposed the ability to add custom TOML sections in api.toml and engine.toml via `customToml`
+- Added `nodeSelector` support for all components (API, Engine, License Proxy) to allow scheduling pods on specific nodes.
+- Added configurable service types for API, Engine, and License Proxy services with ClusterIP as the default
+- Added support for service annotations when using LoadBalancer service type
+- Added `loadBalancerSourceRanges` configuration for LoadBalancer services to restrict access to specific IP CIDR ranges
+- Added `externalTrafficPolicy` configuration for LoadBalancer services to control traffic routing behavior
+- Updated sample configurations to demonstrate service configuration options including LoadBalancer security settings
+- Container-level security context support to Helm templates
+- Supported removing resource limits on Engine pods
+
+### Changed
+
+- Changed default service type from NodePort to ClusterIP for all services (API external, Engine metrics, License Proxy status)
+- Updated service templates to support configurable service types and annotations
+
+## [0.19.0] - 2025-09-12
+
+### Added
+
+- Changes the defaults of `.Values.api.features.formatEntityTags` and `.Values.engine.features.streamingNer` to `true`, so that NER formatting is enabled by default. This formatting is required with Nova-3 models. See our [self-hosted NER guide](https://deepgram.gitbook.io/help-center/self-hosted/how-can-i-enable-ner-formatting-in-my-self-hosted-deployment) for further details.
+- Updated default container tags to September 2025 release (`release-250912`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-september-2025-release-250912) for additional details.
+
+## [0.18.1] - 2025-09-03
+
+### Added
+
+- Defined `allowNonpublicEndpoints` Voice Agent flag for use with custom LLM endpoints
+
+### Fixed
+
+- Fixed HPA replica conflicts in API and Engine deployments by conditionally removing hardcoded replicas when autoscaling is enabled
+
+## [0.18.0] - 2025-08-28
+
+### Added
+
+- Added built-in support for Voice Agent.
+- Updated default container tags to August 2025 release (`release-250828`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-august-2025-release-250828) for additional details.
+
+### Fixed
+
+- Fixed securityContext template references for API and Engine deployments
+- Fixed securityContext documentation comments
+
+## [0.17.0] - 2025-08-14
+
+### Added
+
+- Updated default container tags to August 2025 release (`release-250814`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog/self-hosted-changelog#deepgram-self-hosted-august-2025-release-250814) for additional details.
+
+## [0.16.0] - 2025-07-31
+
+### Added
+
+- Updated default container tags to July 2025 release (`release-250731`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog#deepgram-self-hosted-july-2025-release-250731) for additional details.
+
+## [0.15.0] - 2025-07-10
+
+### Added
+
+- Apply additional annotations to the template section of Deployment resources.
+- Updated default container tags to July 2025 release (`release-250710`). Refer to the [main Deepgram changelog](https://developers.deepgram.com/changelog#deepgram-self-hosted-july-2025-release-250710) for additional details.
+
+## [0.14.0] - 2025-06-26
+
+### Added
+
+- Updated default container tags to June 2025 release (`release-250626`). Refer to the [main Deepgram changelog](https://deepgram.com/changelog/deepgram-self-hosted-june-2025-release-250626) for additional details.
+
+## [0.13.0] - 2025-06-10
+
+### Added
+
+- Updated default container tags to June 2025 release. Refer to the [main Deepgram changelog](https://deepgram.com/changelog/deepgram-self-hosted-june-2025-release-250610) for additional details.
+
 ## [0.12.0] - 2025-03-31
 
 ### Added
 
 - Updated default container tags to March 2025 release. Refer to the [main Deepgram changelog](https://deepgram.com/changelog/deepgram-self-hosted-march-2025-release-250331) for additional details.
-
 
 ## [0.11.1] - 2025-03-28
 
@@ -178,9 +304,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Initial implementation of the Helm chart.
 
 
-[unreleased]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.12.0...HEAD
-[0.12.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.11.1...0.12.0
-[0.11.1]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.11.0...0.11.1
+[unreleased]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.23.0...HEAD
+[0.23.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.22.0...deepgram-self-hosted-0.23.0
+[0.22.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.21.0...deepgram-self-hosted-0.22.0
+[0.21.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.20.0...deepgram-self-hosted-0.21.0
+[0.20.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.19.0...deepgram-self-hosted-0.20.0
+[0.19.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.18.1...deepgram-self-hosted-0.19.0
+[0.18.1]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.18.0...deepgram-self-hosted-0.18.1
+[0.18.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.17.0...deepgram-self-hosted-0.18.0
+[0.17.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.16.0...deepgram-self-hosted-0.17.0
+[0.16.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.15.0...deepgram-self-hosted-0.16.0
+[0.15.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.14.0...deepgram-self-hosted-0.15.0
+[0.14.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.13.0...deepgram-self-hosted-0.14.0
+[0.13.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.12.0...deepgram-self-hosted-0.13.0
+[0.12.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.11.1...deepgram-self-hosted-0.12.0
+[0.11.1]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.11.0...deepgram-self-hosted-0.11.1
 [0.11.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.10.0...deepgram-self-hosted-0.11.0
 [0.10.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.9.0...deepgram-self-hosted-0.10.0
 [0.9.0]: https://github.com/deepgram/self-hosted-resources/compare/deepgram-self-hosted-0.8.1...deepgram-self-hosted-0.9.0

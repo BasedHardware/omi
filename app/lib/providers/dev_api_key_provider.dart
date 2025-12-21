@@ -12,7 +12,12 @@ class DevApiKeyProvider with ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  Future<void> fetchKeys() async {
+  Future<void> fetchKeys({bool force = false}) async {
+    // Don't refetch if we already have keys and force is false
+    if (!force && _keys.isNotEmpty && !_isLoading) {
+      return;
+    }
+
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -27,18 +32,16 @@ class DevApiKeyProvider with ChangeNotifier {
     }
   }
 
-  Future<DevApiKeyCreated?> createKey(String name) async {
+  Future<DevApiKeyCreated?> createKey(String name, {List<String>? scopes}) async {
     // The dialog handles its own loading state. We don't set _isLoading here
     // to avoid a loading indicator on the main list view while creating.
     _error = null;
 
     DevApiKeyCreated? newKey;
     try {
-      newKey = await DevApi.createDevApiKey(name);
-      if (newKey != null) {
-        // Add the new key to the top of the list, as the API returns keys sorted by creation date.
-        _keys.insert(0, newKey);
-      }
+      newKey = await DevApi.createDevApiKey(name, scopes: scopes);
+      // Add the new key to the top of the list, as the API returns keys sorted by creation date.
+      _keys.insert(0, newKey);
     } catch (e) {
       _error = e.toString();
     } finally {

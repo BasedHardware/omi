@@ -78,6 +78,8 @@ class AppProvider extends BaseProvider {
   }
 
   void addOrRemoveFilter(String filter, String filterGroup) {
+    bool isAdding = !filters.containsKey(filterGroup) || filters[filterGroup] != filter;
+
     if (filters.containsKey(filterGroup)) {
       if (filters[filterGroup] == filter) {
         filters.remove(filterGroup);
@@ -88,10 +90,31 @@ class AppProvider extends BaseProvider {
       filters.addAll({filterGroup: filter});
     }
 
+    // Track filter changes
+    if (filterGroup == 'Apps') {
+      if (filter == 'My Apps') {
+        MixpanelManager().appsFilterMyApps(enabled: isAdding);
+      } else if (filter == 'Installed Apps') {
+        MixpanelManager().appsFilterInstalled(enabled: isAdding);
+      }
+    } else if (filterGroup == 'Rating') {
+      if (isAdding) {
+        String ratingStr = filter.replaceAll('+ Stars', '').trim();
+        int? rating = int.tryParse(ratingStr);
+        if (rating != null) {
+          MixpanelManager().appsFilterRating(rating: rating);
+        }
+      }
+    } else if (filterGroup == 'Sort' && isAdding) {
+      MixpanelManager().appsSortChanged(sortOption: filter);
+    }
+
     notifyListeners();
   }
 
   void addOrRemoveCategoryFilter(Category category) {
+    bool isAdding = !filters.containsKey('Category') || filters['Category'] != category;
+
     if (filters.containsKey('Category')) {
       if (filters['Category'] == category) {
         filters.remove('Category');
@@ -102,10 +125,17 @@ class AppProvider extends BaseProvider {
       filters.addAll({'Category': category});
     }
 
+    // Track category filter
+    if (isAdding) {
+      MixpanelManager().appsFilterCategory(category: category.title);
+    }
+
     notifyListeners();
   }
 
   void addOrRemoveCapabilityFilter(AppCapability capability) {
+    bool isAdding = !filters.containsKey('Capabilities') || filters['Capabilities'] != capability;
+
     if (filters.containsKey('Capabilities')) {
       if (filters['Capabilities'] == capability) {
         filters.remove('Capabilities');
@@ -114,6 +144,11 @@ class AppProvider extends BaseProvider {
       }
     } else {
       filters.addAll({'Capabilities': capability});
+    }
+
+    // Track capability filter
+    if (isAdding) {
+      MixpanelManager().appsFilterCapability(capability: capability.title);
     }
 
     notifyListeners();
@@ -172,10 +207,17 @@ class AppProvider extends BaseProvider {
         filters.containsKey('Apps');
   }
 
+  String _pendingSearchQuery = '';
+
   Future<void> performServerSearch() async {
+    // Always update pending query to the latest
+    _pendingSearchQuery = searchQuery;
+
     if (isSearching) {
       return;
     }
+
+    final queryBeingSearched = searchQuery;
 
     try {
       isSearching = true;
@@ -212,7 +254,7 @@ class AppProvider extends BaseProvider {
       }
 
       final result = await retrieveAppsSearch(
-        query: searchQuery.isEmpty ? null : searchQuery,
+        query: queryBeingSearched.isEmpty ? null : queryBeingSearched,
         category: categoryFilter,
         minRating: minRating,
         capability: capabilityFilter,
@@ -222,13 +264,27 @@ class AppProvider extends BaseProvider {
         limit: 100,
       );
 
-      searchResults = result.apps;
-      filteredApps = result.apps;
+      if (queryBeingSearched == _pendingSearchQuery) {
+        searchResults = result.apps;
+        filteredApps = result.apps;
+
+        // Track search if there was a query
+        if (queryBeingSearched.isNotEmpty) {
+          MixpanelManager().appsSearched(
+            searchTerm: queryBeingSearched,
+            resultCount: result.apps.length,
+          );
+        }
+      }
     } catch (e) {
       filterApps();
     } finally {
       isSearching = false;
       notifyListeners();
+
+      if (_pendingSearchQuery != queryBeingSearched) {
+        performServerSearch();
+      }
     }
   }
 
@@ -359,9 +415,10 @@ class AppProvider extends BaseProvider {
         setAppsFromCache();
       }
 
-      // Fetch fresh grouped data from server (first page per category)
+      // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
+
       // Flatten for search/filter views
       final List<App> flat = [];
       for (final g in groups) {
@@ -509,8 +566,11 @@ class AppProvider extends BaseProvider {
   Future<void> refreshAppsAfterChange() async {
     try {
       debugPrint('Refreshing apps after installation/change...');
+      // Fetch grouped apps from server (backend handles all filtering and grouping)
       final groups = await retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true);
       groupedApps = groups;
+
+      // Flatten for search/filter views
       final List<App> flat = [];
       for (final g in groups) {
         final List<App> data = (g['data'] as List<App>? ?? <App>[]);
@@ -635,6 +695,8 @@ class AppProvider extends BaseProvider {
           return (a, b) => (b.ratingAvg ?? -1.0).compareTo(a.ratingAvg ?? -1.0);
         case 'Lowest Rating':
           return (a, b) => (a.ratingAvg ?? -1.0).compareTo(b.ratingAvg ?? -1.0);
+        case 'Most Installs':
+          return (a, b) => b.installs.compareTo(a.installs);
         default:
           return null;
       }

@@ -1,147 +1,133 @@
 <!-- This file is auto-generated from docs/doc/hardware/omiGlass.mdx. Do not edit manually. -->
-# omiGlass - Open Source Meta Raybans with 6x of their battery
+<Frame>
+  <img src="https://github.com/user-attachments/assets/848f664b-183e-4df5-8928-f16f00ff144b" alt="omiGlass Front View" style={{ maxWidth: '500px', margin: '0 auto' }} />
+</Frame>
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/848f664b-183e-4df5-8928-f16f00ff144b" width="45%" />
-  <img src="https://github.com/user-attachments/assets/3fa00359-74a0-4f85-a233-f4bf12b1db7b" width="45%" />
-</p>
+## Overview
 
+omiGlass is an open-source smart glasses project that gives you AI capabilities with exceptional battery life.
 
+<CardGroup cols={3}>
+  <Card title="6x Battery Life" icon="battery-full">
+    Longer lasting than Meta Ray-Bans
+  </Card>
+  <Card title="ESP32 S3 Sense" icon="microchip">
+    Powerful XIAO microcontroller with camera
+  </Card>
+  <Card title="Fully Open Source" icon="code-branch">
+    Hardware, firmware, and software
+  </Card>
+</CardGroup>
 
+<Info>
+Watch the [announcement video](https://x.com/kodjima33/status/1911852469329727811) to see omiGlass in action.
+</Info>
 
-<p align="center">
-  <a href="https://x.com/kodjima33/status/1911852469329727811">
-    <img src="https://img.youtube.com/vi/QvFjXgLZX7U/maxresdefault.jpg" alt="Watch the video" width="400"/>
-  </a>
-  <br />
-  <a href="https://x.com/kodjima33/status/1911852469329727811">▶️ Watch Video</a>
-</p>
-
-
-## Want a Pre-built Version?
-
-We will ship a limited number of pre-built kits. Get a Dev [kit here](https://omi.me/glass)
-
-## Community
-
-Join the [Based Hardware Discord](http://discord.omi.me) for setup questions, contribution guide, and more.
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
-
-- [Ollama](https://github.com/ollama/ollama) for local AI model hosting
-- [Arduino IDE](https://www.arduino.cc/en/software) for firmware upload (if building hardware)
-- 3D printer for hardware components (if building your own)
-
-## Getting Started
-
-Follow these steps to set up omiglass:
-
-### Hardware Components
-
-You'll need the following components to build your own omiGlass:
-
-- [Seeed Studio XIAO ESP32 S3 Sense](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1)
-- x6 150mah batteries like [this](https://a.co/d/i17DjOr) or at least like [this](https://a.co/d/bbFdkic) (but you'll need to increase the size of the casing)
-- 1x 250mah battery like [this](https://a.co/d/2xheiFC)
-- Wires like [these](https://a.co/d/ah98wY0) and hinges
-- Note: The current design does not include a switch. See contribution section for more details.
-
-### Software Setup
-
-1. Clone the omiglass repository and install the dependencies:
-
-   ```bash
-   git clone https://github.com/BasedHardware/omi.git
-   cd omi/OmiGlass
-   npm install
-   ```
-
-   You can also use **yarn** to install:
-
-   ```bash
-   yarn install
-   ```
-
-2. Set up your API keys:
-
-   - Copy the `.env.example` file to create a new `.env` file:
-     ```bash
-     cp .env.template .env
-     ```
-
-   - Edit the `.env` file and add your API keys:
-     - Get a Groq API key from [Groq](https://console.groq.com/keys)
-     - Get an OpenAI API key from [OpenAI](https://platform.openai.com/api-keys)
-     - For Ollama, the default URL is already set (http://localhost:11434/api/chat)
-
-3. Install the required Ollama model:
-
-   ```bash
-   ollama pull moondream:1.8b-v2-fp16
-   ```
-
-4. Start the application:
-
-   ```bash
-   npm start
-   ```
-
-   or with yarn:
-
-   ```bash
-   yarn start
-   ```
-
-   Note: This is an Expo project. Open the localhost link (displayed after starting) to access the web version.
-
-### Hardware Assembly
-
-1. 3D print the glasses mount case using the provided STL files located in the `hardware` folder.
-
-2. Assemble the components as shown:
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/45ef303b-0f92-43eb-bfad-1b20a86e948c" width="45%" />
-  <img src="https://github.com/user-attachments/assets/3fa00359-74a0-4f85-a233-f4bf12b1db7b" width="45%" />
-</p>
-
-### Firmware Installation
-
-1. Open the [firmware folder](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware) and open the `.ino` file in the Arduino IDE.
-
-   - If you don't have the Arduino IDE installed, download and install it from the [official website](https://www.arduino.cc/en/software).
-   - Alternatively, follow the steps in the [firmware readme](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware/readme.md) to build using `arduino-cli`
-
-2. Set up the Arduino IDE for the XIAO ESP32S3 board:
-
-   - Add ESP32 board package to your Arduino IDE:
-     - Navigate to File > Preferences, and fill "Additional Boards Manager URLs" with:
-       `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
-     - Navigate to Tools > Board > Boards Manager..., search for `esp32`, and install the latest version.
-   - Select your board and port:
-     - On top of the Arduino IDE, select the port (likely to be COM3 or higher).
-     - Search for `xiao` in the development board on the left and select `XIAO_ESP32S3`.
-
-3. Configure PSRAM settings:
-   - Go to the "Tools" dropdown in the Arduino IDE
-   - Set "PSRAM:" to "OPI PSRAM"
-
-   ![PSRAM Settings](../docs/images/docs/hardware/images/image.png)
+<CardGroup cols={3}>
+  <Card title="Ollama" icon="robot" href="https://github.com/ollama/ollama">
+    Local AI model hosting
+  </Card>
+  <Card title="Arduino IDE" icon="code" href="https://www.arduino.cc/en/software">
+    For firmware upload
+  </Card>
+  <Card title="3D Printer" icon="cube">
+    For hardware components
+  </Card>
+</CardGroup>
 
 
-4. Upload the firmware to the XIAO ESP32S3 board.
+## Software Setup
 
-## How You Can Contribute
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone https://github.com/BasedHardware/omi.git
+    cd omi/OmiGlass
+    npm install
+    ```
 
-### Software
-- [x] Connect glasses with [Omi AI app](/doc/get_started/introduction#📲-get-the-app)
+    Or with yarn:
+    ```bash
+    yarn install
+    ```
+  </Step>
+  <Step title="Configure API Keys">
+    Copy the template and add your keys:
 
-### Hardware
-- [ ] Redesign the legs/sides so that it would fit on bigger heads
-- [x] Add a switch into design (current design has no switch, requires manual wire connection)
+    ```bash
+    cp .env.template .env
+    ```
+
+    Edit `.env` and add:
+    - [Groq API key](https://console.groq.com/keys)
+    - [OpenAI API key](https://platform.openai.com/api-keys)
+    - Ollama URL (default: `http://localhost:11434/api/chat`)
+  </Step>
+  <Step title="Install Ollama Model">
+    ```bash
+    ollama pull moondream:1.8b-v2-fp16
+    ```
+  </Step>
+  <Step title="Start the Application">
+    ```bash
+    npm start
+    ```
+
+    Or with yarn:
+    ```bash
+    yarn start
+    ```
+
+    <Tip>
+    This is an Expo project. Open the localhost link displayed after starting to access the web version.
+    </Tip>
+  </Step>
+</Steps>
+
+
+## Firmware Installation
+
+<Steps>
+  <Step title="Open the Firmware">
+    Open the [firmware folder](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware) and load the `.ino` file in Arduino IDE.
+
+    <Tip>
+    Alternatively, follow the [firmware readme](https://github.com/BasedHardware/omi/tree/main/omiGlass/firmware/readme.md) to build using `arduino-cli`.
+    </Tip>
+  </Step>
+  <Step title="Configure Arduino IDE">
+    Add the ESP32 board package:
+
+    1. Go to **File → Preferences**
+    2. Add to "Additional Boards Manager URLs":
+       ```
+       https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+       ```
+    3. Go to **Tools → Board → Boards Manager**
+    4. Search for `esp32` and install the latest version
+  </Step>
+  <Step title="Select Board and Port">
+    1. Select port (likely COM3 or higher) at the top of Arduino IDE
+    2. Search for `xiao` in the board selector
+    3. Select **XIAO_ESP32S3**
+  </Step>
+  <Step title="Configure PSRAM">
+    Go to **Tools** dropdown and set **PSRAM** to **OPI PSRAM**.
+
+    <Frame>
+      <img src="/images/docs/hardware/images/image.png" alt="PSRAM Settings" />
+    </Frame>
+  </Step>
+  <Step title="Upload Firmware">
+    Click the Upload button to flash the firmware to your XIAO ESP32S3 board.
+  </Step>
+</Steps>
+
 
 ## License
 
 This project is licensed under the MIT License.
+

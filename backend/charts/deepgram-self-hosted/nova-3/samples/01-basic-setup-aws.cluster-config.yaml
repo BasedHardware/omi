@@ -4,7 +4,7 @@ kind: ClusterConfig
 metadata:
   name: deepgram-self-hosted-cluster
   region: us-west-2
-  version: "1.30"
+  version: "1.33"
 
 iam:
   withOIDC: true

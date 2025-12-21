@@ -1,75 +1,108 @@
 ---
-title: "Get started with omi"
-description: "Choose your device and get started with omi"
+title: "Get Started with Omi"
+description: "Choose your device and get started with Omi"
 sidebarTitle: "Device Setup"
 ---
 
-# Choose Your Device
+## Choose Your Device
 
-Select your omi device to get started with the specific setup guide:
+Select your Omi device to get started with the specific setup guide:
 
-## Omi
+<CardGroup cols={3}>
+  <Card title="Omi" icon="circle" href="/onboarding/omi">
+    <Frame>
+      <img src="/omi-without-rope.png" alt="Omi Device" />
+    </Frame>
 
-<img src="/omi-without-rope.png" alt="Omi Device" width="200" />
+    The standard Omi wearable AI device
+  </Card>
+  <Card title="Omi DevKit 2" icon="microchip" href="/onboarding/omi-devkit-2">
+    <Frame>
+      <img src="/omi-devkit-without-rope.png" alt="Omi DevKit 2" />
+    </Frame>
 
-The standard omi wearable AI device
+    Developer kit for building and testing
+  </Card>
+  <Card title="Omi Glass" icon="glasses" href="/onboarding/omi-glass">
+    <Frame>
+      <img src="/omi-glass.png" alt="Omi Glass" />
+    </Frame>
 
-[Get Started with Omi →](/onboarding/omi)
-
----
-
-## Omi DevKit 2
-
-<img src="/omi-devkit-without-rope.png" alt="Omi DevKit 2" width="200" />
-
-Developer kit for building and testing
-
-[Get Started with DevKit 2 →](/onboarding/omi-devkit-2)
-
----
-
-## Omi Glass
-
-<img src="/omi-glass.png" alt="Omi Glass" width="200" />
-
-Smart glasses with omi capabilities
-
-[Get Started with Omi Glass →](/onboarding/omi-glass)
+    Smart glasses with Omi capabilities
+  </Card>
+</CardGroup>
 
 ---
 
-## Features
+## Key Features
 
-🚀 **Fully Open-Source** \
-🎙️ **Live Transcription** \
-🧠 **Conversation Memory** \
-📡 **Offline Transcription** \
-🌐 **App Marketplace**\
-🗣️ **Speaker Diarization**
+<CardGroup cols={3}>
+  <Card title="Fully Open-Source" icon="code-branch">
+    Hardware, firmware, and software - all open source
+  </Card>
+  <Card title="Live Transcription" icon="microphone">
+    Real-time speech-to-text as you speak
+  </Card>
+  <Card title="Conversation Memory" icon="brain">
+    AI-powered memory of your conversations
+  </Card>
+  <Card title="Offline Transcription" icon="wifi-slash">
+    Works without internet connection
+  </Card>
+  <Card title="App Marketplace" icon="store">
+    Extend functionality with community apps
+  </Card>
+  <Card title="Speaker Diarization" icon="users">
+    Identifies who said what
+  </Card>
+</CardGroup>
 
-## Need Help?
+---
+
+## Frequently Asked Questions
 
 <AccordionGroup>
-  <Accordion title="How can I build my own app?" icon="sparkles">
-    You can build your own omi app in 2 minutes: read this
-    [guide](https://docs.omi.me/doc/developer/apps/Introduction)
+  <Accordion title="How can I build my own app?" icon="puzzle-piece">
+    You can build your own Omi app in just 2 minutes! Check out the [Apps Introduction Guide](/doc/developer/apps/Introduction) to get started.
   </Accordion>
-  <Accordion title="Where the conversations are stored?" icon="sparkles">
-    Conversations are stored on the secured cloud. Your data is secure and
-    everything can be deleted in one click in omi app
+  <Accordion title="Where are my conversations stored?" icon="database">
+    Conversations are stored on our secure cloud infrastructure. Your data is protected, and you can delete everything with one click in the Omi app settings.
   </Accordion>
-  <Accordion title="I don't see the light / transcription">
-    If you don't see any light/transcription, your device might not have
-    firmware. Install it [here](https://docs.omi.me/get_started/Flash_device/)\
-    if the issue persists, ask in [discord](http://discord.omi.me) or contact
-    [help@omi.me](mailto:help@omi.me) to replace the device
+  <Accordion title="I don't see any light or transcription" icon="circle-question">
+    If you don't see any light or transcription:
+
+    1. Your device might need firmware - [install it here](/doc/get_started/Flash_device)
+    2. Make sure the device is charged
+    3. Try turning it off and on again
+
+    If the issue persists, ask in [Discord](http://discord.omi.me) or contact [help@omi.me](mailto:help@omi.me) for a replacement.
+  </Accordion>
+  <Accordion title="How do I update the firmware?" icon="arrows-rotate">
+    You can update firmware directly in the app: **Settings → Device Settings → Update Firmware**
+
+    For manual updates, see the [Firmware Update Guide](/doc/get_started/Flash_device).
   </Accordion>
 </AccordionGroup>
 
-## Feedback/FAQ/Support
+---
 
-1. Have questions, problems or feedback? [Join Discord](http://discord.omi.me) or visit [help](https://intercom.help/omi-37041f50f654/en)
-2. Want to build an omi app? Check our [docs](https://docs.omi.me/doc/developer/apps/Introduction)
-3. To contribute, Check our [issues and bounties](https://github.com/BasedHardware/omi/issues) and Check [Github](https://github.com/BasedHardware/Friend/) repository
-4. For delivery and shipping, Send an email to [team@basedhardware.com](mailto:team@basedhardware.com)
-5. Visit Omi's [Website](https://basedhardware.com/) and explore other products like smartglasses
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card title="Join Discord" icon="discord" href="http://discord.omi.me">
+    Get help from the community and team
+  </Card>
+  <Card title="Help Center" icon="circle-question" href="https://intercom.help/omi-37041f50f654/en">
+    Browse FAQs and support articles
+  </Card>
+  <Card title="Build Apps" icon="code" href="/doc/developer/apps/Introduction">
+    Create your own Omi integrations
+  </Card>
+  <Card title="Contribute" icon="github" href="https://github.com/BasedHardware/omi/issues">
+    View issues and bounties
+  </Card>
+</CardGroup>
+
+<Info>
+For delivery and shipping questions, email [team@basedhardware.com](mailto:team@basedhardware.com)
+</Info>

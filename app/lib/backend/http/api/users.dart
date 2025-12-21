@@ -393,6 +393,46 @@ Future<bool> setTrainingDataOptIn() async {
   return response.statusCode == 200;
 }
 
+// Transcription Preferences
+
+Future<Map<String, dynamic>?> getTranscriptionPreferences() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/transcription-preferences',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getTranscriptionPreferences response: ${response.body}');
+  if (response.statusCode == 200) {
+    return jsonDecode(response.body);
+  }
+  return null;
+}
+
+Future<bool> setTranscriptionPreferences({
+  bool? singleLanguageMode,
+  List<String>? vocabulary,
+}) async {
+  Map<String, dynamic> body = {};
+  if (singleLanguageMode != null) {
+    body['single_language_mode'] = singleLanguageMode;
+  }
+  if (vocabulary != null) {
+    body['vocabulary'] = vocabulary;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/transcription-preferences',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  debugPrint('setTranscriptionPreferences response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<UserSubscriptionResponse?> getUserSubscription() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/me/subscription',

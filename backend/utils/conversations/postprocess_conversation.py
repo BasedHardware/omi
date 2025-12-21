@@ -10,7 +10,7 @@ from database.users import get_user_store_recording_permission
 from models.conversation import *
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
-from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 
@@ -71,8 +71,8 @@ def postprocess_conversation(
             upload_conversation_recording(file_path, uid, conversation_id)
 
         speakers_count = len(set([segment.speaker for segment in conversation.transcript_segments]))
-        words = fal_whisperx(signed_url, speakers_count)
-        fal_segments = fal_postprocessing(words, aseg.duration_seconds)
+        words = deepgram_prerecorded(signed_url, speakers_count=speakers_count)
+        fal_segments = postprocess_words(words, aseg.duration_seconds)
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
         count = len(''.join([segment.text.strip() for segment in conversation.transcript_segments]))

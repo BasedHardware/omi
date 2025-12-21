@@ -16,8 +16,18 @@ spec:
         {{- toYaml .Values.engine.affinity | nindent 8 }}
       tolerations:
         {{- toYaml .Values.engine.tolerations | nindent 8 }}
+      {{- with .Values.engine.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.engine.nodeSelector | nindent 8 }}
       containers:
       - name: model-management
+        {{- with .Values.engine.containerSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         image: alpine
         command:
           - /bin/sh

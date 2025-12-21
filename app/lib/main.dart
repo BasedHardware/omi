@@ -23,6 +23,7 @@ import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -39,6 +40,8 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/providers/calendar_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -46,8 +49,10 @@ import 'package:omi/providers/theme_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -92,6 +97,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await ActionItemNotificationHandler.handleUpdateMessage(data, channelKey);
   } else if (messageType == 'action_item_delete') {
     await ActionItemNotificationHandler.handleDeletionMessage(data);
+  } else if (messageType == 'merge_completed') {
+    await MergeNotificationHandler.handleMergeCompleted(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
   }
 }
 
@@ -161,6 +172,11 @@ Future _init() async {
     FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true;
   };
+
+  // Initialize desktop updater
+  if (PlatformService.isDesktop) {
+    await DesktopUpdateService().initialize();
+  }
 
   await ServiceManager.instance().start();
   return;
@@ -238,7 +254,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     try {
       final context = MyApp.navigatorKey.currentContext;
       if (context == null) return;
-      
+
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       if (captureProvider.recordingState == RecordingState.stop) {
         await captureProvider.streamSystemAudioRecording();
@@ -319,6 +335,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, value, AddAppProvider? previous) =>
                 (previous?..setAppProvider(value)) ?? AddAppProvider(),
           ),
+          ChangeNotifierProxyProvider<AppProvider, AiAppGeneratorProvider>(
+            create: (context) => AiAppGeneratorProvider(),
+            update: (BuildContext context, value, AiAppGeneratorProvider? previous) =>
+                (previous?..setAppProvider(value)) ?? AiAppGeneratorProvider(),
+          ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
           ChangeNotifierProvider(create: (context) => MemoriesProvider()),
@@ -327,6 +348,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
           ChangeNotifierProvider(create: (context) => ThemeProvider()),
+          ChangeNotifierProvider(create: (context) => IntegrationProvider()),
+          ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
         ],
         builder: (context, child) {
           final themeProvider = context.watch<ThemeProvider>();

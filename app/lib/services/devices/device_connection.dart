@@ -12,6 +12,7 @@ import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
+import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
@@ -65,6 +66,8 @@ class DeviceConnectionFactory {
         return FieldyDeviceConnection(device, transport);
       case DeviceType.friendPendant:
         return FriendPendantDeviceConnection(device, transport);
+      case DeviceType.limitless:
+        return LimitlessDeviceConnection(device, transport);
     }
   }
 }

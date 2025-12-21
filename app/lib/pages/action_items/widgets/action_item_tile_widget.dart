@@ -64,6 +64,13 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
     final newState = !widget.actionItem.completed;
 
+    // Track action item checked/unchecked
+    MixpanelManager().actionItemChecked(
+      actionItemId: widget.actionItem.id,
+      completed: newState,
+      timestamp: DateTime.now(),
+    );
+
     if (newState) {
       setState(() {
         _isAnimating = true;
@@ -140,10 +147,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        // color: chipColor,
-        borderRadius: BorderRadius.circular(12),
+        color: chipColor,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -428,12 +435,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
       // If successful, update the action item with export metadata
       if (success) {
+        final exportTime = DateTime.now();
         await updateActionItem(
           widget.actionItem.id,
           exported: true,
-          exportDate: DateTime.now(),
+          exportDate: exportTime,
           exportPlatform: 'todoist',
         );
+
+        // Track action item export
+        MixpanelManager().actionItemExported(
+          actionItemId: widget.actionItem.id,
+          appName: 'Todoist',
+          timestamp: exportTime,
+        );
+
         widget.onRefresh?.call();
       }
     }
@@ -536,12 +552,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
       // If successful, update the action item with export metadata
       if (success) {
+        final exportTime = DateTime.now();
         await updateActionItem(
           widget.actionItem.id,
           exported: true,
-          exportDate: DateTime.now(),
+          exportDate: exportTime,
           exportPlatform: 'asana',
         );
+
+        // Track action item export
+        MixpanelManager().actionItemExported(
+          actionItemId: widget.actionItem.id,
+          appName: 'Asana',
+          timestamp: exportTime,
+        );
+
         widget.onRefresh?.call();
       }
     }
@@ -644,12 +669,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
       // If successful, update the action item with export metadata
       if (success) {
+        final exportTime = DateTime.now();
         await updateActionItem(
           widget.actionItem.id,
           exported: true,
-          exportDate: DateTime.now(),
+          exportDate: exportTime,
           exportPlatform: 'google_tasks',
         );
+
+        // Track action item export
+        MixpanelManager().actionItemExported(
+          actionItemId: widget.actionItem.id,
+          appName: 'Google Tasks',
+          timestamp: exportTime,
+        );
+
         widget.onRefresh?.call();
       }
     }
@@ -732,12 +766,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
       // If successful, update the action item with export metadata
       if (success) {
+        final exportTime = DateTime.now();
         await updateActionItem(
           widget.actionItem.id,
           exported: true,
-          exportDate: DateTime.now(),
+          exportDate: exportTime,
           exportPlatform: 'clickup',
         );
+
+        // Track action item export
+        MixpanelManager().actionItemExported(
+          actionItemId: widget.actionItem.id,
+          appName: 'ClickUp',
+          timestamp: exportTime,
+        );
+
         widget.onRefresh?.call();
       }
     }
@@ -850,12 +893,21 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
       // If successful, update the action item with export metadata
       if (success) {
+        final exportTime = DateTime.now();
         await updateActionItem(
           widget.actionItem.id,
           exported: true,
-          exportDate: DateTime.now(),
+          exportDate: exportTime,
           exportPlatform: 'apple_reminders',
         );
+
+        // Track action item export
+        MixpanelManager().actionItemExported(
+          actionItemId: widget.actionItem.id,
+          appName: 'Apple Reminders',
+          timestamp: exportTime,
+        );
+
         widget.onRefresh?.call();
       }
     }
@@ -987,7 +1039,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
               if (widget.actionItem.isLocked)
                 Positioned.fill(
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                    filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
                         MixpanelManager().paywallOpened('Action Item');

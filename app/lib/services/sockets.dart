@@ -2,27 +2,31 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/utils/mutex.dart';
-import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 
 abstract class ISocketService {
   void start();
 
   void stop();
 
-  Future<TranscriptSegmentSocketService?> conversation(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      bool force = false,
-      String? source});
+  Future<TranscriptSegmentSocketService?> conversation({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    bool force = false,
+    String? source,
+    CustomSttConfig? customSttConfig,
+  });
 
-  Future<TranscriptSegmentSocketService?> speechProfile(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      bool force = false,
-      String? source});
+  Future<TranscriptSegmentSocketService?> speechProfile({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    bool force = false,
+    String? source,
+  });
 }
 
 abstract interface class ISocketServiceSubsciption {}
@@ -47,22 +51,39 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    CustomSttConfig? customSttConfig,
   }) async {
     await _mutex.acquire();
     try {
+      final sttConfigId = customSttConfig?.sttConfigId ?? 'omi:default';
+
+      // Check if we can reuse existing socket (same codec, sample rate, config, and connected)
       if (!force &&
           _socket?.codec == codec &&
           _socket?.sampleRate == sampleRate &&
-          _socket?.state == SocketServiceState.connected) {
+          _socket?.state == SocketServiceState.connected &&
+          _socket?.sttConfigId == sttConfigId) {
+        debugPrint("Reusing existing socket connection");
         return _socket;
       }
 
-      debugPrint("_connect force ${force} state ${_socket?.state}");
+      debugPrint("_connect force=$force state=${_socket?.state} configChanged=${_socket?.sttConfigId != sttConfigId}");
 
       // new socket
       await _socket?.stop();
 
-      _socket = ConversationTranscriptSegmentSocketService.create(sampleRate, codec, language, source: source);
+      if (customSttConfig != null && customSttConfig.isEnabled) {
+        _socket = TranscriptSocketServiceFactory.createFromCustomConfig(
+          sampleRate,
+          codec,
+          language,
+          customSttConfig,
+          source: source,
+        );
+      } else {
+        _socket = TranscriptSocketServiceFactory.createDefault(sampleRate, codec, language, source: source, sttConfigId: sttConfigId);
+      }
+
       await _socket?.start();
       if (_socket?.state != SocketServiceState.connected) {
         return null;
@@ -72,29 +93,45 @@ class SocketServicePool extends ISocketService {
     } finally {
       _mutex.release();
     }
-
-    return null;
   }
 
   @override
-  Future<TranscriptSegmentSocketService?> conversation(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      bool force = false,
-      String? source}) async {
-    debugPrint("socket conversation > $codec $sampleRate $force source: $source");
-    return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force, source: source);
+  Future<TranscriptSegmentSocketService?> conversation({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    bool force = false,
+    String? source,
+    CustomSttConfig? customSttConfig,
+  }) async {
+    debugPrint("socket conversation > $codec $sampleRate $force source: $source customStt: ${customSttConfig?.provider}");
+    return await socket(
+      codec: codec,
+      sampleRate: sampleRate,
+      language: language,
+      force: force,
+      source: source,
+      customSttConfig: customSttConfig,
+    );
   }
 
   @override
-  Future<TranscriptSegmentSocketService?> speechProfile(
-      {required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      bool force = false,
-      String? source}) async {
+  Future<TranscriptSegmentSocketService?> speechProfile({
+    required BleAudioCodec codec,
+    required int sampleRate,
+    required String language,
+    bool force = false,
+    String? source,
+  }) async {
     debugPrint("socket speech profile > $codec $sampleRate $force source: $source");
-    return await socket(codec: codec, sampleRate: sampleRate, language: language, force: force, source: source);
+    // Speech profile always uses default Omi service (no custom STT)
+    return await socket(
+      codec: codec,
+      sampleRate: sampleRate,
+      language: language,
+      force: force,
+      source: source,
+      customSttConfig: null,
+    );
   }
 }

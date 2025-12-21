@@ -29,6 +29,9 @@ spec:
       labels: *labels
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/license-proxy/license-proxy.config.yaml") . | sha256sum }}
+        {{- with $.Values.licenseProxy.additionalAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       {{- if .Values.global.pullSecretRef }}
       imagePullSecrets:
@@ -38,6 +41,10 @@ spec:
         {{- toYaml .Values.licenseProxy.affinity | nindent 8 }}
       tolerations:
         {{- toYaml .Values.licenseProxy.tolerations | nindent 8 }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.licenseProxy.topologySpreadConstraints | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.licenseProxy.nodeSelector | nindent 8 }}
       securityContext:
         {{- toYaml .Values.licenseProxy.securityContext | nindent 8 }}
       {{- if or .Values.licenseProxy.serviceAccount.create .Values.licenseProxy.serviceAccount.name }}
@@ -45,6 +52,10 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Values.licenseProxy.namePrefix }}
+        {{- with .Values.licenseProxy.containerSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         image: {{ .Values.licenseProxy.image.path }}:{{ .Values.licenseProxy.image.tag }}
         imagePullPolicy: {{ .Values.licenseProxy.image.pullPolicy }}
         envFrom:

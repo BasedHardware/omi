@@ -73,7 +73,7 @@ autoscalingGroupsnamePrefix: []
 awsAccessKeyID: ""
 
 # awsRegion -- AWS region (required if `cloudProvider=aws`)
-awsRegion: us-east-1
+awsRegion: ""
 
 # awsSecretAccessKey -- AWS access secret key ([if AWS user keys used](https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/cloudprovider/aws/README.md#using-aws-credentials))
 awsSecretAccessKey: ""
@@ -133,10 +133,11 @@ civoRegion: ""
 cloudConfigPath: ""
 
 # cloudProvider -- The cloud provider where the autoscaler runs.
-# Currently only `gce`, `aws`, `azure`, `magnum`, `clusterapi` and `civo` are supported.
+# Currently only `gce`, `aws`, `azure`, `magnum`, `clusterapi`, `civo` and `coreweave` are supported.
 # `aws` supported for AWS. `gce` for GCE. `azure` for Azure AKS.
 # `magnum` for OpenStack Magnum, `clusterapi` for Cluster API.
 # `civo` for Civo Cloud.
+# `coreweave` for CoreWeave.
 cloudProvider: aws
 
 # clusterAPICloudConfigPath -- Path to kubeconfig for connecting to Cluster API Management Cluster, only used if `clusterAPIMode=kubeconfig-kubeconfig or incluster-kubeconfig`
@@ -169,6 +170,18 @@ containerSecurityContext: {}
 deployment:
   # deployment.annotations -- Annotations to add to the Deployment object.
   annotations: {}
+
+# dnsConfig -- [Pod's DNS Config](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-dns-config)
+dnsConfig: {}
+  # nameservers:
+  #   - 1.2.3.4
+  # searches:
+  #   - ns1.svc.cluster-domain.example
+  #   - my.dns.search.suffix
+  # options:
+  #   - name: ndots
+  #     value: "2"
+  #   - name: edns0
 
 # dnsPolicy -- Defaults to `ClusterFirst`. Valid values are:
 # `ClusterFirstWithHostNet`, `ClusterFirst`, `Default` or `None`.
@@ -285,7 +298,7 @@ image:
   # image.repository -- Image repository
   repository: registry.k8s.io/autoscaling/cluster-autoscaler
   # image.tag -- Image tag
-  tag: v1.32.0
+  tag: v1.34.1
   # image.pullPolicy -- Image pull policy
   pullPolicy: IfNotPresent
   ## Optionally specify an array of imagePullSecrets.
@@ -366,6 +379,17 @@ rbac:
     name: ""
     # rbac.serviceAccount.automountServiceAccountToken -- Automount API credentials for a Service Account.
     automountServiceAccountToken: true
+  # rbac.additionalRules -- Additional rules for role/clusterrole
+  additionalRules: []
+  # - apiGroups:
+  #   - infrastructure.cluster.x-k8s.io
+  #   resources:
+  #   - kubemarkmachinetemplates
+  #   verbs:
+  #   - get
+  #   - list
+  #   - watch
+
 
 # replicaCount -- Desired number of pods
 replicaCount: 1
@@ -465,6 +489,8 @@ vpa:
   updateMode: "Auto"
   # vpa.containerPolicy -- [ContainerResourcePolicy](https://github.com/kubernetes/autoscaler/blob/vertical-pod-autoscaler/v0.13.0/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1/types.go#L159). The containerName is always et to the deployment's container name. This value is required if VPA is enabled.
   containerPolicy: {}
+  # vpa.recommender -- Name of the VPA recommender that will provide recommendations for vertical scaling.
+  recommender: default
 
 # secretKeyRefNameOverride -- Overrides the name of the Secret to use when loading the secretKeyRef for AWS, Azure and Civo env variables
 secretKeyRefNameOverride: ""

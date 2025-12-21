@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/list_item.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/app_provider.dart';
 
@@ -29,6 +30,13 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
     super.initState();
     _apps = widget.apps;
     _totalCount = widget.apps.length;
+
+    // Track category page opened
+    MixpanelManager().appsCategoryPageOpened(
+      category: widget.category.title,
+      appCount: widget.apps.length,
+    );
+
     _fetchCategoryApps();
   }
 

@@ -13,12 +13,12 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
-    implements IDeviceServiceSubsciption, ITransctipSegmentSocketServiceListener {
+    implements IDeviceServiceSubsciption, ITransctiptSegmentSocketServiceListener {
   DeviceProvider? deviceProvider;
   bool? permissionEnabled;
   bool loading = false;
@@ -219,11 +219,21 @@ class SpeechProfileProvider extends ChangeNotifier
       device!.id,
       onAudioBytesReceived: (List<int> value) {
         if (value.isEmpty) return;
-        audioStorage.storeFramePacket(value);
 
-        value.removeRange(0, 3);
+        // Only remove 3-byte header for Omi/OpenGlass devices
+        final paddingLeft = (device?.type == DeviceType.omi || device?.type == DeviceType.openglass) ? 3 : 0;
+
+        // Store frame: use storeFramePacket for Omi/OpenGlass (expects header),
+        // or append frames directly for other devices (raw frames)
+        if (paddingLeft > 0) {
+          audioStorage.storeFramePacket(value);
+        } else {
+          audioStorage.frames.add(value);
+        }
+
+        final trimmedValue = paddingLeft > 0 ? value.sublist(paddingLeft) : value;
         if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(value);
+          _socket?.send(trimmedValue);
         }
       },
     );

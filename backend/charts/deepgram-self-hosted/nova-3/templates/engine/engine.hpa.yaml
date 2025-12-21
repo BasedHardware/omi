@@ -1,4 +1,8 @@
-{{- if .Values.scaling.auto.enabled -}}
+{{- if and .Values.scaling.auto.enabled .Values.agent.enabled }}
+{{- fail "Error: Autoscaling is not yet supported for voice agent" }}
+{{- end }}
+{{- if .Values.scaling.auto.enabled }}
+---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

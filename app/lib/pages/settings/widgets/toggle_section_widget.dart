@@ -20,45 +20,63 @@ class ToggleSectionWidget extends StatefulWidget {
 
 class _ToggleSectionWidgetState extends State<ToggleSectionWidget> {
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ListView(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: [
-        ListTile(
-          title: Text(
-            widget.sectionTitle,
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2C2C2E), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.sectionTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.sectionDescription,
+                      style: const TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: widget.isSectionEnabled,
+                onChanged: widget.onSectionEnabledChanged,
+                activeColor: const Color(0xFF8B5CF6),
+              ),
+            ],
           ),
-          contentPadding: EdgeInsets.zero,
-          subtitle: Text(widget.sectionDescription),
-          trailing: Switch(
-            value: widget.isSectionEnabled,
-            onChanged: widget.onSectionEnabledChanged,
-          ),
-        ),
-        AnimatedCrossFade(
-          firstChild: const SizedBox.shrink(),
-          secondChild: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: widget.options,
-          ),
-          crossFadeState: widget.isSectionEnabled ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          duration: const Duration(milliseconds: 300),
-        ),
-      ],
+          if (widget.isSectionEnabled)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: widget.options,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

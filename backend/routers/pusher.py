@@ -2,14 +2,20 @@ import struct
 import asyncio
 import json
 import time
+from datetime import datetime, timezone
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
+import database.conversations as conversations_db
 from database import users as users_db
+from database.redis_db import get_cached_user_geolocation
+from models.conversation import Conversation, ConversationStatus, Geolocation
 from utils.apps import is_audio_bytes_app_enabled
-from utils.app_integrations import trigger_realtime_integrations, trigger_realtime_audio_bytes
+from utils.app_integrations import trigger_realtime_integrations, trigger_realtime_audio_bytes, trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
+from utils.conversations.process_conversation import process_conversation
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
@@ -18,6 +24,73 @@ from utils.webhooks import (
 from utils.other.storage import upload_audio_chunk
 
 router = APIRouter()
+
+
+async def _process_conversation_task(uid: str, conversation_id: str, language: str, websocket: WebSocket):
+    """Process a conversation and send result back to _listen via websocket."""
+    try:
+        conversation_data = conversations_db.get_conversation(uid, conversation_id)
+        if not conversation_data:
+            # Send error response
+            response = {
+                "conversation_id": conversation_id,
+                "error": "conversation_not_found"
+            }
+            data = bytearray()
+            data.extend(struct.pack("I", 201))
+            data.extend(bytes(json.dumps(response), "utf-8"))
+            await websocket.send_bytes(data)
+            return
+
+        conversation = Conversation(**conversation_data)
+        
+        if conversation.status != ConversationStatus.processing:
+            conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+            conversation.status = ConversationStatus.processing
+
+        try:
+            # Geolocation
+            geolocation = get_cached_user_geolocation(uid)
+            if geolocation:
+                geolocation = Geolocation(**geolocation)
+                conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+            # Run blocking operations in thread pool to avoid blocking event loop
+            conversation = await asyncio.to_thread(
+                process_conversation, uid, language, conversation
+            )
+            messages = await asyncio.to_thread(
+                trigger_external_integrations, uid, conversation
+            )
+        except Exception as e:
+            print(f"Error processing conversation: {e}", uid, conversation_id)
+            conversations_db.set_conversation_as_discarded(uid, conversation.id)
+            conversation.discarded = True
+            messages = []
+
+        # Send success response back (minimal - transcribe will fetch from DB)
+        response = {
+            "conversation_id": conversation_id,
+            "success": True
+        }
+        data = bytearray()
+        data.extend(struct.pack("I", 201))
+        data.extend(bytes(json.dumps(response), "utf-8"))
+        await websocket.send_bytes(data)
+        
+    except Exception as e:
+        print(f"Error in _process_conversation_task: {e}", uid, conversation_id)
+        response = {
+            "conversation_id": conversation_id,
+            "error": str(e)
+        }
+        data = bytearray()
+        data.extend(struct.pack("I", 201))
+        data.extend(bytes(json.dumps(response), "utf-8"))
+        try:
+            await websocket.send_bytes(data)
+        except Exception:
+            pass
 
 
 async def _websocket_util_trigger(
@@ -79,8 +152,20 @@ async def _websocket_util_trigger(
                     # Update conversation_id from transcript if provided
                     if memory_id:
                         current_conversation_id = memory_id
-                    asyncio.run_coroutine_threadsafe(trigger_realtime_integrations(uid, segments, memory_id), loop)
-                    asyncio.run_coroutine_threadsafe(realtime_transcript_webhook(uid, segments), loop)
+                    asyncio.create_task(trigger_realtime_integrations(uid, segments, memory_id))
+                    asyncio.create_task(realtime_transcript_webhook(uid, segments))
+                    continue
+
+                # Process conversation request
+                if header_type == 104:
+                    res = json.loads(bytes(data[4:]).decode("utf-8"))
+                    conversation_id = res.get('conversation_id')
+                    language = res.get('language', 'en')
+                    if conversation_id:
+                        print(f"Pusher received process_conversation request: {conversation_id}", uid)
+                        asyncio.run_coroutine_threadsafe(
+                            _process_conversation_task(uid, conversation_id, language, websocket), loop
+                        )
                     continue
 
                 # Audio bytes

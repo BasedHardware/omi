@@ -26,6 +26,10 @@
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
+#ifdef CONFIG_OMI_ENABLE_BATTERY
+#define BATTERY_FULL_THRESHOLD_PERCENT        98 // 98%
+extern uint8_t battery_percentage;
+#endif
 bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
@@ -130,6 +134,14 @@ void set_led_state()
     // Set LED state based on connection and charging status
     if (is_charging) {
         set_led_green(true);
+        #ifdef CONFIG_OMI_ENABLE_BATTERY
+        // Solid green if battery is full (>= BATTERY_FULL_THRESHOLD_PERCENT)
+        if (battery_percentage >= BATTERY_FULL_THRESHOLD_PERCENT) {
+            set_led_red(false);
+            set_led_blue(false);
+            return;
+        }
+        #endif
     } else {
         set_led_green(false);
     }

@@ -369,4 +369,32 @@ class PermissionManager: NSObject, CBCentralManagerDelegate, CLLocationManagerDe
         print("Location manager failed with error: \(error.localizedDescription)")
         locationPermissionCompletion?(false)
     }
+
+    // MARK: - Accessibility Permission
+
+    func checkAccessibilityPermission() -> String {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false]
+        let isTrusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
+        return isTrusted ? "granted" : "undetermined"
+    }
+
+    func requestAccessibilityPermission() async -> Bool {
+        // Check if already granted
+        let checkOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false]
+        if AXIsProcessTrustedWithOptions(checkOptions as CFDictionary) {
+            return true
+        }
+
+        // Request permission with prompt
+        let requestOptions = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
+        _ = AXIsProcessTrustedWithOptions(requestOptions as CFDictionary)
+
+        // Open System Preferences to guide the user
+        await MainActor.run {
+            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        }
+
+        // Return false as user needs to manually grant permission
+        return false
+    }
 } 

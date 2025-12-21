@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -22,137 +23,90 @@ class ActionFieldsWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 8.0, bottom: 12.0),
-                  child: Text(
-                    'Import',
-                    style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                  ),
-                ),
-                // List of action items
-                Column(
-                  children: [
-                    ...provider.getActionTypes().map((actionType) {
-                      final isSelected = provider.actions.any((action) => action['action'] == actionType.id);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8.0),
-                        decoration: BoxDecoration(
-                          color: Color(0xFF35343B),
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              height: 90,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            actionType.title,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            'Allow this app to ${actionType.title.toLowerCase()}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade400,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: isSelected,
-                                      onChanged: (value) {
-                                        if (value) {
-                                          provider.addSpecificAction(actionType.id);
-                                        } else {
-                                          provider.removeActionByType(actionType.id);
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            // Description
-                            if (isSelected)
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      actionType.description ??
-                                          (actionType.id == 'create_conversation'
-                                              ? 'Extend user conversations by making a POST request to the OMI System.'
-                                              : actionType.id == 'create_facts'
-                                                  ? 'Create new memories for the user through the OMI System.'
-                                                  : actionType.id == 'read_conversations'
-                                                      ? 'Access and read all user conversations through the OMI System. This gives the app access to all conversation history.'
-                                                      : actionType.id == 'read_memories'
-                                                          ? 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.'
-                                                          : 'Enable this action for your app.'),
-                                      style: TextStyle(
-                                        color: Colors.grey.shade400,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    GestureDetector(
-                                      onTap: () {
-                                        if (actionType.docUrl != null) {
-                                          launchUrl(Uri.parse(actionType.docUrl!));
-                                        } else {
-                                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Import'));
-                                        }
-                                      },
-                                      child: Text(
-                                        'Learn more.',
-                                        style: TextStyle(
-                                          color: Colors.blue.shade300,
-                                          fontSize: 14,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-
-                    // Add button for future actions
-                    if (provider.getActionTypes().length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                          'Select multiple actions as needed for your app.',
-                          style: TextStyle(
-                            color: Colors.grey.shade400,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
+                  padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Scopes',
+                        style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
+                        },
+                        child: FaIcon(
+                          FontAwesomeIcons.solidCircleQuestion,
+                          color: Colors.grey.shade500,
+                          size: 18,
                         ),
                       ),
-                  ],
+                    ],
+                  ),
+                ),
+                // List of action items - aligned with "Scopes" text
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Column(
+                    children: [
+                      ...provider.getActionTypes().asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final actionType = entry.value;
+                        final isSelected = provider.actions.any((action) => action['action'] == actionType.id);
+                        final isLast = index == provider.getActionTypes().length - 1;
+
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2A2A2E),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Center(
+                                    child: FaIcon(
+                                      _getIconForAction(actionType.id),
+                                      color: Colors.grey.shade400,
+                                      size: 16,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Text(
+                                    actionType.title,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                Switch(
+                                  value: isSelected,
+                                  onChanged: (value) {
+                                    if (value) {
+                                      provider.addSpecificAction(actionType.id);
+                                    } else {
+                                      provider.removeActionByType(actionType.id);
+                                    }
+                                  },
+                                  activeColor: const Color(0xFF6366F1),
+                                ),
+                              ],
+                            ),
+                            if (!isLast)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(color: Colors.grey.shade800, height: 1),
+                              ),
+                          ],
+                        );
+                      }),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -160,5 +114,20 @@ class ActionFieldsWidget extends StatelessWidget {
         );
       },
     );
+  }
+
+  IconData _getIconForAction(String actionId) {
+    switch (actionId) {
+      case 'create_conversation':
+        return FontAwesomeIcons.solidComment;
+      case 'create_facts':
+        return FontAwesomeIcons.solidLightbulb;
+      case 'read_conversations':
+        return FontAwesomeIcons.solidComments;
+      case 'read_memories':
+        return FontAwesomeIcons.brain;
+      default:
+        return FontAwesomeIcons.puzzlePiece;
+    }
   }
 }

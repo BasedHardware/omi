@@ -32,7 +32,7 @@ cryptography==43.0.0
 cycler==0.12.1
 dataclasses-json==0.6.7
 decorator==5.1.1
-deepgram-sdk==3.4.0
+deepgram-sdk==4.8.1
 deprecation==2.1.0
 distro==1.9.0
 dnspython==2.6.1

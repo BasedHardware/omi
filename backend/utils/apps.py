@@ -1,3 +1,4 @@
+import math
 import os
 import threading
 from collections import defaultdict
@@ -59,6 +60,8 @@ from database.redis_db import (
     is_username_taken,
     get_user_app_subscription_customer_id,
     set_user_app_subscription_customer_id,
+    can_update_persona,
+    set_persona_update_timestamp,
 )
 from database.users import get_stripe_connect_account_id
 from models.app import App, UsageHistoryItem, UsageHistoryType
@@ -111,6 +114,26 @@ def weighted_rating(app):
     R = app.rating_avg or 0
     v = app.rating_count or 0
     return (v / (v + m) * R) + (m / (v + m) * C)
+
+
+def compute_app_score(app: App) -> float:
+    """
+    Compute app ranking score using the formula:
+    score = ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
+
+    - Power of 2 on rating makes ratings below 3.0 fall steeply
+    - sqrt on installs reduces dependence on install count
+
+    Rating factor with power of 2:
+      5.0 -> 1.0, 4.0 -> 0.64, 3.0 -> 0.36, 2.0 -> 0.16, 1.0 -> 0.04
+    """
+    rating_avg = app.rating_avg or 0
+    rating_count = app.rating_count or 0
+    installs = app.installs or 0
+
+    rating_factor = (rating_avg / 5) ** 2  # Steep drop for low ratings
+    score = rating_factor * math.log(1 + rating_count) * math.sqrt(math.log(1 + installs))
+    return round(score, 4)
 
 
 def get_popular_apps() -> List[App]:
@@ -578,9 +601,15 @@ def generate_persona_desc(uid: str, persona_name: str):
 
 
 def update_personas_async(uid: str):
+    if not can_update_persona(uid):
+        print(f"[PERSONAS] Rate limited - uid={uid} already updated today")
+        return
+
     print(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
+        set_persona_update_timestamp(uid)
+
         threads = []
         for persona in personas:
             threads.append(threading.Thread(target=sync_update_persona_prompt, args=(persona,)))
@@ -782,17 +811,22 @@ def normalize_app_numeric_fields(app_dict: dict) -> dict:
     return app_dict
 
 
-def filter_apps_by_category(apps: List[App], category: str) -> List[App]:
-    """Filter apps by category, handling special 'popular' category."""
-    if category == 'popular':
-        return [app for app in apps if getattr(app, 'is_popular', False)]
-    else:
-        return [app for app in apps if (app.category or 'other') == category]
+def sort_apps_by_installs_only(apps: List[App]) -> List[App]:
+    """Sort apps by install count only (no score calculation)."""
+    return sorted(apps, key=lambda a: a.installs, reverse=True)
 
 
 def sort_apps_by_installs(apps: List[App]) -> List[App]:
-    """Sort apps by install count in descending order."""
-    return sorted(apps, key=lambda a: a.installs, reverse=True)
+    """Sort apps by computed score in descending order.
+
+    Score formula: ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
+    This balances review quality, review quantity, and popularity.
+    """
+    # Compute and assign scores to each app
+    for app in apps:
+        app.score = compute_app_score(app)
+
+    return sorted(apps, key=lambda a: a.score or 0, reverse=True)
 
 
 def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:
@@ -825,35 +859,303 @@ def build_pagination_metadata(total: int, offset: int, limit: int, category: str
     return metadata
 
 
-def group_apps_by_category(apps: List[App], categories: List[dict]) -> Dict[str, List[App]]:
-    """Group apps by category, including special 'popular' category."""
+def get_capabilities_list() -> List[dict]:
+    """Get the list of app capabilities for grouping."""
+    return [
+        {'title': 'Featured', 'id': 'popular'},
+        {'title': 'Integrations', 'id': 'external_integration'},
+        {'title': 'Chat Assistants', 'id': 'chat'},
+        {'title': 'Summary Apps', 'id': 'memories'},
+        {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
+    ]
+
+
+def get_categories_list() -> List[dict]:
+    """Get the list of app categories for grouping."""
+    return [
+        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
+        {'title': 'Personality Clone', 'id': 'personality-emulation'},
+        {'title': 'Health', 'id': 'health-and-wellness'},
+        {'title': 'Education', 'id': 'education-and-learning'},
+        {'title': 'Communication', 'id': 'communication-improvement'},
+        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
+        {'title': 'Financial', 'id': 'financial'},
+        {'title': 'Travel', 'id': 'travel-and-exploration'},
+        {'title': 'Safety', 'id': 'safety-and-security'},
+        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
+        {'title': 'Social', 'id': 'social-and-relationships'},
+        {'title': 'News', 'id': 'news-and-information'},
+        {'title': 'Utilities', 'id': 'utilities-and-tools'},
+        {'title': 'Other', 'id': 'other'},
+    ]
+
+
+def _app_has_auth_steps(app: App) -> bool:
+    """Check if app has external_integration with auth_steps."""
+    has_external_integration = 'external_integration' in (app.capabilities or set())
+    if not has_external_integration:
+        return False
+    ext_int = app.external_integration
+    if ext_int is None:
+        return False
+    auth_steps = getattr(ext_int, 'auth_steps', None) or []
+    return len(auth_steps) > 0
+
+
+def _is_notification_app(app: App) -> bool:
+    """Check if app is a notification/simple integration app.
+
+    Returns True for:
+    - Apps with proactive_notification capability
+    - Simple integrations (external_integration without auth_steps, chat, or memories)
+    """
+    app_capabilities = app.capabilities or set()
+    if 'proactive_notification' in app_capabilities:
+        return True
+    has_external_integration = 'external_integration' in app_capabilities
+    has_auth_steps = _app_has_auth_steps(app)
+    return (
+        has_external_integration
+        and not has_auth_steps
+        and 'chat' not in app_capabilities
+        and 'memories' not in app_capabilities
+    )
+
+
+def _get_app_capability(app: App) -> str | None:
+    """Determine which capability section an app belongs to.
+
+    Returns the capability id or None if the app doesn't match any section.
+    Priority order: external_integration (with auth) > chat > memories > proactive_notification
+    """
+    app_capabilities = app.capabilities or set()
+    has_external_integration = 'external_integration' in app_capabilities
+    has_auth_steps = _app_has_auth_steps(app)
+
+    # Notification apps (including simple integrations) go to proactive_notification
+    if _is_notification_app(app):
+        return 'proactive_notification'
+
+    # External integration with auth_steps
+    if has_external_integration and has_auth_steps:
+        return 'external_integration'
+
+    # Chat apps (excluding those with external_integration+auth_steps)
+    if 'chat' in app_capabilities:
+        if not has_external_integration or not has_auth_steps:
+            return 'chat'
+
+    # Memories apps (excluding those with chat or external_integration+auth_steps)
+    if 'memories' in app_capabilities and 'chat' not in app_capabilities:
+        if not has_external_integration or not has_auth_steps:
+            return 'memories'
+
+    return None
+
+
+def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[str, List[App]]:
+    """Group apps by capability with enhanced filtering rules.
+
+    Groups:
+    - popular: Apps marked as is_popular (sorted by installs)
+    - proactive_notification: Apps with proactive_notification OR simple integrations
+    - external_integration: Apps with external_integration AND auth_steps
+    - chat: Apps with chat (excluding those with external_integration+auth_steps)
+    - memories: Apps with memories but no chat (excluding those with external_integration+auth_steps)
+
+    Popular apps are excluded from other sections.
+    Notification/simple integration apps are excluded from other sections.
+    """
     grouped = defaultdict(list)
 
-    # Add popular group first if there are popular apps
+    # First pass: collect popular apps
     popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
+    popular_app_ids = {app.id for app in popular_apps}
     if popular_apps:
-        grouped['popular'] = sort_apps_by_installs(popular_apps)
+        grouped['popular'] = sort_apps_by_installs_only(popular_apps)
 
-    # Group remaining apps by their actual category
+    # Second pass: collect notification apps (exclusive)
+    notification_app_ids = set()
     for app in apps:
-        category_id = app.category or 'other'
-        grouped[category_id].append(app)
+        if _is_notification_app(app):
+            grouped['proactive_notification'].append(app)
+            notification_app_ids.add(app.id)
 
-    # Sort each category by installs
-    for category_id in grouped:
-        if category_id != 'popular':
-            grouped[category_id] = sort_apps_by_installs(grouped[category_id])
+    # Sort notification apps
+    if grouped['proactive_notification']:
+        grouped['proactive_notification'] = sort_apps_by_installs(grouped['proactive_notification'])
+
+    # Group remaining apps by capability
+    for app in apps:
+        # Skip popular apps in other sections
+        if app.id in popular_app_ids:
+            continue
+
+        # Skip notification apps (already processed)
+        if app.id in notification_app_ids:
+            continue
+
+        capability = _get_app_capability(app)
+        if capability and capability != 'proactive_notification':
+            grouped[capability].append(app)
+
+    # Sort each capability group by score (except popular which is already sorted by installs)
+    for cap_id in grouped:
+        if cap_id not in ('popular', 'proactive_notification'):
+            grouped[cap_id] = sort_apps_by_installs(grouped[cap_id])
 
     return grouped
 
 
-def build_category_groups_response(
-    grouped_apps: Dict[str, List[App]], categories: List[dict], offset: int, limit: int
-) -> List[dict]:
-    """Build the groups response for v2/apps endpoint."""
-    id_to_title = {c['id']: c['title'] for c in categories}
+def filter_apps_by_capability(apps: List[App], capability: str) -> List[App]:
+    """Filter apps by capability with enhanced filtering rules.
 
-    ordered_keys = [c['id'] for c in categories]
+    Note: Unlike group_apps_by_capability (used for main apps page), this does NOT exclude
+    popular apps - they should appear on individual capability pages if they match.
+    """
+    if capability == 'popular':
+        return [app for app in apps if getattr(app, 'is_popular', False)]
+
+    filtered_apps = []
+    for app in apps:
+        # Skip notification apps in non-notification sections
+        if capability != 'proactive_notification' and _is_notification_app(app):
+            continue
+
+        app_capability = _get_app_capability(app)
+        if app_capability == capability:
+            filtered_apps.append(app)
+
+    return filtered_apps
+
+
+def build_capability_groups_response(
+    grouped_apps: Dict[str, List[App]], capabilities: List[dict], offset: int, limit: int
+) -> List[dict]:
+    """Build the groups response for v2/apps endpoint grouped by capability."""
+    id_to_title = {c['id']: c['title'] for c in capabilities}
+
+    ordered_keys = [c['id'] for c in capabilities]
+    for key in grouped_apps.keys():
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+
+    groups = []
+    for capability_id in ordered_keys:
+        apps = grouped_apps.get(capability_id, [])
+        if not apps:
+            continue
+
+        total = len(apps)
+        page = paginate_apps(apps, offset, limit)
+
+        groups.append(
+            {
+                'capability': {
+                    'id': capability_id,
+                    'title': id_to_title.get(capability_id, capability_id.title().replace('_', ' ')),
+                },
+                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
+                'pagination': build_pagination_metadata(total, offset, limit, capability_id),
+            }
+        )
+
+    return groups
+
+
+# Base category mapping (used for non-chat capabilities)
+_BASE_CATEGORY_MAPPING = {
+    # Productivity & Tools
+    'personality-emulation': 'productivity-tools',
+    'education-and-learning': 'productivity-tools',
+    'productivity-and-organization': 'productivity-tools',
+    'utilities-and-tools': 'productivity-tools',
+    'financial': 'productivity-tools',
+    'shopping-and-commerce': 'productivity-tools',
+    'news-and-information': 'productivity-tools',
+    # Personal & Wellness
+    'conversation-analysis': 'personal-wellness',
+    'communication-improvement': 'personal-wellness',
+    'emotional-and-mental-support': 'personal-wellness',
+    'health-and-wellness': 'personal-wellness',
+    'safety-and-security': 'personal-wellness',
+    'other': 'personal-wellness',
+    # Social & Entertainment
+    'social-and-relationships': 'social-entertainment',
+    'entertainment-and-fun': 'social-entertainment',
+    'travel-and-exploration': 'social-entertainment',
+}
+
+# Chat-specific overrides (remaps categories to chat-specific master categories)
+_CHAT_CATEGORY_OVERRIDES = {
+    # Personality Clone (unique to chat)
+    'personality-emulation': 'personality-clone',
+    # Productivity & Lifestyle (replaces productivity-tools and personal-wellness)
+    'education-and-learning': 'productivity-lifestyle',
+    'productivity-and-organization': 'productivity-lifestyle',
+    'utilities-and-tools': 'productivity-lifestyle',
+    'financial': 'productivity-lifestyle',
+    'shopping-and-commerce': 'productivity-lifestyle',
+    'news-and-information': 'productivity-lifestyle',
+    'conversation-analysis': 'productivity-lifestyle',
+    'communication-improvement': 'productivity-lifestyle',
+    'emotional-and-mental-support': 'productivity-lifestyle',
+    'health-and-wellness': 'productivity-lifestyle',
+    'safety-and-security': 'productivity-lifestyle',
+    'other': 'productivity-lifestyle',
+}
+
+
+def get_master_category_mapping(capability_id: str) -> Dict[str, str]:
+    """Get master category mapping for a capability."""
+    if capability_id == 'chat':
+        return {**_BASE_CATEGORY_MAPPING, **_CHAT_CATEGORY_OVERRIDES}
+    return _BASE_CATEGORY_MAPPING
+
+
+def get_master_categories_list(capability_id: str) -> List[dict]:
+    """Get master categories list for a capability."""
+    if capability_id == 'chat':
+        return [
+            {'title': 'Personality Clones', 'id': 'personality-clone'},
+            {'title': 'Productivity & Lifestyle', 'id': 'productivity-lifestyle'},
+            {'title': 'Social & Entertainment', 'id': 'social-entertainment'},
+        ]
+
+    # Default categories for other capabilities
+    return [
+        {'title': 'Productivity & Tools', 'id': 'productivity-tools'},
+        {'title': 'Personal & Lifestyle', 'id': 'personal-wellness'},
+        {'title': 'Social & Entertainment', 'id': 'social-entertainment'},
+    ]
+
+
+def group_capability_apps_by_category(apps: List[App], capability_id: str) -> Dict[str, List[App]]:
+    """Group apps within a capability by master category."""
+    category_mapping = get_master_category_mapping(capability_id)
+    default_category = 'productivity-lifestyle' if capability_id == 'chat' else 'personal-wellness'
+
+    grouped = defaultdict(list)
+    for app in apps:
+        original_category_id = app.category if app.category else 'other'
+        master_category_id = category_mapping.get(original_category_id, default_category)
+        grouped[master_category_id].append(app)
+
+    # Sort each master category by score
+    for master_category_id in grouped:
+        grouped[master_category_id] = sort_apps_by_installs(grouped[master_category_id])
+
+    return grouped
+
+
+def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]], capability_id: str) -> List[dict]:
+    """Build response for capability apps grouped by category."""
+    master_categories = get_master_categories_list(capability_id)
+    id_to_title = {c['id']: c['title'] for c in master_categories}
+
+    ordered_keys = [c['id'] for c in master_categories]
     for key in grouped_apps.keys():
         if key not in ordered_keys:
             ordered_keys.append(key)
@@ -864,18 +1166,170 @@ def build_category_groups_response(
         if not apps:
             continue
 
-        total = len(apps)
-        page = paginate_apps(apps, offset, limit)
+        # Capitalize unknown category titles
+        title = id_to_title.get(category_id)
+        if not title:
+            title = ' '.join(word.capitalize() for word in category_id.replace('-', ' ').split())
 
         groups.append(
             {
                 'category': {
                     'id': category_id,
-                    'title': id_to_title.get(category_id, category_id.title().replace('-', ' ')),
+                    'title': title,
                 },
-                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in page],
-                'pagination': build_pagination_metadata(total, offset, limit, category_id),
+                'data': [normalize_app_numeric_fields(app.model_dump(mode='json')) for app in apps],
+                'count': len(apps),
             }
         )
 
     return groups
+
+
+# ********************************
+# *** CHAT TOOLS MANIFEST FETCH **
+# ********************************
+
+
+def fetch_app_chat_tools_from_manifest(manifest_url: str, timeout: int = 10) -> List[Dict[str, Any]] | None:
+    """
+    Fetch chat tools definitions from an app's manifest endpoint.
+
+    The manifest endpoint should return a JSON object with a 'tools' array containing
+    tool definitions with: name, description, endpoint, method, parameters, auth_required, status_message.
+
+    Args:
+        manifest_url: Full URL to the manifest endpoint (e.g., https://my-app.com/.well-known/omi-tools.json)
+        timeout: Request timeout in seconds
+
+    Returns:
+        List of chat tool definitions, or None if fetch fails
+
+    Example manifest response:
+    {
+        "tools": [
+            {
+                "name": "add_to_playlist",
+                "description": "Add a song to a Spotify playlist",
+                "endpoint": "/tools/add_to_playlist",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "song_name": {"type": "string", "description": "Name of the song"},
+                        "artist_name": {"type": "string", "description": "Artist name"}
+                    },
+                    "required": ["song_name"]
+                },
+                "auth_required": true,
+                "status_message": "Adding to playlist..."
+            }
+        ]
+    }
+    """
+    import requests
+
+    if not manifest_url:
+        return None
+
+    try:
+        print(f"📥 Fetching chat tools manifest from: {manifest_url}")
+
+        response = requests.get(
+            manifest_url, timeout=timeout, headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'}
+        )
+
+        if response.status_code != 200:
+            print(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
+            return None
+
+        data = response.json()
+
+        # Validate response structure
+        if not isinstance(data, dict):
+            print(f"⚠️ Invalid manifest format (not a dict): {manifest_url}")
+            return None
+
+        tools = data.get('tools', [])
+
+        if not isinstance(tools, list):
+            print(f"⚠️ Invalid manifest format ('tools' is not a list): {manifest_url}")
+            return None
+
+        # Validate and normalize each tool
+        validated_tools = []
+        for tool in tools:
+            validated_tool = _validate_tool_definition(tool)
+            if validated_tool:
+                validated_tools.append(validated_tool)
+            else:
+                print(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
+
+        print(f"✅ Fetched {len(validated_tools)} chat tools from manifest")
+        return validated_tools if validated_tools else None
+
+    except requests.Timeout:
+        print(f"⚠️ Manifest fetch timed out: {manifest_url}")
+        return None
+    except requests.RequestException as e:
+        print(f"⚠️ Manifest fetch request error: {e}")
+        return None
+    except ValueError as e:
+        print(f"⚠️ Invalid JSON in manifest response: {e}")
+        return None
+    except Exception as e:
+        print(f"⚠️ Unexpected error fetching manifest: {e}")
+        return None
+
+
+def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
+    """
+    Validate and normalize a single tool definition from the manifest.
+
+    Required fields: name, description, endpoint
+    Optional fields: method, parameters, auth_required, status_message
+
+    Returns normalized tool dict or None if invalid.
+    """
+    if not isinstance(tool, dict):
+        return None
+
+    # Check required fields
+    name = tool.get('name')
+    description = tool.get('description')
+    endpoint = tool.get('endpoint')
+
+    if not name or not isinstance(name, str):
+        print(f"⚠️ Tool missing required 'name' field")
+        return None
+
+    if not description or not isinstance(description, str):
+        print(f"⚠️ Tool '{name}' missing required 'description' field")
+        return None
+
+    if not endpoint or not isinstance(endpoint, str):
+        print(f"⚠️ Tool '{name}' missing required 'endpoint' field")
+        return None
+
+    # Build normalized tool definition
+    validated = {
+        'name': name.strip(),
+        'description': description.strip(),
+        'endpoint': endpoint.strip(),
+        'method': tool.get('method', 'POST').upper(),
+        'auth_required': tool.get('auth_required', True),
+    }
+
+    # Optional: status_message
+    if tool.get('status_message'):
+        validated['status_message'] = str(tool['status_message']).strip()
+
+    # Optional: parameters (JSON schema format)
+    parameters = tool.get('parameters')
+    if parameters and isinstance(parameters, dict):
+        # Validate parameters schema structure
+        if 'properties' in parameters and isinstance(parameters['properties'], dict):
+            validated['parameters'] = {
+                'properties': parameters['properties'],
+                'required': parameters.get('required', []) if isinstance(parameters.get('required'), list) else [],
+            }
+
+    return validated

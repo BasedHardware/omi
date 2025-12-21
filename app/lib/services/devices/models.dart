@@ -57,6 +57,10 @@ const String fieldyServiceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const String friendPendantServiceUuid = "1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da";
 const String friendPendantAudioCharacteristicUuid = "01000000-1111-1111-1111-111111111111";
 
+const String limitlessServiceUuid = "632de001-604c-446b-a80f-7963e950f3fb";
+const String limitlessTxCharUuid = "632de002-604c-446b-a80f-7963e950f3fb";
+const String limitlessRxCharUuid = "632de003-604c-446b-a80f-7963e950f3fb";
+
 Future<List<BluetoothService>> getBleServices(String deviceId) async {
   final device = BluetoothDevice.fromId(deviceId);
   try {

@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Any
 
 import requests
 import websockets
@@ -19,17 +19,32 @@ import database.notifications as notification_db
 from utils.notifications import send_notification
 
 
+def _json_serialize_datetime(obj: Any) -> Any:
+    """Helper function to recursively convert datetime objects to ISO format strings for JSON serialization"""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: _json_serialize_datetime(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [_json_serialize_datetime(item) for item in obj]
+    else:
+        return obj
+
+
 def conversation_created_webhook(uid, memory: Conversation):
     toggled = user_webhook_status_db(uid, WebhookType.memory_created)
+
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.memory_created)
         if not webhook_url:
             return
         webhook_url += f'?uid={uid}'
         try:
+            payload = memory.as_dict_cleaned_dates()
+            payload = _json_serialize_datetime(payload)
             response = requests.post(
                 webhook_url,
-                json=memory.as_dict_cleaned_dates(),
+                json=payload,
                 headers={'Content-Type': 'application/json'},
                 timeout=30,
             )
@@ -64,6 +79,7 @@ def day_summary_webhook(uid, summary: str):
 async def realtime_transcript_webhook(uid, segments: List[dict]):
     print("realtime_transcript_webhook", uid)
     toggled = user_webhook_status_db(uid, WebhookType.realtime_transcript)
+
     if toggled:
         webhook_url = get_user_webhook_db(uid, WebhookType.realtime_transcript)
         if not webhook_url:

@@ -34,6 +34,7 @@ class Subscription(BaseModel):
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
     stripe_subscription_id: Optional[str] = None
+    current_price_id: Optional[str] = None
     features: List[str] = []
     cancel_at_period_end: bool = False
     limits: PlanLimits = PlanLimits()

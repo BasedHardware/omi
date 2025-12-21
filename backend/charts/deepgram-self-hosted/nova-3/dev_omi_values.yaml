@@ -75,7 +75,7 @@ scaling:
 api:
   image:
     path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-api
-    tag: release-250626
+    tag: release-251210
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -90,7 +90,7 @@ api:
       kubernetes.io/ingress.class: "gce-internal"
       kubernetes.io/ingress.regional-static-ip-name: "dev-omi-deepgram-ilb-ip-address"
       kubernetes.io/ingress.allow-http: "false"
-      ingress.gcp.kubernetes.io/pre-shared-cert: "dev-omi-deepgram-ilb-cert-20250705"
+      ingress.gcp.kubernetes.io/pre-shared-cert: "dev-omi-deepgram-ilb-cert"
     hosts:
       - host: dg.omiapi.com
         paths:
@@ -108,7 +108,7 @@ api:
 engine:
   image:
     path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-engine
-    tag: release-250626
+    tag: release-251210
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
@@ -138,13 +138,19 @@ engine:
         gpd:
           enabled: true
           # Replace with your Google disk handle
-          volumeHandle: "projects/based-hardware-dev/zones/us-central1-a/disks/dev-omi-deepgram-model-storage"
+          volumeHandle: "projects/based-hardware-dev/zones/us-central1-a/disks/dev-omi-deepgram-model-storage-20251213"
+  startupProbe:
+    # -- periodSeconds defines how often to execute the probe.
+    periodSeconds: 10
+    # -- failureThreshold defines how many unsuccessful startup probe attempts
+    # are allowed before the container will be marked as Failed
+    failureThreshold: 100
 
 licenseProxy:
   enabled: true
   image:
     path: us-central1-docker.pkg.dev/based-hardware-dev/deepgram/self-hosted-license-proxy
-    tag: release-250626
+    tag: release-251210
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:

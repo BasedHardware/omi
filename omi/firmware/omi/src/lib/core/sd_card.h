@@ -14,8 +14,7 @@ typedef enum {
     REQ_CLEAR_AUDIO_DIR,
     REQ_WRITE_DATA,
     REQ_READ_DATA,
-    REQ_SAVE_OFFSET,
-    REQ_READ_OFFSET
+    REQ_SAVE_OFFSET
 } sd_req_type_t;
 
 /* Read request response object */
@@ -43,10 +42,6 @@ typedef struct {
         struct {
             uint32_t offset_value;
         } info;
-        struct {
-            struct read_resp *resp;
-            uint32_t *out_offset;
-        } offset;
         struct {
             struct read_resp *resp;
         } clear_dir;

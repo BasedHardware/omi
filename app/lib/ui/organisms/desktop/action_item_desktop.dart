@@ -346,7 +346,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       child: ClipRRect(
         borderRadius: const BorderRadius.all(Radius.circular(8)),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -637,6 +637,13 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         isCompleted: newValue,
       );
     }
+
+    MixpanelManager().actionItemChecked(
+      actionItemId: widget.actionItem.id,
+      completed: newValue,
+      timestamp: DateTime.now(),
+    );
+
     context.read<ActionItemsProvider>().updateActionItemState(widget.actionItem, newValue);
 
     widget.onChanged?.call();

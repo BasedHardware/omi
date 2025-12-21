@@ -1,183 +1,115 @@
 <!-- This file is auto-generated from docs/doc/developer/sdk/swift.mdx. Do not edit manually. -->
-### Omi Swift Library
+## Overview
 
-An easy to install package to get started with the omi dev kit 1 in seconds.
+An easy-to-install Swift package for connecting to Omi devices. Get started in seconds with local Whisper-based transcription - no cloud API required.
 
-## Installation
+<CardGroup cols={3}>
+  <Card title="Swift Package" icon="swift">
+    Native iOS/macOS support
+  </Card>
+  <Card title="Local Transcription" icon="microphone">
+    Whisper runs on-device
+  </Card>
+  <Card title="Simple API" icon="code">
+    Connect in minutes
+  </Card>
+</CardGroup>
 
-0. Open Xcode => File => New Project => Ios => App => Create project (Interface: storyboard
 
-![CleanShot 2025-03-25 at 15 56 36@2x](https://github.com/user-attachments/assets/7e59be15-48dc-4ff1-bcf1-235b8bab3990)
+## Quick Start
 
-1. In Xcode navigate to File → Swift Packages → Add Package Dependency...
-2. Select a project
-3. Paste the repository URL (https://github.com/BasedHardware/omi) and click Next.
+Get transcription working in 2 minutes:
 
-If you aren't being asked to add the package to your target, click on "add Package" again, then "Add to Target" and choose your project
+<Steps>
+  <Step title="Copy This Code">
+    Replace your `ViewController.swift` with:
 
-<img
-  width="1407"
-  alt="CleanShot 2025-03-25 at 16 15 29@2x"
-  src="https://github.com/user-attachments/assets/5295b4df-81b6-49b2-80d8-67c43e2a31c2"
-/>
+    ```swift
+    import UIKit
+    import omi_lib
 
-4. install Requirement
+    class ViewController: UIViewController {
 
-Go to "Targets => your project => Info" and add this permission:
-
-```xml
-<key>NSBluetoothAlwaysUsageDescription</key>
-<string>This app needs Bluetooth access to connect to BLE devices.</string>
-```
-
-## Run in 2 minutes
-
-1. Copy this code into ViewController.swift
-
-```
-//
-//  ViewController.swift
-//  omi_demo
-//
-//
-
-import UIKit
-import omi_lib
-
-class ViewController: UIViewController {
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        // Do any additional setup after loading the view.
-
-        self.lookForDevice()
-    }
-
-    func lookForDevice() {
-        OmiManager.startScan { device, error in
-            // connect to first found omi device
-            print("starting scan")
-            if let device = device {
-                print("got device ", device)
-                self.connectToOmiDevice(device: device)
-                OmiManager.endScan()
-            }
-        }
-    }
-
-    func lookForSpecificDevice(device_id: String) {
-        OmiManager.startScan { device, error in
-            // connect to first found omi device
-            if let device = device, device.id == "some_device_id" {
-                print("got device ", device)
-                self.connectToOmiDevice(device: device)
-                OmiManager.endScan()
-            }
-        }
-    }
-
-    func connectToOmiDevice(device: Device) {
-        OmiManager.connectToDevice(device: device)
-        self.listenToLiveTranscript(device: device)
-        self.reconnectIfDisconnects()
-    }
-
-    func reconnectIfDisconnects() {
-        OmiManager.connectionUpdated { connected in
-            if connected == false {
-                self.lookForDevice()
-            }
-        }
-    }
-
-    func listenToLiveTranscript(device: Device) {
-        OmiManager.getLiveTranscription(device: device) { transcription in
-            print("transcription:", transcription ?? "no transcription")
-        }
-    }
-
-    func listenToLiveAudio(device: Device) {
-        OmiManager.getLiveAudio(device: device) { file_url in
-            print("file_url: ", file_url?.absoluteString ?? "no url")
-        }
-    }
-}
-
-```
-
-2. Select your team, connect the phone (we suggest via cable), and run the project
-
-3. turn on omi device - the app should connect automatically
-
-Speak. You will not see any UI on the mobile app, but you should see transcription in logs. Transcription runs locally using whisper
-
-![CleanShot 2025-03-25 at 16 00 43@2x](https://github.com/user-attachments/assets/636b33ac-7ea7-4e1c-b490-8ec99b1feef8)
-
-## Other Usage
-
-The core interface for interacting with the Omi device is the **OmiManager.swift**. The OmiManager abstracts things like scanning, connecting, and reading bluetooth data into a few simple function calls.
-
-**Looking for a device**
-
-```swift
-import omi_lib
-
-func lookForDevice() {
-    OmiManager.startScan { device, error in
-        // connect to first found omi device
-        if let device = device {
-            print("got device ", device)
-            self.connectToOmiDevice(device: device)
-            OmiManager.endScan()
-        }
-    }
-}
-
-func lookForSpecificDevice(device_id: String) {
-    OmiManager.startScan { device, error in
-        // connect to first found omi device
-        if let device = device, device.id == "some_device_id" {
-            print("got device ", device)
-            self.connectToOmiDevice(device: device)
-            OmiManager.endScan()
-        }
-    }
-}
-```
-
-**Connecting / Reconnecting to a device**
-
-```swift
-func connectToOmiDevice(device: Device) {
-    OmiManager.connectToDevice(device: device)
-    self.reconnectIfDisconnects()
-}
-
-func reconnectIfDisconnects() {
-    OmiManager.connectionUpdated { connected in
-        if connected == false {
+        override func viewDidLoad() {
+            super.viewDidLoad()
             self.lookForDevice()
         }
+
+        func lookForDevice() {
+            OmiManager.startScan { device, error in
+                print("starting scan")
+                if let device = device {
+                    print("got device ", device)
+                    self.connectToOmiDevice(device: device)
+                    OmiManager.endScan()
+                }
+            }
+        }
+
+        func connectToOmiDevice(device: Device) {
+            OmiManager.connectToDevice(device: device)
+            self.listenToLiveTranscript(device: device)
+            self.reconnectIfDisconnects()
+        }
+
+        func reconnectIfDisconnects() {
+            OmiManager.connectionUpdated { connected in
+                if connected == false {
+                    self.lookForDevice()
+                }
+            }
+        }
+
+        func listenToLiveTranscript(device: Device) {
+            OmiManager.getLiveTranscription(device: device) { transcription in
+                print("transcription:", transcription ?? "no transcription")
+            }
+        }
     }
-}
-```
+    ```
+  </Step>
+  <Step title="Build and Run">
+    1. Select your development team
+    2. Connect your iPhone via cable (simulators don't support Bluetooth)
+    3. Run the project
+  </Step>
+  <Step title="Test It">
+    1. Turn on your Omi device
+    2. The app should connect automatically
+    3. Speak - you'll see transcription in the Xcode console
 
-**Getting Live Data**
+    <Note>
+    There's no UI in this example - transcription appears in the Xcode logs.
+    </Note>
 
-```swift
-func listenToLiveTranscript(device: Device) {
-    OmiManager.getLiveTranscription(device: device) { transcription in
-        print("transcription:", transcription ?? "no transcription")
-    }
-}
+    <img
+      src="https://github.com/user-attachments/assets/636b33ac-7ea7-4e1c-b490-8ec99b1feef8"
+      alt="Xcode Console Output"
+      style={{maxWidth: '600px'}}
+    />
+  </Step>
+</Steps>
 
-func listenToLiveAudio(device: Device) {
-    OmiManager.getLiveAudio(device: device) { file_url in
-        print("file_url: ", file_url?.absoluteString ?? "no url")
-    }
-}
-```
 
-## Licensing
+## OmiManager Methods
 
-Omi's Swift SDK is available under MIT License
+| Method | Description |
+|--------|-------------|
+| `startScan(callback)` | Start scanning for Omi devices |
+| `endScan()` | Stop scanning |
+| `connectToDevice(device)` | Connect to a discovered device |
+| `connectionUpdated(callback)` | Monitor connection state changes |
+| `getLiveTranscription(device, callback)` | Receive real-time transcription |
+| `getLiveAudio(device, callback)` | Receive audio file URLs |
+
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="SDK Overview" icon="cube" href="/doc/developer/sdk/sdk">
+    Compare all available SDKs
+  </Card>
+  <Card title="GitHub Source" icon="github" href="https://github.com/BasedHardware/omi">
+    View source code and contribute
+  </Card>
+</CardGroup>

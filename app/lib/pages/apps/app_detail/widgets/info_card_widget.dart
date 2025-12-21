@@ -8,6 +8,7 @@ class InfoCardWidget extends StatelessWidget {
   final bool showChips;
   final List<String>? capabilityChips;
   final List<String>? connectionChips;
+  final int? maxLines;
   const InfoCardWidget(
       {super.key,
       required this.onTap,
@@ -15,7 +16,8 @@ class InfoCardWidget extends StatelessWidget {
       required this.description,
       required this.showChips,
       this.capabilityChips,
-      this.connectionChips});
+      this.connectionChips,
+      this.maxLines});
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +33,7 @@ class InfoCardWidget extends StatelessWidget {
           bottom: 6,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
+          color: const Color(0xFF1F1F25).withOpacity(0.8),
           borderRadius: BorderRadius.circular(16.0),
         ),
         child: Column(
@@ -39,9 +41,9 @@ class InfoCardWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
                 const Spacer(),
-                description.decodeString.characters.length > 200
+                (maxLines != null || description.decodeString.characters.length > 200)
                     ? const Icon(
                         Icons.arrow_forward,
                         size: 20,
@@ -51,10 +53,14 @@ class InfoCardWidget extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              description.decodeString.characters.length > 200
-                  ? '${description.decodeString.characters.take(200).toString().trim()}...'
-                  : description.decodeString,
+              maxLines != null
+                  ? description.decodeString
+                  : (description.decodeString.characters.length > 200
+                      ? '${description.decodeString.characters.take(200).toString().trim()}...'
+                      : description.decodeString),
               style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
+              maxLines: maxLines,
+              overflow: maxLines != null ? TextOverflow.ellipsis : null,
             ),
             if (showChips && capabilityChips != null) ...[
               const SizedBox(height: 10),

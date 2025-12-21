@@ -117,7 +117,7 @@ int codec_start()
                     NULL,
                     NULL,
                     NULL,
-                    K_PRIO_PREEMPT(4),
+                    K_PRIO_PREEMPT(7),
                     0,
                     K_NO_WAIT);
 

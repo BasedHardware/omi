@@ -49,6 +49,9 @@ scaling:
         # Must also set engine.concurrencyLimit.activeRequests if using request ratio for autoscaling
         requestCapacityRatio:
 
+agent:
+  enabled: false
+
 api:
   affinity:
     nodeAffinity:

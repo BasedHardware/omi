@@ -29,6 +29,10 @@ from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
 )
+from database.users import (
+    get_user_transcription_preferences,
+    set_user_transcription_preferences,
+)
 from database.users import *
 from models.conversation import Geolocation, Conversation
 from models.other import Person, CreatePerson
@@ -38,7 +42,12 @@ from datetime import datetime
 
 from models.users import WebhookType, UserSubscriptionResponse, SubscriptionPlan, PlanType, PricingOption
 from utils.apps import get_available_app_by_id
-from utils.subscription import get_plan_limits, get_plan_features, get_monthly_usage_for_subscription
+from utils.subscription import (
+    get_plan_limits,
+    get_plan_features,
+    get_monthly_usage_for_subscription,
+    reconcile_basic_plan_with_stripe,
+)
 from utils import stripe as stripe_utils
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -348,6 +357,42 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
     return {'status': 'ok'}
 
 
+# *************************************************
+# ********** Transcription Preferences ************
+# *************************************************
+
+
+class TranscriptionPreferencesResponse(BaseModel):
+    single_language_mode: bool = False
+    vocabulary: List[str] = []
+
+
+class TranscriptionPreferencesUpdate(BaseModel):
+    single_language_mode: Optional[bool] = None
+    vocabulary: Optional[List[str]] = None
+
+
+@router.get('/v1/users/transcription-preferences', tags=['v1'], response_model=TranscriptionPreferencesResponse)
+def get_transcription_preferences_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Get user's transcription preferences (single language mode, vocabulary)."""
+    prefs = get_user_transcription_preferences(uid)
+    return prefs
+
+
+@router.patch('/v1/users/transcription-preferences', tags=['v1'])
+def update_transcription_preferences_endpoint(
+    data: TranscriptionPreferencesUpdate, uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Update user's transcription preferences.
+
+    - single_language_mode: If True, uses exact language for higher accuracy but disables translation
+    - vocabulary: List of custom keywords/terms (max 100) for better transcription accuracy
+    """
+    set_user_transcription_preferences(uid, single_language_mode=data.single_language_mode, vocabulary=data.vocabulary)
+    return {'status': 'ok'}
+
+
 # **************************************
 # ********* Data Protection ************
 # **************************************
@@ -549,10 +594,25 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
             available_plans=[],
             show_subscription_ui=False,
         )
+    # First, reconcile any "basic but actually unlimited" inconsistencies against Stripe once.
+    raw_subscription = get_user_subscription(uid)
+    reconcile_basic_plan_with_stripe(uid, raw_subscription)
+
+    # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
     if not subscription:
         # Return default basic plan if no valid subscription
         subscription = get_default_basic_subscription()
+
+    # Get current price ID from Stripe if subscription exists
+    if subscription.stripe_subscription_id:
+        try:
+            stripe_sub = stripe_utils.stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+            stripe_sub_dict = stripe_sub.to_dict()
+            if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
+                subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
+        except Exception as e:
+            print(f"Error retrieving current price ID: {e}")
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)

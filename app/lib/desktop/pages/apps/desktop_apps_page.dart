@@ -424,7 +424,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
               onFilterChanged: () {
                 // Debounce filter operations for better performance
                 _debouncer.run(() {
-                  appProvider.filterApps();
+                  appProvider.applyFilters();
                 });
               },
             ),

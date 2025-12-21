@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:provider/provider.dart';
@@ -134,25 +134,49 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
       final description = _descriptionController.text.trim();
 
       if (_isEditing) {
+        final original = widget.actionItem!;
+        final descriptionChanged = original.description != description;
+        final dueDateChanged = original.dueAt != _dueDate;
+        final completionChanged = original.completed != _isCompleted;
+
         // Update existing action item
-        if (widget.actionItem!.description != description) {
-          await provider.updateActionItemDescription(widget.actionItem!, description);
+        if (descriptionChanged) {
+          await provider.updateActionItemDescription(original, description);
         }
-        if (widget.actionItem!.completed != _isCompleted) {
-          await provider.updateActionItemState(widget.actionItem!, _isCompleted);
+        if (completionChanged) {
+          await provider.updateActionItemState(original, _isCompleted);
         }
-        if (widget.actionItem!.dueAt != _dueDate) {
-          await provider.updateActionItemDueDate(widget.actionItem!, _dueDate);
+        if (dueDateChanged) {
+          await provider.updateActionItemDueDate(original, _dueDate);
         }
+
+        // Track action item edit
+        if (descriptionChanged || dueDateChanged) {
+          MixpanelManager().actionItemEdited(
+            actionItemId: original.id,
+            titleChanged: descriptionChanged,
+            dateChanged: dueDateChanged,
+          );
+        }
+
         _showSnackBar('Action item updated successfully', Colors.green);
       } else {
         // Create new action item
-        await provider.createActionItem(
+        final createdItem = await provider.createActionItem(
           description: description,
           conversationId: widget.conversationId,
           completed: _isCompleted,
           dueAt: _dueDate,
         );
+
+        if (createdItem != null) {
+          // Track manually added action item
+          MixpanelManager().actionItemManuallyAdded(
+            actionItemId: createdItem.id,
+            timestamp: DateTime.now(),
+          );
+        }
+
         _showSnackBar('Action item created successfully', Colors.green);
       }
 

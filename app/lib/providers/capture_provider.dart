@@ -16,18 +16,19 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
@@ -36,11 +37,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin, WidgetsBindingObserver
-    implements ITransctipSegmentSocketServiceListener {
+    implements ITransctiptSegmentSocketServiceListener {
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
+  CalendarProvider? calendarProvider;
 
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
@@ -85,6 +87,8 @@ class CaptureProvider extends ChangeNotifier
   List<int> _systemAudioBuffer = [];
   bool _systemAudioCaching = true;
 
+  bool _isLoadingInProgressConversation = false;
+
   // BLE streaming metrics
   int _blesBytesReceived = 0;
   int _wsSocketBytesSent = 0;
@@ -109,6 +113,8 @@ class CaptureProvider extends ChangeNotifier
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
+        ServiceManager.instance().systemAudio.setOnRecordingStartedFromNub(_handleRecordingStartedFromNub);
+        ServiceManager.instance().systemAudio.setIsRecordingPausedCallback(() => _isPaused);
       });
     }
   }
@@ -120,6 +126,14 @@ class CaptureProvider extends ChangeNotifier
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+
+    DebugLogManager.logEvent('app_lifecycle_changed', {
+      'state': state.name,
+      'recording_state': recordingState.name,
+      'has_device': _recordingDevice != null,
+      'socket_connected': _socket?.state == SocketServiceState.connected,
+    });
+
     if (state == AppLifecycleState.resumed) {
       _handleAppResumed();
     }
@@ -127,7 +141,7 @@ class CaptureProvider extends ChangeNotifier
 
   void _handleAppResumed() async {
     if (!PlatformService.isDesktop || !_shouldAutoResumeAfterWake) return;
-    
+
     try {
       final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
 
@@ -135,7 +149,7 @@ class CaptureProvider extends ChangeNotifier
         updateRecordingState(RecordingState.stop);
         await _socket?.stop(reason: 'native recording stopped during sleep');
       }
-      
+
       if (!nativeRecording && recordingState == RecordingState.stop) {
         await Future.delayed(const Duration(seconds: 2));
         await streamSystemAudioRecording();
@@ -177,6 +191,8 @@ class CaptureProvider extends ChangeNotifier
         return 'frame';
       case DeviceType.appleWatch:
         return 'apple_watch';
+      case DeviceType.limitless:
+        return 'limitless';
     }
   }
 
@@ -207,6 +223,20 @@ class CaptureProvider extends ChangeNotifier
   bool _isPaused = false;
   bool get isPaused => _isPaused;
 
+  // Flag to star the conversation when it ends
+  bool _starOngoingConversation = false;
+  bool get isConversationMarkedForStarring => _starOngoingConversation;
+
+  void markConversationForStarring() {
+    _starOngoingConversation = true;
+    notifyListeners();
+  }
+
+  void unmarkConversationForStarring() {
+    _starOngoingConversation = false;
+    notifyListeners();
+  }
+
   // Session-based auto-resume flag
   // Always true on app start, set to false only when user manually stops/pauses
   bool _shouldAutoResumeAfterWake = true;
@@ -223,6 +253,8 @@ class CaptureProvider extends ChangeNotifier
       recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
+
+  BtDevice? get recordingDevice => _recordingDevice;
 
   void setHasTranscripts(bool value) {
     hasTranscripts = value;
@@ -259,6 +291,48 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
+  /// Called when transcription settings are changed (e.g., custom STT provider)
+  /// This resets the socket connection to use the new configuration
+  Future<void> onTranscriptionSettingsChanged() async {
+    debugPrint("Transcription settings changed, refreshing socket connection...");
+
+    // Handle device recording
+    if (_recordingDevice != null) {
+      await _socket?.stop(reason: 'transcription settings changed');
+      BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
+      await _initiateWebsocket(
+        audioCodec: codec,
+        force: true,
+        source: _getConversationSourceFromDevice(),
+      );
+      return;
+    }
+
+    // Handle phone mic recording
+    if (recordingState == RecordingState.record) {
+      await _socket?.stop(reason: 'transcription settings changed');
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        force: true,
+        source: ConversationSource.phone.name,
+      );
+      return;
+    }
+
+    // Handle system audio recording (desktop)
+    if (recordingState == RecordingState.systemAudioRecord) {
+      await _socket?.stop(reason: 'transcription settings changed');
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        force: true,
+        source: ConversationSource.desktop.name,
+      );
+      return;
+    }
+  }
+
   Future<void> changeAudioRecordProfile({
     required BleAudioCodec audioCodec,
     int? sampleRate,
@@ -288,13 +362,29 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('is ws null: ${_socket == null}');
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
-    // Connect to the transcript socket
+    // Get language and custom STT config
     String language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
-    _socket = await ServiceManager.instance()
-        .socket
-        .conversation(codec: codec, sampleRate: sampleRate, language: language, force: force, source: source);
+    Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
+
+    // Check codec compatibility for custom STT - fallback to default if incompatible
+    CustomSttConfig? effectiveConfig = customSttConfig.isEnabled ? customSttConfig : null;
+    if (effectiveConfig != null && !TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
+      debugPrint('[CustomSTT] Codec $codec not supported, falling back to Omi');
+      effectiveConfig = null;
+    }
+
+    // Connect to the transcript socket
+    _socket = await ServiceManager.instance().socket.conversation(
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       debugPrint("Can not create new conversation socket");
@@ -368,7 +458,9 @@ class CaptureProvider extends ChangeNotifier
           return;
         }
 
-        if (SharedPreferencesUtil().doubleTapPausesMuting) {
+        int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+
+        if (doubleTapAction == 1) {
           // Pause/resume recording
           debugPrint("Double tap: toggling pause/mute");
           _isProcessingButtonEvent = true;
@@ -386,6 +478,18 @@ class CaptureProvider extends ChangeNotifier
               debugPrint("Error pausing device recording: $e");
               _isProcessingButtonEvent = false;
             });
+          }
+        } else if (doubleTapAction == 2) {
+          // Star ongoing conversation (doesn't end it)
+          debugPrint("Double tap: marking conversation for starring");
+          if (!_starOngoingConversation) {
+            markConversationForStarring();
+            // Haptic feedback to confirm
+            HapticFeedback.mediumImpact();
+          } else {
+            // Toggle off if already marked
+            unmarkConversationForStarring();
+            HapticFeedback.lightImpact();
           }
         } else {
           // End conversation and process (default)
@@ -540,7 +644,13 @@ class CaptureProvider extends ChangeNotifier
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
     var language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
-    if (language != _socket?.language || codec != _socket?.codec || _socket?.state != SocketServiceState.connected) {
+    final customSttConfig = SharedPreferencesUtil().customSttConfig;
+    final sttConfigId = customSttConfig.sttConfigId;
+
+    if (language != _socket?.language ||
+        codec != _socket?.codec ||
+        _socket?.state != SocketServiceState.connected ||
+        _socket?.sttConfigId != sttConfigId) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
     }
   }
@@ -812,11 +922,11 @@ class CaptureProvider extends ChangeNotifier
           },
           onSystemDidWake: (nativeIsRecording) async {
             debugPrint('[SystemWake] Native recording: $nativeIsRecording, Flutter state: $recordingState');
-            
+
             if (!nativeIsRecording && recordingState == RecordingState.systemAudioRecord) {
               // Native stopped, sync Flutter state
               updateRecordingState(RecordingState.stop);
-              
+
               // Auto-resume based on session flag (was recording before sleep?)
               if (_shouldAutoResumeAfterWake) {
                 debugPrint('[SystemWake] Auto-resuming recording (was recording before sleep)...');
@@ -843,6 +953,7 @@ class CaptureProvider extends ChangeNotifier
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           onMicrophoneStatus: _onMicrophoneStatus,
+          onStoppedAutomatically: _handleRecordingStoppedAutomatically,
         );
   }
 
@@ -877,7 +988,7 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _onMicrophoneDeviceChanged() async {
     final nativeRecording = await _screenCaptureChannel.invokeMethod('isRecording') ?? false;
     if (!nativeRecording) return;
-    
+
     _isAutoReconnecting = true;
     _reconnectCountdown = 5;
     notifyListeners();
@@ -927,24 +1038,27 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> stopSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    
+
     // User manually stopped - don't auto-resume after wake
     _shouldAutoResumeAfterWake = false;
-    
+
     _isAutoReconnecting = false;
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
-    
+
     ServiceManager.instance().systemAudio.stop();
     _isPaused = false;
     _stopRecordingTimer();
     await _socket?.stop(reason: 'manual stop');
     await _cleanupCurrentState();
+
+    // Tell native to reset recording source since user explicitly stopped
+    _screenCaptureChannel.invokeMethod('resetRecordingSource');
   }
 
   Future<void> pauseSystemAudioRecording({bool isAuto = false}) async {
     if (!PlatformService.isDesktop) return;
-    
+
     if (!isAuto) {
       // User manually paused - don't auto-resume after wake
       _shouldAutoResumeAfterWake = false;
@@ -955,17 +1069,24 @@ class CaptureProvider extends ChangeNotifier
 
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true;
+    // Don't reset duration - just pause the timer
+    _pauseRecordingTimer();
     notifyListeners();
     _broadcastRecordingState();
   }
 
   Future<void> resumeSystemAudioRecording() async {
     if (!PlatformService.isDesktop) return;
-    
+
     // User wants to resume - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
     _isPaused = false;
+
+    // Preserve the current duration before starting
+    final preservedDuration = _recordingDuration;
     await streamSystemAudioRecording();
+    // Restore duration after streamSystemAudioRecording may have reset it
+    _recordingDuration = preservedDuration;
     _broadcastRecordingState();
   }
 
@@ -982,9 +1103,56 @@ class CaptureProvider extends ChangeNotifier
           await streamSystemAudioRecording();
         }
         break;
+      case 'requestCurrentState':
+        // Control bar is requesting current state (e.g., when it becomes visible)
+        _broadcastRecordingState();
+        break;
       default:
         Logger.debug('FloatingControlBarChannel: Unhandled method ${call.method}');
     }
+  }
+
+  Future<void> _handleRecordingStoppedAutomatically() async {
+    debugPrint('CaptureProvider: Recording stopped automatically (meeting ended)');
+    // Don't auto-resume after this - meeting is over
+    _shouldAutoResumeAfterWake = false;
+
+    // Stop the Flutter-side recording state
+    if (PlatformService.isDesktop) {
+      _isAutoReconnecting = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      _isPaused = false;
+      _stopRecordingTimer();
+      updateRecordingState(RecordingState.stop);
+      await _socket?.stop(reason: 'meeting ended - auto stop');
+      await _cleanupCurrentState();
+    }
+
+    await forceProcessingCurrentConversation();
+  }
+
+  Future<void> _handleRecordingStartedFromNub() async {
+    debugPrint('CaptureProvider: Recording started from nub - stopping any existing recording and starting fresh');
+
+    // Reset all recording state to ensure clean start
+    _isPaused = false;
+    _stopRecordingTimer();
+
+    // Stop any existing recording and CLEAR CALLBACKS immediately
+    ServiceManager.instance().systemAudio.stopAndClearCallbacks();
+    await _socket?.stop(reason: 'nub start - reset');
+
+    // Reset state to stop and broadcast immediately so control bar shows correct state
+    recordingState = RecordingState.stop;
+    notifyListeners();
+    _broadcastRecordingState();
+
+    // Small delay to ensure native stop completes before starting new recording
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // Start fresh recording
+    await streamSystemAudioRecording();
   }
 
   @override
@@ -1159,6 +1327,16 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
     if (conversation == null) return;
+
+    // Star the conversation if it was marked for starring
+    if (_starOngoingConversation) {
+      debugPrint("Conversation was marked for starring, applying star");
+      _starOngoingConversation = false; // Reset the flag
+      conversation.starred = true;
+      // Call API to star the conversation
+      await setConversationStarred(conversation.id, true);
+    }
+
     conversationProvider?.upsertConversation(conversation);
     MixpanelManager().conversationCreated(conversation);
   }
@@ -1284,13 +1462,18 @@ class CaptureProvider extends ChangeNotifier
   void _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
 
-    if (segments.isEmpty) {
+    if (segments.isEmpty && !_isLoadingInProgressConversation) {
+      _isLoadingInProgressConversation = true;
       if (!PlatformService.isDesktop) {
         FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
       }
-      await _loadInProgressConversation();
+      try {
+        await _loadInProgressConversation();
+      } finally {
+        _isLoadingInProgressConversation = false;
+      }
     }
-    
+
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
     hasTranscripts = true;
@@ -1337,6 +1520,13 @@ class CaptureProvider extends ChangeNotifier
         _broadcastRecordingState();
       }
     });
+  }
+
+  void _pauseRecordingTimer() {
+    // Stop the timer but preserve the current duration
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    // Don't reset _recordingDuration here
   }
 
   void _stopRecordingTimer() {

@@ -5,12 +5,14 @@ import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
   bool _isLoading = false;
+  bool _hasLoaded = false;
 
   TaskIntegrationProvider()
       : _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
@@ -18,6 +20,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
   bool get isLoading => _isLoading;
+  bool get hasLoaded => _hasLoaded;
 
   /// Load default app and connection details from backend
   Future<void> loadFromBackend() async {
@@ -53,6 +56,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       debugPrint('Error loading task integrations from backend: $e');
     } finally {
       _isLoading = false;
+      _hasLoaded = true;
       notifyListeners();
     }
   }
@@ -75,6 +79,13 @@ class TaskIntegrationProvider extends ChangeNotifier {
       final success = await saveTaskIntegration(appKey, details);
       if (success) {
         _connectionDetails[appKey] = details;
+
+        // Track successful integration connection
+        MixpanelManager().taskIntegrationEnabled(
+          appName: appKey,
+          success: true,
+        );
+
         notifyListeners();
         return true;
       }

@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 
 class SearchWidget extends StatefulWidget {
   const SearchWidget({super.key});
@@ -21,6 +17,45 @@ class _SearchWidgetState extends State<SearchWidget> {
   final TextEditingController searchController = TextEditingController();
   final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
   bool showClearButton = false;
+  HomeProvider? _homeProvider;
+  ConversationProvider? _convoProvider;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Store provider references safely
+    _homeProvider = Provider.of<HomeProvider>(context, listen: false);
+    _convoProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+    // Add listener if not already added
+    _homeProvider?.convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    _homeProvider?.convoSearchFieldFocusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    // Remove listener safely
+    _homeProvider?.convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    // Dispose the text controller to prevent memory leak
+    searchController.dispose();
+    // Cancel any pending debounced operations
+    _debouncer.cancel();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    // Check if widget is still mounted before accessing providers
+    if (!mounted || _homeProvider == null || _convoProvider == null) {
+      return;
+    }
+
+    // Hide search bar if focus is lost and there's no search query
+    if (!_homeProvider!.isConvoSearchFieldFocused &&
+        _convoProvider!.previousQuery.isEmpty &&
+        _homeProvider!.showConvoSearchBar) {
+      _homeProvider!.hideConvoSearchBar();
+    }
+  }
 
   void setShowClearButton() {
     if (showClearButton != searchController.text.isNotEmpty) {
