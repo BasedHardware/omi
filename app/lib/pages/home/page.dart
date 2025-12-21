@@ -44,6 +44,7 @@ import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
+import 'widgets/stats_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -433,6 +434,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       Column(
                         children: [
+                          if (homeProvider.selectedIndex == 0) const StatsWidget(),
                           Expanded(
                             child: IndexedStack(
                               index: context.watch<HomeProvider>().selectedIndex,
