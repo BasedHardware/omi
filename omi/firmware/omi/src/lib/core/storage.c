@@ -420,12 +420,12 @@ void storage_write(void)
             stop_started = 0;
             save_offset(offset);
         }
-        // if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
-        //     LOG_INF("no heartbeat sent\n");
-        //     save_offset(offset);
-        //     // ensure heartbeat count resets
-        //     heartbeat_count = 0;
-        // }
+        if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
+            LOG_INF("no heartbeat sent\n");
+            save_offset(offset);
+            // ensure heartbeat count resets
+            heartbeat_count = 0;
+        }
 
         if (remaining_length > 0) {
             if (conn == NULL) {
