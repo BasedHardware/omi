@@ -1,0 +1,1875 @@
+{
+  "info": {
+    "_postman_id": "omi-backend-local",
+    "name": "Omi Backend API",
+    "description": "Omi Backend API collection for local development testing.\n\nBase URL: http://localhost:8000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "uid",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminKey",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "health"]
+            },
+            "description": "Check if the backend is running and healthy"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "profile"]
+            },
+            "description": "Get current user profile with data protection status"
+          }
+        },
+        {
+          "name": "Get User Language",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/language",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "language"]
+            }
+          }
+        },
+        {
+          "name": "Set User Language",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"en\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/language",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "language"]
+            }
+          }
+        },
+        {
+          "name": "Get User Usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/me/usage",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "me", "usage"]
+            }
+          }
+        },
+        {
+          "name": "Get User Subscription",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/me/subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "me", "subscription"]
+            }
+          }
+        },
+        {
+          "name": "Set User Geolocation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 37.7749,\n  \"longitude\": -122.4194\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/geolocation",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "geolocation"]
+            }
+          }
+        },
+        {
+          "name": "Get Recording Permission",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/store-recording-permission",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "store-recording-permission"]
+            }
+          }
+        },
+        {
+          "name": "Get All People",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/people",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "people"]
+            }
+          }
+        },
+        {
+          "name": "Create Person",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/people",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "people"]
+            }
+          }
+        },
+        {
+          "name": "Get Person by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/people/:person_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "people", ":person_id"],
+              "variable": [
+                {
+                  "key": "person_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Person",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/people/:person_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "people", ":person_id"],
+              "variable": [
+                {
+                  "key": "person_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "Get All Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "status",
+                  "value": "completed",
+                  "disabled": true
+                },
+                {
+                  "key": "include_discarded",
+                  "value": "false",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Get all conversations with optional filtering"
+          }
+        },
+        {
+          "name": "Get Conversation by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Process Conversation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations"]
+            },
+            "description": "Process in-progress conversation and create a memory"
+          }
+        },
+        {
+          "name": "Reprocess Conversation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/reprocess",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "reprocess"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Conversation Title",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"New Title\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/title",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "title"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Conversation",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Conversation Photos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/photos",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "photos"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Conversation Transcripts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/transcripts",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "transcripts"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check Recording Exists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/recording",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "recording"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set Conversation Visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/visibility",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "visibility"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Shared Conversation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/shared",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "shared"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Public Conversations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/public-conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "public-conversations"]
+            }
+          }
+        },
+        {
+          "name": "Search Conversations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"search term\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/search",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", "search"]
+            }
+          }
+        },
+        {
+          "name": "Get Suggested Apps",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/suggested-apps",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "suggested-apps"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Action Item Completion",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action_item_idx\": 0,\n  \"completed\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/action-items",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "action-items"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Assign Segment Speaker",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assign_type\": \"person_id\",\n  \"value\": \"person-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/conversations/:conversation_id/segments/:segment_idx/assign",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "conversations", ":conversation_id", "segments", ":segment_idx", "assign"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                },
+                {
+                  "key": "segment_idx",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Action Items",
+      "item": [
+        {
+          "name": "Get All Action Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "completed",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "conversation_id",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Action Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Follow up on the meeting\",\n  \"completed\": false,\n  \"conversation_id\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items"]
+            }
+          }
+        },
+        {
+          "name": "Get Action Item by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items/:action_item_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items", ":action_item_id"],
+              "variable": [
+                {
+                  "key": "action_item_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Action Item",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items/:action_item_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items", ":action_item_id"],
+              "variable": [
+                {
+                  "key": "action_item_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toggle Action Item Completed",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completed\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items/:action_item_id/completed",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items", ":action_item_id", "completed"],
+              "variable": [
+                {
+                  "key": "action_item_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Action Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items/:action_item_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items", ":action_item_id"],
+              "variable": [
+                {
+                  "key": "action_item_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Batch Create Action Items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "[\n  {\n    \"description\": \"First task\",\n    \"completed\": false\n  },\n  {\n    \"description\": \"Second task\",\n    \"completed\": false\n  }\n]"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/action-items/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "action-items", "batch"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Memories",
+      "item": [
+        {
+          "name": "Get All Memories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories?limit=50&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Memory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Remember this important information\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories"]
+            }
+          }
+        },
+        {
+          "name": "Delete Memory",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories/:memory_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories", ":memory_id"],
+              "variable": [
+                {
+                  "key": "memory_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete All Memories",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories"]
+            }
+          }
+        },
+        {
+          "name": "Edit Memory",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Updated memory content\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories/:memory_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories", ":memory_id"],
+              "variable": [
+                {
+                  "key": "memory_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Review Memory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories/:memory_id/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories", ":memory_id", "review"],
+              "variable": [
+                {
+                  "key": "memory_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set Memory Visibility",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visibility\": \"public\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v3/memories/:memory_id/visibility",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "memories", ":memory_id", "visibility"],
+              "variable": [
+                {
+                  "key": "memory_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Get Messages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v2/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Send Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello, how can you help me?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Get Initial Message",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v2/initial-message",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "initial-message"]
+            }
+          }
+        },
+        {
+          "name": "Delete Messages",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v2/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "messages"]
+            }
+          }
+        },
+        {
+          "name": "Report Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"inappropriate\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/messages/:message_id/report",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "messages", ":message_id", "report"],
+              "variable": [
+                {
+                  "key": "message_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Files",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v2/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["v2", "files"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Apps",
+      "item": [
+        {
+          "name": "Get All Apps",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps"]
+            }
+          }
+        },
+        {
+          "name": "Get App by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps/:app_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps", ":app_id"],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create App",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My App\",\n  \"description\": \"App description\",\n  \"category\": \"productivity\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps"]
+            }
+          }
+        },
+        {
+          "name": "Update App",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated App Name\",\n  \"description\": \"Updated description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps/:app_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps", ":app_id"],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete App",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps/:app_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps", ":app_id"],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get App Reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps/:app_id/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps", ":app_id", "reviews"],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create App Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"review\": \"Great app!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/apps/:app_id/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "apps", ":app_id", "reviews"],
+              "variable": [
+                {
+                  "key": "app_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Plugin Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/plugin-categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "plugin-categories"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Personas",
+      "item": [
+        {
+          "name": "Get All Personas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/personas",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "personas"]
+            }
+          }
+        },
+        {
+          "name": "Create Persona",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Persona\",\n  \"description\": \"Persona description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/personas",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "personas"]
+            }
+          }
+        },
+        {
+          "name": "Update Persona",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Persona\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/personas/:persona_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "personas", ":persona_id"],
+              "variable": [
+                {
+                  "key": "persona_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Persona",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/personas/:persona_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "personas", ":persona_id"],
+              "variable": [
+                {
+                  "key": "persona_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Task Integrations",
+      "item": [
+        {
+          "name": "Get All Integrations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/task-integrations",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "task-integrations"]
+            }
+          }
+        },
+        {
+          "name": "Get Default Integration",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/task-integrations/default",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "task-integrations", "default"]
+            }
+          }
+        },
+        {
+          "name": "Set Default Integration",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"app_key\": \"todoist\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/task-integrations/default",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "task-integrations", "default"]
+            }
+          }
+        },
+        {
+          "name": "Get OAuth URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/task-integrations/:app_key/oauth-url",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "task-integrations", ":app_key", "oauth-url"],
+              "variable": [
+                {
+                  "key": "app_key",
+                  "value": "todoist"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Task in Integration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"New Task\",\n  \"description\": \"Task description\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/task-integrations/:app_key/tasks",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "task-integrations", ":app_key", "tasks"],
+              "variable": [
+                {
+                  "key": "app_key",
+                  "value": "todoist"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Integration",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/task-integrations/:app_key",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "task-integrations", ":app_key"],
+              "variable": [
+                {
+                  "key": "app_key",
+                  "value": "todoist"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Get Available Plans",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/payments/available-plans",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "payments", "available-plans"]
+            }
+          }
+        },
+        {
+          "name": "Create Checkout Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plan_id\": \"pro\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/payments/checkout-session",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "payments", "checkout-session"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Subscription",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/payments/subscription",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "payments", "subscription"]
+            }
+          }
+        },
+        {
+          "name": "Get Payment Method Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/payment-methods/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "payment-methods", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trends",
+      "item": [
+        {
+          "name": "Get Trends",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/trends",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "trends"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Developer",
+      "item": [
+        {
+          "name": "Get API Keys",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dev/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dev", "keys"]
+            }
+          }
+        },
+        {
+          "name": "Create API Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My API Key\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/dev/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dev", "keys"]
+            }
+          }
+        },
+        {
+          "name": "Delete API Key",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dev/keys/:key_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dev", "keys", ":key_id"],
+              "variable": [
+                {
+                  "key": "key_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User Memories (Dev)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dev/user/memories",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dev", "user", "memories"]
+            }
+          }
+        },
+        {
+          "name": "Get User Action Items (Dev)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dev/user/action-items",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dev", "user", "action-items"]
+            }
+          }
+        },
+        {
+          "name": "Get User Conversations (Dev)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/dev/user/conversations",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "dev", "user", "conversations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "MCP",
+      "item": [
+        {
+          "name": "Get MCP Keys",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mcp/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "mcp", "keys"]
+            }
+          }
+        },
+        {
+          "name": "Create MCP Key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My MCP Key\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/mcp/keys",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "mcp", "keys"]
+            }
+          }
+        },
+        {
+          "name": "Delete MCP Key",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mcp/keys/:key_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "mcp", "keys", ":key_id"],
+              "variable": [
+                {
+                  "key": "key_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get MCP Memories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/mcp/memories",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "mcp", "memories"]
+            }
+          }
+        },
+        {
+          "name": "Create MCP Memory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Memory content\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/mcp/memories",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "mcp", "memories"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get User Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/users/count",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "users", "count"]
+            }
+          }
+        },
+        {
+          "name": "Get User Conversations (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/conversations/:uid",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "conversations", ":uid"],
+              "variable": [
+                {
+                  "key": "uid",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Specific User Conversation (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-admin-key",
+                "value": "{{adminKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v1/admin/conversations/:uid/:conversation_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "admin", "conversations", ":uid", ":conversation_id"],
+              "variable": [
+                {
+                  "key": "uid",
+                  "value": ""
+                },
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sync",
+      "item": [
+        {
+          "name": "Get Audio File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/sync/audio/:conversation_id/:audio_file_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "sync", "audio", ":conversation_id", ":audio_file_id"],
+              "variable": [
+                {
+                  "key": "conversation_id",
+                  "value": ""
+                },
+                {
+                  "key": "audio_file_id",
+                  "value": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sync Local Files",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/sync-local-files",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "sync-local-files"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Setup Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://your-webhook-url.com/hook\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/developer/webhook/:wtype",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "developer", "webhook", ":wtype"],
+              "variable": [
+                {
+                  "key": "wtype",
+                  "value": "conversation"
+                }
+              ]
+            },
+            "description": "Setup webhook. Types: conversation, memory, transcript"
+          }
+        },
+        {
+          "name": "Get Webhook Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/developer/webhook/:wtype",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "developer", "webhook", ":wtype"],
+              "variable": [
+                {
+                  "key": "wtype",
+                  "value": "conversation"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Enable Webhook",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/developer/webhook/:wtype/enable",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "developer", "webhook", ":wtype", "enable"],
+              "variable": [
+                {
+                  "key": "wtype",
+                  "value": "conversation"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Disable Webhook",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/developer/webhook/:wtype/disable",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "developer", "webhook", ":wtype", "disable"],
+              "variable": [
+                {
+                  "key": "wtype",
+                  "value": "conversation"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get All Webhooks Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/users/developer/webhooks/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "users", "developer", "webhooks", "status"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

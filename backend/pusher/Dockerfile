@@ -27,7 +27,17 @@ RUN git clone https://github.com/google/liblc3.git && \
 # Install Python requirements
 WORKDIR /opt/venv
 COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
+
+# Install heavy NVIDIA/torch packages first (allows Docker layer caching if one fails)
+RUN pip install --no-cache-dir --timeout=600 torch==2.4.0 || \
+    pip install --no-cache-dir --timeout=600 torch==2.4.0 || \
+    pip install --no-cache-dir --timeout=600 torch==2.4.0
+
+RUN pip install --no-cache-dir --timeout=600 torchaudio==2.4.0 torchvision==0.19.0 || \
+    pip install --no-cache-dir --timeout=600 torchaudio==2.4.0 torchvision==0.19.0
+
+# Install remaining requirements
+RUN pip install --no-cache-dir --upgrade --timeout=600 --retries 5 -r /tmp/requirements.txt
 
 FROM python:3.11-slim
 

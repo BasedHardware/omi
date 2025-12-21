@@ -1,0 +1,105 @@
+# Docker Compose for Coolify Deployment
+# Traefik handles port routing - do not expose ports here
+
+services:
+  redis:
+    image: redis:7-alpine
+    platform: linux/amd64
+    container_name: omi-redis
+    volumes:
+      - omi-redis-data:/data
+    command: >
+      sh -c "redis-server
+      --appendonly yes
+      --requirepass $${REDIS_DB_PASSWORD:-}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "redis-cli",
+          "-a",
+          "$${REDIS_DB_PASSWORD:-}",
+          "ping",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: omi-backend
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+    volumes:
+      - omi-temp:/app/_temp
+      - omi-samples:/app/_samples
+      - omi-segments:/app/_segments
+      - omi-speech-profiles:/app/_speech_profiles
+      - omi-pretrained-models:/app/pretrained_models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  pusher:
+    build:
+      context: ../..
+      dockerfile: pusher/Dockerfile
+    platform: linux/amd64
+    container_name: omi-pusher
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_DB_HOST=redis
+      - REDIS_DB_PORT=6379
+      - REDIS_DB_PASSWORD=${REDIS_DB_PASSWORD:-}
+      - SERVICE_ACCOUNT_JSON=${SERVICE_ACCOUNT_JSON:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-}
+    volumes:
+      - omi-temp:/app/_temp
+      - omi-samples:/app/_samples
+      - omi-segments:/app/_segments
+      - omi-speech-profiles:/app/_speech_profiles
+      - omi-pretrained-models:/app/pretrained_models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  omi-redis-data:
+    driver: local
+  omi-temp:
+    driver: local
+  omi-samples:
+    driver: local
+  omi-segments:
+    driver: local
+  omi-speech-profiles:
+    driver: local
+  omi-pretrained-models:
+    driver: local
