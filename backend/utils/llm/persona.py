@@ -1,8 +1,10 @@
 from typing import Optional, List
 
+
 from models.app import App
 from models.chat import Message, MessageSender
-from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
 from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium_experiment
 
 
