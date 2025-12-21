@@ -11,17 +11,7 @@
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/dhcpv4.h>
-#include <zephyr/drivers/gpio.h>
 #include <zephyr/net/socket.h>
-#include <zephyr/device.h>
-#include <zephyr/pm/device.h>
-
-/*
- * net_sprint_ll_addr_buf() lives in Zephyr's net internals in this SDK.
- * The Wi-Fi samples use it via an extern declaration.
- */
-extern char *net_sprint_ll_addr_buf(const uint8_t *ll, uint8_t ll_len,
-				    char *buf, int buflen);
 
 #include <net/wifi_mgmt_ext.h>
 #include <net/wifi_ready.h>
@@ -207,20 +197,6 @@ static bool wifi_has_ipv4_addr(void)
 	return (addr != NULL);
 }
 
-static const struct device *wifi_nrf70_dev_get(void)
-{
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(nrf70), okay)
-	/*
-	 * Use runtime lookup to avoid hard link-time dependency on a device ordinal.
-	 * Some build stages/configs may not instantiate the nRF70 device even if the
-	 * node exists in devicetree.
-	 */
-	return device_get_binding(DEVICE_DT_NAME(DT_NODELABEL(nrf70)));
-#else
-	return NULL;
-#endif
-}
-
 static bool ipv4_ready(struct net_if *iface)
 {
 	struct net_if_ipv4 *ipv4 = iface->config.ip.ipv4;
@@ -260,42 +236,6 @@ static int wifi_wait_for_dhcp(int32_t timeout_ms)
 		}
 	}
 
-	return 0;
-}
-static int cmd_wifi_status(void)
-{
-	struct net_if *iface = net_if_get_default();
-	struct wifi_iface_status status = { 0 };
-
-	if (net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status,
-				sizeof(struct wifi_iface_status))) {
-		LOG_INF("Status request failed");
-
-		return -ENOEXEC;
-	}
-
-	LOG_INF("==================");
-	LOG_INF("State: %s", wifi_state_txt(status.state));
-
-	if (status.state >= WIFI_STATE_ASSOCIATED) {
-		char bssid_str[sizeof("xx:xx:xx:xx:xx:xx")] = { 0 };
-		snprintk(bssid_str, sizeof(bssid_str),
-			 "%02x:%02x:%02x:%02x:%02x:%02x",
-			 status.bssid[0], status.bssid[1], status.bssid[2],
-			 status.bssid[3], status.bssid[4], status.bssid[5]);
-
-		LOG_INF("Interface Mode: %s",
-		       wifi_mode_txt(status.iface_mode));
-		LOG_INF("Link Mode: %s",
-		       wifi_link_mode_txt(status.link_mode));
-		LOG_INF("SSID: %.32s", status.ssid);
-		LOG_INF("BSSID: %s", bssid_str);
-		LOG_INF("Band: %s", wifi_band_txt(status.band));
-		LOG_INF("Channel: %d", status.channel);
-		LOG_INF("Security: %s", wifi_security_txt(status.security));
-		LOG_INF("MFP: %s", wifi_mfp_txt(status.mfp));
-		LOG_INF("RSSI: %d", status.rssi);
-	}
 	return 0;
 }
 
