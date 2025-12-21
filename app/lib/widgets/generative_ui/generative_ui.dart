@@ -12,6 +12,7 @@ export 'models/story_briefing_data.dart';
 export 'models/study_data.dart';
 export 'models/task_data.dart';
 export 'models/flow_data.dart';
+export 'models/table_data.dart';
 
 // Parsers (modular tag parsers for easy extension)
 export 'parsers/parsers.dart';
@@ -36,6 +37,7 @@ export 'widgets/task_card.dart';
 export 'widgets/task_screen.dart';
 export 'widgets/task_create_sheet.dart';
 export 'widgets/flow_card.dart';
+export 'widgets/table_card.dart';
 export 'widgets/in_app_browser.dart';
 
 // Services

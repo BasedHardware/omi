@@ -1,15 +1,15 @@
 flavors:
   prod:
     app:
-      name: "Omi"
+      name: "Nooto"
       icon: "assets/images/app_launcher_icon.png"
     android:
-      applicationId: "com.nooto-app-with-wearable.ios12"
+      applicationId: "com.togodynamics.nooto"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/android/app/src/prod/google-services.json"
     ios:
-      bundleId: "com.nooto-app-with-wearable.ios12"
+      bundleId: "com.togodynamics.nooto"
       icon: "assets/images/app_launcher_icon.png"
       firebase:
         config: "app/ios/Config/Prod/GoogleService-Info.plist"

@@ -5,11 +5,12 @@ import { Card } from '@/src/components/ui/card';
 import { Input } from '@/src/components/ui/input';
 import { Button } from '@/src/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/src/components/ui/tabs';
-import { Shield, Users, DollarSign, BarChart3, Package } from 'lucide-react';
+import { Shield, Users, DollarSign, BarChart3, Package, MessageSquare } from 'lucide-react';
 import AppsReview from './components/AppsReview';
 import UsersManagement from './components/UsersManagement';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import ConversationCategoriesChart from './components/ConversationCategoriesChart';
+import ConversationsManagement from './components/ConversationsManagement';
 
 export default function AdminDashboard() {
   const [adminKey, setAdminKey] = useState('');
@@ -94,10 +95,14 @@ export default function AdminDashboard() {
 
         {/* Tabs Navigation */}
         <Tabs defaultValue="apps" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="apps" className="gap-2">
               <Package className="h-4 w-4" />
               <span className="hidden sm:inline">Apps</span>
+            </TabsTrigger>
+            <TabsTrigger value="conversations" className="gap-2">
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Conversations</span>
             </TabsTrigger>
             <TabsTrigger value="users" className="gap-2">
               <Users className="h-4 w-4" />
@@ -116,6 +121,11 @@ export default function AdminDashboard() {
           {/* Apps Review Tab */}
           <TabsContent value="apps" className="space-y-4">
             <AppsReview adminKey={adminKey} />
+          </TabsContent>
+
+          {/* Conversations Tab */}
+          <TabsContent value="conversations" className="space-y-4">
+            <ConversationsManagement adminKey={adminKey} />
           </TabsContent>
 
           {/* Users Management Tab */}

@@ -13,9 +13,11 @@ import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
 import 'widgets/conversation_list_item.dart';
+import 'widgets/conversation_list_item_compact.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -136,6 +138,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   List<Widget> _buildConversationsWithStickyHeaders(ConversationProvider convoProvider) {
     List<Widget> slivers = [];
     int groupIndex = 0;
+    final useCompactCard = SharedPreferencesUtil().useCompactConversationCard;
 
     for (var entry in convoProvider.groupedConversations.entries) {
       var date = entry.key;
@@ -158,6 +161,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
+              if (useCompactCard) {
+                return ConversationListItemCompact(
+                  conversation: conversations[index],
+                  conversationIdx: index,
+                  date: date,
+                );
+              }
               return ConversationListItem(
                 conversation: conversations[index],
                 conversationIdx: index,

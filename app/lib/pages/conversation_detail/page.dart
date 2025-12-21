@@ -228,7 +228,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         _copyContent(context, provider.conversation.getTranscript(generate: true));
         break;
       case 'copy_summary':
-        _copyContent(context, provider.conversation.structured.toString());
+        _copyContent(context, provider.getDisplayedSummaryContent());
         break;
       // case 'export_transcript':
       //   showShareBottomSheet(context, provider.conversation, (fn) {});

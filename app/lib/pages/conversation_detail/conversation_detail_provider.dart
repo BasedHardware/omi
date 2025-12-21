@@ -307,6 +307,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     return null;
   }
 
+  /// Returns the displayed summary content (from app results or structured overview)
+  /// This is what the user actually sees on the screen
+  String getDisplayedSummaryContent() {
+    final summarizedApp = getSummarizedApp();
+    if (summarizedApp != null) {
+      return summarizedApp.content;
+    }
+    // Fallback to structured toString if no summary available
+    return conversation.structured.toString();
+  }
+
   /// Returns the list of suggested summarization apps for this conversation
   List<String> getSuggestedApps() {
     return conversation.suggestedSummarizationApps;

@@ -142,7 +142,7 @@ class App(BaseModel):
         return [param for param in params if param in self.proactive_notification.scopes]
 
     def get_image_url(self) -> str:
-        return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
+        return f'xd{self.image}'
 
 
 class AppCreate(BaseModel):

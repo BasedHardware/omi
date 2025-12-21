@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/theme/brand_colors.dart';
 
 /// App color palette - provides a consistent color system across the app
@@ -29,8 +30,14 @@ class AppTheme {
 
   const AppTheme({required this.brandColors});
 
+  /// Get the current font family based on A/B test preference
+  static String get fontFamily {
+    return SharedPreferencesUtil().useGeistFont ? 'Geist' : 'SF Pro Display';
+  }
+
   /// Create ThemeData for the app with brand colors
   ThemeData get themeData => ThemeData(
+        fontFamily: fontFamily,
         useMaterial3: false,
         colorScheme: ColorScheme.dark(
           primary: Colors.black, // Keep primary as black for backgrounds

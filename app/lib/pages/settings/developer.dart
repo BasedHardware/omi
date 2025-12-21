@@ -605,6 +605,52 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     onChanged: provider.onAutoCreateSpeakersChanged,
                   ),
                   const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Compact conversation cards (A/B Test)',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Use a more compact card design showing app, source, and action items.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    value: SharedPreferencesUtil().useCompactConversationCard,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          SharedPreferencesUtil().useCompactConversationCard = value;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
+                  CheckboxListTile(
+                    contentPadding: const EdgeInsets.all(0),
+                    title: const Text(
+                      'Use Geist Font (A/B Test)',
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    subtitle: const Text(
+                      'Switch to Geist font family. Requires app restart.',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    value: SharedPreferencesUtil().useGeistFont,
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          SharedPreferencesUtil().useGeistFont = value;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Restart the app to apply font changes'),
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16.0),
                   const SizedBox(height: 36),
                   const Text(
                     'Pilot Features',

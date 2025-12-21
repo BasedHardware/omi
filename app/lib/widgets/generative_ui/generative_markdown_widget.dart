@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
 
 import 'xml_parser.dart';
 import 'models/pie_chart_data.dart';
@@ -10,9 +11,11 @@ import 'widgets/pie_chart_widget.dart';
 import 'widgets/accordion_widget.dart';
 import 'widgets/story_briefing_card.dart';
 import 'widgets/highlight_widget.dart';
+import 'widgets/highlight_builder.dart';
 import 'widgets/study_card.dart';
 import 'widgets/task_card.dart';
 import 'widgets/flow_card.dart';
+import 'widgets/table_card.dart';
 import 'widgets/in_app_browser.dart';
 
 /// Main widget that renders markdown content with embedded generative UI components
@@ -30,10 +33,6 @@ class GenerativeMarkdownWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('=== GenerativeMarkdownWidget content ===');
-    debugPrint(content);
-    debugPrint('=== END content ===');
-
     final parser = XmlTagParser();
     final segments = parser.parse(content);
 
@@ -77,6 +76,8 @@ class GenerativeMarkdownWidget extends StatelessWidget {
       return TaskCard(data: segment.data);
     } else if (segment is FlowSegment) {
       return FlowCard(data: segment.data);
+    } else if (segment is TableSegment) {
+      return TableCard(data: segment.data);
     }
     return const SizedBox.shrink();
   }
@@ -97,10 +98,26 @@ class GenerativeMarkdownWidget extends StatelessWidget {
     // Preprocess markdown to fix common formatting issues
     var processedContent = markdownContent;
 
-    // Convert <highlight> tags to bold markdown (** **) so they render inline
+    // Convert <highlight> tags to custom ==color:text== syntax for inline rendering
+    // The HighlightSyntax parser will handle these in the markdown renderer
+    // Only convert simple single-line highlights; complex content won't work with inline syntax
     processedContent = processedContent.replaceAllMapped(
-      RegExp(r'<highlight(?:\s+color="[^"]*")?>([^<]*)</highlight>', caseSensitive: false),
-      (match) => '**${match.group(1)}**',
+      RegExp(r'<highlight(?:\s+color="([^"]*)")?>([\s\S]*?)</highlight>', caseSensitive: false),
+      (match) {
+        final color = match.group(1)?.trim().toLowerCase() ?? 'yellow';
+        final text = match.group(2)?.trim() ?? '';
+
+        // Skip empty highlights
+        if (text.isEmpty) return '';
+
+        // For multi-line content or content starting with list markers,
+        // just return the text (can't render these as inline highlights)
+        if (text.contains('\n') || text.startsWith('-') || text.startsWith('*') || RegExp(r'^\d+\.').hasMatch(text)) {
+          return text;
+        }
+
+        return '==$color:$text==';
+      },
     );
 
     // Add blank line BEFORE horizontal rules if not present (prevents setext headings)
@@ -136,6 +153,16 @@ class GenerativeMarkdownWidget extends StatelessWidget {
         }
       },
       styleSheet: MarkdownStyleHelper.getStyleSheet(context),
+      extensionSet: md.ExtensionSet(
+        md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+        [
+          HighlightSyntax(),
+          ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
+        ],
+      ),
+      builders: {
+        'highlight': HighlightBuilder(),
+      },
       data: processedContent,
     );
   }

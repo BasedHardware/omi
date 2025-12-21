@@ -26,6 +26,7 @@ import { useToast } from '@/src/hooks/use-toast';
 import { Toaster } from '@/src/components/ui/toaster';
 import {
   getUnapprovedApps,
+  getAllApps,
   approveApp,
   rejectApp,
   setAppPopular,
@@ -39,6 +40,10 @@ import {
   Clock,
   Loader2,
   TrendingUp,
+  Copy,
+  Check,
+  List,
+  Filter,
 } from 'lucide-react';
 
 interface AppsReviewProps {
@@ -53,21 +58,45 @@ export default function AppsReview({ adminKey }: AppsReviewProps) {
   const [selectedApp, setSelectedApp] = useState<UnapprovedApp | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [copiedPrompt, setCopiedPrompt] = useState<string | null>(null);
+  const [showAllApps, setShowAllApps] = useState(false);
+
+  const copyToClipboard = async (text: string, promptType: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPrompt(promptType);
+      toast({
+        title: 'Copied!',
+        description: `${promptType} copied to clipboard`,
+      });
+      setTimeout(() => setCopiedPrompt(null), 2000);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Failed to copy to clipboard',
+        variant: 'destructive',
+      });
+    }
+  };
 
   useEffect(() => {
     if (adminKey) {
       loadApps();
     }
-  }, [adminKey]);
+  }, [adminKey, showAllApps]);
 
   const loadApps = async () => {
     setLoading(true);
     try {
-      const unapprovedApps = await getUnapprovedApps(adminKey);
-      setApps(unapprovedApps);
+      const fetchedApps = showAllApps
+        ? await getAllApps(adminKey)
+        : await getUnapprovedApps(adminKey);
+      setApps(fetchedApps);
       toast({
         title: 'Success',
-        description: `Loaded ${unapprovedApps.length} apps pending review`,
+        description: showAllApps
+          ? `Loaded ${fetchedApps.length} total apps`
+          : `Loaded ${fetchedApps.length} apps pending review`,
       });
     } catch (error) {
       toast({
@@ -180,11 +209,13 @@ export default function AppsReview({ adminKey }: AppsReviewProps) {
         </div>
 
         {/* Stats Cards */}
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-6 grid gap-4 md:grid-cols-4">
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Pending Review</p>
+                <p className="text-sm text-neutral-500">
+                  {showAllApps ? 'Total Apps' : 'Pending Review'}
+                </p>
                 <p className="mt-1 text-3xl font-bold">{apps.length}</p>
               </div>
               <div className="rounded-full bg-amber-100 p-3">
@@ -195,9 +226,22 @@ export default function AppsReview({ adminKey }: AppsReviewProps) {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-neutral-500">Needs Attention</p>
+                <p className="text-sm text-neutral-500">Approved</p>
                 <p className="mt-1 text-3xl font-bold">
-                  {apps.filter((a) => a.status === 'under-review').length}
+                  {apps.filter((a) => a.approved === true).length}
+                </p>
+              </div>
+              <div className="rounded-full bg-green-100 p-3">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
+          </Card>
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-neutral-500">Under Review</p>
+                <p className="mt-1 text-3xl font-bold">
+                  {apps.filter((a) => a.status === 'under-review' || a.approved === false).length}
                 </p>
               </div>
               <div className="rounded-full bg-blue-100 p-3">
@@ -211,8 +255,8 @@ export default function AppsReview({ adminKey }: AppsReviewProps) {
                 <p className="text-sm text-neutral-500">Search Results</p>
                 <p className="mt-1 text-3xl font-bold">{filteredApps.length}</p>
               </div>
-              <div className="rounded-full bg-green-100 p-3">
-                <TrendingUp className="h-6 w-6 text-green-600" />
+              <div className="rounded-full bg-purple-100 p-3">
+                <TrendingUp className="h-6 w-6 text-purple-600" />
               </div>
             </div>
           </Card>
@@ -227,7 +271,24 @@ export default function AppsReview({ adminKey }: AppsReviewProps) {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1"
             />
-            <Button onClick={() => loadApps(adminKey)} disabled={loading}>
+            <Button
+              variant={showAllApps ? 'default' : 'outline'}
+              onClick={() => setShowAllApps(!showAllApps)}
+              className="gap-2 whitespace-nowrap"
+            >
+              {showAllApps ? (
+                <>
+                  <List className="h-4 w-4" />
+                  All Apps
+                </>
+              ) : (
+                <>
+                  <Filter className="h-4 w-4" />
+                  Pending Only
+                </>
+              )}
+            </Button>
+            <Button onClick={() => loadApps()} disabled={loading}>
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -486,6 +547,81 @@ export default function AppsReview({ adminKey }: AppsReviewProps) {
                       </div>
                     </div>
                   </div>
+
+                  {/* System Prompts Section */}
+                  {(selectedApp.memory_prompt || selectedApp.chat_prompt || selectedApp.persona_prompt) && (
+                    <div>
+                      <Label className="font-semibold">System Prompts</Label>
+                      <div className="mt-2 space-y-3">
+                        {selectedApp.memory_prompt && (
+                          <div className="rounded-lg bg-neutral-50 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-neutral-700">Memory Prompt</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={() => copyToClipboard(selectedApp.memory_prompt!, 'Memory Prompt')}
+                              >
+                                {copiedPrompt === 'Memory Prompt' ? (
+                                  <Check className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <pre className="text-xs text-neutral-600 whitespace-pre-wrap bg-white rounded p-2 border max-h-32 overflow-y-auto">
+                              {selectedApp.memory_prompt}
+                            </pre>
+                          </div>
+                        )}
+                        {selectedApp.chat_prompt && (
+                          <div className="rounded-lg bg-neutral-50 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-neutral-700">Chat Prompt</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={() => copyToClipboard(selectedApp.chat_prompt!, 'Chat Prompt')}
+                              >
+                                {copiedPrompt === 'Chat Prompt' ? (
+                                  <Check className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <pre className="text-xs text-neutral-600 whitespace-pre-wrap bg-white rounded p-2 border max-h-32 overflow-y-auto">
+                              {selectedApp.chat_prompt}
+                            </pre>
+                          </div>
+                        )}
+                        {selectedApp.persona_prompt && (
+                          <div className="rounded-lg bg-neutral-50 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-neutral-700">Persona Prompt</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2"
+                                onClick={() => copyToClipboard(selectedApp.persona_prompt!, 'Persona Prompt')}
+                              >
+                                {copiedPrompt === 'Persona Prompt' ? (
+                                  <Check className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <Copy className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                            <pre className="text-xs text-neutral-600 whitespace-pre-wrap bg-white rounded p-2 border max-h-32 overflow-y-auto">
+                              {selectedApp.persona_prompt}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <DialogFooter className="gap-2">

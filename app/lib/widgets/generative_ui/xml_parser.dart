@@ -10,6 +10,7 @@ import 'models/highlight_data.dart';
 import 'models/study_data.dart';
 import 'models/task_data.dart';
 import 'models/flow_data.dart';
+import 'models/table_data.dart';
 import 'parsers/parsers.dart';
 
 /// Base class for parsed content segments
@@ -101,6 +102,13 @@ class FlowSegment extends ContentSegment {
   const FlowSegment(this.data);
 }
 
+/// A segment containing a table with rows and cells
+class TableSegment extends ContentSegment {
+  final TableDisplayData data;
+
+  const TableSegment(this.data);
+}
+
 /// Main parser for extracting custom XML tags from markdown content.
 ///
 /// Uses modular [BaseTagParser] implementations for each tag type.
@@ -111,8 +119,8 @@ class FlowSegment extends ContentSegment {
 /// 4. Handle the new segment type in GenerativeMarkdownWidget
 class XmlTagParser {
   /// List of registered tag parsers (non-journalist components)
-  /// Note: HighlightParser is NOT included here because highlights are inline
-  /// elements handled by the markdown renderer, not block-level segments
+  /// HighlightParser is included to handle block-level highlights (multi-line, list items)
+  /// Simple inline highlights are handled by the markdown renderer's HighlightSyntax
   final List<BaseTagParser> _baseParsers = [
     RichListParser(),
     ChartParser(),
@@ -120,6 +128,8 @@ class XmlTagParser {
     StudyParser(),
     TaskParser(),
     FlowParser(),
+    TableParser(),
+    HighlightParser(),
   ];
 
   /// Journalist component parsers (these get aggregated into Story Briefing)
@@ -135,6 +145,8 @@ class XmlTagParser {
         StudyParser().containsTag(content) ||
         TaskParser().containsTag(content) ||
         FlowParser().containsTag(content) ||
+        TableParser().containsTag(content) ||
+        HighlightParser().containsTag(content) ||
         TimelineParser().containsTag(content) ||
         QuoteBoardParser().containsTag(content) ||
         FollowupsParser().containsTag(content);

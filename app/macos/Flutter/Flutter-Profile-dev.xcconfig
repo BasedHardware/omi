@@ -1,0 +1,6 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
+#include "ephemeral/Flutter-Generated.xcconfig"
+#include "CustomDev.xcconfig"
+
+BUNDLE_NAME=Nooto Dev
+BUNDLE_DISPLAY_NAME=Nooto Dev

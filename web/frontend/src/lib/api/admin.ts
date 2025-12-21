@@ -1,9 +1,16 @@
 import { Plugin } from '@/src/app/apps/components/types';
+import { Conversation } from '@/src/types/conversation.types';
 
 export interface UnapprovedApp extends Plugin {
   uid: string;
   created_at: any;
   updated_at: any;
+  status?: string;
+  popular?: boolean;
+  external_integration?: {
+    webhook_url?: string;
+    setup_completed_url?: string;
+  };
 }
 
 export interface PlatformAnalytics {
@@ -21,6 +28,13 @@ export interface CategoryCount {
 export interface ConversationCategoriesAnalytics {
   categories: CategoryCount[];
   total: number;
+}
+
+export interface AdminUserInfo {
+  uid: string;
+  email: string | null;
+  created_at: string | null;
+  conversation_count: number;
 }
 
 /**
@@ -41,6 +55,29 @@ export async function getUnapprovedApps(adminKey: string): Promise<UnapprovedApp
     }
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to fetch unapproved apps: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get all apps (approved and unapproved) for admin management
+ * Uses Next.js API proxy to avoid CORS issues
+ */
+export async function getAllApps(adminKey: string): Promise<UnapprovedApp[]> {
+  const response = await fetch('/api/admin/apps?all=true', {
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 401) {
+      throw new Error('Unauthorized: Invalid admin key');
+    }
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch all apps: ${response.statusText}`);
   }
 
   return response.json();
@@ -172,6 +209,94 @@ export async function getConversationCategoriesAnalytics(
     throw new Error(
       errorData.error || `Failed to fetch conversation categories: ${response.statusText}`
     );
+  }
+
+  return response.json();
+}
+
+/**
+ * Get all conversations for a specific user (admin only)
+ * Uses Next.js API proxy to avoid CORS issues
+ */
+export async function getAdminUserConversations(
+  uid: string,
+  adminKey: string,
+  limit: number = 100,
+  offset: number = 0
+): Promise<Conversation[]> {
+  const response = await fetch(
+    `/api/admin/conversations/${uid}?limit=${limit}&offset=${offset}`,
+    {
+      headers: {
+        'x-admin-key': adminKey,
+      },
+      cache: 'no-store',
+    }
+  );
+
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 401) {
+      throw new Error('Unauthorized: Invalid admin key');
+    }
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch conversations: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get a specific conversation for a user (admin only)
+ * Uses Next.js API proxy to avoid CORS issues
+ */
+export async function getAdminConversationById(
+  uid: string,
+  conversationId: string,
+  adminKey: string
+): Promise<Conversation> {
+  const response = await fetch(`/api/admin/conversations/${uid}/${conversationId}`, {
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 401) {
+      throw new Error('Unauthorized: Invalid admin key');
+    }
+    if (response.status === 404) {
+      throw new Error('Conversation not found');
+    }
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch conversation: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get all users with basic info (admin only)
+ * Uses Next.js API proxy to avoid CORS issues
+ */
+export async function getAdminUsers(
+  adminKey: string,
+  limit: number = 100,
+  offset: number = 0
+): Promise<AdminUserInfo[]> {
+  const response = await fetch(`/api/admin/users?limit=${limit}&offset=${offset}`, {
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 401) {
+      throw new Error('Unauthorized: Invalid admin key');
+    }
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch users: ${response.statusText}`);
   }
 
   return response.json();
