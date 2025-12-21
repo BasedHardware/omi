@@ -36,8 +36,10 @@ from routers import (
 from utils.other.timeout import TimeoutMiddleware
 
 # Initialize Sentry for error tracking and performance monitoring
+# SENTRY_ENABLED must be explicitly set to 'true' to enable Sentry (prevents local dev from sending errors)
+sentry_enabled = os.environ.get('SENTRY_ENABLED', 'false').lower() == 'true'
 sentry_dsn = os.environ.get('SENTRY_DSN')
-if sentry_dsn:
+if sentry_enabled and sentry_dsn:
     sentry_sdk.init(
         dsn=sentry_dsn,
         # Set traces_sample_rate to capture performance data
@@ -50,6 +52,8 @@ if sentry_dsn:
         # Enable sending of default PII (be careful with this in production)
         send_default_pii=os.environ.get('SENTRY_SEND_PII', 'false').lower() == 'true',
     )
+elif sentry_dsn:
+    print("Sentry DSN found but SENTRY_ENABLED is not 'true'. Sentry is disabled.")
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     json_str = os.environ["SERVICE_ACCOUNT_JSON"]
