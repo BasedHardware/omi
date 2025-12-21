@@ -12,6 +12,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/firmware_update_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -38,6 +39,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Track firmware update state to prevent showing dialog during updates
   bool _isFirmwareUpdateInProgress = false;
   bool get isFirmwareUpdateInProgress => _isFirmwareUpdateInProgress;
+  bool get isBatteryTooLowForFirmwareUpdate => isBatteryLevelTooLowForFirmwareUpdate(batteryLevel);
 
   // Current and latest firmware versions for UI display
   String get currentFirmwareVersion => pairedDevice?.firmwareRevision ?? 'Unknown';
@@ -419,6 +421,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    if (isBatteryTooLowForFirmwareUpdate) {
+      showDialog(
+        context: context,
+        builder: (context) => ConfirmationDialog(
+          title: 'Battery Too Low',
+          description:
+              'Your Omi device battery is at $batteryLevel%. Please charge to at least $minFirmwareUpdateBatteryPercent% before updating firmware.',
+          confirmText: 'OK',
+          onConfirm: () {
+            Navigator.of(context).pop();
+          },
+          onCancel: () {},
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => ConfirmationDialog(
@@ -485,7 +504,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     _bleDisconnectDevice(connectedDevice!);
-    _reconnectAt = DateTime.now().add(Duration(seconds: 30));
+    _reconnectAt = DateTime.now().add(const Duration(seconds: 30));
   }
 
   // Reset firmware update state when update completes or fails

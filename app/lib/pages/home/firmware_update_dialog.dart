@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/firmware_update_policy.dart';
 
 class FirmwareUpdateStep {
   final String title;
@@ -46,8 +47,9 @@ class _FirmwareUpdateDialogState extends State<FirmwareUpdateDialog> {
         icon: Icons.usb_off,
       ),
       'battery': FirmwareUpdateStep(
-        title: 'Battery > 15%',
-        description: "Ensure your Omi device has at least 15% battery remaining for a safe update.",
+        title: 'Battery > $minFirmwareUpdateBatteryPercent%', //Removed the hardcoded 15% from here and added the variable instead.
+        description:
+            "Ensure your Omi device has at least $minFirmwareUpdateBatteryPercent% battery remaining for a safe update.",
         icon: Icons.battery_5_bar,
       ),
       'internet': FirmwareUpdateStep(

@@ -5,8 +5,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/firmware_update_policy.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:provider/provider.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -22,6 +24,28 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   bool shouldUpdate = false;
   String updateMessage = '';
   bool isLoading = false;
+
+  Future<bool> _ensureBatterySafe(DeviceProvider deviceProvider) async {
+    if (!isBatteryLevelTooLowForFirmwareUpdate(deviceProvider.batteryLevel)) {
+      return true;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (context) => ConfirmationDialog(
+        title: 'Battery Too Low',
+        description:
+            'Your Omi device battery is at ${deviceProvider.batteryLevel}%. Please charge to at least $minFirmwareUpdateBatteryPercent% before updating firmware.',
+        confirmText: 'OK',
+        onConfirm: () {
+          Navigator.of(context).pop();
+        },
+        onCancel: () {},
+      ),
+    );
+
+    return false;
+  }
 
   @override
   void initState() {
@@ -451,8 +475,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                       ),
                     ),
                     onPressed: () async {
-                      // Set firmware update in progress when starting update
                       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                      final canStartUpdate = await _ensureBatterySafe(deviceProvider);
+                      if (!canStartUpdate) {
+                        return;
+                      }
+                      // Set firmware update in progress when starting update
                       deviceProvider.setFirmwareUpdateInProgress(true);
 
                       if (otaUpdateSteps.isEmpty) {
