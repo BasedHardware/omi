@@ -1199,17 +1199,3 @@ bool is_wifi_transport_ready(void)
 	wifi_state_t state = get_wifi_state();
 	return state != WIFI_STATE_UDP_CONNECTED ? false : true;
 }
-
-// int wifi_setup_example(void)
-// {
-// 	/* Example setup - can be overridden by user */
-// 	const char *example_ssid = "Tu Nguyen";
-// 	const char *example_password = "1223334444";
-// 	const char *example_server_addr = "172.20.10.12";
-// 	uint16_t example_server_port = 12345;
-// 	setup_wifi_credentials(example_ssid, example_password);
-// 	setup_udp_server(example_server_addr, example_server_port);
-// 	mic_off();
-// 	wifi_turn_on();
-// 	return 0;
-// }
