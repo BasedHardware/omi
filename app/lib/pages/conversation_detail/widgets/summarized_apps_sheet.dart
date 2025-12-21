@@ -2,17 +2,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/apps/widgets/category_apps_page.dart';
-import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_sheet.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -106,7 +102,7 @@ class _SheetHeader extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Summary Template',
+              'Conversation Analysis',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -182,7 +178,7 @@ class _AppsListState extends State<_AppsList> {
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            'Suggested Templates',
+            'Suggested Apps',
             style: TextStyle(
               color: Colors.grey,
               fontSize: 14,
@@ -272,35 +268,18 @@ class _AppsListState extends State<_AppsList> {
       return _buildShimmerLoading();
     }
 
-    // Get preferred (default) app ID and find it in enabled apps
+    // Get preferred (default) app ID
     final preferredAppId = widget.provider.preferredSummarizationAppId;
-    final preferredApp = preferredAppId != null && preferredAppId.isNotEmpty
-        ? enabledApps.firstWhereOrNull((app) => app.id == preferredAppId)
-        : null;
 
     // Get last used app ID and find it in the enabled apps
     final lastUsedAppId = widget.provider.getLastUsedSummarizationAppId();
     final lastUsedApp = lastUsedAppId != null ? enabledApps.firstWhereOrNull((app) => app.id == lastUsedAppId) : null;
 
     final suggestedAppIds = suggestedApps.map((app) => app.id).toList();
-    final currentUserId = SharedPreferencesUtil().uid;
 
-    // Get other apps (excluding suggested, preferred, and last used)
-    var otherApps = enabledApps
-        .where((app) =>
-            !suggestedAppIds.contains(app.id) &&
-            (preferredApp == null || app.id != preferredApp.id) &&
-            (lastUsedApp == null || app.id != lastUsedApp.id))
+    final otherApps = enabledApps
+        .where((app) => !suggestedAppIds.contains(app.id) && (lastUsedApp == null || app.id != lastUsedApp.id))
         .toList();
-
-    // Sort: user's own apps first, then alphabetically by name
-    otherApps.sort((a, b) {
-      final aIsOwned = a.isOwner(currentUserId);
-      final bIsOwned = b.isOwner(currentUserId);
-      if (aIsOwned && !bIsOwned) return -1;
-      if (!aIsOwned && bIsOwned) return 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
 
     return ListView(
       children: [
@@ -319,7 +298,7 @@ class _AppsListState extends State<_AppsList> {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              'Suggested Templates',
+              'Suggested Apps',
               style: TextStyle(
                 color: Colors.grey,
                 fontSize: 14,
@@ -342,12 +321,12 @@ class _AppsListState extends State<_AppsList> {
           }),
         ],
 
-        // Other Apps section (order: default app, last used, then others)
-        if (otherApps.isNotEmpty || lastUsedApp != null || preferredApp != null) ...[
+        // Other Apps section (includes last used app at top)
+        if (otherApps.isNotEmpty || lastUsedApp != null) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              suggestedApps.isNotEmpty ? 'Other Templates' : 'Available Templates',
+              suggestedApps.isNotEmpty ? 'Other Apps' : 'Available Apps',
               style: const TextStyle(
                 color: Colors.grey,
                 fontSize: 14,
@@ -355,55 +334,50 @@ class _AppsListState extends State<_AppsList> {
               ),
             ),
           ),
-          // 1. Show default/preferred app first if available (and not in suggested)
-          if (preferredApp != null && !suggestedAppIds.contains(preferredApp.id))
-            _AppListItem(
-              app: preferredApp,
-              isSelected: preferredApp.id == widget.currentAppId,
-              onTap: () => _handleAppTap(context, preferredApp),
-              isDefault: true,
-              provider: widget.provider,
-            ),
-          // 2. Show last used app second if available (and different from preferred)
-          if (lastUsedApp != null && lastUsedApp.id != preferredAppId)
+          // Show last used app first if available
+          if (lastUsedApp != null)
             _AppListItem(
               app: lastUsedApp,
               isSelected: lastUsedApp.id == widget.currentAppId,
               onTap: () => _handleAppTap(context, lastUsedApp),
               isLastUsed: true,
-              isDefault: false,
+              isDefault: lastUsedApp.id == preferredAppId && preferredAppId?.isNotEmpty == true,
               provider: widget.provider,
             ),
-          // 3. Then show other apps (user's own apps first, then alphabetically)
+          // Then show other apps
           ...otherApps.map((app) => _AppListItem(
                 app: app,
                 isSelected: app.id == widget.currentAppId,
                 onTap: () => _handleAppTap(context, app),
-                isDefault: false,
+                isDefault: app.id == preferredAppId && preferredAppId?.isNotEmpty == true,
                 provider: widget.provider,
               )),
         ],
 
-        // Get Creative section
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            'Get Creative',
-            style: TextStyle(
-              color: Colors.grey,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-
         // Create Template option
         const _CreateTemplateListItem(),
 
-        // All Templates option
+        // Enable Apps option
         const _EnableAppsListItem(),
       ],
     );
+  }
+
+  void _handleAutoAppTap(BuildContext context) async {
+    Navigator.pop(context);
+    final provider = context.read<ConversationDetailProvider>();
+    final previousAppId = provider.getSummarizedApp()?.appId;
+    final conversationId = provider.conversation.id;
+
+    MixpanelManager().summarizedAppSelected(
+      conversationId: conversationId,
+      selectedAppId: 'auto',
+      previousAppId: previousAppId,
+    );
+
+    provider.clearSelectedAppForReprocessing();
+    await provider.reprocessConversation();
+    return;
   }
 
   void _handleAppTap(BuildContext context, App app) async {
@@ -496,9 +470,11 @@ class _AppsListState extends State<_AppsList> {
 }
 
 class _AppListItem extends StatefulWidget {
-  final App app;
+  final App? app;
   final bool isSelected;
   final VoidCallback onTap;
+  final Widget? trailingIcon;
+  final String? subtitle;
   final bool isSuggested;
   final bool isLastUsed;
   final bool isDefault;
@@ -509,6 +485,8 @@ class _AppListItem extends StatefulWidget {
     required this.app,
     required this.isSelected,
     required this.onTap,
+    this.trailingIcon,
+    this.subtitle,
     this.isSuggested = false,
     this.isLastUsed = false,
     this.isDefault = false,
@@ -523,8 +501,13 @@ class _AppListItem extends StatefulWidget {
 class _AppListItemState extends State<_AppListItem> {
   @override
   Widget build(BuildContext context) {
+    // Don't allow dismissible for Auto option (null app)
+    if (widget.app == null) {
+      return _buildListTile();
+    }
+
     return Dismissible(
-      key: Key('dismissible_${widget.app.id}'),
+      key: Key('dismissible_${widget.app!.id}'),
       direction: DismissDirection.horizontal,
       confirmDismiss: (direction) async {
         // Show confirmation dialog
@@ -532,12 +515,12 @@ class _AppListItemState extends State<_AppListItem> {
 
         if (confirmed == true) {
           // Set as preferred app
-          if (widget.provider != null) {
-            widget.provider!.setPreferredSummarizationApp(widget.app.id);
+          if (widget.provider != null && widget.app != null) {
+            widget.provider!.setPreferredSummarizationApp(widget.app!.id);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${widget.app.name.decodeString} set as default summarization app'),
+                  content: Text('${widget.app!.name.decodeString} set as default summarization app'),
                   duration: const Duration(seconds: 2),
                 ),
               );
@@ -563,7 +546,7 @@ class _AppListItemState extends State<_AppListItem> {
           content: Padding(
             padding: const EdgeInsets.only(top: 8.0),
             child: Text(
-              'Set ${widget.app.name.decodeString} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.',
+              'Set ${widget.app!.name.decodeString} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.',
             ),
           ),
           actions: [
@@ -619,123 +602,84 @@ class _AppListItemState extends State<_AppListItem> {
   }
 
   Widget _buildListTile() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: _buildLeadingIcon(),
-          title: Text(
-            widget.app.name.decodeString,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500,
-              fontSize: 16,
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      leading: _buildLeadingIcon(),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              widget.app != null ? widget.app!.name.decodeString : 'Auto',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500,
+                fontSize: 16,
+              ),
             ),
           ),
-          subtitle: _buildSubtitle(),
-          trailing: _buildTrailingWidget(),
-          selected: widget.isSelected,
-          onTap: widget.onTap,
-        ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: Colors.grey.withValues(alpha: 0.2),
-          indent: 56,
-          endIndent: 16,
-        ),
-      ],
-    );
-  }
-
-  Widget? _buildSubtitle() {
-    // Build tags row for apps
-    final List<Widget> tags = [];
-
-    if (widget.isDefault) {
-      tags.add(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.amber.shade300.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(
-                    FontAwesomeIcons.solidStar,
-                    size: 7,
-                    color: Colors.amber.shade300,
+          if (widget.isDefault)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade300,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.shade400),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.star,
+                    size: 12,
+                    color: Colors.grey.shade900,
                   ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Default',
-                  style: TextStyle(
-                    color: Colors.amber.shade300,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(width: 4),
+                  Text(
+                    'Default',
+                    style: TextStyle(
+                      color: Colors.grey.shade900,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
-      );
-    }
-
-    if (widget.isLastUsed && !widget.isDefault) {
-      tags.add(
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade600.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(
-                    FontAwesomeIcons.clock,
-                    size: 7,
-                    color: Colors.grey.shade400,
-                  ),
+          if (widget.isLastUsed && !widget.isDefault)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+              ),
+              child: const Text(
+                'Last Used',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  'Last Used',
-                  style: TextStyle(
-                    color: Colors.grey.shade400,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-      );
-    }
-
-    if (tags.isEmpty) {
-      return null;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Row(
-        children: tags,
+        ],
       ),
+      subtitle: widget.app != null
+          ? Text(
+              widget.app!.description.decodeString,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            )
+          : widget.subtitle != null
+              ? Text(
+                  widget.subtitle!,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                )
+              : null,
+      trailing: _buildTrailingWidget(),
+      selected: widget.isSelected,
+      onTap: widget.onTap,
     );
   }
 
@@ -743,7 +687,8 @@ class _AppListItemState extends State<_AppListItem> {
     // Check if this app is currently being processed
     final isProcessing = widget.provider != null &&
         widget.provider!.loadingReprocessConversation &&
-        widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
+        ((widget.app != null && widget.provider!.selectedAppForReprocessing?.id == widget.app!.id) ||
+            (widget.app == null && widget.provider!.selectedAppForReprocessing == null));
 
     if (widget.isSelected) {
       return const Icon(Icons.check, color: Colors.green, size: 20);
@@ -766,37 +711,61 @@ class _AppListItemState extends State<_AppListItem> {
         ),
       );
     } else {
-      return const SizedBox.shrink();
+      return widget.trailingIcon ?? const SizedBox.shrink();
     }
   }
 
   Widget _buildLeadingIcon() {
-    return CachedNetworkImage(
-      imageUrl: widget.app.getImageUrl(),
-      imageBuilder: (context, imageProvider) {
-        return CircleAvatar(
+    if (widget.app != null) {
+      return CachedNetworkImage(
+        imageUrl: widget.app!.getImageUrl(),
+        imageBuilder: (context, imageProvider) {
+          return CircleAvatar(
+            backgroundColor: Colors.white,
+            radius: 16,
+            backgroundImage: imageProvider,
+          );
+        },
+        errorWidget: (context, url, error) {
+          return const CircleAvatar(
+            backgroundColor: Colors.white,
+            radius: 16,
+            child: Icon(Icons.error_outline_rounded, size: 16),
+          );
+        },
+        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
           backgroundColor: Colors.white,
           radius: 16,
-          backgroundImage: imageProvider,
-        );
-      },
-      errorWidget: (context, url, error) {
-        return const CircleAvatar(
-          backgroundColor: Colors.white,
-          radius: 16,
-          child: Icon(Icons.error_outline_rounded, size: 16),
-        );
-      },
-      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-        backgroundColor: Colors.white,
-        radius: 16,
-        child: CircularProgressIndicator(
-          value: progress.progress,
-          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-          strokeWidth: 2,
+          child: CircularProgressIndicator(
+            value: progress.progress,
+            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            strokeWidth: 2,
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      return Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage(Assets.images.background.path),
+            fit: BoxFit.cover,
+          ),
+          borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+        ),
+        height: 32,
+        width: 32,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Image.asset(
+              Assets.images.herologo.path,
+              height: 20,
+              width: 20,
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
 
@@ -805,48 +774,75 @@ class _CreateTemplateListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: const CircleAvatar(
-            backgroundColor: Colors.white,
-            radius: 16,
-            child: Icon(
-              FontAwesomeIcons.plus,
+    return GestureDetector(
+      onTap: () async {
+        Navigator.pop(context);
+        final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+        MixpanelManager().summarizedAppCreateTemplateClicked(conversationId: conversationId);
+
+        // Navigate to AddAppPage with preset values for template creation
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AddAppPage(presetForConversationAnalysis: true),
+          ),
+        );
+
+        MixpanelManager().pageOpened('Create Template from Conversation');
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1F1F25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.auto_fix_high,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Create Custom Template',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Build a personalized analysis app for your conversations',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
               color: Colors.black,
-              size: 18,
+              size: 24,
             ),
-          ),
-          title: const Text(
-            'Create Custom Template',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 16,
-            ),
-          ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-          onTap: () {
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            MixpanelManager().summarizedAppCreateTemplateClicked(conversationId: conversationId);
-
-            // Close the current bottom sheet first
-            Navigator.pop(context);
-
-            // Show the quick create template bottom sheet
-            showCreateTemplateBottomSheet(context, conversationId: conversationId);
-          },
+          ],
         ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: Colors.grey.withValues(alpha: 0.2),
-          indent: 56,
-          endIndent: 16,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -856,59 +852,43 @@ class _EnableAppsListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: const CircleAvatar(
-            backgroundColor: Colors.white,
-            radius: 16,
-            child: FaIcon(
-              FontAwesomeIcons.solidFolderOpen,
-              color: Colors.black,
-              size: 14,
-            ),
-          ),
-          title: const Text(
-            'All Templates',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 16,
-            ),
-          ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-          onTap: () {
-            Navigator.pop(context);
-            final conversationId = context.read<ConversationDetailProvider>().conversation.id;
-            MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      leading: const Icon(Icons.apps, color: Colors.white, size: 24),
+      title: const Text(
+        'Explore',
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w500,
+          fontSize: 16,
+        ),
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+      onTap: () {
+        Navigator.pop(context);
+        final conversationId = context.read<ConversationDetailProvider>().conversation.id;
+        MixpanelManager().summarizedAppEnableAppsClicked(conversationId: conversationId);
 
-            // Navigate to Summary (memories) capability apps page
-            final appProvider = context.read<AppProvider>();
-            final memoriesApps = appProvider.apps.where((app) => app.worksWithMemories()).toList();
+        // Try to route to conversation-analysis category first
+        final appProvider = context.read<AppProvider>();
+        final conversationAnalysisCategory = appProvider.categories.firstWhereOrNull(
+          (category) => category.id == 'conversation-analysis',
+        );
 
-            routeToPage(
+        if (conversationAnalysisCategory != null) {
+          final categoryApps = appProvider.apps.where((app) => app.category == 'conversation-analysis').toList();
+          routeToPage(
               context,
-              CapabilityAppsPage(
-                capability: AppCapability(
-                  title: 'Summary',
-                  id: 'memories',
-                ),
-                apps: memoriesApps,
-              ),
-            );
-            MixpanelManager().pageOpened('Summary Apps');
-          },
-        ),
-        Divider(
-          height: 1,
-          thickness: 0.5,
-          color: Colors.grey.withValues(alpha: 0.2),
-          indent: 56,
-          endIndent: 16,
-        ),
-      ],
+              CategoryAppsPage(
+                category: conversationAnalysisCategory,
+                apps: categoryApps,
+              ));
+        } else {
+          // Fallback to general apps page
+          routeToPage(context, const AppsPage(showAppBar: true));
+        }
+        MixpanelManager().pageOpened('Detail Apps');
+      },
     );
   }
 }

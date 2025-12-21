@@ -96,7 +96,7 @@ class _ConversationListItemCompactState extends State<ConversationListItemCompac
             );
           }
 
-          context.read<ConversationDetailProvider>().updateConversation(widget.conversationIdx, widget.date);
+          context.read<ConversationDetailProvider>().updateConversation(widget.conversation.id, widget.date);
           String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
           provider.onConversationTap(widget.conversationIdx);
 
