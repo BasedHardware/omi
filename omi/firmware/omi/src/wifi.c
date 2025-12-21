@@ -35,9 +35,6 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 				NET_EVENT_WIFI_DISCONNECT_RESULT |	\
 				NET_EVENT_WIFI_DISCONNECT_COMPLETE)
 
-#define MAX_SSID_LEN        32
-#define MAX_PASSWORD_LEN    64
-#define MAX_SERVER_ADDR_LEN 64
 #define STATUS_POLLING_MS   300
 
 /*
@@ -83,9 +80,9 @@ static wifi_state_t get_wifi_state(void)
 }
 
 /* WiFi and UDP connection settings - global variables that can be modified */
-char wifi_ssid[MAX_SSID_LEN + 1] = "";
-char wifi_password[MAX_PASSWORD_LEN + 1] = "";
-char udp_server_addr[MAX_SERVER_ADDR_LEN + 1] = "";
+char wifi_ssid[WIFI_MAX_SSID_LEN + 1] = "";
+char wifi_password[WIFI_MAX_PASSWORD_LEN + 1] = "";
+char udp_server_addr[WIFI_MAX_SERVER_ADDR_LEN + 1] = "";
 uint16_t udp_server_port = 0;
 
 static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
@@ -386,38 +383,6 @@ static void handle_wifi_disconnect_result(struct net_mgmt_event_callback *cb, st
 	set_wifi_state(WIFI_STATE_ON);
 	k_msleep(100);
 	udp_close_socket();
-	
-	// bool requested = atomic_test_bit(&wifi_flags, WIFI_FLAG_DISCONNECT_REQUESTED);
-	// if (requested) {
-	// 	const struct wifi_status *status = NULL;
-	// 	#if defined(CONFIG_NET_MGMT_EVENT_INFO)
-	// 	status = (const struct wifi_status *)cb->info;
-	// 	#endif
-	// 	LOG_INF("Disconnection request %s (%d)",
-	// 		(status && status->status) ? "failed" : "done",
-	// 		(status) ? status->status : 0);
-	// 	wifi_set_disconnect_requested(false);
-	// } else {
-	// 	LOG_INF("Received Disconnected");
-	// 	/* If we were recently under UDP trouble and then got dropped, request a PM
-	// 	 * cycle before the next retry (driver is more likely wedged).
-	// 	 */
-	// 	int64_t now_ms = k_uptime_get();
-	// 	if (udp_trouble_until_ms && now_ms < udp_trouble_until_ms) {
-	// 		wifi_set_need_recover(true);
-	// 	}
-	// }
-
-	// /* In all cases, we are no longer connected */
-	// wifi_set_connected(false);
-	// udp_close_socket();
-	// udp_next_setup_ms = 0;
-	// atomic_set(&dhcp_started, 0);
-	// atomic_set(&dhcp_start_pending, 0);
-	// atomic_set(&dhcp_bound, 0);
-	// k_sem_reset(&dhcp_bound_sem);
-	// /* Give supplicant/driver a moment to settle before reconnecting */
-	// wifi_connect_backoff_until_ms = k_uptime_get() + 1500;
 }
 
 static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
@@ -628,7 +593,6 @@ static void handle_wifi_shutdown(void)
 		k_sem_reset(&dhcp_bound_sem);
 		struct net_if *iface = net_if_get_wifi_sta();
 		(void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-		k_msleep(5000);
 
 		if (iface) {
 			LOG_INF("TURN_OFF: calling net_if_down");
@@ -948,10 +912,10 @@ int setup_wifi_credentials(const char *ssid, const char *password)
 
 	LOG_INF("Processing WIFI_UPDATE_CREDENTIALS");
 	// Can update credentials in any state
-	strncpy(wifi_ssid, ssid, MAX_SSID_LEN);
-	wifi_ssid[MAX_SSID_LEN] = '\0';
-	strncpy(wifi_password, password, MAX_PASSWORD_LEN);
-	wifi_password[MAX_PASSWORD_LEN] = '\0';
+	strncpy(wifi_ssid, ssid, WIFI_MAX_SSID_LEN);
+	wifi_ssid[WIFI_MAX_SSID_LEN] = '\0';
+	strncpy(wifi_password, password, WIFI_MAX_PASSWORD_LEN);
+	wifi_password[WIFI_MAX_PASSWORD_LEN] = '\0';
 	LOG_INF("Credentials updated: SSID=%s, password_len=%d",
 		wifi_ssid, (int)strlen(wifi_password));
 
@@ -966,7 +930,7 @@ int setup_wifi_credentials(const char *ssid, const char *password)
  */
 int setup_udp_server(const char *server_addr, uint16_t server_port)
 {
-	if (!server_addr || strlen(server_addr) == 0 || strlen(server_addr) > 63) {
+	if (!server_addr || strlen(server_addr) == 0 || strlen(server_addr) > WIFI_MAX_SERVER_ADDR_LEN - 1) {
 		LOG_ERR("Invalid server address");
 		return -EINVAL;
 	}
@@ -976,8 +940,8 @@ int setup_udp_server(const char *server_addr, uint16_t server_port)
 		return -EINVAL;
 	}
 
-	strncpy(udp_server_addr, server_addr, MAX_SERVER_ADDR_LEN);
-	udp_server_addr[MAX_SERVER_ADDR_LEN] = '\0';
+	strncpy(udp_server_addr, server_addr, WIFI_MAX_SERVER_ADDR_LEN);
+	udp_server_addr[WIFI_MAX_SERVER_ADDR_LEN] = '\0';
 	udp_server_port = server_port;
 	k_mutex_lock(&udp_socket_mutex, K_FOREVER);
 	udp_update_server_addr_locked();

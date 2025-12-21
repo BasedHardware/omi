@@ -273,33 +273,34 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             uint8_t idx = 1;
             uint8_t ssid_len = ((const uint8_t *)buf)[idx++];
             LOG_INF("WIFI_SETUP: ssid_len=%d, idx=%d, len=%d", ssid_len, idx, len);
-            if (ssid_len == 0 || idx + ssid_len > len) {
+
+            if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || idx + ssid_len > len) {
                 LOG_WRN("SSID length invalid: ssid_len=%d, idx=%d, len=%d", ssid_len, idx, len);
                 result_buffer[0] = 3; break;
             }
-            char ssid[33] = {0};
+            char ssid[WIFI_MAX_SSID_LEN + 1] = {0};
             memcpy(ssid, &((const uint8_t *)buf)[idx], ssid_len);
             idx += ssid_len;
             LOG_INF("WIFI_SETUP: ssid='%s', idx=%d", ssid, idx);
 
             uint8_t pwd_len = ((const uint8_t *)buf)[idx++];
             LOG_INF("WIFI_SETUP: pwd_len=%d, idx=%d, len=%d", pwd_len, idx, len);
-            if (pwd_len > 0 && idx + pwd_len > len) {
+            if (pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
                 LOG_WRN("PWD length invalid: pwd_len=%d, idx=%d, len=%d", pwd_len, idx, len);
                 result_buffer[0] = 4; break;
             }
-            char pwd[65] = {0};
+            char pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
             if (pwd_len > 0) memcpy(pwd, &((const uint8_t *)buf)[idx], pwd_len);
             idx += pwd_len;
             LOG_INF("WIFI_SETUP: pwd='%s', idx=%d", pwd, idx);
 
             uint8_t ip_len = ((const uint8_t *)buf)[idx++];
             LOG_INF("WIFI_SETUP: ip_len=%d, idx=%d, len=%d", ip_len, idx, len);
-            if (ip_len == 0 || idx + ip_len > len) {
+            if (ip_len == 0 || ip_len > WIFI_MAX_SERVER_ADDR_LEN - 1 || idx + ip_len > len) {
                 LOG_WRN("IP length invalid: ip_len=%d, idx=%d, len=%d", ip_len, idx, len);
                 result_buffer[0] = 5; break;
             }
-            char ip[64] = {0};
+            char ip[WIFI_MAX_SERVER_ADDR_LEN] = {0};
             memcpy(ip, &((const uint8_t *)buf)[idx], ip_len);
             idx += ip_len;
             LOG_INF("WIFI_SETUP: ip='%s', idx=%d", ip, idx);

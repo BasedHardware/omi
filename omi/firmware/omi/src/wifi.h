@@ -4,6 +4,10 @@
 #include <zephyr/kernel.h>
 #include <stdint.h>
 
+#define WIFI_MAX_SSID_LEN        32
+#define WIFI_MAX_PASSWORD_LEN    64
+#define WIFI_MAX_SERVER_ADDR_LEN 64
+
 /* WiFi state machine states */
 typedef enum {
 	WIFI_STATE_OFF,          /* WiFi is off */
