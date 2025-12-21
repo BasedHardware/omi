@@ -95,7 +95,7 @@ static struct bt_gatt_attr storage_service_attr[] = {
                            NULL,
                            storage_wifi_handler,
                            NULL),
-
+    BT_GATT_CCC(storage_config_changed_handler, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 };
 
 struct bt_gatt_service storage_service = BT_GATT_SERVICE(storage_service_attr);
@@ -254,7 +254,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
 
     if (len < 1) {
         result_buffer[0] = 1; // error: invalid length
-        bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
+        bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
         return len;
     }
 
@@ -337,7 +337,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             break;
     }
 
-    bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
+    bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
     return len;
 }
 
@@ -436,8 +436,12 @@ void storage_write(void)
                 continue;
                 // k_yield();
             }
-            if (is_wifi_transport_ready()) {
-                write_to_udp();
+
+            // Send data over UDP if WiFi is ready, otherwise over GATT
+            if(is_wifi_on()) {
+                if (is_wifi_transport_ready()) {
+                    write_to_udp();
+                }
             } else {
                 write_to_gatt(conn);
             }
