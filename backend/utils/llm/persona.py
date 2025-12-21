@@ -1,12 +1,10 @@
 from typing import Optional, List
 
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 from models.app import App
 from models.chat import Message, MessageSender
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-
 from .clients import llm_persona_mini_stream, llm_persona_medium_stream, llm_medium_experiment
-
 
 def initial_persona_chat_message(uid: str, app: Optional[App] = None, messages: List[Message] = []) -> str:
     print("initial_persona_chat_message")
