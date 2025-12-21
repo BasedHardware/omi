@@ -105,13 +105,13 @@ extension IntegrationAppExtension on IntegrationApp {
   }
 
   bool get isAvailable {
-    //  return true; // All integrations are available
-    return this != IntegrationApp.googleCalendar;
+     return true; // All integrations are available
+    // return this != IntegrationApp.googleCalendar;
   }
 
-  String get comingSoonText {
-    return 'Coming Soon';
-  }
+  // String get comingSoonText {
+  //   return 'Coming Soon';
+  // }
 }
 
 class IntegrationsPage extends StatefulWidget {
