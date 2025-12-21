@@ -465,18 +465,19 @@ def process_conversation(
     app_id: Optional[str] = None,
 ) -> Conversation:
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
-    meeting_id = redis_db.get_conversation_meeting_id(conversation.id)
-    if meeting_id:
-        try:
-            meeting_data = calendar_db.get_meeting(uid, meeting_id)
-            if meeting_data:
-                # Add meeting context to conversation's external_data
-                if not hasattr(conversation, 'external_data') or not conversation.external_data:
-                    conversation.external_data = {}
-                conversation.external_data['calendar_meeting_context'] = meeting_data
-                print(f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}")
-        except Exception as e:
-            print(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
+    if hasattr(conversation, 'id') and conversation.id:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation.id)
+        if meeting_id:
+            try:
+                meeting_data = calendar_db.get_meeting(uid, meeting_id)
+                if meeting_data:
+                    # Add meeting context to conversation's external_data
+                    if not hasattr(conversation, 'external_data') or not conversation.external_data:
+                        conversation.external_data = {}
+                    conversation.external_data['calendar_meeting_context'] = meeting_data
+                    print(f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}")
+            except Exception as e:
+                print(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
 
     person_ids = conversation.get_person_ids()
     people = []
