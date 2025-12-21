@@ -174,6 +174,7 @@ def _get_conversation_obj(
             structured=structured,
             created_at=created_at,
             discarded=discarded,
+            **conversation_dict,
         )
 
         # Add calendar metadata to external_data
