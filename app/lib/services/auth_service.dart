@@ -168,6 +168,13 @@ class AuthService {
         SharedPreferencesUtil().uid = user.uid;
         SharedPreferencesUtil().tokenExpirationTime = newToken?.expirationTime?.millisecondsSinceEpoch ?? 0;
         SharedPreferencesUtil().authToken = newToken?.token ?? '';
+
+        // Log token for local development - copy from debug console
+        debugPrint('═══════════════════════════════════════════════════════════════');
+        debugPrint('🔑 AUTH TOKEN (for local development):');
+        debugPrint('${newToken?.token}');
+        debugPrint('═══════════════════════════════════════════════════════════════');
+
         if (SharedPreferencesUtil().email.isEmpty) {
           SharedPreferencesUtil().email = user.email ?? '';
         }
