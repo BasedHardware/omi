@@ -209,7 +209,7 @@ SoundCard==0.4.3
 soundfile==0.12.1
 soxr==0.4.0
 speechbrain==1.0.0
-speechmatics-python==2.0.1
+speechmatics-rt==0.5.3
 SQLAlchemy==2.0.32
 stack-data==0.6.3
 starlette==0.37.2

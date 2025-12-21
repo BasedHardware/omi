@@ -193,7 +193,74 @@ deepgram_nova3_languages = {
     "vi",
 }
 
-# Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2
+# Speechmatics supported languages for real-time transcription
+# https://docs.speechmatics.com/introduction/supported-languages
+# Note: 'auto' is batch-only and not supported for real-time
+speechmatics_languages = {
+    'ar',  # Arabic
+    'ba',  # Bashkir
+    'eu',  # Basque
+    'be',  # Belarusian
+    'bn',  # Bengali
+    'bg',  # Bulgarian
+    'yue',  # Cantonese
+    'ca',  # Catalan
+    'hr',  # Croatian
+    'cs',  # Czech
+    'da',  # Danish
+    'nl',  # Dutch
+    'en',  # English
+    'eo',  # Esperanto
+    'et',  # Estonian
+    'fi',  # Finnish
+    'fr',  # French
+    'gl',  # Galician
+    'de',  # German
+    'el',  # Greek
+    'he',  # Hebrew
+    'hi',  # Hindi
+    'hu',  # Hungarian
+    'id',  # Indonesian
+    'ia',  # Interlingua
+    'ga',  # Irish
+    'it',  # Italian
+    'ja',  # Japanese
+    'ko',  # Korean
+    'lv',  # Latvian
+    'lt',  # Lithuanian
+    'ms',  # Malay
+    'mt',  # Maltese
+    'cmn',  # Mandarin
+    'mr',  # Marathi
+    'mn',  # Mongolian
+    'no',  # Norwegian
+    'fa',  # Persian
+    'pl',  # Polish
+    'pt',  # Portuguese
+    'ro',  # Romanian
+    'ru',  # Russian
+    'sk',  # Slovak
+    'sl',  # Slovenian
+    'es',  # Spanish
+    'sw',  # Swahili
+    'sv',  # Swedish
+    'ta',  # Tamil
+    'th',  # Thai
+    'tr',  # Turkish
+    'uk',  # Ukrainian
+    'ur',  # Urdu
+    'ug',  # Uyghur
+    'vi',  # Vietnamese
+    'cy',  # Welsh
+    # Bilingual variants
+    'en_ms',  # Malay & English
+    'cmn_en',  # Mandarin & English
+    'cmn_en_ms_ta',  # Mandarin, Malay, Tamil & English
+    'en_ta',  # Tamil & English
+    'tl',  # Tagalog & English (Filipino)
+}
+
+# Supported values: soniox-stt-rt,dg-nova-3,dg-nova-2,speechmatics
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
@@ -218,6 +285,10 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
                 return STTService.deepgram, 'multi', 'nova-2-general'
             if language in deepgram_nova2_languages:
                 return STTService.deepgram, language, 'nova-2-general'
+        # Speechmatics
+        elif m == 'speechmatics':
+            if language in speechmatics_languages:
+                return STTService.speechmatics, language, 'enhanced'
 
     # Fallback to deepgram nova-3
     return STTService.deepgram, 'en', 'nova-3'
@@ -643,116 +714,127 @@ async def process_audio_soniox(
 
 
 async def process_audio_speechmatics(stream_transcript, sample_rate: int, language: str, preseconds: int = 0):
+    from speechmatics.rt import (
+        AsyncClient,
+        ServerMessageType,
+        TranscriptionConfig,
+        AudioFormat,
+        AudioEncoding,
+        OperatingPoint,
+        TranscriptResult,
+    )
+
     api_key = os.getenv('SPEECHMATICS_API_KEY')
-    uri = 'wss://eu2.rt.speechmatics.com/v2'
+    if not api_key:
+        raise ValueError("SPEECHMATICS_API_KEY environment variable is not set")
 
-    request = {
-        "message": "StartRecognition",
-        "transcription_config": {
-            "language": language,
-            "diarization": "speaker",
-            "operating_point": "enhanced",
-            "max_delay_mode": "flexible",
-            "max_delay": 3,
-            "enable_partials": False,
-            "enable_entities": True,
-            "speaker_diarization_config": {"max_speakers": 4},
-        },
-        "audio_format": {"type": "raw", "encoding": "pcm_s16le", "sample_rate": sample_rate},
-        # "audio_events_config": {
-        #     "types": [
-        #         "laughter",
-        #         "music",
-        #         "applause"
-        #     ]
-        # }
-    }
-    try:
-        print("Connecting to Speechmatics WebSocket...")
-        socket = await websockets.connect(uri, extra_headers={"Authorization": f"Bearer {api_key}"})
-        print("Connected to Speechmatics WebSocket.")
+    class SpeechmaticsSocket:
+        """Wrapper to provide socket-like interface for Speechmatics SDK client."""
 
-        await socket.send(json.dumps(request))
-        print(f"Sent initial request: {request}")
+        def __init__(self, client: AsyncClient):
+            self.client = client
+            self.closed = False
 
-        async def on_message():
+        async def send(self, data: bytes):
+            if self.closed:
+                return
             try:
-                async for message in socket:
-                    response = json.loads(message)
-                    if response['message'] == 'AudioAdded':
-                        continue
-                    if response['message'] == 'AddTranscript':
-                        results = response['results']
-                        if not results:
-                            continue
-                        segments = []
-                        for r in results:
-                            # print(r)
-                            if not r['alternatives']:
-                                continue
-
-                            r_data = r['alternatives'][0]
-                            r_type = r['type']  # word | punctuation
-                            r_start = r['start_time']
-                            r_end = r['end_time']
-
-                            r_content = r_data['content']
-                            r_confidence = r_data['confidence']
-                            if r_confidence < 0.4:
-                                print('Low confidence:', r)
-                                continue
-                            r_speaker = r_data['speaker'][1:] if r_data['speaker'] != 'UU' else '1'
-                            speaker = f"SPEAKER_0{r_speaker}"
-
-                            is_user = True if r_speaker == '1' and preseconds > 0 else False
-                            if r_start < preseconds:
-                                # print('Skipping word', r_start, r_content)
-                                continue
-                            # print(r_content, r_speaker, [r_start, r_end])
-                            if not segments:
-                                segments.append(
-                                    {
-                                        'speaker': speaker,
-                                        'start': r_start,
-                                        'end': r_end,
-                                        'text': r_content,
-                                        'is_user': is_user,
-                                        'person_id': None,
-                                    }
-                                )
-                            else:
-                                last_segment = segments[-1]
-                                if last_segment['speaker'] == speaker:
-                                    last_segment['text'] += f' {r_content}'
-                                    last_segment['end'] += r_end
-                                else:
-                                    segments.append(
-                                        {
-                                            'speaker': speaker,
-                                            'start': r_start,
-                                            'end': r_end,
-                                            'text': r_content,
-                                            'is_user': is_user,
-                                            'person_id': None,
-                                        }
-                                    )
-
-                        if segments:
-                            stream_transcript(segments)
-                        # print('---')
-                    else:
-                        print(response)
-            except websockets.exceptions.ConnectionClosedOK:
-                print("Speechmatics connection closed normally.")
+                await self.client.send_audio(data)
             except Exception as e:
-                print(f"Error receiving from Speechmatics: {e}")
-            finally:
-                if not socket.closed:
-                    await socket.close()
-                    print("Speechmatics WebSocket closed in on_message.")
+                print(f"Error sending audio to Speechmatics: {e}")
+                self.closed = True
 
-        asyncio.create_task(on_message())
-        return socket
+        async def close(self):
+            if self.closed:
+                return
+            self.closed = True
+            try:
+                await self.client.__aexit__(None, None, None)
+            except Exception as e:
+                print(f"Error closing Speechmatics: {e}")
+
+    audio_format = AudioFormat(
+        encoding=AudioEncoding.PCM_S16LE,
+        sample_rate=sample_rate,
+    )
+
+    transcription_config = TranscriptionConfig(
+        language=language,
+        enable_partials=False,
+        operating_point=OperatingPoint.ENHANCED,
+        diarization="speaker",
+        speaker_diarization_config={"max_speakers": 4},
+        max_delay_mode="flexible",
+        max_delay=3,
+    )
+
+    try:
+        print("Connecting to Speechmatics...")
+        client = AsyncClient(api_key=api_key)
+
+        @client.on(ServerMessageType.ADD_TRANSCRIPT)
+        def handle_transcript(message):
+            try:
+                result = TranscriptResult.from_message(message)
+
+                # Get full transcript from metadata (as shown in SDK example)
+                transcript = result.metadata.transcript
+                if not transcript or not transcript.strip():
+                    return
+
+                start_time = result.metadata.start_time
+                end_time = result.metadata.end_time
+
+                # Skip segments that start before preseconds threshold
+                if start_time < preseconds:
+                    return
+
+                # Get speaker from first word if available (as shown in SDK example)
+                speaker_label = "S1"
+                if result.results and result.results[0].alternatives:
+                    speaker_label = getattr(result.results[0].alternatives[0], 'speaker', 'S1') or 'S1'
+
+                # Parse speaker label (e.g., "S1" -> 0, "S2" -> 1) - convert to 0-indexed like Deepgram
+                if isinstance(speaker_label, str) and speaker_label.startswith('S'):
+                    speaker_num = int(speaker_label[1:]) - 1  # Convert to 0-indexed
+                elif speaker_label == 'UU':
+                    speaker_num = 0
+                else:
+                    speaker_num = 0
+
+                speaker = f"SPEAKER_{speaker_num}"
+                is_user = speaker_num == 0 and preseconds > 0
+
+                segment = {
+                    'speaker': speaker,
+                    'start': start_time,
+                    'end': end_time,
+                    'text': transcript.strip(),
+                    'is_user': is_user,
+                    'person_id': None,
+                }
+
+                stream_transcript([segment])
+
+            except Exception as e:
+                print(f"Error processing Speechmatics transcript: {e}")
+
+        @client.on(ServerMessageType.ERROR)
+        def handle_error(message):
+            print(f"Speechmatics error: {message}")
+
+        # Enter context manager manually to establish connection
+        await client.__aenter__()
+
+        # Start transcription session
+        await client.start_session(
+            transcription_config=transcription_config,
+            audio_format=audio_format,
+        )
+
+        print("Connected to Speechmatics.")
+        return SpeechmaticsSocket(client)
+
     except Exception as e:
         print(f"Exception in process_audio_speechmatics: {e}")
         raise
