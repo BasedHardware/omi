@@ -958,6 +958,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
         db.collection('users')
         .document(uid)
         .collection(conversations_collection)
+        .where(filter=FieldFilter('status', '==', ConversationStatus.completed))
         .where(filter=FieldFilter('finished_at', '>=', start_threshold))
         .where(filter=FieldFilter('started_at', '<=', end_threshold))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
