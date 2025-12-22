@@ -946,41 +946,44 @@ int wifi_send_data(const uint8_t *data, size_t len)
 	/* TCP send - socket is already connected */
 	int poll_retries = 0;
 	while (1) {
-		ret = send(sock, data, len, ZSOCK_MSG_DONTWAIT);
-		if (ret < 0) {
-			int err = errno;
-			if (err == EINPROGRESS || err == EAGAIN || err == ENOBUFS) {
-				struct zsock_pollfd pfd = {
-					.fd = sock,
-					.events = ZSOCK_POLLOUT
-				};
-				int poll_ret = zsock_poll(&pfd, 1, 100); // 100ms timeout
-				if (poll_ret <= 0) {
-					k_msleep(10);
+		if (is_wifi_transport_ready()) {
+			ret = send(sock, data, len, ZSOCK_MSG_DONTWAIT);
+			if (ret < 0) {
+				int err = errno;
+				if (err == EINPROGRESS || err == EAGAIN || err == ENOBUFS) {
+					struct zsock_pollfd pfd = {
+						.fd = sock,
+						.events = ZSOCK_POLLOUT
+					};
+					int poll_ret = zsock_poll(&pfd, 1, 100); // 100ms timeout
+					if (poll_ret <= 0) {
+						k_msleep(1);
+						continue;
+					}
+					// Socket writable, retry send
 					continue;
 				}
-				// Socket writable, retry send
-				continue;
+				int64_t now_ms = k_uptime_get();
+				if (now_ms - last_tcp_err_log_ms > 1000) {
+					LOG_WRN("TCP send error %d", err);
+					last_tcp_err_log_ms = now_ms;
+				}
+				LOG_ERR("TCP send failed with error: %d", err);
+				struct net_if *iface = net_if_get_wifi_sta();
+				if (!iface) {
+					LOG_ERR("No Wi-Fi interface available");
+					return -ENODEV;
+				}
+				tcp_close_socket();
+				net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+				stop_tcp_traffic = true;
+				tcp_next_setup_ms = now_ms + 1000;
+				return -err;
 			}
-			int64_t now_ms = k_uptime_get();
-			if (now_ms - last_tcp_err_log_ms > 1000) {
-				LOG_WRN("TCP send error %d", err);
-				last_tcp_err_log_ms = now_ms;
-			}
-			LOG_ERR("TCP send failed with error: %d", err);
-			struct net_if *iface = net_if_get_wifi_sta();
-			if (!iface) {
-				LOG_ERR("No Wi-Fi interface available");
-				return -ENODEV;
-			}
-			tcp_close_socket();
-			net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-			stop_tcp_traffic = true;
-			tcp_next_setup_ms = now_ms + 1000;
-			return -err;
+			break;
+		} else {
+			return -ENOTCONN;
 		}
-
-		break;
 	}
 
 	return ret;
