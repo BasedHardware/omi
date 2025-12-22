@@ -6,7 +6,7 @@ import uuid
 
 import database.conversations as conversations_db
 import database.memories as memories_db
-from models.conversation import ConversationStatus
+from models.conversation import ConversationStatus, ConversationSource
 from models.memories import MemoryDB, MemoryCategory
 from utils.llm.clients import llm_mini
 
@@ -200,7 +200,7 @@ Reply with only "yes" or "no"."""
             'created_at': now,
             'started_at': now,
             'finished_at': now,
-            'source': 'onboarding',
+            'source': ConversationSource.onboarding.value,
             'language': 'en',
             'structured': {
                 'title': 'Getting to Know You',
@@ -217,7 +217,6 @@ Reply with only "yes" or "no"."""
             'photos': [],
             'status': ConversationStatus.completed.value,
             'discarded': False,
-            'deleted': False,
         }
 
         conversations_db.upsert_conversation(self.uid, conversation_data)

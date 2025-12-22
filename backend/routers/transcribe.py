@@ -178,6 +178,10 @@ async def _listen(
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
 
+    # Onboarding mode overrides: no speech profile (creating new one), single language
+    if onboarding_mode:
+        include_speech_profile = False
+
     try:
         await websocket.accept()
     except RuntimeError as e:
@@ -212,6 +216,10 @@ async def _listen(
     transcription_prefs = get_user_transcription_preferences(uid)
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
+
+    # Onboarding mode: force single language for better accuracy
+    if onboarding_mode:
+        single_language_mode = True
 
     # Always include "Omi" as predefined vocabulary
     vocabulary = list({"Omi"} | set(vocabulary))
