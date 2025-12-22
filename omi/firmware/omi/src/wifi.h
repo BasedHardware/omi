@@ -14,8 +14,8 @@ typedef enum {
 	WIFI_STATE_SHUTDOWN,     /* WiFi is shutting down */
 	WIFI_STATE_ON,           /* WiFi is on but not connected */
 	WIFI_STATE_CONNECTING,   /* WiFi is connecting */
-	WIFI_STATE_CONNECTED,    /* WiFi connected but no UDP */
-	WIFI_STATE_UDP_CONNECTED /* WiFi and UDP connected */
+	WIFI_STATE_CONNECTED,    /* WiFi connected but no TCP */
+	WIFI_STATE_TCP_CONNECTED /* WiFi and TCP connected */
 } wifi_state_t;
 
 /* API functions */
@@ -23,7 +23,7 @@ int wifi_init(void);
 void wifi_turn_off(void);
 int wifi_turn_on(void);
 int setup_wifi_credentials(const char *ssid, const char *password);
-int setup_udp_server(const char *server_addr, uint16_t server_port);
+int setup_tcp_server(const char *server_addr, uint16_t server_port);
 int wifi_send_data(const uint8_t *data, size_t len);
 bool is_wifi_transport_ready(void);
 bool is_wifi_on(void);

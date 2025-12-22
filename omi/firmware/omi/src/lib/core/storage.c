@@ -131,10 +131,9 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 }
 
 uint8_t transport_started = 0;
-
 static uint16_t packet_next_index = 0;
 #define SD_BLE_SIZE 440
-static uint8_t storage_write_buffer[SD_BLE_SIZE];
+static uint8_t storage_write_buffer[SD_BLE_SIZE * 5];
 
 static uint32_t offset = 0;
 static uint8_t index = 0;
@@ -268,7 +267,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
                 result_buffer[0] = 2; // error: invalid setup length
                 break;
             }
-            // Parse SSID, PASSWORD, UDP_SERVER_IP, UDP_SERVER_PORT
+            // Parse SSID, PASSWORD, TCP_SERVER_IP, TCP_SERVER_PORT
             // Format: [cmd][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port(2 bytes)]
             uint8_t idx = 1;
             uint8_t ssid_len = ((const uint8_t *)buf)[idx++];
@@ -315,7 +314,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
 
             LOG_INF("WIFI_SETUP: SSID=%s, PWD=%s, IP=%s, PORT=%u", ssid, pwd, ip, port);
             setup_wifi_credentials(ssid, pwd);
-            setup_udp_server(ip, port);
+            setup_tcp_server(ip, port);
             result_buffer[0] = 0; // success
             break;
 
@@ -363,17 +362,24 @@ static void write_to_gatt(struct bt_conn *conn)
     }
 }
 
-static void write_to_udp()
+static void write_to_tcp()
 {
-    uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
-    /* Send smaller UDP datagrams (440 bytes) to reduce net_pkt/driver pressure */
-    int ret = read_audio_data(storage_write_buffer, packet_size, offset);
+    uint32_t max_size = SD_BLE_SIZE * 5;
+    uint32_t to_read = MIN(remaining_length, max_size);
+    int ret = read_audio_data(storage_write_buffer, to_read, offset);
     if (ret > 0) {
-        offset = offset + packet_size;
-        ret = wifi_send_data(storage_write_buffer, packet_size);
-        if (ret < 0) {
-            LOG_ERR("wifi_send_data failed: %d", ret);
-            k_msleep(100);
+        offset += to_read;
+        remaining_length -= to_read;
+        size_t sent = 0;
+        while (sent < to_read) {
+            int n = wifi_send_data(storage_write_buffer + sent, to_read - sent);
+            if (n <= 0) {
+                k_msleep(10);
+                // LOG_WRN("wifi_send_data failed: %d, retrying ...", n);
+            } else {
+                sent += n;
+                k_yield();
+            }
         }
     } else {
         LOG_ERR("Failed to read audio data: %d", ret);
@@ -438,16 +444,17 @@ void storage_write(void)
                 // k_yield();
             }
 
-            // Send data over UDP if WiFi is ready, otherwise over GATT
+            // Send data over TCP if WiFi is ready, otherwise over GATT
             if(is_wifi_on()) {
                 if (is_wifi_transport_ready()) {
-                    write_to_udp();
+                    write_to_tcp();
+                    heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
                 }
             } else {
                 write_to_gatt(conn);
+                heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
             }
 
-            heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
             transport_started = 0;
             if (remaining_length == 0) {
                 if (stop_started) {

@@ -34,7 +34,6 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 #define WIFI_CONNECT_WAIT_MS 30000
 #define WIFI_DHCP_WAIT_MS    15000
 #define WIFI_RETRY_BACKOFF_MS 5000
-#define WIFI_UDP_MAX_ERR     5
 
 /* WiFi state management */
 static wifi_state_t current_wifi_state = WIFI_STATE_OFF;
@@ -48,7 +47,7 @@ static const char *wifi_state_str(wifi_state_t state)
 		case WIFI_STATE_ON: return "ON";
 		case WIFI_STATE_CONNECTING: return "CONNECTING";
 		case WIFI_STATE_CONNECTED: return "CONNECTED";
-		case WIFI_STATE_UDP_CONNECTED: return "UDP_CONNECTED";
+		case WIFI_STATE_TCP_CONNECTED: return "TCP_CONNECTED";
 		default: return "UNKNOWN";
 	}
 }
@@ -69,11 +68,11 @@ static wifi_state_t get_wifi_state(void)
 	return state;
 }
 
-/* WiFi and UDP connection settings - global variables that can be modified */
+/* WiFi and TCP connection settings - global variables that can be modified */
 char wifi_ssid[WIFI_MAX_SSID_LEN + 1] = "";
 char wifi_password[WIFI_MAX_PASSWORD_LEN + 1] = "";
-char udp_server_addr[WIFI_MAX_SERVER_ADDR_LEN + 1] = "";
-uint16_t udp_server_port = 0;
+char tcp_server_addr[WIFI_MAX_SERVER_ADDR_LEN + 1] = "";
+uint16_t tcp_server_port = 0;
 
 static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
 static struct net_mgmt_event_callback net_shell_mgmt_cb;
@@ -85,17 +84,17 @@ static atomic_t dhcp_bound;
 static atomic_t dhcp_started;
 static atomic_t dhcp_start_pending;
 
-static int64_t udp_next_setup_ms;
-static int64_t udp_trouble_until_ms;
+static int64_t tcp_next_setup_ms;
+static int64_t tcp_trouble_until_ms;
 static int64_t wifi_connect_backoff_until_ms;
 
-/* UDP socket management */
-static int udp_socket = -1;
-static K_MUTEX_DEFINE(udp_socket_mutex);
+/* TCP socket management */
+static int tcp_socket = -1;
+K_MUTEX_DEFINE(tcp_socket_mutex);
 
-static struct sockaddr_in udp_sock_addr;
-static bool udp_server_addr_valid;
-static bool stop_udp_traffic = true;
+static struct sockaddr_in tcp_sock_addr;
+static bool tcp_server_addr_valid;
+static bool stop_tcp_traffic = true;
 
 enum {
 	WIFI_FLAG_CONNECTED = 0,
@@ -153,31 +152,31 @@ static inline void wifi_set_need_recover(bool need)
 	}
 }
 
-static void udp_close_socket(void)
+static void tcp_close_socket(void)
 {
-	k_mutex_lock(&udp_socket_mutex, K_FOREVER);
-	if (udp_socket >= 0) {
-        int ret = close(udp_socket);
+	k_mutex_lock(&tcp_socket_mutex, K_FOREVER);
+	if (tcp_socket >= 0) {
+        int ret = close(tcp_socket);
         if (ret != 0) {
-            LOG_WRN("close(udp_socket=%d) failed: %d", udp_socket, errno);
+            LOG_WRN("close(tcp_socket=%d) failed: %d", tcp_socket, errno);
         }
-		udp_socket = -1;
+		tcp_socket = -1;
 	}
-	k_mutex_unlock(&udp_socket_mutex);
+	k_mutex_unlock(&tcp_socket_mutex);
 }
 
-static void udp_update_server_addr_locked(void)
+static void tcp_update_server_addr_locked(void)
 {
-	memset(&udp_sock_addr, 0, sizeof(udp_sock_addr));
-	udp_sock_addr.sin_family = AF_INET;
-	udp_sock_addr.sin_port = htons(udp_server_port);
-	udp_server_addr_valid = (udp_server_port > 0) &&
-		(zsock_inet_pton(AF_INET, udp_server_addr, &udp_sock_addr.sin_addr) == 1);
+	memset(&tcp_sock_addr, 0, sizeof(tcp_sock_addr));
+	tcp_sock_addr.sin_family = AF_INET;
+	tcp_sock_addr.sin_port = htons(tcp_server_port);
+	tcp_server_addr_valid = (tcp_server_port > 0) &&
+		(zsock_inet_pton(AF_INET, tcp_server_addr, &tcp_sock_addr.sin_addr) == 1);
 }
 
-static bool udp_is_configured(void)
+static bool tcp_is_configured(void)
 {
-	return (strlen(udp_server_addr) > 0 && udp_server_port > 0);
+	return (strlen(tcp_server_addr) > 0 && tcp_server_port > 0);
 }
 
 static bool wifi_is_configured(void)
@@ -307,6 +306,23 @@ static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb, struc
 	atomic_set_bit(&wifi_flags, WIFI_FLAG_CONNECT_RESULT);
 }
 
+static void wifi_power_save(bool enable)
+{
+	LOG_INF("Setting Wi-Fi Power Save: %s", enable ? "ENABLED" : "DISABLED");
+    struct net_if *iface = net_if_get_wifi_sta();
+    struct wifi_ps_params ps = {
+        .enabled = enable,
+    };
+
+    int ret = net_mgmt(NET_REQUEST_WIFI_PS,
+                       iface,
+                       &ps,
+                       sizeof(ps));
+    if (ret) {
+        LOG_ERR("Failed to set Wi-Fi PS: %d", ret);
+    }
+}
+
 static void handle_wifi_disconnect_result(struct net_mgmt_event_callback *cb, struct net_if *iface)
 {
 	if (!wifi_is_connected()) {
@@ -319,10 +335,10 @@ static void handle_wifi_disconnect_result(struct net_mgmt_event_callback *cb, st
 	}
 
 	atomic_set_bit(&wifi_flags, WIFI_FLAG_DISCONNECT_REQUESTED);
-	LOG_WRN("WiFi disconnected, close UDP socket if any");
+	LOG_WRN("WiFi disconnected, close TCP socket if any");
 	set_wifi_state(WIFI_STATE_ON);
 	k_msleep(100);
-	udp_close_socket();
+	tcp_close_socket();
 }
 
 static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
@@ -341,50 +357,52 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 	}
 }
 
-static int udp_setup_socket(void)
+static int tcp_setup_socket(void)
 {
 	int sock;
 	int ret;
 
 	/* Close existing socket if any */
-	udp_close_socket();
+	tcp_close_socket();
 
-	LOG_INF("Creating UDP socket...");
-	
-	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	LOG_INF("Creating TCP socket...");
+
+	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (sock < 0) {
-		LOG_ERR("Failed to create UDP socket: %d", errno);
+		LOG_ERR("Failed to create TCP socket: %d", errno);
 		return -errno;
 	}
 
-	LOG_INF("UDP socket created successfully");
+	LOG_INF("TCP socket created successfully");
 
-	/*
-	 * Keep UDP sends from piling up too much inside the stack/driver.
-	 * When congested, we prefer fast EAGAIN/ENOBUFS over buffering and risking
-	 * driver heap pressure.
-	 */
+	int one = 1;
+	setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 	struct timeval tv = {
 		.tv_sec = 0,
-		.tv_usec = 20000,
+		.tv_usec = 0,
 	};
-	(void)setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-	int sndbuf = 4 * 1024;
-	(void)setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
 
-	/* Validate + cache destination address */
-	k_mutex_lock(&udp_socket_mutex, K_FOREVER);
-	udp_update_server_addr_locked();
-	if (!udp_server_addr_valid) {
-		k_mutex_unlock(&udp_socket_mutex);
-		LOG_ERR("Invalid server address: %s", udp_server_addr);
+	setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	k_mutex_lock(&tcp_socket_mutex, K_FOREVER);
+	tcp_update_server_addr_locked();
+	if (!tcp_server_addr_valid) {
+		k_mutex_unlock(&tcp_socket_mutex);
+		LOG_ERR("Invalid server address: %s", tcp_server_addr);
 		close(sock);
 		return -EINVAL;
 	}
 
+	ret = connect(sock, (struct sockaddr *)&tcp_sock_addr, sizeof(tcp_sock_addr));
+	if (ret < 0) {
+		k_mutex_unlock(&tcp_socket_mutex);
+		LOG_ERR("TCP connect failed: %d", errno);
+		close(sock);
+		return -errno;
+	}
+
 	/* Store socket for later use */
-	udp_socket = sock;
-	k_mutex_unlock(&udp_socket_mutex);
+	tcp_socket = sock;
+	k_mutex_unlock(&tcp_socket_mutex);
 
 	return 0;
 }
@@ -449,7 +467,7 @@ static int wifi_connect(void)
 	}
 
 	LOG_INF("Preparing WiFi connection...");
-	udp_close_socket();
+	tcp_close_socket();
 	net_dhcpv4_stop(iface);
 	wifi_set_connected(false);
 	wifi_clear_connect_result();
@@ -496,6 +514,8 @@ static int wifi_connect(void)
 	/* Bounded timeout so we always get a CONNECT_RESULT event */
 	params.timeout = WIFI_CONNECT_WAIT_MS;
 
+	wifi_power_save(false);
+
 	LOG_INF("Connecting to SSID: %s (len=%d)", wifi_ssid, params.ssid_length);
 	LOG_INF("Password len: %d", params.psk_length);
 	LOG_INF("Security: %s, MFP: %d, Band: auto", 
@@ -522,17 +542,18 @@ static void handle_wifi_shutdown(void)
 	wifi_state_t state = get_wifi_state();
 
 	LOG_INF("Processing WIFI_SHUTDOWN");
-	stop_udp_traffic = true;
+	stop_tcp_traffic = true;
 	if (state == WIFI_STATE_OFF) {
 		LOG_WRN("WiFi already OFF");
 		ret = -EALREADY;
 	} else {
-		/* Best-effort: close UDP and disconnect if connected */
-		udp_close_socket();
+		/* Best-effort: close TCP and disconnect if connected */
+		tcp_close_socket();
 		atomic_set(&dhcp_bound, 0);
 		k_sem_reset(&dhcp_bound_sem);
 		struct net_if *iface = net_if_get_wifi_sta();
 		(void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+		wifi_power_save(true);
 
 		if (iface) {
 			LOG_INF("TURN_OFF: calling net_if_down");
@@ -624,7 +645,7 @@ static void handle_wifi_connected(void)
 		/* Disconnected while in this state */
 		LOG_WRN("WiFi disconnected, retrying...");
 		set_wifi_state(WIFI_STATE_ON);
-		udp_close_socket();
+		tcp_close_socket();
 		atomic_set(&dhcp_bound, 0);
 		k_sem_reset(&dhcp_bound_sem);
 		wifi_clear_connect_result();
@@ -632,24 +653,24 @@ static void handle_wifi_connected(void)
 		return;
 	}
 
-	/* Setup UDP if configured and have IP */
-	if (udp_is_configured() && wifi_has_ipv4_addr()) {
+	/* Setup TCP if configured and have IP */
+	if (tcp_is_configured() && wifi_has_ipv4_addr()) {
 		int64_t now_ms = k_uptime_get();
-		if (udp_next_setup_ms && now_ms < udp_next_setup_ms) {
+		if (tcp_next_setup_ms && now_ms < tcp_next_setup_ms) {
 			/* backoff */
 		} else {
 			// wait for DHCP to be bound
 			LOG_INF("Waiting for DHCP to assign IP...");
 			if (!wifi_wait_for_dhcp(WIFI_DHCP_WAIT_MS)) {
-				stop_udp_traffic = false;
-				udp_next_setup_ms = 0;
-				int ret = udp_setup_socket();
+				stop_tcp_traffic = false;
+				tcp_next_setup_ms = 0;
+				int ret = tcp_setup_socket();
 				if (ret == 0) {
-					set_wifi_state(WIFI_STATE_UDP_CONNECTED);
-					LOG_INF("UDP socket ready");
+					set_wifi_state(WIFI_STATE_TCP_CONNECTED);
+					LOG_INF("TCP socket ready");
 				} else {
-					LOG_ERR("UDP socket setup failed: %d, retrying...", ret);
-					udp_next_setup_ms = now_ms + 1000;
+					LOG_ERR("TCP socket setup failed: %d, retrying...", ret);
+					tcp_next_setup_ms = now_ms + 1000;
 				}
 			} else {
 				LOG_WRN("Can't get IPv4 - retrying ...");
@@ -661,14 +682,13 @@ static void handle_wifi_connected(void)
 	k_msleep(500);
 }
 
-static void handle_wifi_udp_connected(void)
+static void handle_wifi_tcp_connected(void)
 {
 	if (!wifi_is_connected()) {
 		/* Disconnected while in this state */
 		LOG_WRN("WiFi disconnected, retrying...");
 		set_wifi_state(WIFI_STATE_ON);
-		k_msleep(100);
-		udp_close_socket();
+		tcp_close_socket();
 		k_msleep(100);
 		atomic_set(&dhcp_bound, 0);
 		k_sem_reset(&dhcp_bound_sem);
@@ -708,8 +728,8 @@ int start_wifi_thread(void)
 		case WIFI_STATE_CONNECTED:
 			handle_wifi_connected();
 			break;
-		case WIFI_STATE_UDP_CONNECTED:
-			handle_wifi_udp_connected();
+		case WIFI_STATE_TCP_CONNECTED:
+			handle_wifi_tcp_connected();
 			break;
 		default:
 			LOG_ERR("Unknown WiFi state: %d", current_state);
@@ -733,7 +753,7 @@ static void net_mgmt_callback_init(void)
 	atomic_set(&wifi_ready_status, 0);
 	atomic_set(&dhcp_bound, 0);
 	k_sem_reset(&dhcp_bound_sem);
-	udp_server_addr_valid = false;
+	tcp_server_addr_valid = false;
 
 	net_mgmt_init_event_callback(&wifi_shell_mgmt_cb,
 				     wifi_mgmt_event_handler,
@@ -863,12 +883,12 @@ int setup_wifi_credentials(const char *ssid, const char *password)
 }
 
 /**
- * @brief Update UDP server connection parameters
- * @param server_addr UDP server IP address
- * @param server_port UDP server port
+ * @brief Update TCP server connection parameters
+ * @param server_addr TCP server IP address
+ * @param server_port TCP server port
  * @return 0 on success, negative error code on failure
  */
-int setup_udp_server(const char *server_addr, uint16_t server_port)
+int setup_tcp_server(const char *server_addr, uint16_t server_port)
 {
 	if (!server_addr || strlen(server_addr) == 0 || strlen(server_addr) > WIFI_MAX_SERVER_ADDR_LEN - 1) {
 		LOG_ERR("Invalid server address");
@@ -880,18 +900,18 @@ int setup_udp_server(const char *server_addr, uint16_t server_port)
 		return -EINVAL;
 	}
 
-	strncpy(udp_server_addr, server_addr, WIFI_MAX_SERVER_ADDR_LEN);
-	udp_server_addr[WIFI_MAX_SERVER_ADDR_LEN] = '\0';
-	udp_server_port = server_port;
-	k_mutex_lock(&udp_socket_mutex, K_FOREVER);
-	udp_update_server_addr_locked();
-	k_mutex_unlock(&udp_socket_mutex);
+	strncpy(tcp_server_addr, server_addr, WIFI_MAX_SERVER_ADDR_LEN);
+	tcp_server_addr[WIFI_MAX_SERVER_ADDR_LEN] = '\0';
+	tcp_server_port = server_port;
+	k_mutex_lock(&tcp_socket_mutex, K_FOREVER);
+	tcp_update_server_addr_locked();
+	k_mutex_unlock(&tcp_socket_mutex);
 
 	return 0;
 }
 
 /**
- * @brief Send data over UDP connection (non-blocking, direct send)
+ * @brief Send data over TCP connection (non-blocking, direct send)
  * @param data Pointer to data buffer
  * @param len Length of data to send
  * @return Number of bytes sent on success, negative error code on failure
@@ -900,12 +920,11 @@ int wifi_send_data(const uint8_t *data, size_t len)
 {
 	int ret;
 	wifi_state_t state = get_wifi_state();
-	struct sockaddr_in server_addr;
 	int sock;
 	bool server_valid;
-	static int64_t last_udp_err_log_ms;
+	static int64_t last_tcp_err_log_ms;
 
-	if (stop_udp_traffic) {
+	if (stop_tcp_traffic) {
 		return -ECONNABORTED;
 	}
 
@@ -914,41 +933,38 @@ int wifi_send_data(const uint8_t *data, size_t len)
 		return -EINVAL;
 	}
 
-	if (state != WIFI_STATE_UDP_CONNECTED) {
-		LOG_ERR("Cannot send data: UDP not ready (state: %s)", wifi_state_str(state));
+	if (state != WIFI_STATE_TCP_CONNECTED) {
+		LOG_ERR("Cannot send data: TCP not ready (state: %s)", wifi_state_str(state));
 		return -ENOTCONN;
 	}
 
-	k_mutex_lock(&udp_socket_mutex, K_FOREVER);
-	sock = udp_socket;
-	server_addr = udp_sock_addr;
-	server_valid = udp_server_addr_valid;
-	k_mutex_unlock(&udp_socket_mutex);
+	k_mutex_lock(&tcp_socket_mutex, K_FOREVER);
+	sock = tcp_socket;
+	server_valid = tcp_server_addr_valid;
+	k_mutex_unlock(&tcp_socket_mutex);
 	if (sock < 0 || !server_valid) {
-		LOG_ERR("UDP socket not available");
+		LOG_ERR("TCP socket not available");
 		return -ENOTCONN;
 	}
 
-	/* UDP sendto - no connection, just send */
-	ret = sendto(sock, data, len, ZSOCK_MSG_DONTWAIT,
-			(struct sockaddr *)&server_addr, sizeof(server_addr));
-	
+	/* TCP send - socket is already connected */
+	ret = send(sock, data, len, ZSOCK_MSG_DONTWAIT);
+
 	if (ret < 0) {
 		int err = errno;
 		int64_t now_ms = k_uptime_get();
-		{
-			if (now_ms - last_udp_err_log_ms > 1000) {
-				LOG_WRN("UDP send error %d", err);
-				last_udp_err_log_ms = now_ms;
-			}
+		if (now_ms - last_tcp_err_log_ms > 1000) {
+			LOG_WRN("TCP send error %d", err);
+			last_tcp_err_log_ms = now_ms;
 		}
 		if (err == EINPROGRESS || err == EAGAIN || err == ENOBUFS) {
-			udp_next_setup_ms = k_uptime_get() + 1000;
-			udp_trouble_until_ms = k_uptime_get() + 5000;
+			tcp_next_setup_ms = k_uptime_get() + 1000;
+			tcp_trouble_until_ms = k_uptime_get() + 5000;
 
 			return -err;
 		}
 
+		LOG_ERR("TCP send failed with error: %d", err);
 		struct net_if *iface = net_if_get_wifi_sta();
 
 		if (!iface) {
@@ -956,14 +972,12 @@ int wifi_send_data(const uint8_t *data, size_t len)
 			return -ENODEV;
 		}
 
-		udp_close_socket();
+		tcp_close_socket();
 		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-		stop_udp_traffic = true;
-		
-		/* Any other error: pause UDP and let the worker recreate the socket.
-		 * Do NOT force Wi-Fi OFF/ON here (it causes reconnect instability).
-		 */
-		udp_next_setup_ms = now_ms + 1000;
+		stop_tcp_traffic = true;
+
+		/* Any other error: pause TCP and let the worker recreate the socket. */
+		tcp_next_setup_ms = now_ms + 1000;
 
 		return -err;
 	}
@@ -980,7 +994,7 @@ int wifi_init(void)
 	int ret = 0;
 
 	set_wifi_state(WIFI_STATE_OFF);
-	
+
 	/* Register callbacks FIRST before anything else */
 	net_mgmt_callback_init();
 	LOG_INF("Network management callbacks registered");
@@ -1005,7 +1019,7 @@ int wifi_init(void)
 bool is_wifi_transport_ready(void)
 {
 	wifi_state_t state = get_wifi_state();
-	return state != WIFI_STATE_UDP_CONNECTED ? false : true;
+	return state == WIFI_STATE_TCP_CONNECTED ? true : false;
 }
 
 bool is_wifi_on(void)
