@@ -30,6 +30,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -911,7 +912,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           // Date picker
                                           Expanded(
                                             child: Material(
-                                              color: const Color(0xFF1F1F25),
+                                              color: ResponsiveHelper.backgroundSecondary,
                                               child: CalendarDatePicker2(
                                                 config: getDefaultCalendarConfig(
                                                   firstDate: DateTime(2020),
@@ -920,8 +921,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 ),
                                                 value: [selectedDate],
                                                 onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty) {
-                                                    selectedDate = dates[0];
+                                                  if (dates.isNotEmpty && dates[0] != null) {
+                                                    selectedDate = dates[0]!;
                                                   }
                                                 },
                                               ),
