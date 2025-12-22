@@ -1058,7 +1058,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       const GetSummaryWidgets(),
                       data.item1
                           ? const ReprocessDiscardedWidget()
-                          : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
+                          : GetAppsWidgets(
+                              searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
                       const GetGeolocationWidgets(),
                       const SizedBox(height: 150),
                     ],

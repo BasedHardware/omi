@@ -3,6 +3,7 @@ import json
 import os
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -462,14 +463,21 @@ def get_or_create_merged_audio(
     # Convert to WAV
     wav_data = pcm_to_wav_func(pcm_data)
 
-    # Upload to cache with 1-day expiry metadata
-    expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-    cache_blob.metadata = {
-        'expires_at': expires_at.isoformat(),
-        'audio_file_id': audio_file_id,
-    }
-    cache_blob.upload_from_string(wav_data, content_type='audio/wav')
-    print(f"Cached merged audio at: {cache_path}")
+    # Upload to cache in background thread with 1-day TTL
+    def _upload_to_cache():
+        try:
+            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            cache_blob.metadata = {
+                'expires_at': expires_at.isoformat(),
+                'audio_file_id': audio_file_id,
+            }
+            cache_blob.upload_from_string(wav_data, content_type='audio/wav')
+            print(f"Cached merged audio at: {cache_path}")
+        except Exception as e:
+            print(f"Error uploading audio cache: {e}")
+
+    cache_thread = threading.Thread(target=_upload_to_cache, daemon=True)
+    cache_thread.start()
 
     return wav_data, False
 
