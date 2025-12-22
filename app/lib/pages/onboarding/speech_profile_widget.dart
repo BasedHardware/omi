@@ -42,8 +42,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
         await LanguageSelectionDialog.show(context);
       }
-      // Enable question mode for onboarding
-      context.read<SpeechProfileProvider>().enableQuestionMode();
     });
     SharedPreferencesUtil().onboardingCompleted = true;
   }
@@ -187,12 +185,28 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     context,
                     () {
                       Navigator.pop(context);
-                      //  Navigator.pop(context);
                     },
                     () {},
                     'Are you there?',
                     'We could not detect any speech. Please make sure to speak for at least 10 seconds and not more than 3 minutes.',
                     okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      provider.close();
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    'Connection Lost',
+                    'The connection was interrupted. Please check your internet connection and try again.',
+                    okButtonText: 'Try Again',
                     singleButton: true,
                   ),
                   barrierDismissible: false,
@@ -213,9 +227,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         ? Column(
                             children: [
                               Text(
-                                provider.useQuestionMode
-                                    ? 'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.'
-                                    : 'Omi needs to learn your voice to recognize you',
+                                'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white,
@@ -310,9 +322,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       });
                                       
                                       // Start question animation
-                                      if (provider.useQuestionMode) {
-                                        _questionAnimationController.forward();
-                                      }
+                                      _questionAnimationController.forward();
                                     },
                                     child: const Text(
                                       'Get Started',
@@ -376,52 +386,36 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     const SizedBox(height: 8),
-                                    provider.useQuestionMode
-                                        ? FadeTransition(
-                                            opacity: _questionFadeAnimation,
-                                            child: Text(
-                                              provider.currentQuestion,
-                                              style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          )
-                                        : (provider.percentageCompleted > 0
-                                            ? const SizedBox()
-                                            : const Text(
-                                                "Introduce\nyourself",
-                                                style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
-                                                textAlign: TextAlign.center,
-                                              )),
+                                    FadeTransition(
+                                      opacity: _questionFadeAnimation,
+                                      child: Text(
+                                        provider.currentQuestion,
+                                        style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
                                     const SizedBox(height: 8),
                                     SizedBox(
                                         width: MediaQuery.sizeOf(context).width * 0.9,
                                         child: ProgressBarWithPercentage(
-                                            progressValue: provider.useQuestionMode 
-                                                ? provider.questionProgress 
-                                                : provider.percentageCompleted)),
+                                            progressValue: provider.questionProgress)),
                                     const SizedBox(height: 8),
                                     Text(
-                                      provider.useQuestionMode
-                                          ? (provider.isProcessingAnswer 
-                                              ? 'Processing your answer...' 
-                                              : 'Keep going, you are doing great')
-                                          : provider.message,
+                                      'Keep going, you are doing great',
                                       style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
                                       textAlign: TextAlign.center,
                                     ),
-                                    if (provider.useQuestionMode) ...[
-                                      const SizedBox(height: 8),
-                                      TextButton(
-                                        onPressed: provider.isProcessingAnswer ? null : () => provider.skipCurrentQuestion(),
-                                        child: Text(
-                                          'Skip this question',
-                                          style: TextStyle(
-                                            color: provider.isProcessingAnswer ? Colors.grey : Colors.white70,
-                                            fontSize: 14,
-                                          ),
+                                    const SizedBox(height: 8),
+                                    TextButton(
+                                      onPressed: () => provider.skipCurrentQuestion(),
+                                      child: const Text(
+                                        'Skip this question',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 14,
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ],
                                 ),
                   (!provider.startedRecording)

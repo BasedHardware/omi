@@ -229,12 +229,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
       ChangeNotifierProvider(
-        create: (context) {
-          final provider = SpeechProfileProvider();
-          // Enable question mode by default
-          provider.enableQuestionMode();
-          return provider;
-        },
+        create: (context) => SpeechProfileProvider(),
         child: SpeechProfileWidget(
           goNext: () {
             // Speech profile complete, finish onboarding
