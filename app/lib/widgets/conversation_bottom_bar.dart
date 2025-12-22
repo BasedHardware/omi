@@ -106,7 +106,6 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     try {
       _audioPlayer = AudioPlayer();
 
-      // Try to get signed URLs first (direct GCS streaming - faster)
       final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
       final audioFileIds = widget.conversation!.audioFiles.map((af) => af.id).toList();
 
@@ -120,10 +119,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         );
 
         if (urlInfo.isCached && urlInfo.signedUrl != null) {
-          // Use signed URL directly (no auth headers needed)
+          // Use signed URL directly
           audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
         } else {
-          // Fall back to API URL with headers
+          // Fall back to API URL
           final headers = await getAudioHeaders();
           final apiUrl = getAudioStreamUrl(
             conversationId: widget.conversation!.id,
