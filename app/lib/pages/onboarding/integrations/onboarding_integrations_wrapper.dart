@@ -16,7 +16,6 @@ class OnboardingIntegrationsWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IntegrationsPage(
-      hideAppBar: false,
       onBackPressed: goBack,
       bottomWidget: Padding(
         padding: const EdgeInsets.only(top: 8),

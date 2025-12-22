@@ -115,7 +115,16 @@ extension IntegrationAppExtension on IntegrationApp {
 }
 
 class IntegrationsPage extends StatefulWidget {
-  const IntegrationsPage({super.key});
+  final bool hideAppBar;
+  final VoidCallback? onBackPressed;
+  final Widget? bottomWidget;
+
+  const IntegrationsPage({
+    super.key,
+    this.hideAppBar = false,
+    this.onBackPressed,
+    this.bottomWidget,
+  });
 
   @override
   State<IntegrationsPage> createState() => _IntegrationsPageState();
@@ -598,23 +607,25 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Chat Tools',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-      ),
+      appBar: widget.hideAppBar
+          ? null
+          : AppBar(
+              backgroundColor: const Color(0xFF000000),
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: widget.onBackPressed ?? () => Navigator.pop(context),
+              ),
+              title: const Text(
+                'Chat Tools',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              centerTitle: true,
+            ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -660,6 +671,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                   ],
                 ),
               ),
+              // Optional bottom widget (for onboarding buttons)
+              if (widget.bottomWidget != null) ...[
+                const SizedBox(height: 24),
+                widget.bottomWidget!,
+              ],
             ],
           ),
         ),
