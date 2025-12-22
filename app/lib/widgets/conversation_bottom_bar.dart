@@ -110,6 +110,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       final audioFileIds = widget.conversation!.audioFiles.map((af) => af.id).toList();
 
       List<AudioSource> audioSources = [];
+      Map<String, String>? fallbackHeaders;
 
       for (final fileId in audioFileIds) {
         // Find matching signed URL info
@@ -123,13 +124,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
         } else {
           // Fall back to API URL
-          final headers = await getAudioHeaders();
+          fallbackHeaders ??= await getAudioHeaders();
           final apiUrl = getAudioStreamUrl(
             conversationId: widget.conversation!.id,
             audioFileId: fileId,
             format: 'wav',
           );
-          audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: headers));
+          audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
         }
       }
 
