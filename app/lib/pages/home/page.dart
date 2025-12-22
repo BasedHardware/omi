@@ -39,8 +39,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
@@ -846,12 +848,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 context: context,
                                 builder: (BuildContext context) {
                                   return Container(
-                                    height: 300,
+                                    height: 420,
                                     padding: const EdgeInsets.only(top: 6.0),
                                     margin: EdgeInsets.only(
                                       bottom: MediaQuery.of(context).viewInsets.bottom,
                                     ),
-                                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                                    color: const Color(0xFF1F1F25),
                                     child: SafeArea(
                                       top: false,
                                       child: Column(
@@ -908,15 +910,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           ),
                                           // Date picker
                                           Expanded(
-                                            child: Container(
+                                            child: Material(
                                               color: const Color(0xFF1F1F25),
-                                              child: CupertinoDatePicker(
-                                                mode: CupertinoDatePickerMode.date,
-                                                initialDateTime: DateTime.now(),
-                                                minimumDate: DateTime(2020),
-                                                maximumDate: DateTime.now(),
-                                                onDateTimeChanged: (DateTime newDate) {
-                                                  selectedDate = newDate;
+                                              child: CalendarDatePicker2(
+                                                config: getDefaultCalendarConfig(
+                                                  firstDate: DateTime(2020),
+                                                  lastDate: DateTime.now(),
+                                                  currentDate: DateTime.now(),
+                                                ),
+                                                value: [selectedDate],
+                                                onValueChanged: (dates) {
+                                                  if (dates.isNotEmpty) {
+                                                    selectedDate = dates[0];
+                                                  }
                                                 },
                                               ),
                                             ),
