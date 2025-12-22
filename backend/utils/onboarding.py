@@ -12,12 +12,46 @@ from utils.llm.clients import llm_mini
 
 
 ONBOARDING_QUESTIONS = [
-    {'question': 'How old are you?', 'category': 'age'},
-    {'question': 'Where do you live?', 'category': 'location'},
-    {'question': 'What do you do for work?', 'category': 'work'},
-    {'question': 'What is your long-term goal?', 'category': 'long_term_goal'},
-    {'question': 'What are your goals this month?', 'category': 'monthly_goals'},
-    {'question': 'What do you have planned for today?', 'category': 'daily_plans'},
+    {
+        'question': "What should I call you?",
+        'category': 'name'
+    },
+    {
+        'question': "Where do you live?",
+        'category': 'location'
+    },
+    {
+        'question': "What do you do for work?",
+        'category': 'work'
+    },
+    {
+        'question': "What kind of work or projects are you passionate about?",
+        'category': 'work_passion'
+    },
+    {
+        'question': "What are some hobbies or interests you enjoy outside of work?",
+        'category': 'hobbies'
+    },
+    {
+        'question': "What's something you'd love to have more time for?",
+        'category': 'time_wishes'
+    },
+    {
+        'question': "What's a challenge you're currently working through?",
+        'category': 'current_challenges'
+    },
+    {
+        'question': "What is your long-term goal?",
+        'category': 'long_term_goal'
+    },
+    {
+        'question': "How do you hope I can help you in your daily life?",
+        'category': 'omi_expectations'
+    },
+    {
+        'question': "What's on your mind for today or this week?",
+        'category': 'immediate_focus'
+    },
 ]
 
 
@@ -72,6 +106,39 @@ class OnboardingHandler:
             return
 
         await self._check_answer()
+
+    async def skip_current_question(self):
+        """Skip the current question and move to the next one"""
+        if self.completed or self.is_checking_answer:
+            return
+
+        # Cancel any pending silence timer
+        if self.silence_timer:
+            self.silence_timer.cancel()
+            self.silence_timer = None
+
+        # Record that this question was skipped
+        if self.current_question:
+            self.answers.append({
+                'question': self.current_question['question'],
+                'answer': self.current_transcript.strip() if self.current_transcript.strip() else '[skipped]',
+                'category': self.current_question['category'],
+                'skipped': True,
+            })
+
+        # Send event to app
+        await self._send_event('question_skipped', {
+            'question_index': self.current_question_index,
+        })
+
+        # Move to next question
+        self.current_question_index += 1
+        self.current_transcript = ''
+
+        if self.current_question_index >= len(self.questions):
+            await self._complete_onboarding()
+        else:
+            await self.send_current_question()
 
     async def _check_answer(self):
         """Use AI to check if question was answered"""
@@ -242,6 +309,10 @@ Return ONLY the overview text."""
         now = datetime.now(timezone.utc)
 
         for qa in self.answers:
+            # Skip creating memories for skipped questions with no real answer
+            if qa.get('skipped') and qa.get('answer') == '[skipped]':
+                continue
+
             memory_data = MemoryDB(
                 id=str(uuid.uuid4()),
                 uid=self.uid,

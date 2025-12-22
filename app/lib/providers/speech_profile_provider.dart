@@ -66,7 +66,9 @@ class SpeechProfileProvider extends ChangeNotifier
       : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
 
   void skipCurrentQuestion() {
-    notifyInfo('SKIP_QUESTION');
+    if (_socket?.state == SocketServiceState.connected) {
+      _socket?.sendText('{"type": "skip_question"}');
+    }
   }
 
   void updateLoadingText(String text) {

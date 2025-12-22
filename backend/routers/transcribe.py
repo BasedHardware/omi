@@ -1519,6 +1519,9 @@ async def _listen(
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
+                        elif json_data.get('type') == 'skip_question':
+                            if onboarding_handler and not onboarding_handler.completed:
+                                await onboarding_handler.skip_current_question()
                         elif json_data.get('type') == 'suggested_transcript':
                             if use_custom_stt:
                                 suggested_segments = json_data.get('segments', [])
