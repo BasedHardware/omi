@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 
 enum ConversationBottomBarMode {
@@ -104,17 +105,38 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     try {
       _audioPlayer = AudioPlayer();
-      final headers = await getAudioHeaders();
+
+      final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
       final audioFileIds = widget.conversation!.audioFiles.map((af) => af.id).toList();
-      final urls = getConversationAudioUrls(
-        conversationId: widget.conversation!.id,
-        audioFileIds: audioFileIds,
-        format: 'wav',
-      );
+
+      List<AudioSource> audioSources = [];
+      Map<String, String>? fallbackHeaders;
+
+      for (final fileId in audioFileIds) {
+        // Find matching signed URL info
+        final urlInfo = signedUrlInfos.firstWhere(
+          (info) => info.id == fileId,
+          orElse: () => AudioFileUrlInfo(id: fileId, status: 'pending', duration: 0),
+        );
+
+        if (urlInfo.isCached && urlInfo.signedUrl != null) {
+          // Use signed URL directly
+          audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
+        } else {
+          // Fall back to API URL
+          fallbackHeaders ??= await getAudioHeaders();
+          final apiUrl = getAudioStreamUrl(
+            conversationId: widget.conversation!.id,
+            audioFileId: fileId,
+            format: 'wav',
+          );
+          audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
+        }
+      }
 
       final playlist = ConcatenatingAudioSource(
         useLazyPreparation: true,
-        children: urls.map((url) => AudioSource.uri(Uri.parse(url), headers: headers)).toList(),
+        children: audioSources,
       );
 
       await _audioPlayer!.setAudioSource(playlist, preload: true);
@@ -136,9 +158,29 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
     if (!mounted) return;
     if (_audioPlayer == null) return;
+
+    final conversationId = widget.conversation?.id ?? '';
+
     if (_audioPlayer!.playing) {
+      // Track pause
+      final position = _audioPlayer!.position;
+      final currentIndex = _audioPlayer!.currentIndex ?? 0;
+      final combinedPosition = _getCombinedPosition(currentIndex, position);
+
+      MixpanelManager().audioPlaybackPaused(
+        conversationId: conversationId,
+        positionSeconds: combinedPosition.inSeconds,
+        durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
+      );
+
       await _audioPlayer!.pause();
     } else {
+      // Track play
+      MixpanelManager().audioPlaybackStarted(
+        conversationId: conversationId,
+        durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
+      );
+
       await _audioPlayer!.play();
     }
     if (mounted) setState(() {});
@@ -652,6 +694,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (positionInTrack.isNegative) {
       positionInTrack = Duration.zero;
     }
+
+    // Track seek
+    final conversationId = widget.conversation?.id ?? '';
+    MixpanelManager().audioPlaybackSeeked(
+      conversationId: conversationId,
+      toPositionSeconds: targetPosition.inSeconds,
+    );
 
     await _audioPlayer!.seek(positionInTrack, index: targetIndex);
   }
