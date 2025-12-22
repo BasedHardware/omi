@@ -1231,6 +1231,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     return _buildCardBase(
       backgroundColor: WrappedColors.orange,
+      customPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
       child: _TopPhrasesAnimated(
         phrases: phrases.take(5).map((p) {
           final phrase = p is Map ? (p['phrase'] ?? '') : p.toString();
@@ -2891,6 +2892,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
       );
     }
 
+    if (!mounted) return;
     setState(() {
       _displayedMonth = targetMonth;
     });
@@ -2902,8 +2904,10 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     for (double scale = 0.0; scale <= 1.0; scale += 0.1) {
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 20));
+      if (!mounted) return;
       setState(() => _circleScale = scale);
     }
+    if (!mounted) return;
     setState(() => _circleScale = 1.0);
     HapticFeedback.mediumImpact();
   }
@@ -2913,8 +2917,10 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     for (double opacity = 0.0; opacity <= 1.0; opacity += 0.1) {
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 30));
+      if (!mounted) return;
       setState(() => _detailsOpacity = opacity);
     }
+    if (!mounted) return;
     setState(() => _detailsOpacity = 1.0);
   }
 
@@ -2923,11 +2929,13 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     for (double val = 1.0; val >= 0.0; val -= 0.15) {
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 25));
+      if (!mounted) return;
       setState(() {
         _detailsOpacity = val;
         _circleScale = val;
       });
     }
+    if (!mounted) return;
     setState(() {
       _detailsOpacity = 0.0;
       _circleScale = 0.0;
@@ -3465,8 +3473,8 @@ class _TypewriterEndPageAnimated extends StatefulWidget {
 class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> with TickerProviderStateMixin {
   late AnimationController _mainController;
   late Animation<double> _mainAnimation;
-  late List<AnimationController> _typewriterControllers;
-  late List<Animation<double>> _typewriterAnimations;
+  late List<AnimationController> _itemControllers;
+  late List<Animation<double>> _itemAnimations;
 
   bool _hasAnimated = false;
 
@@ -3483,16 +3491,15 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
       curve: Curves.easeOutCubic,
     );
 
-    // Create typewriter controllers for each item
-    _typewriterControllers = List.generate(
+    // Create controllers for each item
+    _itemControllers = List.generate(
       widget.items.length,
       (index) => AnimationController(
-        duration: Duration(milliseconds: 50 * widget.items[index].value.length),
+        duration: const Duration(milliseconds: 500),
         vsync: this,
       ),
     );
-    _typewriterAnimations =
-        _typewriterControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.linear)).toList();
+    _itemAnimations = _itemControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeOutBack)).toList();
 
     if (widget.isActive) {
       _startAnimation();
@@ -3509,11 +3516,12 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
     _mainController.forward();
     HapticFeedback.mediumImpact();
 
-    // Start typewriter for each item with stagger
-    for (int i = 0; i < _typewriterControllers.length; i++) {
-      await Future.delayed(Duration(milliseconds: 200 + i * 150));
+    // Stagger item animations
+    for (int i = 0; i < _itemControllers.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 120));
       if (!mounted) return;
-      _typewriterControllers[i].forward();
+      _itemControllers[i].forward();
+      HapticFeedback.selectionClick();
     }
   }
 
@@ -3528,7 +3536,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
   @override
   void dispose() {
     _mainController.dispose();
-    for (final c in _typewriterControllers) {
+    for (final c in _itemControllers) {
       c.dispose();
     }
     super.dispose();
@@ -3568,23 +3576,86 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            // Items list with typewriter effect
+            const SizedBox(height: 32),
+            // Items list
             ...widget.items.asMap().entries.map((entry) {
               final index = entry.key;
               final item = entry.value;
-              // Stagger the entry animation
-              final delayedProgress = ((mainOpacity - index * 0.1) / 0.7).clamp(0.0, 1.0);
 
-              return Opacity(
-                opacity: delayedProgress,
-                child: Transform.translate(
-                  offset: Offset(30 * (1 - delayedProgress), 0),
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: index < widget.items.length - 1 ? 28 : 0),
-                    child: _buildTypewriterItem(item, index),
-                  ),
-                ),
+              return AnimatedBuilder(
+                animation: _itemAnimations.length > index ? _itemAnimations[index] : _mainAnimation,
+                builder: (context, child) {
+                  final rawProgress = _itemAnimations.length > index ? _itemAnimations[index].value : 0.0;
+                  final progress = rawProgress.clamp(0.0, 1.0);
+
+                  return Opacity(
+                    opacity: progress,
+                    child: Transform.translate(
+                      offset: Offset(-30 * (1 - rawProgress), 0),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Rank number
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Emoji
+                            Text(
+                              item.emoji ?? '',
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                            const SizedBox(width: 12),
+                            // Content
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.label.toUpperCase(),
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    item.value,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
               );
             }),
             const Spacer(),
@@ -3595,62 +3666,6 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
               buttonColor: widget.badgeColor,
             ),
             const SizedBox(height: 20),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildTypewriterItem(_TypewriterItem item, int index) {
-    return AnimatedBuilder(
-      animation: _typewriterAnimations[index],
-      builder: (context, child) {
-        final progress = _typewriterAnimations[index].value.clamp(0.0, 1.0);
-        final charCount = (progress * item.value.length).round();
-        final displayedText = item.value.substring(0, charCount);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Label with optional emoji
-            Row(
-              children: [
-                if (item.emoji != null) ...[
-                  Text(
-                    item.emoji!,
-                    style: const TextStyle(fontSize: 24),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    item.label.toUpperCase(),
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            // Value with typewriter effect
-            Text(
-              displayedText,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                height: 1.3,
-              ),
-            ),
           ],
         );
       },
@@ -3752,102 +3767,111 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
       builder: (context, child) {
         final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 40),
-            // Badge
-            Opacity(
-              opacity: mainOpacity,
-              child: Transform.scale(
-                scale: 0.5 + mainOpacity * 0.5,
-                alignment: Alignment.centerLeft,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Top 5 Phrases',
-                    style: TextStyle(
-                      color: WrappedColors.orange,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 40),
+              // Badge
+              Opacity(
+                opacity: mainOpacity,
+                child: Transform.scale(
+                  scale: 0.5 + mainOpacity * 0.5,
+                  alignment: Alignment.centerLeft,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Top 5 Phrases',
+                        style: TextStyle(
+                          color: WrappedColors.orange,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 32),
-            // Phrases list
-            ...widget.phrases.asMap().entries.map((entry) {
-              final index = entry.key;
-              final phrase = entry.value;
+              const SizedBox(height: 32),
+              // Phrases list
+              ...widget.phrases.asMap().entries.map((entry) {
+                final index = entry.key;
+                final phrase = entry.value;
 
-              return AnimatedBuilder(
-                animation: _phraseAnimations.length > index ? _phraseAnimations[index] : _mainAnimation,
-                builder: (context, child) {
-                  final rawProgress = _phraseAnimations.length > index ? _phraseAnimations[index].value : 0.0;
-                  final progress = rawProgress.clamp(0.0, 1.0);
+                return AnimatedBuilder(
+                  animation: _phraseAnimations.length > index ? _phraseAnimations[index] : _mainAnimation,
+                  builder: (context, child) {
+                    final rawProgress = _phraseAnimations.length > index ? _phraseAnimations[index].value : 0.0;
+                    final progress = rawProgress.clamp(0.0, 1.0);
 
-                  return Opacity(
-                    opacity: progress,
-                    child: Transform.translate(
-                      offset: Offset(-40 * (1 - rawProgress), 0),
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${index + 1}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
+                    return Opacity(
+                      opacity: progress,
+                      child: Transform.translate(
+                        offset: Offset(-40 * (1 - rawProgress), 0),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                '"$phrase"',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w600,
-                                  fontStyle: FontStyle.italic,
-                                  height: 1.3,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  '"$phrase"',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    fontStyle: FontStyle.italic,
+                                    height: 1.3,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                },
-              );
-            }),
-            const Spacer(),
-            // Share button
-            _AnimatedShareButton(
-              progress: mainOpacity,
-              onShare: widget.onShare,
-              buttonColor: WrappedColors.blue,
-            ),
-            const SizedBox(height: 20),
-          ],
+                    );
+                  },
+                );
+              }),
+              const Spacer(),
+              // Share button
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _AnimatedShareButton(
+                  progress: mainOpacity,
+                  onShare: widget.onShare,
+                  buttonColor: WrappedColors.blue,
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         );
       },
     );
@@ -4282,7 +4306,7 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 72),
             // Subtitle directly under the main quote
             Opacity(
               opacity: contentOpacity,
@@ -4444,7 +4468,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
         final tilesProgress = _tilesAnimation.value.clamp(0.0, 1.0);
 
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 24),
             // Header with 2025 and percentile
@@ -4686,14 +4710,12 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
             // Share button row with omi branding
             Row(
               children: [
-                Expanded(
-                  child: _AnimatedShareButton(
-                    progress: tilesProgress,
-                    onShare: widget.onShare,
-                    buttonColor: WrappedColors.mint,
-                  ),
+                _AnimatedShareButton(
+                  progress: tilesProgress,
+                  onShare: widget.onShare,
+                  buttonColor: WrappedColors.mint,
                 ),
-                const SizedBox(width: 12),
+                const Spacer(),
                 Opacity(
                   opacity: tilesProgress.clamp(0.0, 1.0),
                   child: const Text(
@@ -4702,7 +4724,6 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
                       color: Colors.white54,
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ),
