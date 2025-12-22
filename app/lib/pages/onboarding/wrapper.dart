@@ -16,6 +16,7 @@ import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
 import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
+import 'package:omi/pages/onboarding/integrations/onboarding_integrations_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -39,13 +40,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kNamePage = 1;
   static const int kPrimaryLanguagePage = 2;
   static const int kPermissionsPage = 3;
-  static const int kUserReviewPage = 4;
-  static const int kWelcomePage = 5;
-  static const int kFindDevicesPage = 6;
-  static const int kSpeechProfilePage = 7; // Now always the last index
+  static const int kImportPage = 4;
+  static const int kUserReviewPage = 5;
+  static const int kWelcomePage = 6;
+  static const int kFindDevicesPage = 7;
+  static const int kSpeechProfilePage = 8; // Now always the last index
 
   // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7];
+  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -55,7 +57,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _controller = TabController(length: 8, vsync: this);
+    _controller = TabController(length: 9, vsync: this);
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
@@ -132,6 +134,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       case kPermissionsPage:
         newImage = Assets.images.onboardingBg3.path;
         break;
+      case kImportPage:
+        newImage = Assets.images.onboardingBg3.path;
+        break;
       case kUserReviewPage:
         newImage = Assets.images.onboardingBg6.path;
         break;
@@ -174,6 +179,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       case kPrimaryLanguagePage:
         return Assets.images.onboardingBg4.path;
       case kPermissionsPage:
+        return Assets.images.onboardingBg3.path;
+      case kImportPage:
         return Assets.images.onboardingBg3.path;
       case kUserReviewPage:
         return Assets.images.onboardingBg6.path;
@@ -223,8 +230,22 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       }),
       PermissionsWidget(
         goNext: () {
-          _goNext(); // Go to User Review page
+          _goNext(); // Go to Integrations page
           MixpanelManager().onboardingStepCompleted('Permissions');
+        },
+      ),
+      OnboardingIntegrationsWrapper(
+        goNext: () {
+          _goNext(); // Go to User Review page
+          MixpanelManager().onboardingStepCompleted('Integrations');
+        },
+        onSkip: () {
+          _goNext(); // Go to User Review page
+          MixpanelManager().onboardingStepCompleted('Integrations Skipped');
+        },
+        goBack: () {
+          // Go back to Permissions page
+          _controller!.animateTo(kPermissionsPage);
         },
       ),
       UserReviewPage(
@@ -313,7 +334,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                   pages[kAuthPage],
                 ],
               )
-            : _controller!.index == kNamePage ||
+            : _controller!.index == kImportPage
+                ? pages[_controller!.index]
+                : _controller!.index == kNamePage ||
                     _controller!.index == kPrimaryLanguagePage ||
                     _controller!.index == kPermissionsPage ||
                     _controller!.index == kUserReviewPage ||
@@ -348,9 +371,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: List.generate(
-                            7,
+                            8,
                             (index) {
-                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=7
+                              int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
                               return Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                 width: pageIndex == _controller!.index ? 12.0 : 8.0,
@@ -403,16 +426,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             children: [
-                              Consumer<OnboardingProvider>(
-                                builder: (context, onboardingProvider, child) {
-                                  return DeviceAnimationWidget(
-                                    animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
-                                    isConnected: onboardingProvider.isConnected,
-                                    deviceName: onboardingProvider.deviceName,
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 24),
+                              // Hide device animation for integrations page
+                              if (_controller!.index != kImportPage)
+                                Consumer<OnboardingProvider>(
+                                  builder: (context, onboardingProvider, child) {
+                                    return DeviceAnimationWidget(
+                                      animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
+                                      isConnected: onboardingProvider.isConnected,
+                                      deviceName: onboardingProvider.deviceName,
+                                    );
+                                  },
+                                ),
+                              if (_controller!.index != kImportPage) const SizedBox(height: 24),
                               kHiddenHeaderPages.contains(_controller?.index)
                                   ? const SizedBox.shrink()
                                   : Padding(
@@ -473,9 +498,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: List.generate(
-                                6,
+                                8,
                                 (index) {
-                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=6
+                                  int pageIndex = index + 1; // Name=1, Lang=2, ..., Speech=8
                                   return Container(
                                     margin: const EdgeInsets.symmetric(horizontal: 4.0),
                                     width: pageIndex == _controller!.index ? 12.0 : 8.0,
