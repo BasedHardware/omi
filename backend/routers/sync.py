@@ -8,7 +8,7 @@ import wave
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import StreamingResponse
 from opuslib import Decoder
 from pydub import AudioSegment
@@ -24,6 +24,7 @@ from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
     download_audio_chunks_and_merge,
+    get_or_create_merged_audio,
 )
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
@@ -48,6 +49,52 @@ def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> 
     return wav_buffer.getvalue()
 
 
+def parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | None:
+    """
+    Parse HTTP Range header and return (start, end) tuple.
+    Returns None if the range is invalid.
+
+    Example: "bytes=0-1023" -> (0, 1023)
+    """
+    if not range_header:
+        return None
+
+    try:
+        # Parse "bytes=start-end" format
+        if not range_header.startswith("bytes="):
+            return None
+
+        range_spec = range_header[6:]
+        parts = range_spec.split("-")
+
+        if len(parts) != 2:
+            return None
+
+        start_str, end_str = parts
+
+        # Handle "bytes=start-" (from start to end of file)
+        if start_str and not end_str:
+            start = int(start_str)
+            end = file_size - 1
+        # Handle "bytes=-suffix" (last N bytes)
+        elif not start_str and end_str:
+            suffix_length = int(end_str)
+            start = max(0, file_size - suffix_length)
+            end = file_size - 1
+        # Handle "bytes=start-end"
+        else:
+            start = int(start_str)
+            end = int(end_str)
+
+        # RFC 7233: start must be valid, end can exceed file size and gets clamped
+        if start < 0 or start >= file_size or start > end:
+            return None
+        end = min(end, file_size - 1)
+        return (start, end)
+    except (ValueError, IndexError):
+        return None
+
+
 # **********************************************
 # ********** AUDIO DOWNLOAD ENDPOINT ***********
 # **********************************************
@@ -57,6 +104,7 @@ def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> 
 def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
+    request: Request,
     format: str = Query(default="wav", regex="^(wav|pcm)$"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -67,11 +115,13 @@ def download_audio_file_endpoint(
     Args:
         conversation_id: ID of the conversation
         audio_file_id: ID of the audio file within the conversation
+        request: FastAPI Request object (for Range header)
         format: Output format - 'wav' or 'pcm' (raw) (default: wav)
         uid: User ID (from authentication)
 
     Returns:
-        StreamingResponse with the audio file in the requested format
+        StreamingResponse with the audio file in the requested format.
+        Returns 206 Partial Content for Range requests, 200 OK for full file.
     """
     # Verify user owns the conversation
     conversation = conversations_db.get_conversation(uid, conversation_id)
@@ -89,36 +139,79 @@ def download_audio_file_endpoint(
     if not audio_file:
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
-    # Get PCM data by merging chunks on-demand
+    # Get audio data - use cache if available, otherwise merge and cache
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
-        pcm_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+        if format == "wav":
+            audio_data, was_cached = get_or_create_merged_audio(
+                uid=uid,
+                conversation_id=conversation_id,
+                audio_file_id=audio_file_id,
+                timestamps=audio_file['chunk_timestamps'],
+                pcm_to_wav_func=pcm_to_wav,
+            )
+            content_type = "audio/wav"
+            extension = "wav"
+        else:
+            audio_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+            content_type = "application/octet-stream"
+            extension = "pcm"
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Audio chunks not found in storage")
     except Exception as e:
         print(f"Error downloading audio file: {e}")
         raise HTTPException(status_code=500, detail="Failed to download audio file")
 
-    # Convert to requested format
-    if format == "wav":
-        audio_data = pcm_to_wav(pcm_data)
-        content_type = "audio/wav"
-        extension = "wav"
-    else:  # pcm (raw)
-        audio_data = pcm_data
-        content_type = "application/octet-stream"
-        extension = "pcm"
-
     # Create descriptive filename
     filename = f"conversation_{conversation_id}_audio_{audio_file_id}.{extension}"
+    file_size = len(audio_data)
 
-    # Return streaming response
+    base_headers = {
+        "Content-Disposition": f"attachment; filename={filename}",
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=3600",
+    }
+
+    range_header = request.headers.get("Range")
+
+    if range_header:
+        # Parse the range request
+        range_tuple = parse_range_header(range_header, file_size)
+
+        if range_tuple is None:
+            return Response(
+                status_code=416,
+                headers={
+                    "Content-Range": f"bytes */{file_size}",
+                    **base_headers,
+                },
+            )
+
+        start, end = range_tuple
+        content_length = end - start + 1
+
+        # Return partial content
+        return StreamingResponse(
+            io.BytesIO(audio_data[start : end + 1]),
+            status_code=206,
+            media_type=content_type,
+            headers={
+                "Content-Length": str(content_length),
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                **base_headers,
+            },
+        )
+
     return StreamingResponse(
         io.BytesIO(audio_data),
+        status_code=200,
         media_type=content_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Length": str(file_size),
+            **base_headers,
+        },
     )
 
 
