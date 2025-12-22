@@ -435,7 +435,7 @@ void storage_write(void)
         }
 
         if (remaining_length > 0) {
-            if (conn == NULL) {
+            if (conn == NULL && !is_wifi_on()) {
                 LOG_ERR("invalid connection");
                 remaining_length = 0;
                 save_offset(offset);
