@@ -374,8 +374,7 @@ static void write_to_tcp()
         while (sent < to_read) {
             int n = wifi_send_data(storage_write_buffer + sent, to_read - sent);
             if (n <= 0) {
-                k_msleep(10);
-                // LOG_WRN("wifi_send_data failed: %d, retrying ...", n);
+                LOG_ERR("wifi_send_data failed: %d", n);
             } else {
                 sent += n;
                 k_yield();
