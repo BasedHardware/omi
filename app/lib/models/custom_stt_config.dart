@@ -69,23 +69,36 @@ class CustomSttConfig {
   }
 
   /// Build request config with all settings applied
+  /// Merges user customizations with provider defaults (user values win)
   Map<String, dynamic> get requestConfig {
-    if (provider == SttProvider.custom || provider == SttProvider.customLive) {
-      return {
-        'url': url,
-        'request_type': effectiveRequestType,
-        'headers': headers,
-        'params': params,
-        'audio_field_name': audioFieldName,
-      };
-    }
-    return providerConfig.buildRequestConfig(
+    // Get provider defaults (works for all providers including custom)
+    final config = providerConfig.buildRequestConfig(
       apiKey: apiKey,
       language: language,
       model: model,
       host: host,
       port: port,
     );
+
+    final defaultParams = Map<String, String>.from(config['params'] ?? {});
+    final defaultHeaders = Map<String, String>.from(config['headers'] ?? {});
+
+    // Merge user params with defaults (user values override defaults)
+    if (params != null && params!.isNotEmpty) {
+      config['params'] = {...defaultParams, ...params!};
+    }
+
+    // Merge user headers with defaults (user values override defaults)
+    if (headers != null && headers!.isNotEmpty) {
+      config['headers'] = {...defaultHeaders, ...headers!};
+    }
+
+    // Apply explicit overrides
+    if (url != null && url!.isNotEmpty) config['url'] = url;
+    if (requestType != null) config['request_type'] = requestType;
+    if (audioFieldName != null) config['audio_field_name'] = audioFieldName;
+
+    return config;
   }
 
   String get sttConfigId {

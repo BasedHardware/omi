@@ -16,6 +16,7 @@ import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 import database.action_items as action_items_db
+import database.calendar_meetings as calendar_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -27,6 +28,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from models.conversation import CalendarMeetingContext
 from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
@@ -77,6 +79,13 @@ def _get_structured(
         except Exception as e:
             print(f"Error fetching existing action items for deduplication: {e}")
 
+        # Extract calendar context from external_data
+        calendar_context = None
+        if hasattr(conversation, 'external_data') and conversation.external_data:
+            calendar_data = conversation.external_data.get('calendar_meeting_context')
+            if calendar_data:
+                calendar_context = CalendarMeetingContext(**calendar_data)
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
@@ -88,6 +97,7 @@ def _get_structured(
                     language_code,
                     tz,
                     existing_action_items=existing_action_items,
+                    calendar_meeting_context=calendar_context,
                 )
                 return structured, False
 
@@ -136,6 +146,7 @@ def _get_structured(
                 tz,
                 photos=conversation.photos,
                 existing_action_items=existing_action_items,
+                calendar_meeting_context=calendar_context,
             ),
             False,
         )
@@ -151,16 +162,27 @@ def _get_conversation_obj(
 ):
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
+        conversation_dict = conversation.dict()
+        # Store calendar context in external_data if available
+        calendar_context = conversation_dict.pop('calendar_meeting_context', None)
+
         # Use started_at as created_at for imported conversations to preserve original timestamp
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
             structured=structured,
-            **conversation.dict(),
             created_at=created_at,
             discarded=discarded,
+            **conversation_dict,
         )
+
+        # Add calendar metadata to external_data
+        if calendar_context:
+            if not conversation.external_data:
+                conversation.external_data = {}
+            conversation.external_data['calendar_meeting_context'] = calendar_context
+
         if conversation.photos:
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
@@ -443,6 +465,21 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
+    # Fetch meeting context from Firestore if meeting_id is associated with this conversation
+    if hasattr(conversation, 'id') and conversation.id:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation.id)
+        if meeting_id:
+            try:
+                meeting_data = calendar_db.get_meeting(uid, meeting_id)
+                if meeting_data:
+                    # Add meeting context to conversation's external_data
+                    if not hasattr(conversation, 'external_data') or not conversation.external_data:
+                        conversation.external_data = {}
+                    conversation.external_data['calendar_meeting_context'] = meeting_data
+                    print(f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}")
+            except Exception as e:
+                print(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
+
     person_ids = conversation.get_person_ids()
     people = []
     if person_ids:

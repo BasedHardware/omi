@@ -5,6 +5,7 @@ import 'package:omi/models/stt_response_schema.dart';
 enum SttProvider {
   omi,
   openai,
+  openaiDiarize,
   deepgram,
   deepgramLive,
   falai,
@@ -158,6 +159,21 @@ class SttProviderConfig {
       apiKeyUrl: 'https://platform.openai.com/api-keys',
       docsUrl: 'https://platform.openai.com/docs/guides/speech-to-text',
     ),
+    SttProvider.openaiDiarize: SttProviderConfig(
+      provider: SttProvider.openaiDiarize,
+      displayName: 'OpenAI GPT-4o Transcribe Diarize',
+      description: 'GPT-4o Transcribe with speaker diarization',
+      icon: FontAwesomeIcons.userGroup,
+      requiresApiKey: true,
+      requestType: SttRequestType.multipartForm,
+      supportedLanguages: SttLanguages.whisperSupported,
+      supportedModels: const ['gpt-4o-transcribe-diarize'],
+      defaultLanguage: 'en',
+      defaultModel: 'gpt-4o-transcribe-diarize',
+      responseSchema: SttResponseSchema.openAIDiarize,
+      apiKeyUrl: 'https://platform.openai.com/api-keys',
+      docsUrl: 'https://platform.openai.com/docs/models/gpt-4o-transcribe-diarize',
+    ),
     SttProvider.deepgram: SttProviderConfig(
       provider: SttProvider.deepgram,
       displayName: 'Deepgram',
@@ -224,9 +240,9 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.streaming,
       supportedLanguages: SttLanguages.geminiSupported,
-      supportedModels: const ['gemini-2.0-flash-live-001'],
+      supportedModels: const ['gemini-2.5-flash-native-audio-preview-12-2025'],
       defaultLanguage: 'en',
-      defaultModel: 'gemini-2.0-flash-live-001',
+      defaultModel: 'gemini-2.5-flash-native-audio-preview-12-2025',
       responseSchema: SttResponseSchema.geminiLive,
       apiKeyUrl: 'https://aistudio.google.com/apikey',
       docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini',
@@ -281,6 +297,7 @@ class SttProviderConfig {
 
   static const _visibleProviders = [
     SttProvider.openai,
+    SttProvider.openaiDiarize,
     SttProvider.deepgramLive,
     SttProvider.geminiLive,
     SttProvider.localWhisper,
@@ -351,6 +368,18 @@ class SttProviderConfig {
         };
         break;
 
+      case SttProvider.openaiDiarize:
+        config['url'] = 'https://api.openai.com/v1/audio/transcriptions';
+        config['audio_field_name'] = 'file';
+        config['headers'] = {'Authorization': 'Bearer ${apiKey ?? ''}'};
+        config['params'] = {
+          'model': mdl.isNotEmpty ? mdl : 'gpt-4o-transcribe-diarize',
+          'language': lang,
+          'response_format': 'diarized_json',
+          'chunking_strategy': 'auto',
+        };
+        break;
+
       case SttProvider.deepgram:
         config['url'] = 'https://api.deepgram.com/v1/listen';
         config['headers'] = {
@@ -402,9 +431,9 @@ class SttProviderConfig {
 
       case SttProvider.geminiLive:
         config['url'] =
-            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
+            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
         config['params'] = {
-          'model': mdl.isNotEmpty ? mdl : 'gemini-2.0-flash-live-001',
+          'model': mdl.isNotEmpty ? mdl : 'gemini-2.5-flash-native-audio-preview-12-2025',
           'language': lang,
         };
         break;

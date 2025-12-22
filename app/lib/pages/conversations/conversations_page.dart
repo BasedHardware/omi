@@ -16,6 +16,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
+import 'widgets/score_widget.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -175,6 +176,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
+            const SliverToBoxAdapter(child: ScoreWidget()),
             if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)
@@ -238,8 +240,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   },
                 ),
               ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 80),
+            SliverToBoxAdapter(
+              child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100),
             ),
           ],
         ),

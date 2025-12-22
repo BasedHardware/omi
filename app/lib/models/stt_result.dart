@@ -6,10 +6,22 @@ int _extractSpeakerId(dynamic value) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   if (value is String) {
+    // Pattern 1: Direct numeric string
     final directParse = int.tryParse(value);
     if (directParse != null) return directParse;
+
+    // Pattern 2: "SPEAKER_1" or "speaker_1" format - extract number
     final match = RegExp(r'(\d+)').firstMatch(value);
-    return match != null ? (int.tryParse(match.group(1)!) ?? 0) : 0;
+    if (match != null) return int.tryParse(match.group(1)!) ?? 0;
+
+    // Pattern 3: "A", "B", "C" format (OpenAI diarize) -> 0, 1, 2
+    if (value.length == 1) {
+      final code = value.toUpperCase().codeUnitAt(0);
+      if (code >= 65 && code <= 90) {
+        // A-Z
+        return code - 65; // A=0, B=1, C=2, ...
+      }
+    }
   }
   return 0;
 }

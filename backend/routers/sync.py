@@ -27,7 +27,7 @@ from utils.other.storage import (
     get_or_create_merged_audio,
 )
 from utils import encryption
-from utils.stt.pre_recorded import fal_whisperx, fal_postprocessing
+from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
 
 router = APIRouter()
@@ -410,10 +410,10 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
 
     threading.Thread(target=delete_file).start()
 
-    words, language = fal_whisperx(url, 3, 2, True)
-    transcript_segments: List[TranscriptSegment] = fal_postprocessing(words, 0)
+    words, language = deepgram_prerecorded(url, speakers_count=3, attempts=0, return_language=True)
+    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
     if not transcript_segments:
-        print('failed to get fal segments')
+        print('failed to get deepgram segments')
         return
 
     timestamp = get_timestamp_from_path(path)

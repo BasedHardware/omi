@@ -6,22 +6,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals.dart';
@@ -41,6 +44,7 @@ class CaptureProvider extends ChangeNotifier
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
+  CalendarProvider? calendarProvider;
 
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
@@ -111,6 +115,8 @@ class CaptureProvider extends ChangeNotifier
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _controlBarChannel.setMethodCallHandler(_handleFloatingControlBarMethodCall);
+        ServiceManager.instance().systemAudio.setOnRecordingStartedFromNub(_handleRecordingStartedFromNub);
+        ServiceManager.instance().systemAudio.setIsRecordingPausedCallback(() => _isPaused);
       });
     }
   }
@@ -810,9 +816,41 @@ class CaptureProvider extends ChangeNotifier
     _broadcastRecordingState();
   }
 
+  /// Sends current geolocation to backend if location services are enabled and permission is granted
+  Future<void> _sendCurrentGeolocation() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        Logger.log('Location service is not enabled, skipping geolocation update');
+        return;
+      }
+
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        Logger.log('Location permission not granted, skipping geolocation update');
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition();
+      final geolocation = Geolocation(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        altitude: position.altitude,
+        accuracy: position.accuracy,
+        time: position.timestamp.toUtc(),
+      );
+
+      await updateUserGeolocation(geolocation: geolocation);
+    } catch (e) {
+      Logger.error('Error sending geolocation: $e');
+    }
+  }
+
   streamRecording() async {
     updateRecordingState(RecordingState.initialising);
     await Permission.microphone.request();
+
+    // Send current location when conversation starts
+    _sendCurrentGeolocation();
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -843,6 +881,9 @@ class CaptureProvider extends ChangeNotifier
     if (device != null) _updateRecordingDevice(device);
 
     bool wasPaused = _isPaused;
+
+    // Send current location when conversation starts
+    _sendCurrentGeolocation();
 
     await _resetStateVariables();
     await _resetState();
@@ -949,6 +990,7 @@ class CaptureProvider extends ChangeNotifier
           },
           onMicrophoneDeviceChanged: _onMicrophoneDeviceChanged,
           onMicrophoneStatus: _onMicrophoneStatus,
+          onStoppedAutomatically: _handleRecordingStoppedAutomatically,
         );
   }
 
@@ -1046,6 +1088,9 @@ class CaptureProvider extends ChangeNotifier
     _stopRecordingTimer();
     await _socket?.stop(reason: 'manual stop');
     await _cleanupCurrentState();
+
+    // Tell native to reset recording source since user explicitly stopped
+    _screenCaptureChannel.invokeMethod('resetRecordingSource');
   }
 
   Future<void> pauseSystemAudioRecording({bool isAuto = false}) async {
@@ -1061,6 +1106,8 @@ class CaptureProvider extends ChangeNotifier
 
     ServiceManager.instance().systemAudio.stop();
     _isPaused = true;
+    // Don't reset duration - just pause the timer
+    _pauseRecordingTimer();
     notifyListeners();
     _broadcastRecordingState();
   }
@@ -1071,7 +1118,12 @@ class CaptureProvider extends ChangeNotifier
     // User wants to resume - enable auto-resume after wake
     _shouldAutoResumeAfterWake = true;
     _isPaused = false;
+
+    // Preserve the current duration before starting
+    final preservedDuration = _recordingDuration;
     await streamSystemAudioRecording();
+    // Restore duration after streamSystemAudioRecording may have reset it
+    _recordingDuration = preservedDuration;
     _broadcastRecordingState();
   }
 
@@ -1088,9 +1140,56 @@ class CaptureProvider extends ChangeNotifier
           await streamSystemAudioRecording();
         }
         break;
+      case 'requestCurrentState':
+        // Control bar is requesting current state (e.g., when it becomes visible)
+        _broadcastRecordingState();
+        break;
       default:
         Logger.debug('FloatingControlBarChannel: Unhandled method ${call.method}');
     }
+  }
+
+  Future<void> _handleRecordingStoppedAutomatically() async {
+    debugPrint('CaptureProvider: Recording stopped automatically (meeting ended)');
+    // Don't auto-resume after this - meeting is over
+    _shouldAutoResumeAfterWake = false;
+
+    // Stop the Flutter-side recording state
+    if (PlatformService.isDesktop) {
+      _isAutoReconnecting = false;
+      _reconnectTimer?.cancel();
+      _reconnectTimer = null;
+      _isPaused = false;
+      _stopRecordingTimer();
+      updateRecordingState(RecordingState.stop);
+      await _socket?.stop(reason: 'meeting ended - auto stop');
+      await _cleanupCurrentState();
+    }
+
+    await forceProcessingCurrentConversation();
+  }
+
+  Future<void> _handleRecordingStartedFromNub() async {
+    debugPrint('CaptureProvider: Recording started from nub - stopping any existing recording and starting fresh');
+
+    // Reset all recording state to ensure clean start
+    _isPaused = false;
+    _stopRecordingTimer();
+
+    // Stop any existing recording and CLEAR CALLBACKS immediately
+    ServiceManager.instance().systemAudio.stopAndClearCallbacks();
+    await _socket?.stop(reason: 'nub start - reset');
+
+    // Reset state to stop and broadcast immediately so control bar shows correct state
+    recordingState = RecordingState.stop;
+    notifyListeners();
+    _broadcastRecordingState();
+
+    // Small delay to ensure native stop completes before starting new recording
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // Start fresh recording
+    await streamSystemAudioRecording();
   }
 
   @override
@@ -1458,6 +1557,13 @@ class CaptureProvider extends ChangeNotifier
         _broadcastRecordingState();
       }
     });
+  }
+
+  void _pauseRecordingTimer() {
+    // Stop the timer but preserve the current duration
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    // Don't reset _recordingDuration here
   }
 
   void _stopRecordingTimer() {

@@ -41,6 +41,7 @@ import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
 import 'package:flutter/cupertino.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
 
@@ -343,58 +344,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               connectivityProvider.previousConnection != isConnected) {
             previousConnection = isConnected;
             if (!isConnected) {
-              Future.delayed(const Duration(seconds: 2), () {
-                if (mounted && !connectivityProvider.isConnected) {
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'No internet connection. Please check your connection.',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      backgroundColor: const Color(0xFF424242), // Dark gray instead of red
-                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              });
+              // TODO: Re-enable when internet connection banners are redesigned
+              // Future.delayed(const Duration(seconds: 2), () {
+              //   if (mounted && !connectivityProvider.isConnected) {
+              //     ScaffoldMessenger.of(ctx).showMaterialBanner(
+              //       MaterialBanner(
+              //         content: const Text(
+              //           'No internet connection. Please check your connection.',
+              //           style: TextStyle(color: Colors.white70),
+              //         ),
+              //         backgroundColor: const Color(0xFF424242), // Dark gray instead of red
+              //         leading: const Icon(Icons.wifi_off, color: Colors.white70),
+              //         actions: [
+              //           TextButton(
+              //             onPressed: () {
+              //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+              //             },
+              //             child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
+              //           ),
+              //         ],
+              //       ),
+              //     );
+              //   }
+              // });
             } else {
               Future.delayed(Duration.zero, () {
-                if (mounted) {
-                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'Internet connection is restored.',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
-                      leading: const Icon(Icons.wifi, color: Colors.white),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            if (mounted) {
-                              ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                            }
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
-                        ),
-                      ],
-                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        if (mounted) {
-                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                        }
-                      }),
-                    ),
-                  );
-                }
+                // TODO: Re-enable when internet connection banners are redesigned
+                // if (mounted) {
+                //   ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //   ScaffoldMessenger.of(ctx).showMaterialBanner(
+                //     MaterialBanner(
+                //       content: const Text(
+                //         'Internet connection is restored.',
+                //         style: TextStyle(color: Colors.white),
+                //       ),
+                //       backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
+                //       leading: const Icon(Icons.wifi, color: Colors.white),
+                //       actions: [
+                //         TextButton(
+                //           onPressed: () {
+                //             if (mounted) {
+                //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //             }
+                //           },
+                //           child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
+                //         ),
+                //       ],
+                //       onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                //         if (mounted) {
+                //           ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //         }
+                //       }),
+                //     ),
+                //   );
+                // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
@@ -672,6 +675,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           }
                         },
                       ),
+                      // Merge action bar - floats above bottom nav when in selection mode
+                      if (homeProvider.selectedIndex == 0)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: MergeActionBar(),
+                        ),
                     ],
                   ),
                 ),

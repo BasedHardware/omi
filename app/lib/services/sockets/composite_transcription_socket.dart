@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -16,14 +15,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
   IPureSocketListener? _listener;
-
-  // Reconnection
-  int _reconnectRetries = 0;
-  Timer? _reconnectTimer;
-  bool _stopped = false;  // Prevents reconnects after stop() is called
-  static const int _maxReconnectRetries = 8;
-  static const int _initialBackoffMs = 1000;
-  static const double _backoffMultiplier = 1.5;
 
   late final _PrimarySocketListener _primaryListener;
   late final _SecondarySocketListener _secondaryListener;
@@ -51,10 +42,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
-    if (_stopped) {
-      CustomSttLogService.instance.info('Composite', 'Connect ignored - socket was stopped');
-      return false;
-    }
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
@@ -72,7 +59,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
 
     if (primaryOk && secondaryOk) {
       _status = PureSocketStatus.connected;
-      _reconnectRetries = 0;
       CustomSttLogService.instance.info('Composite', 'Both sockets connected');
       DebugLogManager.logEvent('composite_socket_connected', {
         'primary_status': primarySocket.status.toString(),
@@ -110,7 +96,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
   Future disconnect() async {
     CustomSttLogService.instance.info('Composite', 'Disconnecting...');
     DebugLogManager.logEvent('composite_socket_disconnecting', {});
-    _cancelReconnect();
 
     await _disconnectBothQuietly();
 
@@ -122,8 +107,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
   Future stop() async {
     CustomSttLogService.instance.info('Composite', 'Stopping...');
     DebugLogManager.logEvent('composite_socket_stopping', {});
-    _stopped = true;  // Prevent any further reconnect attempts
-    _cancelReconnect();
 
     await Future.wait([
       primarySocket.stop(),
@@ -131,11 +114,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
     ]);
 
     _status = PureSocketStatus.disconnected;
-  }
-
-  void _cancelReconnect() {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
   }
 
   /// Called when either socket closes unexpectedly
@@ -151,13 +129,11 @@ class CompositeTranscriptionSocket implements IPureSocket {
     DebugLogManager.logEvent('composite_socket_child_closed', {
       'child_socket': name,
       'close_code': closeCode ?? -1,
-      'will_reconnect': !_stopped,
     });
 
     _status = PureSocketStatus.disconnected;
     _disconnectBothQuietly();
     onClosed(closeCode);
-    _scheduleReconnect();
   }
 
   /// Called when either socket errors
@@ -174,60 +150,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
     _status = PureSocketStatus.disconnected;
     _disconnectBothQuietly();
     onError(err, trace);
-    // Note: onClosed will likely follow, which will trigger reconnect
-  }
-
-  void _scheduleReconnect() {
-    if (_stopped) {
-      CustomSttLogService.instance.info('Composite', 'Reconnect skipped - socket was stopped');
-      return;
-    }
-    if (_reconnectTimer != null) {
-      return; // Already scheduled
-    }
-    if (_reconnectRetries >= _maxReconnectRetries) {
-      CustomSttLogService.instance.warning(
-        'Composite',
-        'Max reconnect retries reached ($_maxReconnectRetries)',
-      );
-      DebugLogManager.logWarning('composite_socket_max_retries', {
-        'max_retries': _maxReconnectRetries,
-      });
-      _listener?.onMaxRetriesReach();
-      return;
-    }
-
-    final waitMs = (pow(_backoffMultiplier, _reconnectRetries) * _initialBackoffMs).toInt();
-    CustomSttLogService.instance.info(
-      'Composite',
-      'Scheduling reconnect in ${waitMs}ms (attempt ${_reconnectRetries + 1}/$_maxReconnectRetries)',
-    );
-
-    DebugLogManager.logEvent('composite_socket_reconnect_scheduled', {
-      'wait_ms': waitMs,
-      'attempt': _reconnectRetries + 1,
-      'max_retries': _maxReconnectRetries,
-    });
-
-    _reconnectTimer = Timer(Duration(milliseconds: waitMs), () async {
-      _reconnectTimer = null;
-      
-      // Double-check stopped flag before attempting reconnect
-      if (_stopped) {
-        CustomSttLogService.instance.info('Composite', 'Reconnect timer fired but socket was stopped');
-        return;
-      }
-      
-      _reconnectRetries++;
-      DebugLogManager.logEvent('composite_socket_reconnect_attempt', {
-        'attempt': _reconnectRetries,
-        'max_retries': _maxReconnectRetries,
-      });
-      final success = await connect();
-      if (!success && !_stopped) {
-        _scheduleReconnect();
-      }
-    });
   }
 
   @override
@@ -289,12 +211,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
   void onError(Object err, StackTrace trace) {
     _listener?.onError(err, trace);
   }
-
-  @override
-  void onConnectionStateChanged(bool isConnected) {
-    primarySocket.onConnectionStateChanged(isConnected);
-    secondarySocket.onConnectionStateChanged(isConnected);
-  }
 }
 
 // Simplified listeners - just delegate to composite
@@ -314,11 +230,6 @@ class _PrimarySocketListener implements IPureSocketListener {
   @override
   void onError(Object err, StackTrace trace) => _composite._onSocketError('Primary', err, trace);
 
-  @override
-  void onInternetConnectionFailed() => debugPrint("[Composite/Primary] Internet failed");
-
-  @override
-  void onMaxRetriesReach() => debugPrint("[Composite/Primary] Max retries");
 }
 
 class _SecondarySocketListener implements IPureSocketListener {
@@ -336,11 +247,5 @@ class _SecondarySocketListener implements IPureSocketListener {
 
   @override
   void onError(Object err, StackTrace trace) => _composite._onSocketError('Secondary', err, trace);
-
-  @override
-  void onInternetConnectionFailed() => _composite._listener?.onInternetConnectionFailed();
-
-  @override
-  void onMaxRetriesReach() {} // Composite handles its own retries
 }
 

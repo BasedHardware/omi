@@ -461,33 +461,37 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildFilterChip(
-                    label: 'All Recordings',
-                    isSelected: syncProvider.storageFilter == null,
-                    onTap: () => syncProvider.clearStorageFilter(),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildFilterChip(
-                    label: 'Phone Storage',
-                    isSelected:
-                        syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
-                    onTap: () => syncProvider.setStorageFilter(WalStorage.disk),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildFilterChip(
-                    label: 'SD Card',
-                    isSelected: syncProvider.storageFilter == WalStorage.sdcard,
-                    onTap: () => syncProvider.setStorageFilter(WalStorage.sdcard),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildFilterChip(
-                    label: 'Limitless',
-                    isSelected: syncProvider.storageFilter == WalStorage.flashPage,
-                    onTap: () => syncProvider.setStorageFilter(WalStorage.flashPage),
-                  ),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    _buildFilterChip(
+                      label: 'All Recordings',
+                      isSelected: syncProvider.storageFilter == null,
+                      onTap: () => syncProvider.clearStorageFilter(),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      label: 'Phone Storage',
+                      isSelected:
+                          syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
+                      onTap: () => syncProvider.setStorageFilter(WalStorage.disk),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      label: 'SD Card',
+                      isSelected: syncProvider.storageFilter == WalStorage.sdcard,
+                      onTap: () => syncProvider.setStorageFilter(WalStorage.sdcard),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      label: 'Limitless',
+                      isSelected: syncProvider.storageFilter == WalStorage.flashPage,
+                      onTap: () => syncProvider.setStorageFilter(WalStorage.flashPage),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

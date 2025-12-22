@@ -565,12 +565,15 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   // Transcription Section
                   GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
+                    onTap: () async {
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const TranscriptionSettingsPage(),
                         ),
                       );
+                      if (mounted) {
+                        setState(() {});
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(16),
