@@ -360,7 +360,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
                 title: 'Offline Sync',
-                icon: const FaIcon(FontAwesomeIcons.cloud, color: Color(0xFF8E8E93), size: 20),
+                icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.of(context).push(
