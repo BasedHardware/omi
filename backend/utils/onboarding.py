@@ -62,8 +62,8 @@ class OnboardingHandler:
         self.silence_timer = asyncio.create_task(self._silence_check())
 
     async def _silence_check(self):
-        """Check answer after 4 seconds of silence"""
-        await asyncio.sleep(4.0)
+        """Check answer after 2 seconds of silence"""
+        await asyncio.sleep(2.0)
 
         if self.completed or self.is_checking_answer:
             return
