@@ -4,16 +4,15 @@ Wrapped 2025 generation logic.
 Computes analytics from user's 2025 data and generates LLM-based insights.
 """
 
-import re
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 
 import database.wrapped as wrapped_db
 import database.conversations as conversations_db
 import database.action_items as action_items_db
 from database.wrapped import WrappedStatus
-from models.conversation import Conversation, CategoryEnum
+from models.conversation import Conversation
 from utils.llm.clients import llm_gemini_flash
 from utils.notifications import send_notification
 import json
@@ -82,37 +81,6 @@ def _update_progress(uid: str, year: int, step: str, pct: float):
     wrapped_db.update_wrapped_progress(uid, year, {"step": step, "pct": pct})
 
 
-def _get_month_name(month_num: int) -> str:
-    """Get month name from number."""
-    months = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ]
-    return months[month_num - 1] if 1 <= month_num <= 12 else "Unknown"
-
-
-def _get_time_window(hour: int) -> str:
-    """Get time window description from hour."""
-    if 5 <= hour < 12:
-        return "morning"
-    elif 12 <= hour < 17:
-        return "afternoon"
-    elif 17 <= hour < 21:
-        return "evening"
-    else:
-        return "night"
-
-
 def _compute_conversation_duration(conv: Conversation) -> float:
     """Compute conversation duration in seconds."""
     # Try to get duration from transcript segments
@@ -123,15 +91,6 @@ def _compute_conversation_duration(conv: Conversation) -> float:
 
     # Fallback: estimate from created_at to finished_at or use a default
     return 300  # 5 minutes default
-
-
-def _count_words_in_transcript(conv: Conversation) -> int:
-    """Count total words in conversation transcript."""
-    total = 0
-    for seg in conv.transcript_segments:
-        if seg.text:
-            total += len(seg.text.split())
-    return total
 
 
 def _find_signature_phrases(conversations: List[Conversation], sample_size: int = 50) -> Dict[str, int]:
@@ -151,35 +110,6 @@ def _find_signature_phrases(conversations: List[Conversation], sample_size: int 
                 phrase_counts[phrase] += count
 
     return dict(phrase_counts)
-
-
-def _determine_conversation_style(conversations: List[Conversation]) -> str:
-    """Determine if conversations are 'long & exploratory' or 'short & decisive'."""
-    if not conversations:
-        return "balanced"
-
-    durations = [_compute_conversation_duration(conv) for conv in conversations]
-    word_counts = [_count_words_in_transcript(conv) for conv in conversations]
-
-    avg_duration = sum(durations) / len(durations) if durations else 0
-    avg_words = sum(word_counts) / len(word_counts) if word_counts else 0
-
-    # Thresholds (in seconds for duration, words for word count)
-    if avg_duration > 600 or avg_words > 500:  # > 10 min avg or > 500 words
-        return "Long & exploratory"
-    elif avg_duration < 180 or avg_words < 150:  # < 3 min avg or < 150 words
-        return "Short & decisive"
-    else:
-        return "Balanced & focused"
-
-
-def _get_hour_histogram(conversations: List[Conversation]) -> Dict[int, int]:
-    """Get histogram of conversation hours."""
-    hour_counts = Counter()
-    for conv in conversations:
-        if conv.created_at:
-            hour_counts[conv.created_at.hour] += 1
-    return dict(hour_counts)
 
 
 def _determine_archetype_with_llm(conversations: List[Conversation], stats: Dict[str, Any]) -> Dict[str, str]:
@@ -302,67 +232,6 @@ Be specific with actual phrases from their conversations. Avoid generic filler w
         ]
 
 
-def _determine_archetype_fallback(stats: Dict[str, Any]) -> Dict[str, str]:
-    """Use Gemini to find the single word that captures what mattered most to this person in 2025."""
-    print(f"[Wrapped]   - Starting 'what mattered most' analysis with Gemini...")
-
-    try:
-        context = _build_conversations_context(conversations)
-        print(f"[Wrapped]     - Built context: {len(context)} chars from {len(conversations)} conversations")
-
-        prompt = f"""Analyze these conversation summaries from someone's entire 2025 year and determine the ONE WORD that best captures what mattered most to them.
-
-CONVERSATIONS:
-{context}
-
-Based on the themes, emotions, topics, and patterns across ALL these conversations, what is the single most important thing to this person?
-
-Think about:
-- What topic comes up most passionately?
-- What drives their decisions?
-- What do they spend the most emotional energy on?
-- What's the underlying theme across their year?
-
-Return your answer as JSON (no markdown):
-{{
-    "word": "SingleWord",
-    "reason": "One sentence explaining why this word captures what mattered most"
-}}
-
-The word should be meaningful and specific (not generic like "life" or "things"). Examples: Family, Growth, Career, Health, Creation, Freedom, Connection, Impact, Learning, Building, Love, Adventure, Purpose, Success, Balance, etc.
-
-Pick the ONE word that would resonate most deeply with this person."""
-
-        print(f"[Wrapped]     - Calling Gemini for what mattered most...")
-        response = llm_gemini_flash.invoke(prompt)
-        content = response.content.strip()
-        print(f"[Wrapped]     - Gemini response received: {len(content)} chars")
-
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        result = json.loads(content)
-
-        # Handle list response
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
-
-        word = result.get("word", "Growth")
-        reason = result.get("reason", "This theme appeared throughout your year.")
-
-        print(f"[Wrapped]     - What mattered most: {word}")
-        return {"word": word, "reason": reason}
-
-    except Exception as e:
-        print(f"[Wrapped]     - ERROR in what mattered most analysis: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return {"word": "Growth", "reason": "You focused on personal development throughout the year."}
-
-
 def _build_conversations_context(conversations: List[Conversation], max_chars: int = 800000) -> str:
     """Build a context string from conversations for Gemini analysis (title + overview for broad coverage)."""
     context_parts = []
@@ -415,23 +284,24 @@ Return your analysis as JSON (no markdown):
     "most_fun_day": {{
         "date": "Month Day" (e.g. "March 15"),
         "title": "Short catchy title for this day (3-5 words)",
-        "description": "One sentence describing why this was the most fun day",
+        "description": "Brief description - MUST be 15-20 words max",
         "emoji": "Single relevant emoji"
     }},
     "most_productive_day": {{
         "date": "Month Day",
         "title": "Short catchy title (3-5 words)",
-        "description": "One sentence describing the productivity",
+        "description": "Brief description - MUST be 15-20 words max",
         "emoji": "Single relevant emoji"
     }},
     "most_stressful_day": {{
         "date": "Month Day",
         "title": "Short catchy title (3-5 words)",
-        "description": "One sentence describing the challenge (keep it light/empathetic)",
+        "description": "Brief description (keep it light/empathetic) - MUST be 15-20 words max",
         "emoji": "Single relevant emoji"
     }}
 }}
 
+IMPORTANT: Each description MUST be exactly 15-20 words. No more, no less.
 Be specific and reference actual events from the conversations. Make titles catchy and memorable."""
 
         print(f"[Wrapped]     - Calling Gemini for memorable days...")
@@ -502,10 +372,11 @@ Return the single funniest event as JSON (no markdown):
 {{
     "date": "Month Day" (e.g. "June 22"),
     "title": "Catchy funny title (3-6 words)",
-    "story": "2-3 sentence retelling of the funny moment in an engaging way",
+    "story": "Brief retelling of the funny moment - MUST be 20-30 words max",
     "emoji": "Single funny emoji"
 }}
 
+IMPORTANT: The story MUST be exactly 20-30 words. No more, no less.
 Pick something genuinely funny and retell it in an entertaining way. Make the user smile when they read it!"""
 
         print(f"[Wrapped]     - Calling Gemini for funniest event...")
@@ -561,10 +432,11 @@ Return the most embarrassing event as JSON (no markdown):
 {{
     "date": "Month Day" (e.g. "August 5"),
     "title": "Catchy empathetic title (3-6 words)",
-    "story": "2-3 sentence retelling of the embarrassing moment - keep it light and relatable, not mean",
+    "story": "Brief retelling of the embarrassing moment - MUST be 20-30 words max, keep it light and relatable",
     "emoji": "Single appropriate emoji"
 }}
 
+IMPORTANT: The story MUST be exactly 20-30 words. No more, no less.
 Frame it in a lighthearted, relatable way - we've all been there! Make it funny rather than cruel."""
 
         print(f"[Wrapped]     - Calling Gemini for most embarrassing event...")
@@ -594,35 +466,43 @@ Frame it in a lighthearted, relatable way - we've all been there! Make it funny 
         }
 
 
-def _find_favorites_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
-    """Use Gemini to find the user's favorite word, person, and food from the year."""
-    print(f"[Wrapped]   - Starting favorites analysis with Gemini...")
+def _find_top_buddies_with_llm(conversations: List[Conversation]) -> List[Dict[str, Any]]:
+    """Use Gemini to find the top 5 people the user interacted with most."""
+    print(f"[Wrapped]   - Starting top buddies analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
         print(f"[Wrapped]     - Built context: {len(context)} chars")
 
-        prompt = f"""Analyze these conversation summaries from someone's year and identify their FAVORITES.
+        prompt = f"""Analyze these conversation transcripts and identify the TOP 5 PEOPLE this person interacted with, talked about, or mentioned most frequently throughout the year.
 
 CONVERSATIONS:
 {context}
 
-Based on positive mentions, enthusiasm, and frequency, identify:
+Look for:
+- People they had conversations with or about
+- Friends, family members, colleagues, partners
+- People mentioned by name or relationship (mom, dad, best friend, etc.)
+- Recurring people in their stories and daily life
 
-1. **FAVORITE WORD**: A word or short phrase they use positively/enthusiastically often (not a common filler word)
-2. **FAVORITE PERSON**: Someone they speak about positively, admire, or enjoy spending time with (use first name only or relationship like "Mom", "best friend")
-3. **FAVORITE FOOD**: A food, drink, cuisine, or restaurant they mentioned enjoying
+Return the top 5 people as JSON array (no markdown):
+[
+    {{
+        "name": "First name or relationship (e.g. 'Sarah', 'Mom', 'Best Friend Jake')",
+        "relationship": "Brief relationship descriptor (e.g. 'Best Friend', 'Colleague', 'Partner', 'Family')",
+        "context": "One fun/memorable thing about their interactions - 10-15 words max",
+        "emoji": "Single emoji that represents this relationship"
+    }},
+    ...
+]
 
-Return as JSON (no markdown):
-{{
-    "word": "the word or phrase",
-    "person": "Name or relationship",
-    "food": "food/drink/cuisine name"
-}}
+IMPORTANT: 
+- Return exactly 5 people, ranked by how frequently/meaningfully they appear
+- Use first names when available, otherwise use relationship titles
+- The context should be specific and memorable, not generic
+- Each context MUST be 10-15 words max"""
 
-Be specific based on actual conversations. If something isn't clearly mentioned, make a reasonable inference from context."""
-
-        print(f"[Wrapped]     - Calling Gemini for favorites...")
+        print(f"[Wrapped]     - Calling Gemini for top buddies...")
         response = llm_gemini_flash.invoke(prompt)
         content = response.content.strip()
         print(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -633,79 +513,41 @@ Be specific based on actual conversations. If something isn't clearly mentioned,
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
+        if not isinstance(result, list):
+            result = [result]
 
-        print(
-            f"[Wrapped]     - Favorites: word={result.get('word')}, person={result.get('person')}, food={result.get('food')}"
-        )
+        # Ensure we have exactly 5
+        result = result[:5]
+
+        print(f"[Wrapped]     - Successfully parsed {len(result)} buddies")
         return result
 
     except Exception as e:
-        print(f"[Wrapped]     - ERROR in favorites analysis: {e}")
+        print(f"[Wrapped]     - ERROR in top buddies analysis: {e}")
         import traceback
 
         traceback.print_exc()
-        return {"word": "Amazing", "person": "A close friend", "food": "Coffee"}
-
-
-def _find_most_hated_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
-    """Use Gemini to find what the user disliked most - word, person, food."""
-    print(f"[Wrapped]   - Starting most hated analysis with Gemini...")
-
-    try:
-        context = _build_conversations_context(conversations)
-        print(f"[Wrapped]     - Built context: {len(context)} chars")
-
-        prompt = f"""Analyze these conversation summaries from someone's year and identify things they DISLIKED or complained about.
-
-CONVERSATIONS:
-{context}
-
-Based on negative mentions, complaints, frustrations, or avoidance, identify:
-
-1. **MOST HATED WORD**: A word, phrase, or concept they complained about or expressed frustration with
-2. **MOST HATED PERSON**: Someone they expressed frustration with or complained about (use first name only, or a description like "that coworker", "the neighbor" - keep it anonymous/light)
-3. **MOST HATED FOOD**: A food, drink, or cuisine they mentioned disliking or avoiding
-
-Return as JSON (no markdown):
-{{
-    "word": "the word or concept",
-    "person": "Anonymous description or first name",
-    "food": "food/drink name"
-}}
-
-Keep it lighthearted and fun - this is meant to be humorous, not mean-spirited. If something isn't clearly mentioned, make a reasonable inference."""
-
-        print(f"[Wrapped]     - Calling Gemini for most hated...")
-        response = llm_gemini_flash.invoke(prompt)
-        content = response.content.strip()
-        print(f"[Wrapped]     - Gemini response received: {len(content)} chars")
-
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-
-        result = json.loads(content)
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
-
-        print(
-            f"[Wrapped]     - Most hated: word={result.get('word')}, person={result.get('person')}, food={result.get('food')}"
-        )
-        return result
-
-    except Exception as e:
-        print(f"[Wrapped]     - ERROR in most hated analysis: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return {"word": "Meetings", "person": "That one person", "food": "Cold coffee"}
+        return [
+            {
+                "name": "Your #1",
+                "relationship": "Close Friend",
+                "context": "Always there when you needed them!",
+                "emoji": "👋",
+            },
+            {
+                "name": "Your Confidant",
+                "relationship": "Best Friend",
+                "context": "Shared your best moments together.",
+                "emoji": "🤝",
+            },
+            {"name": "Work Buddy", "relationship": "Colleague", "context": "Made work days more fun.", "emoji": "💼"},
+            {"name": "Family", "relationship": "Family", "context": "Your support system all year.", "emoji": "❤️"},
+            {"name": "The Fun One", "relationship": "Friend", "context": "Always up for an adventure.", "emoji": "🎉"},
+        ]
 
 
 def _find_obsessions_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
-    """Find what shows, movies, books, and celebrities the user couldn't stop talking about."""
+    """Find what shows, movies, books, celebrities, and food the user couldn't stop talking about."""
     print(f"[Wrapped]   - Starting obsessions analysis with Gemini...")
 
     try:
@@ -723,13 +565,15 @@ Identify specific things they mentioned multiple times or with enthusiasm:
 2. **MOVIE**: A movie they discussed or recommended
 3. **BOOK**: A book they read or mentioned
 4. **CELEBRITY**: Any famous person - actor, entrepreneur, athlete, musician, influencer, etc.
+5. **FOOD**: A food, drink, cuisine, or restaurant they mentioned enjoying or craving
 
 Return as JSON (no markdown):
 {{
     "show": "Name of the show",
     "movie": "Name of the movie", 
     "book": "Name of the book",
-    "celebrity": "Name of the celebrity"
+    "celebrity": "Name of the celebrity",
+    "food": "Name of the food/drink/cuisine"
 }}
 
 Be specific with actual names. If something isn't clearly mentioned, make your best inference or use "Not mentioned"."""
@@ -761,6 +605,7 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
             "movie": "Not mentioned",
             "book": "Not mentioned",
             "celebrity": "Not mentioned",
+            "food": "Not mentioned",
         }
 
 
@@ -822,14 +667,14 @@ Include a mix of movies they mentioned AND movies that match their vibe/interest
 
 
 def _find_struggles_and_wins_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
-    """Find the biggest struggle, personal win, and professional win of the year."""
+    """Find the biggest struggle and personal win of the year."""
     print(f"[Wrapped]   - Starting struggles and wins analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
         print(f"[Wrapped]     - Built context: {len(context)} chars")
 
-        prompt = f"""Analyze these conversation summaries and identify the most significant STRUGGLE and WINS from this person's year.
+        prompt = f"""Analyze these conversation summaries and identify the most significant STRUGGLE and WIN from this person's year.
 
 CONVERSATIONS:
 {context}
@@ -838,9 +683,7 @@ Identify:
 
 1. **BIGGEST STRUGGLE**: The thing they struggled with most - could be health, relationships, work, mental health, a project, a decision, etc. What kept coming up as difficult?
 
-2. **BIGGEST PERSONAL WIN**: A personal achievement or positive life event - relationship milestone, health goal, personal growth, family moment, hobby achievement, etc.
-
-3. **BIGGEST PROFESSIONAL WIN**: A work/career achievement - promotion, project success, new job, business milestone, recognition, learning new skill, etc.
+2. **BIGGEST PERSONAL WIN**: A personal achievement or positive life event - relationship milestone, health goal, personal growth, family moment, hobby achievement, career milestone, etc.
 
 Return as JSON (no markdown):
 {{
@@ -849,10 +692,6 @@ Return as JSON (no markdown):
         "description": "One sentence describing the struggle"
     }},
     "personal_win": {{
-        "title": "Short title (3-5 words)",
-        "description": "One sentence describing the win"
-    }},
-    "professional_win": {{
         "title": "Short title (3-5 words)",
         "description": "One sentence describing the win"
     }}
@@ -885,7 +724,6 @@ Be specific and empathetic. These should feel personal and meaningful."""
         return {
             "struggle": {"title": "Balancing Everything", "description": "Finding time for everything that matters"},
             "personal_win": {"title": "Growth Mindset", "description": "You became more self-aware and intentional"},
-            "professional_win": {"title": "Leveling Up", "description": "You made significant progress in your career"},
         }
 
 
@@ -1009,70 +847,59 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         print(f"[Wrapped] Step 8 complete: Embarrassing event found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Most embarrassing: {embarrassing_event.get('title', 'N/A')}")
 
-        # Step 9: Find favorites with Gemini
+        # Step 9: Find top buddies with Gemini
         step_start = time.time()
-        _update_progress(uid, year, "Finding your favorites...", 0.82)
-        print(f"[Wrapped] Step 9: Finding favorites with Gemini...")
+        _update_progress(uid, year, "Finding your top buddies...", 0.80)
+        print(f"[Wrapped] Step 9: Finding top buddies with Gemini...")
 
-        favorites = _find_favorites_with_llm(conversations)
-        result["favorites"] = favorites
-        print(f"[Wrapped] Step 9 complete: Favorites found (took {time.time() - step_start:.2f}s)")
-        print(f"[Wrapped]   - Favorites: {favorites}")
+        top_buddies = _find_top_buddies_with_llm(conversations)
+        result["top_buddies"] = top_buddies
+        print(f"[Wrapped] Step 9 complete: Top buddies found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped]   - Top buddies: {len(top_buddies)} found")
 
-        # Step 10: Find most hated with Gemini
+        # Step 10: Find obsessions (shows, movies, books, celebrities, food)
         step_start = time.time()
-        _update_progress(uid, year, "Finding what you hated...", 0.86)
-        print(f"[Wrapped] Step 10: Finding most hated with Gemini...")
-
-        most_hated = _find_most_hated_with_llm(conversations)
-        result["most_hated"] = most_hated
-        print(f"[Wrapped] Step 10 complete: Most hated found (took {time.time() - step_start:.2f}s)")
-        print(f"[Wrapped]   - Most hated: {most_hated}")
-
-        # Step 11: Find obsessions (shows, movies, books, celebrities)
-        step_start = time.time()
-        _update_progress(uid, year, "Finding your obsessions...", 0.88)
-        print(f"[Wrapped] Step 11: Finding obsessions with Gemini...")
+        _update_progress(uid, year, "Finding your obsessions...", 0.86)
+        print(f"[Wrapped] Step 10: Finding obsessions with Gemini...")
 
         obsessions = _find_obsessions_with_llm(conversations)
         result["obsessions"] = obsessions
-        print(f"[Wrapped] Step 11 complete: Obsessions found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 10 complete: Obsessions found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Obsessions: {obsessions}")
 
-        # Step 12: Find movie recommendations
+        # Step 11: Find movie recommendations
         step_start = time.time()
-        _update_progress(uid, year, "Generating movie recommendations...", 0.91)
-        print(f"[Wrapped] Step 12: Finding movie recommendations with Gemini...")
+        _update_progress(uid, year, "Generating movie recommendations...", 0.90)
+        print(f"[Wrapped] Step 11: Finding movie recommendations with Gemini...")
 
         movie_recs = _find_movie_recommendations_with_llm(conversations)
         result["movie_recommendations"] = movie_recs
-        print(f"[Wrapped] Step 12 complete: Movie recommendations found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 11 complete: Movie recommendations found (took {time.time() - step_start:.2f}s)")
         print(f"[Wrapped]   - Movies: {movie_recs}")
 
-        # Step 13: Find struggles and wins
+        # Step 12: Find struggles and wins
         step_start = time.time()
         _update_progress(uid, year, "Finding your wins and struggles...", 0.94)
-        print(f"[Wrapped] Step 13: Finding struggles and wins with Gemini...")
+        print(f"[Wrapped] Step 12: Finding struggles and wins with Gemini...")
 
         struggles_wins = _find_struggles_and_wins_with_llm(conversations)
         result["struggle"] = struggles_wins.get("struggle", {})
         result["personal_win"] = struggles_wins.get("personal_win", {})
-        result["professional_win"] = struggles_wins.get("professional_win", {})
-        print(f"[Wrapped] Step 13 complete: Struggles and wins found (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 12 complete: Struggles and wins found (took {time.time() - step_start:.2f}s)")
 
-        # Step 14: Save result
+        # Step 13: Save result
         step_start = time.time()
         _update_progress(uid, year, "Saving your Wrapped...", 0.98)
-        print(f"[Wrapped] Step 14: Saving result to Firestore...")
+        print(f"[Wrapped] Step 13: Saving result to Firestore...")
 
         wrapped_db.update_wrapped_status(uid, year, WrappedStatus.DONE, result=result)
-        print(f"[Wrapped] Step 14 complete: Result saved (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 13 complete: Result saved (took {time.time() - step_start:.2f}s)")
 
-        # Step 15: Send notification
+        # Step 14: Send notification
         step_start = time.time()
-        print(f"[Wrapped] Step 15: Sending notification...")
+        print(f"[Wrapped] Step 14: Sending notification...")
         _send_wrapped_ready_notification(uid)
-        print(f"[Wrapped] Step 15 complete: Notification sent (took {time.time() - step_start:.2f}s)")
+        print(f"[Wrapped] Step 14 complete: Notification sent (took {time.time() - step_start:.2f}s)")
 
         total_time = time.time() - start_time
         print(f"[Wrapped] ========== Wrapped 2025 generation completed for user {uid} ==========")
@@ -1108,79 +935,21 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
 
     # Total time
     total_seconds = sum(_compute_conversation_duration(c) for c in conversations)
-    result["total_time_seconds"] = total_seconds
     result["total_time_hours"] = round(total_seconds / 3600, 1)
     print(f"[Wrapped]     - Total time: {result['total_time_hours']} hours across {total_conversations} conversations")
-
-    # First and last conversation
-    if conversations:
-        # Sort by created_at
-        sorted_convs = sorted(conversations, key=lambda c: c.created_at or datetime.min.replace(tzinfo=timezone.utc))
-
-        first = sorted_convs[0]
-        last = sorted_convs[-1]
-
-        result["first_conversation"] = {
-            "date": first.created_at.strftime("%B %d, %Y") if first.created_at else "Unknown",
-            "title": first.structured.title if first.structured else "Untitled",
-        }
-        result["last_conversation"] = {
-            "date": last.created_at.strftime("%B %d, %Y") if last.created_at else "Unknown",
-            "title": last.structured.title if last.structured else "Untitled",
-        }
-    else:
-        result["first_conversation"] = None
-        result["last_conversation"] = None
-
-    # Monthly breakdown
-    monthly_counts = Counter()
-    for conv in conversations:
-        if conv.created_at:
-            monthly_counts[conv.created_at.month] += 1
-
-    if monthly_counts:
-        most_active_month = max(monthly_counts.items(), key=lambda x: x[1])
-        least_active_month = min(monthly_counts.items(), key=lambda x: x[1])
-        result["most_active_month"] = {
-            "name": _get_month_name(most_active_month[0]),
-            "count": most_active_month[1],
-        }
-        result["least_active_month"] = {
-            "name": _get_month_name(least_active_month[0]),
-            "count": least_active_month[1],
-        }
-    else:
-        result["most_active_month"] = None
-        result["least_active_month"] = None
 
     # === Section 2: What You Talked About ===
     print(f"[Wrapped]   - Section 2: Topics & Categories...")
     category_counts = Counter()
-    category_durations = defaultdict(list)
 
     for conv in conversations:
         cat = conv.structured.category.value if conv.structured and conv.structured.category else "other"
         category_counts[cat] += 1
-        category_durations[cat].append(_compute_conversation_duration(conv))
 
     # Top categories
     top_cats = category_counts.most_common(5)
     result["top_categories"] = [cat for cat, _ in top_cats]
     result["category_breakdown"] = [{"category": cat, "count": count} for cat, count in top_cats]
-
-    # Dominant category
-    result["dominant_category"] = top_cats[0][0] if top_cats else "other"
-
-    # Longest conversations by category (avg duration)
-    if category_durations:
-        avg_durations = {cat: sum(durs) / len(durs) for cat, durs in category_durations.items()}
-        longest_cat = max(avg_durations.items(), key=lambda x: x[1])
-        result["longest_conversations_category"] = {
-            "category": longest_cat[0],
-            "avg_duration_minutes": round(longest_cat[1] / 60, 1),
-        }
-    else:
-        result["longest_conversations_category"] = None
 
     # === Section 3: Conversations → Actions ===
     print(f"[Wrapped]   - Section 3: Action Items...")
@@ -1192,70 +961,8 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
     result["completed_action_items"] = completed_items
     result["action_items_completion_rate"] = completed_items / total_action_items if total_action_items > 0 else 0
 
-    # Most productive month (by completed action items)
-    monthly_completed = Counter()
-    monthly_created = Counter()
-    for item in action_items:
-        created_at = item.get("created_at")
-        completed_at = item.get("completed_at")
-
-        if created_at:
-            if hasattr(created_at, 'month'):
-                monthly_created[created_at.month] += 1
-        if completed_at and item.get("completed"):
-            if hasattr(completed_at, 'month'):
-                monthly_completed[completed_at.month] += 1
-
-    if monthly_completed:
-        most_productive = max(monthly_completed.items(), key=lambda x: x[1])
-        result["most_productive_month"] = {
-            "name": _get_month_name(most_productive[0]),
-            "completed_count": most_productive[1],
-        }
-    elif monthly_created:
-        most_created = max(monthly_created.items(), key=lambda x: x[1])
-        result["most_productive_month"] = {
-            "name": _get_month_name(most_created[0]),
-            "completed_count": most_created[1],
-        }
-    else:
-        result["most_productive_month"] = None
-
-    # === Section 4: Emotional & Energy Signals ===
-    print(f"[Wrapped]   - Section 4: Energy Signals...")
-    # Calm vs intense months (using duration variance as proxy)
-    monthly_avg_duration = {}
-    monthly_durations = defaultdict(list)
-    for conv in conversations:
-        if conv.created_at:
-            monthly_durations[conv.created_at.month].append(_compute_conversation_duration(conv))
-
-    for month, durs in monthly_durations.items():
-        monthly_avg_duration[month] = sum(durs) / len(durs) if durs else 0
-
-    if monthly_avg_duration:
-        # Lower avg duration = more intense (many short conversations)
-        # Higher avg duration = more calm (fewer, longer conversations)
-        calmest = max(monthly_avg_duration.items(), key=lambda x: x[1])
-        most_intense = min(monthly_avg_duration.items(), key=lambda x: x[1])
-        result["calmest_month"] = _get_month_name(calmest[0])
-        result["most_intense_month"] = _get_month_name(most_intense[0])
-    else:
-        result["calmest_month"] = None
-        result["most_intense_month"] = None
-
-    # Late night conversations (10 PM - 4 AM)
-    late_night_count = sum(
-        1 for conv in conversations if conv.created_at and (conv.created_at.hour >= 22 or conv.created_at.hour < 4)
-    )
-    result["late_night_conversation_count"] = late_night_count
-
-    # Hour histogram (convert int keys to strings for Firestore compatibility)
-    hour_histogram = _get_hour_histogram(conversations)
-    result["hour_histogram"] = {str(k): v for k, v in hour_histogram.items()}
-
-    # === Section 5: Voice Patterns ===
-    print(f"[Wrapped]   - Section 5: Voice Patterns...")
+    # === Section 4: Voice Patterns ===
+    print(f"[Wrapped]   - Section 4: Voice Patterns...")
     # Signature phrases
     phrase_counts = _find_signature_phrases(conversations)
     print(f"[Wrapped]     - Found {len(phrase_counts)} signature phrases")
@@ -1267,19 +974,6 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[dic
         }
     else:
         result["signature_phrase"] = None
-
-    # Conversation style
-    result["conversation_style"] = _determine_conversation_style(conversations)
-
-    # Most common time window
-    if hour_histogram:
-        most_common_hour = max(hour_histogram.items(), key=lambda x: x[1])[0]
-        result["most_common_time_window"] = _get_time_window(most_common_hour)
-    else:
-        result["most_common_time_window"] = None
-
-    # Average duration for archetype calculation
-    result["avg_conversation_duration_seconds"] = total_seconds / total_conversations if total_conversations > 0 else 0
 
     # Note: Decision style and top phrases computed via LLM in main function
 

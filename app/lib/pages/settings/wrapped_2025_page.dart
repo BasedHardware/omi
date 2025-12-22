@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/http/api/wrapped.dart';
+import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -42,11 +43,12 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
 
-  // Key for capturing share image
-  final GlobalKey _shareCardKey = GlobalKey();
+  // Key for share template rendering
+  final GlobalKey _shareTemplateKey = GlobalKey();
+  Widget? _currentShareTemplate;
 
   // Total number of cards
-  int get _totalCards => 14;
+  int get _totalCards => 13;
 
   @override
   void initState() {
@@ -129,15 +131,22 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     }
   }
 
-  Future<void> _shareWrapped() async {
+  /// Share a template by rendering it offstage, capturing, and sharing
+  Future<void> _shareTemplate(Widget template, String filename) async {
     try {
       HapticFeedback.mediumImpact();
 
-      await Future.delayed(const Duration(milliseconds: 100));
+      // Set the template and trigger rebuild
+      setState(() {
+        _currentShareTemplate = template;
+      });
 
-      final boundary = _shareCardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      // Wait for the widget to be rendered
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      final boundary = _shareTemplateKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
-        debugPrint('Share card boundary is null');
+        debugPrint('Share template boundary is null for $filename');
         return;
       }
 
@@ -153,7 +162,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final bytes = byteData.buffer.asUint8List();
 
       final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/omi_wrapped_2025.png');
+      final file = File('${directory.path}/$filename.png');
       await file.writeAsBytes(bytes);
 
       final box = context.findRenderObject() as RenderBox?;
@@ -164,9 +173,19 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         text: 'My 2025, remembered by Omi ✨ omi.me/wrapped',
         sharePositionOrigin: sharePositionOrigin,
       );
-    } catch (e) {
-      debugPrint('Error sharing wrapped: $e');
+
+      // Clear the template after sharing
       if (mounted) {
+        setState(() {
+          _currentShareTemplate = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error sharing $filename: $e');
+      if (mounted) {
+        setState(() {
+          _currentShareTemplate = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to share. Please try again.')),
         );
@@ -174,11 +193,342 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     }
   }
 
+  // ============================================================
+  // SHARE TEMPLATE BUILDERS
+  // ============================================================
+
+  void _shareYearInNumbers() {
+    final totalHours = (_result?['total_time_hours'] ?? 0.0) as num;
+    final totalMinutes = (totalHours * 60).toInt();
+    final totalConvs = _result?['total_conversations'] ?? 0;
+    final daysActive = _result?['days_active'] ?? (totalConvs / 3).ceil();
+    final percentile = _calculatePercentile(totalConvs);
+
+    _shareTemplate(
+      templates.YearInNumbersShareTemplate(
+        totalMinutes: totalMinutes,
+        totalConvs: totalConvs,
+        daysActive: daysActive,
+        percentile: percentile,
+      ),
+      'omi_wrapped_stats',
+    );
+  }
+
+  void _shareCategoryChart() {
+    final categoryBreakdownList = _result?['category_breakdown'] as List? ?? [];
+    final topCategories = (_result?['top_categories'] as List?)?.take(5).toList() ?? [];
+    final Map<String, int> categoryBreakdown = {};
+    for (final item in categoryBreakdownList) {
+      if (item is Map) {
+        final cat = item['category'] as String? ?? '';
+        final count = item['count'] as int? ?? 0;
+        categoryBreakdown[cat] = count;
+      }
+    }
+    final total = categoryBreakdown.values.fold<int>(0, (sum, val) => sum + val);
+    final colors = [
+      const Color(0xFF2E7D32),
+      const Color(0xFFFF9800),
+      const Color(0xFFF4D03F),
+      const Color(0xFF1565C0),
+      const Color(0xFF7B1FA2),
+    ];
+
+    List<Map<String, dynamic>> categories = [];
+    for (int i = 0; i < topCategories.length && i < 5; i++) {
+      final cat = topCategories[i] as String;
+      final count = categoryBreakdown[cat] ?? 0;
+      final pct = total > 0 ? (count / total * 100).round() : 0;
+      categories.add({
+        'name': _formatCategory(cat),
+        'percentage': pct,
+        'color': colors[i % colors.length],
+      });
+    }
+
+    _shareTemplate(
+      templates.TopCategoryShareTemplate(categories: categories),
+      'omi_wrapped_categories',
+    );
+  }
+
+  void _shareActions() {
+    final total = _result?['total_action_items'] ?? 0;
+    final completed = _result?['completed_action_items'] ?? 0;
+    final rate = ((_result?['action_items_completion_rate'] ?? 0.0) * 100).toInt();
+
+    _shareTemplate(
+      templates.ActionsShareTemplate(
+        totalTasks: total,
+        completedTasks: completed,
+        completionRate: rate,
+      ),
+      'omi_wrapped_actions',
+    );
+  }
+
+  void _shareMemorableDays() {
+    final days = _result?['memorable_days'] as Map<String, dynamic>?;
+    final funDay = days?['most_fun_day'] as Map<String, dynamic>?;
+    final productiveDay = days?['most_productive_day'] as Map<String, dynamic>?;
+    final stressfulDay = days?['most_stressful_day'] as Map<String, dynamic>?;
+
+    List<Map<String, dynamic>> memorableDays = [];
+    if (funDay != null) {
+      memorableDays.add({
+        'emoji': funDay['emoji'] ?? '🎉',
+        'label': 'Most Fun',
+        'title': funDay['title'] ?? 'A Great Day',
+        'description': funDay['description'] ?? '',
+        'dateStr': funDay['date'] ?? 'January 1',
+      });
+    }
+    if (productiveDay != null) {
+      memorableDays.add({
+        'emoji': productiveDay['emoji'] ?? '💪',
+        'label': 'Most Productive',
+        'title': productiveDay['title'] ?? 'Getting It Done',
+        'description': productiveDay['description'] ?? '',
+        'dateStr': productiveDay['date'] ?? 'June 15',
+      });
+    }
+    if (stressfulDay != null) {
+      memorableDays.add({
+        'emoji': stressfulDay['emoji'] ?? '😤',
+        'label': 'Most Intense',
+        'title': stressfulDay['title'] ?? 'A Challenge',
+        'description': stressfulDay['description'] ?? '',
+        'dateStr': stressfulDay['date'] ?? 'December 1',
+      });
+    }
+
+    _shareTemplate(
+      templates.MemorableDaysShareTemplate(days: memorableDays),
+      'omi_wrapped_days',
+    );
+  }
+
+  void _shareBestMoments() {
+    final funniestEvent = _result?['funniest_event'] as Map<String, dynamic>?;
+    final cringeEvent = _result?['most_embarrassing_event'] as Map<String, dynamic>?;
+
+    List<Map<String, dynamic>> moments = [
+      {
+        'emoji': '😂',
+        'label': 'Funniest',
+        'title': funniestEvent?['title'] ?? 'A Hilarious Moment',
+        'description': funniestEvent?['story'] ?? '',
+        'dateStr': funniestEvent?['date'] ?? 'January 1',
+      },
+      {
+        'emoji': '😅',
+        'label': 'Most Cringe',
+        'title': cringeEvent?['title'] ?? 'That Awkward Moment',
+        'description': cringeEvent?['story'] ?? '',
+        'dateStr': cringeEvent?['date'] ?? 'January 1',
+      },
+    ];
+
+    _shareTemplate(
+      templates.BestMomentsShareTemplate(moments: moments),
+      'omi_wrapped_moments',
+    );
+  }
+
+  void _shareMyBuddies() {
+    final buddies = (_result?['top_buddies'] as List<dynamic>?) ?? [];
+    List<Map<String, dynamic>> buddyList = buddies.map((b) {
+      final buddy = b as Map<String, dynamic>;
+      return {
+        'name': buddy['name'] ?? 'Friend',
+        'relationship': buddy['relationship'] ?? 'Friend',
+        'context': buddy['context'] ?? '',
+        'emoji': buddy['emoji'] ?? '👋',
+      };
+    }).toList();
+
+    _shareTemplate(
+      templates.MyBuddiesShareTemplate(buddies: buddyList),
+      'omi_wrapped_buddies',
+    );
+  }
+
+  void _shareObsessions() {
+    final obsessions = _result?['obsessions'] as Map<String, dynamic>?;
+    _shareTemplate(
+      templates.ObsessionsShareTemplate(
+        show: _capitalizeWords(obsessions?['show'] ?? 'Not mentioned'),
+        movie: _capitalizeWords(obsessions?['movie'] ?? 'Not mentioned'),
+        book: _capitalizeWords(obsessions?['book'] ?? 'Not mentioned'),
+        celebrity: _capitalizeWords(obsessions?['celebrity'] ?? 'Not mentioned'),
+        food: _capitalizeWords(obsessions?['food'] ?? 'Not mentioned'),
+      ),
+      'omi_wrapped_obsessions',
+    );
+  }
+
+  void _shareMovieRecs() {
+    final movies = (_result?['movie_recommendations'] as List?)?.cast<String>() ?? [];
+    _shareTemplate(
+      templates.MovieRecsShareTemplate(
+        movies: movies.map((m) => _capitalizeWords(m)).toList(),
+      ),
+      'omi_wrapped_movies',
+    );
+  }
+
+  void _shareStruggle() {
+    final struggle = _result?['struggle'] as Map<String, dynamic>?;
+    _shareTemplate(
+      templates.StruggleShareTemplate(
+        title: struggle?['title'] ?? 'The Hard Part',
+      ),
+      'omi_wrapped_struggle',
+    );
+  }
+
+  void _sharePersonalWin() {
+    final win = _result?['personal_win'] as Map<String, dynamic>?;
+    _shareTemplate(
+      templates.BiggestWinShareTemplate(
+        title: win?['title'] ?? 'Personal Growth',
+      ),
+      'omi_wrapped_win',
+    );
+  }
+
+  void _shareTopPhrases() {
+    final phrases = _result?['top_phrases'] as List<dynamic>? ?? [];
+    List<String> phraseList = phrases.take(5).map((p) {
+      final phrase = p is Map ? (p['phrase'] ?? '') : p.toString();
+      return phrase.toString();
+    }).toList();
+
+    _shareTemplate(
+      templates.TopPhrasesShareTemplate(phrases: phraseList),
+      'omi_wrapped_phrases',
+    );
+  }
+
+  void _shareFinalCollage() {
+    final totalHours = (_result?['total_time_hours'] ?? 0.0) as num;
+    final totalMinutes = (totalHours * 60).toInt();
+    final totalConvs = _result?['total_conversations'] ?? 0;
+    final daysActive = _result?['days_active'] ?? (totalConvs / 3).ceil();
+    final percentile = _calculatePercentile(totalConvs);
+
+    // Categories
+    final categoryBreakdownList = _result?['category_breakdown'] as List? ?? [];
+    final topCategoriesRaw = (_result?['top_categories'] as List?)?.take(3).toList() ?? [];
+    final Map<String, int> categoryBreakdown = {};
+    for (final item in categoryBreakdownList) {
+      if (item is Map) {
+        categoryBreakdown[item['category'] as String? ?? ''] = item['count'] as int? ?? 0;
+      }
+    }
+    final total = categoryBreakdown.values.fold<int>(0, (sum, val) => sum + val);
+    final colors = [const Color(0xFF2E7D32), const Color(0xFFFF9800), const Color(0xFFF4D03F)];
+    List<Map<String, dynamic>> topCategories = [];
+    for (int i = 0; i < topCategoriesRaw.length && i < 3; i++) {
+      final cat = topCategoriesRaw[i] as String;
+      final pct = total > 0 ? (categoryBreakdown[cat] ?? 0) / total * 100 : 0;
+      topCategories.add({
+        'name': _formatCategory(cat),
+        'percentage': pct.round(),
+        'color': colors[i],
+      });
+    }
+
+    // Top Days
+    final days = _result?['memorable_days'] as Map<String, dynamic>?;
+    List<Map<String, dynamic>> topDays = [];
+    if (days?['most_fun_day'] != null) {
+      final d = days!['most_fun_day'] as Map<String, dynamic>;
+      topDays.add({'emoji': d['emoji'] ?? '🎉', 'label': 'Fun', 'title': d['title'] ?? ''});
+    }
+    if (days?['most_productive_day'] != null) {
+      final d = days!['most_productive_day'] as Map<String, dynamic>;
+      topDays.add({'emoji': d['emoji'] ?? '💪', 'label': 'Productive', 'title': d['title'] ?? ''});
+    }
+    if (days?['most_stressful_day'] != null) {
+      final d = days!['most_stressful_day'] as Map<String, dynamic>;
+      topDays.add({'emoji': d['emoji'] ?? '😤', 'label': 'Intense', 'title': d['title'] ?? ''});
+    }
+
+    // Best Moments
+    final funniestEvent = _result?['funniest_event'] as Map<String, dynamic>?;
+    final cringeEvent = _result?['most_embarrassing_event'] as Map<String, dynamic>?;
+    List<Map<String, dynamic>> bestMoments = [
+      {'emoji': '😂', 'title': funniestEvent?['title'] ?? 'Funny Moment'},
+      {'emoji': '😅', 'title': cringeEvent?['title'] ?? 'Cringe Moment'},
+    ];
+
+    // Buddies
+    final buddiesRaw = (_result?['top_buddies'] as List<dynamic>?) ?? [];
+    List<Map<String, dynamic>> buddies = buddiesRaw.take(4).map((b) {
+      final buddy = b as Map<String, dynamic>;
+      return {'name': buddy['name'] ?? '', 'emoji': buddy['emoji'] ?? '👋'};
+    }).toList();
+
+    // Obsessions
+    final obsessions = _result?['obsessions'] as Map<String, dynamic>?;
+    final show = _capitalizeWords(obsessions?['show'] ?? 'Not mentioned');
+    final movie = _capitalizeWords(obsessions?['movie'] ?? 'Not mentioned');
+    final food = _capitalizeWords(obsessions?['food'] ?? 'Not mentioned');
+    final celebrity = _capitalizeWords(obsessions?['celebrity'] ?? 'Not mentioned');
+
+    // Phrases
+    final phrases = _result?['top_phrases'] as List<dynamic>? ?? [];
+    List<String> topPhrases = phrases.take(3).map((p) {
+      return (p is Map ? (p['phrase'] ?? '') : p).toString();
+    }).toList();
+
+    // Struggle + Win
+    final struggle = (_result?['struggle'] as Map<String, dynamic>?)?['title'] ?? 'The Hard Part';
+    final biggestWin = (_result?['personal_win'] as Map<String, dynamic>?)?['title'] ?? 'Personal Growth';
+
+    _shareTemplate(
+      templates.FinalCollageShareTemplate(
+        totalMinutes: totalMinutes,
+        totalConvs: totalConvs,
+        daysActive: daysActive,
+        percentile: percentile,
+        topCategories: topCategories,
+        topDays: topDays,
+        bestMoments: bestMoments,
+        buddies: buddies,
+        show: show,
+        movie: movie,
+        food: food,
+        celebrity: celebrity,
+        topPhrases: topPhrases,
+        struggle: struggle,
+        biggestWin: biggestWin,
+      ),
+      'omi_wrapped_2025',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: _isLoading ? const Center(child: CircularProgressIndicator(color: Colors.white)) : _buildContent(),
+      body: Stack(
+        children: [
+          _isLoading ? const Center(child: CircularProgressIndicator(color: Colors.white)) : _buildContent(),
+          // Offstage share template renderer
+          if (_currentShareTemplate != null)
+            Positioned(
+              left: -10000,
+              top: -10000,
+              child: RepaintBoundary(
+                key: _shareTemplateKey,
+                child: _currentShareTemplate!,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -213,13 +563,16 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                '2025',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 140,
-                  fontWeight: FontWeight.w900,
-                  height: 0.9,
+              const FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '2025',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 120,
+                    fontWeight: FontWeight.w900,
+                    height: 0.9,
+                  ),
                 ),
               ),
               const Spacer(),
@@ -403,18 +756,19 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           },
           itemBuilder: (context, index) => cards[index],
         ),
-        // Static progress dots on the right (don't scroll)
-        Positioned(
-          right: 12,
-          top: 0,
-          bottom: 0,
-          child: SafeArea(
-            child: _buildProgressDots(
-              Colors.white,
-              Colors.white.withOpacity(0.3),
+        // Static progress dots on the right (don't scroll) - hide on summary page
+        if (_currentPage != 12)
+          Positioned(
+            right: 12,
+            top: 0,
+            bottom: 0,
+            child: SafeArea(
+              child: _buildProgressDots(
+                Colors.white,
+                Colors.white.withOpacity(0.3),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -451,12 +805,13 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     required Widget child,
     Color textColor = Colors.white,
     bool isDark = true,
+    EdgeInsets? customPadding,
   }) {
     return Container(
       color: backgroundColor,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.only(left: 24, right: 40, top: 16, bottom: 16),
+          padding: customPadding ?? const EdgeInsets.only(left: 24, right: 40, top: 16, bottom: 16),
           child: child,
         ),
       ),
@@ -465,20 +820,19 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   List<Widget> _buildCardsList() {
     return [
-      _buildIntroCard(),
-      _buildYearInNumbersCard(),
-      _buildTopCategoryCard(),
-      _buildActionsCard(),
-      _buildMemorableDaysCard(),
-      _buildFunniestEventCard(),
-      _buildEmbarrassingEventCard(),
-      _buildFavoritesCard(),
-      _buildObsessionsCard(),
-      _buildMovieRecsCard(),
-      _buildStruggleCard(),
-      _buildPersonalWinCard(),
-      _buildTopPhrasesCard(),
-      _buildShareCard(),
+      _buildIntroCard(), // 0
+      _buildYearInNumbersCard(), // 1
+      _buildTopCategoryCard(), // 2
+      _buildActionsCard(), // 3
+      _buildMemorableDaysCard(), // 4
+      _buildBestMomentsCard(), // 5 (combined funniest + cringe)
+      _buildMyBuddiesCard(), // 6
+      _buildObsessionsCard(), // 7
+      _buildMovieRecsCard(), // 8
+      _buildStruggleCard(), // 9
+      _buildPersonalWinCard(), // 10
+      _buildTopPhrasesCard(), // 11
+      _buildSummaryCollageCard(), // 12 - Final collage summary
     ];
   }
 
@@ -578,6 +932,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         daysActive: daysActive,
         percentile: percentile,
         isActive: _currentPage == 1,
+        onShare: _shareYearInNumbers,
       ),
     );
   }
@@ -632,10 +987,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     }
 
     return _buildCardBase(
-      backgroundColor: const Color(0xFF1a237e), // Deep indigo
+      backgroundColor: WrappedColors.mint,
       child: _CategoryChartAnimated(
         categories: categories,
         isActive: _currentPage == 2,
+        onShare: _shareCategoryChart,
       ),
     );
   }
@@ -664,6 +1020,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         completedTasks: completed,
         completionRate: rate,
         isActive: _currentPage == 3,
+        onShare: _shareActions,
       ),
     );
   }
@@ -712,82 +1069,72 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       child: _MemorableDaysAnimated(
         days: memorableDays,
         isActive: _currentPage == 4,
+        onShare: _shareMemorableDays,
       ),
     );
   }
 
-  Widget _buildFunniestEventCard() {
-    final event = _result?['funniest_event'] as Map<String, dynamic>?;
-    final title = event?['title'] ?? 'A Hilarious Moment';
-    final story = event?['story'] ?? 'You had some funny moments this year!';
-    final dateStr = event?['date'] ?? 'January 1';
+  Widget _buildBestMomentsCard() {
+    // Funniest moment
+    final funniestEvent = _result?['funniest_event'] as Map<String, dynamic>?;
+    final funniestTitle = funniestEvent?['title'] ?? 'A Hilarious Moment';
+    final funniestStory = funniestEvent?['story'] ?? 'You had some funny moments this year!';
+    final funniestDateStr = funniestEvent?['date'] ?? 'January 1';
 
-    final funniestDay = _MemorableDayData(
-      emoji: '😂',
-      label: 'Funniest',
-      title: title,
-      description: story,
-      dateStr: dateStr,
-    );
+    // Cringe moment
+    final cringeEvent = _result?['most_embarrassing_event'] as Map<String, dynamic>?;
+    final cringeTitle = cringeEvent?['title'] ?? 'That Awkward Moment';
+    final cringeStory = cringeEvent?['story'] ?? "We've all been there!";
+    final cringeDateStr = cringeEvent?['date'] ?? 'January 1';
+
+    final bestMoments = <_MemorableDayData>[
+      _MemorableDayData(
+        emoji: '😂',
+        label: 'Funniest',
+        title: funniestTitle,
+        description: funniestStory,
+        dateStr: funniestDateStr,
+      ),
+      _MemorableDayData(
+        emoji: '😅',
+        label: 'Most Cringe',
+        title: cringeTitle,
+        description: cringeStory,
+        dateStr: cringeDateStr,
+      ),
+    ];
 
     return _buildCardBase(
-      backgroundColor: WrappedColors.yellow,
+      backgroundColor: WrappedColors.coral,
       child: _MemorableDaysAnimated(
-        days: [funniestDay],
+        days: bestMoments,
         isActive: _currentPage == 5,
-        headerLine1: 'Funniest',
-        headerLine2: 'Moment',
-        summaryBadgeText: 'Funniest Moment',
-        badgeColor: WrappedColors.yellow,
+        headerLine1: 'Best',
+        headerLine2: 'Moments',
+        summaryBadgeText: 'Best Moments',
+        badgeColor: WrappedColors.coral,
+        onShare: _shareBestMoments,
       ),
     );
   }
 
-  Widget _buildEmbarrassingEventCard() {
-    final event = _result?['most_embarrassing_event'] as Map<String, dynamic>?;
-    final title = event?['title'] ?? 'That Awkward Moment';
-    final story = event?['story'] ?? "We've all been there!";
-    final dateStr = event?['date'] ?? 'January 1';
-
-    final cringeDay = _MemorableDayData(
-      emoji: '😅',
-      label: 'Cringe',
-      title: title,
-      description: story,
-      dateStr: dateStr,
-    );
+  Widget _buildMyBuddiesCard() {
+    final buddies = (_result?['top_buddies'] as List<dynamic>?) ?? [];
 
     return _buildCardBase(
-      backgroundColor: WrappedColors.pink,
-      child: _MemorableDaysAnimated(
-        days: [cringeDay],
+      backgroundColor: const Color(0xFF6B5B95),
+      child: _MyBuddiesAnimated(
+        buddies: buddies.map((b) {
+          final buddy = b as Map<String, dynamic>;
+          return _BuddyData(
+            name: buddy['name'] ?? 'Friend',
+            relationship: buddy['relationship'] ?? 'Friend',
+            context: buddy['context'] ?? 'Your buddy!',
+            emoji: buddy['emoji'] ?? '👋',
+          );
+        }).toList(),
         isActive: _currentPage == 6,
-        headerLine1: 'Most',
-        headerLine2: 'Cringe',
-        summaryBadgeText: 'Most Cringe',
-        badgeColor: WrappedColors.pink,
-      ),
-    );
-  }
-
-  Widget _buildFavoritesCard() {
-    final favorites = _result?['favorites'] as Map<String, dynamic>?;
-    final word = _capitalizeWords(favorites?['word'] ?? 'Amazing');
-    final person = _capitalizeWords(favorites?['person'] ?? 'Someone special');
-    final food = _capitalizeWords(favorites?['food'] ?? 'Coffee');
-
-    return _buildCardBase(
-      backgroundColor: const Color(0xFFFF6B9D),
-      child: _TypewriterEndPageAnimated(
-        badgeText: 'Favorites',
-        badgeColor: const Color(0xFFFF6B9D),
-        isActive: _currentPage == 7,
-        showProgressRing: false,
-        items: [
-          _TypewriterItem(label: 'Word', value: word),
-          _TypewriterItem(label: 'Person', value: person),
-          _TypewriterItem(label: 'Food', value: food),
-        ],
+        onShare: _shareMyBuddies,
       ),
     );
   }
@@ -798,20 +1145,23 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     final movie = _capitalizeWords(obsessions?['movie'] ?? 'Not mentioned');
     final book = _capitalizeWords(obsessions?['book'] ?? 'Not mentioned');
     final celebrity = _capitalizeWords(obsessions?['celebrity'] ?? 'Not mentioned');
+    final food = _capitalizeWords(obsessions?['food'] ?? 'Not mentioned');
 
     return _buildCardBase(
       backgroundColor: WrappedColors.coral,
       child: _TypewriterEndPageAnimated(
         badgeText: "Couldn't Stop Talking About",
         badgeColor: WrappedColors.coral,
-        isActive: _currentPage == 8,
+        isActive: _currentPage == 7,
         showProgressRing: false,
         items: [
           _TypewriterItem(label: 'Show', value: show, emoji: '📺'),
           _TypewriterItem(label: 'Movie', value: movie, emoji: '🎬'),
           _TypewriterItem(label: 'Book', value: book, emoji: '📚'),
           _TypewriterItem(label: 'Celebrity', value: celebrity, emoji: '⭐'),
+          _TypewriterItem(label: 'Food', value: food, emoji: '🍕'),
         ],
+        onShare: _shareObsessions,
       ),
     );
   }
@@ -824,7 +1174,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       child: _TypewriterEndPageAnimated(
         badgeText: 'Movie Recs For Friends',
         badgeColor: const Color(0xFF1a0a2e),
-        isActive: _currentPage == 9,
+        isActive: _currentPage == 8,
         showProgressRing: false,
         items: movies.asMap().entries.map((entry) {
           return _TypewriterItem(
@@ -833,6 +1183,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
             emoji: '🎬',
           );
         }).toList(),
+        onShare: _shareMovieRecs,
       ),
     );
   }
@@ -843,50 +1194,15 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     return _buildCardBase(
       backgroundColor: const Color(0xFF2d4a3e),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(),
-          const Text(
-            'Biggest',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Text(
-            'Struggle',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 56,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              '"$title"',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'But you pushed through 💪',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 40),
-        ],
+      child: _BigMomentAnimated(
+        emoji: '😤',
+        headerLine1: 'Biggest',
+        headerLine2: 'Struggle',
+        title: title,
+        subtitle: 'But you pushed through 💪',
+        isActive: _currentPage == 9,
+        onShare: _shareStruggle,
+        buttonColor: const Color(0xFF2d4a3e),
       ),
     );
   }
@@ -897,46 +1213,15 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     return _buildCardBase(
       backgroundColor: WrappedColors.mint,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(),
-          const Text(
-            '🏆',
-            style: TextStyle(fontSize: 72),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Biggest',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Text(
-            'Win',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 64,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(height: 40),
-        ],
+      child: _BigMomentAnimated(
+        emoji: '🏆',
+        headerLine1: 'Biggest',
+        headerLine2: 'Win',
+        title: title,
+        subtitle: 'You did it! 🎉',
+        isActive: _currentPage == 10,
+        onShare: _sharePersonalWin,
+        buttonColor: WrappedColors.mint,
       ),
     );
   }
@@ -946,165 +1231,28 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
     return _buildCardBase(
       backgroundColor: WrappedColors.orange,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(),
-          const Text(
-            'Your Top 5',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Phrases',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 64,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 40),
-          ...phrases.take(5).map((p) {
-            final phrase = p is Map ? (p['phrase'] ?? '') : p.toString();
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 24),
-              child: Text(
-                '"$phrase"',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  fontStyle: FontStyle.italic,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            );
-          }).toList(),
-          const Spacer(),
-        ],
+      child: _TopPhrasesAnimated(
+        phrases: phrases.take(5).map((p) {
+          final phrase = p is Map ? (p['phrase'] ?? '') : p.toString();
+          return phrase.toString();
+        }).toList(),
+        isActive: _currentPage == 11,
+        onShare: _shareTopPhrases,
       ),
     );
   }
 
-  Widget _buildShareCard() {
-    final totalHours = _result?['total_time_hours'] ?? 0.0;
-    final totalConvs = _result?['total_conversations'] ?? 0;
-    final totalActions = _result?['total_action_items'] ?? 0;
-    final completionRate = ((_result?['action_items_completion_rate'] ?? 0.0) * 100).toInt();
-    final archetype = _result?['decision_style']?['name'] ?? 'Thinker';
-    final phrase = _result?['signature_phrase']?['phrase'] ?? 'okay';
-    final phraseCount = _result?['signature_phrase']?['count'] ?? 0;
-
+  Widget _buildSummaryCollageCard() {
     return _buildCardBase(
-      backgroundColor: WrappedColors.blue,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Hidden share card
-          SizedBox.shrink(
-            child: OverflowBox(
-              maxWidth: 1080,
-              maxHeight: 1920,
-              child: Transform.translate(
-                offset: const Offset(-10000, -10000),
-                child: RepaintBoundary(
-                  key: _shareCardKey,
-                  child: _buildShareableImage(totalHours, totalConvs, totalActions),
-                ),
-              ),
-            ),
-          ),
-          const Spacer(),
-          const Text(
-            "That's a wrap!",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 36,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Summary stats row
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildSummaryStat('${(totalHours as num).toStringAsFixed(0)}', 'hours'),
-                    _buildSummaryStat('$totalConvs', 'convos'),
-                    _buildSummaryStat('$totalActions', 'actions'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Divider(color: Colors.white24, height: 1),
-                const SizedBox(height: 16),
-                Text(
-                  'You\'re a $archetype',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'You said "$phrase" $phraseCount times',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '$completionRate% tasks completed',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: _shareWrapped,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.share, color: WrappedColors.blue, size: 24),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Share to Stories',
-                    style: TextStyle(
-                      color: WrappedColors.blue,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 40),
-        ],
+      backgroundColor: const Color(0xFF0A1628),
+      customPadding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 16),
+      child: _SummaryCollageAnimated(
+        result: _result ?? {},
+        isActive: _currentPage == 12,
+        onShare: _shareFinalCollage,
+        formatCategory: _formatCategory,
+        capitalizeWords: _capitalizeWords,
+        calculatePercentile: _calculatePercentile,
       ),
     );
   }
@@ -1228,6 +1376,8 @@ class _YearInNumbersAnimated extends StatefulWidget {
   final int daysActive;
   final double percentile;
   final bool isActive;
+  final VoidCallback? onShare;
+  final GlobalKey? shareKey;
 
   const _YearInNumbersAnimated({
     required this.totalMinutes,
@@ -1235,6 +1385,8 @@ class _YearInNumbersAnimated extends StatefulWidget {
     required this.daysActive,
     required this.percentile,
     required this.isActive,
+    this.onShare,
+    this.shareKey,
   });
 
   @override
@@ -1246,11 +1398,13 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
   late AnimationController _convosController;
   late AnimationController _daysController;
   late AnimationController _badgeController;
+  late AnimationController _shareButtonController;
 
   late Animation<double> _minutesAnimation;
   late Animation<double> _convosAnimation;
   late Animation<double> _daysAnimation;
   late Animation<double> _badgeAnimation;
+  late Animation<double> _shareButtonAnimation;
 
   bool _hasAnimated = false;
   final _numberFormat = NumberFormat('#,###');
@@ -1303,6 +1457,16 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
       curve: Curves.elasticOut,
     );
 
+    // Share button pop animation
+    _shareButtonController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _shareButtonAnimation = CurvedAnimation(
+      parent: _shareButtonController,
+      curve: Curves.elasticOut,
+    );
+
     // Chain animations with sound effects
     _minutesController.addListener(_onMinutesTick);
     _minutesController.addStatusListener((status) {
@@ -1338,6 +1502,12 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
       if (status == AnimationStatus.completed && mounted) {
         // Stamp sound - heavy impact
         HapticFeedback.heavyImpact();
+        // Start share button animation after badge completes
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            _shareButtonController.forward();
+          }
+        });
       }
     });
 
@@ -1403,6 +1573,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     _convosController.dispose();
     _daysController.dispose();
     _badgeController.dispose();
+    _shareButtonController.dispose();
     super.dispose();
   }
 
@@ -1427,6 +1598,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
         _convosAnimation,
         _daysAnimation,
         _badgeAnimation,
+        _shareButtonAnimation,
       ]),
       builder: (context, child) {
         final animatedMinutes = (_minutesAnimation.value * widget.totalMinutes).toInt();
@@ -1436,6 +1608,10 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
         // Badge scale for stamp effect
         final badgeScale = _badgeAnimation.value;
         final badgeOpacity = _badgeAnimation.value.clamp(0.0, 1.0);
+
+        // Share button scale for pop effect
+        final shareButtonScale = _shareButtonAnimation.value;
+        final shareButtonOpacity = _shareButtonAnimation.value.clamp(0.0, 1.0);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1547,21 +1723,179 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
               ),
             ),
             const Spacer(),
-            // Progress circle - bottom left
-            SizedBox(
-              width: 32,
-              height: 32,
-              child: CustomPaint(
-                painter: _CircularProgressPainter(
-                  progress: _overallProgress,
-                  strokeWidth: 3,
-                  backgroundColor: Colors.white.withOpacity(0.3),
-                  progressColor: Colors.white,
+            // Progress circle or Share button (animated pop in)
+            shareButtonScale > 0
+                ? Opacity(
+                    opacity: shareButtonOpacity,
+                    child: Transform.scale(
+                      scale: shareButtonScale == 0 ? 0 : (0.5 + shareButtonScale * 0.5),
+                      alignment: Alignment.centerLeft,
+                      child: GestureDetector(
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          widget.onShare?.call();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.ios_share,
+                                color: WrappedColors.mint,
+                                size: 18,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Share',
+                                style: TextStyle(
+                                  color: WrappedColors.mint,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CustomPaint(
+                      painter: _CircularProgressPainter(
+                        progress: _overallProgress,
+                        strokeWidth: 3,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        progressColor: Colors.white,
+                      ),
+                    ),
+                  ),
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// Reusable animated share button widget
+class _AnimatedShareButton extends StatefulWidget {
+  final double progress; // 0.0 to 1.0 - when 1.0, show share button
+  final VoidCallback? onShare;
+  final Color buttonColor;
+
+  const _AnimatedShareButton({
+    required this.progress,
+    this.onShare,
+    this.buttonColor = WrappedColors.mint,
+  });
+
+  @override
+  State<_AnimatedShareButton> createState() => _AnimatedShareButtonState();
+}
+
+class _AnimatedShareButtonState extends State<_AnimatedShareButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+  bool _hasTriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.elasticOut,
+    );
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedShareButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.progress >= 1.0 && !_hasTriggered) {
+      _hasTriggered = true;
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _controller.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        final scale = _animation.value;
+        final opacity = _animation.value.clamp(0.0, 1.0);
+
+        if (scale > 0) {
+          return Opacity(
+            opacity: opacity,
+            child: Transform.scale(
+              scale: scale == 0 ? 0 : (0.5 + scale * 0.5),
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  widget.onShare?.call();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.ios_share,
+                        color: widget.buttonColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Share',
+                        style: TextStyle(
+                          color: widget.buttonColor,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-          ],
+          );
+        }
+
+        return SizedBox(
+          width: 32,
+          height: 32,
+          child: CustomPaint(
+            painter: _CircularProgressPainter(
+              progress: widget.progress,
+              strokeWidth: 3,
+              backgroundColor: Colors.white.withOpacity(0.3),
+              progressColor: Colors.white,
+            ),
+          ),
         );
       },
     );
@@ -1621,10 +1955,12 @@ class _CircularProgressPainter extends CustomPainter {
 class _CategoryChartAnimated extends StatefulWidget {
   final List<_CategoryData> categories;
   final bool isActive;
+  final VoidCallback? onShare;
 
   const _CategoryChartAnimated({
     required this.categories,
     required this.isActive,
+    this.onShare,
   });
 
   @override
@@ -1750,10 +2086,37 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
           }
         }
 
+        // Badge opacity follows first slice animation
+        final badgeOpacity = _sliceAnimations.isNotEmpty ? _sliceAnimations.first.value.clamp(0.0, 1.0) : 0.0;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 40),
+            // Top badge
+            Opacity(
+              opacity: badgeOpacity,
+              child: Transform.scale(
+                scale: 0.5 + badgeOpacity * 0.5,
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'You Talked About',
+                    style: TextStyle(
+                      color: Color(0xFF2A9D8F),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
             // Animated pie chart
             SizedBox(
               width: 200,
@@ -1813,6 +2176,13 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
               );
             }),
             const Spacer(),
+            // Share button
+            _AnimatedShareButton(
+              progress: _trophyAnimation.value,
+              onShare: widget.onShare,
+              buttonColor: WrappedColors.mint,
+            ),
+            const SizedBox(height: 20),
           ],
         );
       },
@@ -1826,12 +2196,14 @@ class _ActionsAnimated extends StatefulWidget {
   final int completedTasks;
   final int completionRate;
   final bool isActive;
+  final VoidCallback? onShare;
 
   const _ActionsAnimated({
     required this.totalTasks,
     required this.completedTasks,
     required this.completionRate,
     required this.isActive,
+    this.onShare,
   });
 
   @override
@@ -2168,18 +2540,11 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
               ),
             ),
             const Spacer(),
-            // Progress circle - bottom left
-            SizedBox(
-              width: 32,
-              height: 32,
-              child: CustomPaint(
-                painter: _CircularProgressPainter(
-                  progress: _overallProgress,
-                  strokeWidth: 3,
-                  backgroundColor: Colors.white.withOpacity(0.3),
-                  progressColor: Colors.white,
-                ),
-              ),
+            // Share button
+            _AnimatedShareButton(
+              progress: _overallProgress,
+              onShare: widget.onShare,
+              buttonColor: WrappedColors.indigo,
             ),
             const SizedBox(height: 20),
           ],
@@ -2346,6 +2711,9 @@ class _MemorableDaysAnimated extends StatefulWidget {
   final String headerLine2;
   final String summaryBadgeText;
   final Color badgeColor;
+  final bool isSingleMoment;
+  final String? badgeEmoji;
+  final VoidCallback? onShare;
 
   const _MemorableDaysAnimated({
     required this.days,
@@ -2353,7 +2721,10 @@ class _MemorableDaysAnimated extends StatefulWidget {
     this.headerLine1 = 'Your',
     this.headerLine2 = 'Top Days',
     this.summaryBadgeText = 'Your Top Days',
+    this.onShare,
     this.badgeColor = WrappedColors.teal,
+    this.isSingleMoment = false,
+    this.badgeEmoji,
   });
 
   @override
@@ -2368,6 +2739,10 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
 
   late Animation<double> _introAnimation;
   late Animation<double> _summaryAnimation;
+
+  // Horizontal scroll controller for calendar
+  late ScrollController _calendarScrollController;
+  static const double _monthCardWidth = 280.0;
 
   bool _hasAnimated = false;
   int _currentDayIndex = 0;
@@ -2395,6 +2770,9 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
   @override
   void initState() {
     super.initState();
+
+    // Initialize scroll controller
+    _calendarScrollController = ScrollController();
 
     // Intro animation - title appears
     _introController = AnimationController(
@@ -2495,20 +2873,28 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
   }
 
   Future<void> _scrollToMonth(int targetMonth) async {
-    // Scroll through months one by one for effect
-    while (_displayedMonth != targetMonth && mounted) {
-      await Future.delayed(const Duration(milliseconds: 150));
-      if (!mounted) return;
+    // Animate scroll to target month, centered in viewport
+    if (_calendarScrollController.hasClients) {
+      final viewportWidth = _calendarScrollController.position.viewportDimension;
+      // Calculate offset to center the target month
+      // Left edge of target month - offset to center it
+      final monthLeftEdge = (targetMonth - 1) * (_monthCardWidth + 12); // +12 for margin
+      final centerOffset = monthLeftEdge - (viewportWidth - _monthCardWidth) / 2;
+      // Clamp to valid scroll range
+      final maxScroll = _calendarScrollController.position.maxScrollExtent;
+      final targetOffset = centerOffset.clamp(0.0, maxScroll);
 
-      setState(() {
-        if (_displayedMonth < targetMonth) {
-          _displayedMonth++;
-        } else {
-          _displayedMonth--;
-        }
-      });
-      HapticFeedback.selectionClick();
+      await _calendarScrollController.animateTo(
+        targetOffset,
+        duration: Duration(milliseconds: 300 + (targetMonth - _displayedMonth).abs() * 100),
+        curve: Curves.easeOutCubic,
+      );
     }
+
+    setState(() {
+      _displayedMonth = targetMonth;
+    });
+    HapticFeedback.selectionClick();
   }
 
   Future<void> _circleDate() async {
@@ -2562,6 +2948,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     _calendarController.dispose();
     _dayTransitionController.dispose();
     _summaryController.dispose();
+    _calendarScrollController.dispose();
     super.dispose();
   }
 
@@ -2595,7 +2982,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                       widget.headerLine1,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 24,
+                        fontSize: 20,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -2603,7 +2990,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                       widget.headerLine2,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 48,
+                        fontSize: 36,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -2660,13 +3047,25 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(
-                widget.summaryBadgeText,
-                style: TextStyle(
-                  color: widget.badgeColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.badgeEmoji != null) ...[
+                    Text(
+                      widget.badgeEmoji!,
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    widget.summaryBadgeText,
+                    style: TextStyle(
+                      color: widget.badgeColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -2691,21 +3090,11 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
           );
         }),
         const Spacer(),
-        // Progress indicator
-        Opacity(
-          opacity: _summaryAnimation.value,
-          child: SizedBox(
-            width: 32,
-            height: 32,
-            child: CustomPaint(
-              painter: _CircularProgressPainter(
-                progress: _summaryAnimation.value,
-                strokeWidth: 3,
-                backgroundColor: Colors.white.withOpacity(0.3),
-                progressColor: Colors.white,
-              ),
-            ),
-          ),
+        // Share button
+        _AnimatedShareButton(
+          progress: _summaryAnimation.value,
+          onShare: widget.onShare,
+          buttonColor: widget.badgeColor,
         ),
         const SizedBox(height: 20),
       ],
@@ -2713,69 +3102,94 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
   }
 
   Widget _buildSummaryDayItem(_MemorableDayData day, double progress) {
+    final isSingle = widget.isSingleMoment;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Label with emoji
-        Row(
-          children: [
-            Text(
-              day.emoji,
-              style: const TextStyle(fontSize: 24),
+        // For single moments (funniest/cringe), just show date since emoji is in badge
+        // For multi-day (Your Top Days), show emoji + label + date
+        if (isSingle) ...[
+          // Just date for single moments (emoji is in the badge)
+          Text(
+            day.dateStr,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.6),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+          ),
+          const SizedBox(height: 12),
+        ] else ...[
+          // Label with emoji and date in same row for multi-day
+          Row(
+            children: [
+              Text(
+                day.emoji,
+                style: const TextStyle(fontSize: 20),
               ),
-              child: Text(
-                day.label.toUpperCase(),
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  day.label.toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        // Title as big text
+              const SizedBox(width: 8),
+              Text(
+                '·',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                day.dateStr,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+        ],
+        // Title as text
         Text(
           day.title,
-          style: const TextStyle(
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 32,
+            fontSize: isSingle ? 32 : 20,
             fontWeight: FontWeight.w700,
             height: 1.3,
           ),
         ),
-        const SizedBox(height: 6),
-        // Date below
-        Text(
-          day.dateStr,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.7),
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
         // Description if available
         if (day.description.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          SizedBox(height: isSingle ? 16 : 6),
           Text(
             day.description,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 14,
+              color: Colors.white.withOpacity(0.85),
+              fontSize: isSingle ? 18 : 14,
               fontWeight: FontWeight.w400,
               height: 1.4,
             ),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ],
@@ -2783,93 +3197,80 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
   }
 
   Widget _buildCalendar(_MemorableDayData? currentDay) {
-    final daysInMonth = _getDaysInMonth(_displayedMonth, 2025);
-    final firstDayOfWeek = _getFirstDayOfWeek(_displayedMonth, 2025);
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        controller: _calendarScrollController,
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(), // Controlled programmatically
+        itemCount: 12,
+        itemBuilder: (context, index) {
+          final month = index + 1;
+          final daysInMonth = _getDaysInMonth(month, 2025);
+          final firstDayOfWeek = _getFirstDayOfWeek(month, 2025);
+          final isTargetMonth = currentDay?.month == month;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        children: [
-          // Month header with navigation arrows
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.chevron_left,
-                color: Colors.white.withOpacity(0.5),
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, animation) {
-                  return SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.5),
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: FadeTransition(opacity: animation, child: child),
-                  );
-                },
-                child: Text(
-                  '${_monthNames[_displayedMonth - 1]} 2025',
-                  key: ValueKey(_displayedMonth),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
+          return Container(
+            width: _monthCardWidth,
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(isTargetMonth ? 0.2 : 0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: isTargetMonth ? Border.all(color: Colors.white.withOpacity(0.3), width: 1) : null,
+            ),
+            child: Column(
+              children: [
+                // Month header
+                Text(
+                  _monthNames[month - 1],
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(isTargetMonth ? 1.0 : 0.6),
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Icon(
-                Icons.chevron_right,
-                color: Colors.white.withOpacity(0.5),
-                size: 24,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Day headers
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                .map((d) => SizedBox(
-                      width: 32,
-                      child: Text(
-                        d,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          // Calendar grid
-          _buildCalendarGrid(daysInMonth, firstDayOfWeek, currentDay),
-        ],
+                const SizedBox(height: 8),
+                // Day headers
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                      .map((d) => SizedBox(
+                            width: 28,
+                            child: Text(
+                              d,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.5),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 4),
+                // Calendar grid
+                Expanded(
+                  child: _buildMonthGrid(month, daysInMonth, firstDayOfWeek, currentDay),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildCalendarGrid(int daysInMonth, int firstDayOfWeek, _MemorableDayData? currentDay) {
-    final targetDay = currentDay?.month == _displayedMonth ? currentDay?.day : null;
+  Widget _buildMonthGrid(int month, int daysInMonth, int firstDayOfWeek, _MemorableDayData? currentDay) {
+    final targetDay = currentDay?.month == month ? currentDay?.day : null;
 
     List<Widget> rows = [];
     List<Widget> currentRow = [];
 
     // Add empty cells for days before the 1st
     for (int i = 0; i < firstDayOfWeek; i++) {
-      currentRow.add(const SizedBox(width: 32, height: 32));
+      currentRow.add(const SizedBox(width: 28, height: 24));
     }
 
     // Add day cells
@@ -2878,8 +3279,8 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
 
       currentRow.add(
         SizedBox(
-          width: 32,
-          height: 32,
+          width: 28,
+          height: 24,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -2888,23 +3289,23 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
                 Transform.scale(
                   scale: _circleScale,
                   child: Container(
-                    width: 32,
-                    height: 32,
+                    width: 24,
+                    height: 24,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: Colors.white,
-                        width: 2.5,
+                        width: 2,
                       ),
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withOpacity(0.3),
                     ),
                   ),
                 ),
               Text(
                 '$day',
                 style: TextStyle(
-                  color: isTarget && _circleScale > 0.5 ? Colors.white : Colors.white.withOpacity(0.8),
-                  fontSize: 14,
+                  color: isTarget && _circleScale > 0.5 ? Colors.white : Colors.white.withOpacity(0.7),
+                  fontSize: 11,
                   fontWeight: isTarget && _circleScale > 0.5 ? FontWeight.w800 : FontWeight.w500,
                 ),
               ),
@@ -2916,12 +3317,9 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
       // Start new row after Saturday
       if ((firstDayOfWeek + day) % 7 == 0) {
         rows.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: currentRow,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: currentRow,
           ),
         );
         currentRow = [];
@@ -2931,20 +3329,20 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     // Add remaining days in the last row
     if (currentRow.isNotEmpty) {
       while (currentRow.length < 7) {
-        currentRow.add(const SizedBox(width: 32, height: 32));
+        currentRow.add(const SizedBox(width: 28, height: 24));
       }
       rows.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: currentRow,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: currentRow,
         ),
       );
     }
 
-    return Column(children: rows);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      children: rows,
+    );
   }
 
   Widget _buildDayDetails(_MemorableDayData day) {
@@ -3049,6 +3447,7 @@ class _TypewriterEndPageAnimated extends StatefulWidget {
   final List<_TypewriterItem> items;
   final bool isActive;
   final bool showProgressRing;
+  final VoidCallback? onShare;
 
   const _TypewriterEndPageAnimated({
     required this.badgeText,
@@ -3056,6 +3455,7 @@ class _TypewriterEndPageAnimated extends StatefulWidget {
     required this.items,
     required this.isActive,
     this.showProgressRing = true,
+    this.onShare,
   });
 
   @override
@@ -3139,15 +3539,17 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
     return AnimatedBuilder(
       animation: _mainAnimation,
       builder: (context, child) {
+        final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 40),
             // Title badge
             Opacity(
-              opacity: _mainAnimation.value,
+              opacity: mainOpacity,
               child: Transform.scale(
-                scale: 0.5 + _mainAnimation.value * 0.5,
+                scale: 0.5 + mainOpacity * 0.5,
                 alignment: Alignment.centerLeft,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -3172,7 +3574,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
               final index = entry.key;
               final item = entry.value;
               // Stagger the entry animation
-              final delayedProgress = ((_mainAnimation.value - index * 0.1) / 0.7).clamp(0.0, 1.0);
+              final delayedProgress = ((mainOpacity - index * 0.1) / 0.7).clamp(0.0, 1.0);
 
               return Opacity(
                 opacity: delayedProgress,
@@ -3186,23 +3588,12 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
               );
             }),
             const Spacer(),
-            // Progress indicator (conditionally shown)
-            if (widget.showProgressRing)
-              Opacity(
-                opacity: _mainAnimation.value,
-                child: SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CustomPaint(
-                    painter: _CircularProgressPainter(
-                      progress: _mainAnimation.value,
-                      strokeWidth: 3,
-                      backgroundColor: Colors.white.withOpacity(0.3),
-                      progressColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
+            // Share button
+            _AnimatedShareButton(
+              progress: mainOpacity,
+              onShare: widget.onShare,
+              buttonColor: widget.badgeColor,
+            ),
             const SizedBox(height: 20),
           ],
         );
@@ -3214,7 +3605,7 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
     return AnimatedBuilder(
       animation: _typewriterAnimations[index],
       builder: (context, child) {
-        final progress = _typewriterAnimations[index].value;
+        final progress = _typewriterAnimations[index].value.clamp(0.0, 1.0);
         final charCount = (progress * item.value.length).round();
         final displayedText = item.value.substring(0, charCount);
 
@@ -3263,6 +3654,1515 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
           ],
         );
       },
+    );
+  }
+}
+
+// Animated Top 5 Phrases widget - left aligned with staggered animations
+class _TopPhrasesAnimated extends StatefulWidget {
+  final List<String> phrases;
+  final bool isActive;
+  final VoidCallback? onShare;
+
+  const _TopPhrasesAnimated({
+    required this.phrases,
+    required this.isActive,
+    this.onShare,
+  });
+
+  @override
+  State<_TopPhrasesAnimated> createState() => _TopPhrasesAnimatedState();
+}
+
+class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerProviderStateMixin {
+  late AnimationController _mainController;
+  late Animation<double> _mainAnimation;
+  late List<AnimationController> _phraseControllers;
+  late List<Animation<double>> _phraseAnimations;
+
+  bool _hasAnimated = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _mainController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _mainAnimation = CurvedAnimation(
+      parent: _mainController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _phraseControllers = List.generate(
+      widget.phrases.length,
+      (index) => AnimationController(
+        duration: const Duration(milliseconds: 600),
+        vsync: this,
+      ),
+    );
+    _phraseAnimations = _phraseControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeOutBack)).toList();
+
+    if (widget.isActive) {
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() async {
+    if (_hasAnimated) return;
+    _hasAnimated = true;
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    _mainController.forward();
+    HapticFeedback.mediumImpact();
+
+    // Stagger phrase animations
+    for (int i = 0; i < _phraseControllers.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 150));
+      if (!mounted) return;
+      _phraseControllers[i].forward();
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_TopPhrasesAnimated oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !_hasAnimated) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _mainController.dispose();
+    for (final c in _phraseControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _mainAnimation,
+      builder: (context, child) {
+        final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 40),
+            // Badge
+            Opacity(
+              opacity: mainOpacity,
+              child: Transform.scale(
+                scale: 0.5 + mainOpacity * 0.5,
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Top 5 Phrases',
+                    style: TextStyle(
+                      color: WrappedColors.orange,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Phrases list
+            ...widget.phrases.asMap().entries.map((entry) {
+              final index = entry.key;
+              final phrase = entry.value;
+
+              return AnimatedBuilder(
+                animation: _phraseAnimations.length > index ? _phraseAnimations[index] : _mainAnimation,
+                builder: (context, child) {
+                  final rawProgress = _phraseAnimations.length > index ? _phraseAnimations[index].value : 0.0;
+                  final progress = rawProgress.clamp(0.0, 1.0);
+
+                  return Opacity(
+                    opacity: progress,
+                    child: Transform.translate(
+                      offset: Offset(-40 * (1 - rawProgress), 0),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Text(
+                                '"$phrase"',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w600,
+                                  fontStyle: FontStyle.italic,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            }),
+            const Spacer(),
+            // Share button
+            _AnimatedShareButton(
+              progress: mainOpacity,
+              onShare: widget.onShare,
+              buttonColor: WrappedColors.blue,
+            ),
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// Data class for buddy information
+class _BuddyData {
+  final String name;
+  final String relationship;
+  final String context;
+  final String emoji;
+
+  const _BuddyData({
+    required this.name,
+    required this.relationship,
+    required this.context,
+    required this.emoji,
+  });
+}
+
+// Animated My Buddies widget - shows top 5 people
+class _MyBuddiesAnimated extends StatefulWidget {
+  final List<_BuddyData> buddies;
+  final bool isActive;
+  final VoidCallback? onShare;
+
+  const _MyBuddiesAnimated({
+    required this.buddies,
+    required this.isActive,
+    this.onShare,
+  });
+
+  @override
+  State<_MyBuddiesAnimated> createState() => _MyBuddiesAnimatedState();
+}
+
+class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProviderStateMixin {
+  late AnimationController _mainController;
+  late Animation<double> _mainAnimation;
+  late List<AnimationController> _buddyControllers;
+  late List<Animation<double>> _buddyAnimations;
+
+  bool _hasAnimated = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _mainController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _mainAnimation = CurvedAnimation(
+      parent: _mainController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _buddyControllers = List.generate(
+      widget.buddies.length,
+      (index) => AnimationController(
+        duration: const Duration(milliseconds: 500),
+        vsync: this,
+      ),
+    );
+    _buddyAnimations = _buddyControllers.map((c) => CurvedAnimation(parent: c, curve: Curves.easeOutBack)).toList();
+
+    if (widget.isActive) {
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() async {
+    if (_hasAnimated) return;
+    _hasAnimated = true;
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    _mainController.forward();
+    HapticFeedback.mediumImpact();
+
+    // Stagger buddy animations
+    for (int i = 0; i < _buddyControllers.length; i++) {
+      await Future.delayed(const Duration(milliseconds: 120));
+      if (!mounted) return;
+      _buddyControllers[i].forward();
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_MyBuddiesAnimated oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !_hasAnimated) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _mainController.dispose();
+    for (final c in _buddyControllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _mainAnimation,
+      builder: (context, child) {
+        final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 40),
+            // Badge
+            Opacity(
+              opacity: mainOpacity,
+              child: Transform.scale(
+                scale: 0.5 + mainOpacity * 0.5,
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('👥', style: TextStyle(fontSize: 18)),
+                      SizedBox(width: 6),
+                      Text(
+                        'My Buddies',
+                        style: TextStyle(
+                          color: Color(0xFF6B5B95),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Buddies list
+            ...widget.buddies.asMap().entries.map((entry) {
+              final index = entry.key;
+              final buddy = entry.value;
+
+              return AnimatedBuilder(
+                animation: _buddyAnimations.length > index ? _buddyAnimations[index] : _mainAnimation,
+                builder: (context, child) {
+                  final rawProgress = _buddyAnimations.length > index ? _buddyAnimations[index].value : 0.0;
+                  final progress = rawProgress.clamp(0.0, 1.0);
+
+                  return Opacity(
+                    opacity: progress,
+                    child: Transform.translate(
+                      offset: Offset(-30 * (1 - rawProgress), 0),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Rank number
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Emoji
+                            Text(
+                              buddy.emoji,
+                              style: const TextStyle(fontSize: 28),
+                            ),
+                            const SizedBox(width: 12),
+                            // Info
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    buddy.name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    buddy.relationship,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.7),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    buddy.context,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontSize: 13,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            }),
+            const Spacer(),
+            // Share button
+            _AnimatedShareButton(
+              progress: mainOpacity,
+              onShare: widget.onShare,
+              buttonColor: const Color(0xFF6B5B95),
+            ),
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// Animated Big Moment widget for Struggle/Win - left aligned
+class _BigMomentAnimated extends StatefulWidget {
+  final String emoji;
+  final String headerLine1;
+  final String headerLine2;
+  final String title;
+  final String subtitle;
+  final bool isActive;
+  final VoidCallback? onShare;
+  final Color? buttonColor;
+
+  const _BigMomentAnimated({
+    required this.emoji,
+    required this.headerLine1,
+    required this.headerLine2,
+    required this.title,
+    required this.subtitle,
+    required this.isActive,
+    this.onShare,
+    this.buttonColor,
+  });
+
+  @override
+  State<_BigMomentAnimated> createState() => _BigMomentAnimatedState();
+}
+
+class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProviderStateMixin {
+  late AnimationController _mainController;
+  late Animation<double> _mainAnimation;
+  late AnimationController _titleController;
+  late Animation<double> _titleAnimation;
+  late AnimationController _contentController;
+  late Animation<double> _contentAnimation;
+
+  bool _hasAnimated = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _mainController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _mainAnimation = CurvedAnimation(
+      parent: _mainController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _titleController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _titleAnimation = CurvedAnimation(
+      parent: _titleController,
+      curve: Curves.easeOutBack,
+    );
+
+    _contentController = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    );
+    _contentAnimation = CurvedAnimation(
+      parent: _contentController,
+      curve: Curves.easeOutCubic,
+    );
+
+    if (widget.isActive) {
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() async {
+    if (_hasAnimated) return;
+    _hasAnimated = true;
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    _mainController.forward();
+    HapticFeedback.mediumImpact();
+
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
+    _titleController.forward();
+    HapticFeedback.selectionClick();
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    _contentController.forward();
+  }
+
+  @override
+  void didUpdateWidget(_BigMomentAnimated oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !_hasAnimated) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _mainController.dispose();
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_mainAnimation, _titleAnimation, _contentAnimation]),
+      builder: (context, child) {
+        final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
+        final titleOpacity = _titleAnimation.value.clamp(0.0, 1.0);
+        final contentOpacity = _contentAnimation.value.clamp(0.0, 1.0);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 40),
+            // Emoji with scale animation
+            Opacity(
+              opacity: mainOpacity,
+              child: Transform.scale(
+                scale: 0.3 + mainOpacity * 0.7,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  widget.emoji,
+                  style: const TextStyle(fontSize: 72),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Header lines
+            Opacity(
+              opacity: titleOpacity,
+              child: Transform.translate(
+                offset: Offset(-30 * (1 - titleOpacity), 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.headerLine1,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      widget.headerLine2,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 56,
+                        fontWeight: FontWeight.w900,
+                        height: 1.1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            // Title quote - right below header
+            Opacity(
+              opacity: contentOpacity,
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - contentOpacity)),
+                child: Text(
+                  '"${widget.title}"',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Subtitle directly under the main quote
+            Opacity(
+              opacity: contentOpacity,
+              child: Text(
+                widget.subtitle,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const Spacer(),
+            // Share button
+            _AnimatedShareButton(
+              progress: contentOpacity,
+              onShare: widget.onShare,
+              buttonColor: widget.buttonColor ?? WrappedColors.coral,
+            ),
+            const SizedBox(height: 20),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// Summary Collage animated final page - dense, max-info layout
+class _SummaryCollageAnimated extends StatefulWidget {
+  final Map<String, dynamic> result;
+  final bool isActive;
+  final VoidCallback? onShare;
+  final String Function(String) formatCategory;
+  final String Function(String) capitalizeWords;
+  final double Function(int) calculatePercentile;
+
+  const _SummaryCollageAnimated({
+    required this.result,
+    required this.isActive,
+    this.onShare,
+    required this.formatCategory,
+    required this.capitalizeWords,
+    required this.calculatePercentile,
+  });
+
+  @override
+  State<_SummaryCollageAnimated> createState() => _SummaryCollageAnimatedState();
+}
+
+class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with TickerProviderStateMixin {
+  late AnimationController _mainController;
+  late Animation<double> _mainAnimation;
+  late AnimationController _tilesController;
+  late Animation<double> _tilesAnimation;
+
+  bool _hasAnimated = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _mainController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _mainAnimation = CurvedAnimation(
+      parent: _mainController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _tilesController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    _tilesAnimation = CurvedAnimation(
+      parent: _tilesController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _mainController.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        _tilesController.forward();
+      }
+    });
+
+    if (widget.isActive) {
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() async {
+    if (_hasAnimated) return;
+    _hasAnimated = true;
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    _mainController.forward();
+    HapticFeedback.mediumImpact();
+  }
+
+  @override
+  void didUpdateWidget(_SummaryCollageAnimated oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !_hasAnimated) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _mainController.dispose();
+    _tilesController.dispose();
+    super.dispose();
+  }
+
+  String _formatNumber(int num) {
+    if (num >= 1000) {
+      return '${(num / 1000).toStringAsFixed(1)}k';
+    }
+    return num.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalHours = (widget.result['total_time_hours'] ?? 0.0) as num;
+    final totalMinutes = (totalHours * 60).toInt();
+    final totalConvs = widget.result['total_conversations'] ?? 0;
+    final daysActive = widget.result['days_active'] ?? (totalConvs / 3).ceil();
+    final percentile = widget.calculatePercentile(totalConvs);
+
+    // Buddies
+    final buddiesRaw = (widget.result['top_buddies'] as List<dynamic>?) ?? [];
+
+    // Obsessions
+    final obsessions = widget.result['obsessions'] as Map<String, dynamic>?;
+
+    // Phrases
+    final phrases = widget.result['top_phrases'] as List<dynamic>? ?? [];
+
+    // Actions
+    final totalActions = widget.result['total_action_items'] ?? 0;
+    final completedActions = widget.result['completed_action_items'] ?? 0;
+    final completionRate = (((widget.result['action_items_completion_rate'] ?? 0.0) as num) * 100).toInt();
+
+    // Signature + archetype
+    final archetype = (widget.result['decision_style'] as Map<String, dynamic>?)?['name'] ?? 'Thinker';
+    final signaturePhrase = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['phrase'] ?? 'okay';
+    final signatureCount = (widget.result['signature_phrase'] as Map<String, dynamic>?)?['count'] ?? 0;
+
+    // Struggle + Win
+    final struggle = (widget.result['struggle'] as Map<String, dynamic>?)?['title'] ?? 'The Hard Part';
+    final biggestWin = (widget.result['personal_win'] as Map<String, dynamic>?)?['title'] ?? 'Personal Growth';
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_mainAnimation, _tilesAnimation]),
+      builder: (context, child) {
+        final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
+        final tilesProgress = _tilesAnimation.value.clamp(0.0, 1.0);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 24),
+            // Header with 2025 and percentile
+            Opacity(
+              opacity: mainOpacity,
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - mainOpacity)),
+                child: Row(
+                  children: [
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [Color(0xFF4ECDC4), Color(0xFF44A08D)],
+                      ).createShader(bounds),
+                      child: const Text(
+                        '2025',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        'Top $percentile% User',
+                        style: const TextStyle(
+                          color: WrappedColors.mint,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Stats Row
+            _buildAnimatedTile(
+              delay: 0.0,
+              progress: tilesProgress,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: WrappedColors.mint,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStatItem(_formatNumber(totalMinutes), 'mins', Colors.white),
+                    _buildStatItem(_formatNumber(totalConvs), 'convos', Colors.white),
+                    _buildStatItem(_formatNumber(daysActive), 'days', Colors.white),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Buddies + Obsessions Row
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildAnimatedTile(
+                      delay: 0.1,
+                      progress: tilesProgress,
+                      child: _buildMiniTile(
+                        'BUDDIES',
+                        const Color(0xFF6B5B95),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: buddiesRaw.take(4).map((b) {
+                            final buddy = b as Map<String, dynamic>;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                children: [
+                                  Text(buddy['emoji'] ?? '👋', style: const TextStyle(fontSize: 16)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      buddy['name'] ?? '',
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildAnimatedTile(
+                      delay: 0.15,
+                      progress: tilesProgress,
+                      child: _buildMiniTile(
+                        'OBSESSIONS',
+                        WrappedColors.coral,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildObsessionRow('📺', widget.capitalizeWords(obsessions?['show'] ?? '-')),
+                            _buildObsessionRow('🎬', widget.capitalizeWords(obsessions?['movie'] ?? '-')),
+                            _buildObsessionRow('🍕', widget.capitalizeWords(obsessions?['food'] ?? '-')),
+                            _buildObsessionRow('⭐', widget.capitalizeWords(obsessions?['celebrity'] ?? '-')),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Struggle + Win Row
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _buildAnimatedTile(
+                      delay: 0.2,
+                      progress: tilesProgress,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2d4a3e),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Text('😤', style: TextStyle(fontSize: 18)),
+                                SizedBox(width: 6),
+                                Text('STRUGGLE',
+                                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              struggle,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildAnimatedTile(
+                      delay: 0.25,
+                      progress: tilesProgress,
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: WrappedColors.mint,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Text('🏆', style: TextStyle(fontSize: 18)),
+                                SizedBox(width: 6),
+                                Text('WIN',
+                                    style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              biggestWin,
+                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Top Phrases (vertical)
+            _buildAnimatedTile(
+              delay: 0.3,
+              progress: tilesProgress,
+              child: _buildMiniTile(
+                'TOP PHRASES',
+                WrappedColors.orange,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: phrases.take(3).map((p) {
+                    final phrase = p is Map ? (p['phrase'] ?? '') : p.toString();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '"$phrase"',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+
+            const Spacer(),
+
+            // Share button row with omi branding
+            Row(
+              children: [
+                Expanded(
+                  child: _AnimatedShareButton(
+                    progress: tilesProgress,
+                    onShare: widget.onShare,
+                    buttonColor: WrappedColors.mint,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Opacity(
+                  opacity: tilesProgress.clamp(0.0, 1.0),
+                  child: const Text(
+                    'omi',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAnimatedTile({required double delay, required double progress, required Widget child}) {
+    final adjustedProgress = ((progress - delay) / (1 - delay)).clamp(0.0, 1.0);
+    return Opacity(
+      opacity: adjustedProgress,
+      child: Transform.translate(
+        offset: Offset(0, 15 * (1 - adjustedProgress)),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String value, String label, Color color) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 26,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.7),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniTile(String title, Color color, Widget content) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          content,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildObsessionRow(String emoji, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// That's a Wrap animated end card - premium design (DEPRECATED - kept for reference)
+class _ThatsAWrapAnimated extends StatefulWidget {
+  final double totalHours;
+  final int totalConvs;
+  final int totalActions;
+  final int completionRate;
+  final String archetype;
+  final String phrase;
+  final int phraseCount;
+  final GlobalKey shareCardKey;
+  final Widget Function(dynamic, int, int) buildShareableImage;
+  final VoidCallback onShare;
+  final bool isActive;
+
+  const _ThatsAWrapAnimated({
+    required this.totalHours,
+    required this.totalConvs,
+    required this.totalActions,
+    required this.completionRate,
+    required this.archetype,
+    required this.phrase,
+    required this.phraseCount,
+    required this.shareCardKey,
+    required this.buildShareableImage,
+    required this.onShare,
+    required this.isActive,
+  });
+
+  @override
+  State<_ThatsAWrapAnimated> createState() => _ThatsAWrapAnimatedState();
+}
+
+class _ThatsAWrapAnimatedState extends State<_ThatsAWrapAnimated> with TickerProviderStateMixin {
+  late AnimationController _mainController;
+  late Animation<double> _mainAnimation;
+  late AnimationController _statsController;
+  late Animation<double> _statsAnimation;
+  late AnimationController _buttonController;
+  late Animation<double> _buttonAnimation;
+
+  bool _hasAnimated = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _mainController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    _mainAnimation = CurvedAnimation(
+      parent: _mainController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _statsController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _statsAnimation = CurvedAnimation(
+      parent: _statsController,
+      curve: Curves.easeOutBack,
+    );
+
+    _buttonController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _buttonAnimation = CurvedAnimation(
+      parent: _buttonController,
+      curve: Curves.elasticOut,
+    );
+
+    if (widget.isActive) {
+      _startAnimation();
+    }
+  }
+
+  void _startAnimation() async {
+    if (_hasAnimated) return;
+    _hasAnimated = true;
+
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+
+    _mainController.forward();
+    HapticFeedback.heavyImpact();
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    _statsController.forward();
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    _buttonController.forward();
+  }
+
+  @override
+  void didUpdateWidget(_ThatsAWrapAnimated oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !_hasAnimated) {
+      _startAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _mainController.dispose();
+    _statsController.dispose();
+    _buttonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Hidden share card
+        SizedBox.shrink(
+          child: OverflowBox(
+            maxWidth: 1080,
+            maxHeight: 1920,
+            child: Transform.translate(
+              offset: const Offset(-10000, -10000),
+              child: RepaintBoundary(
+                key: widget.shareCardKey,
+                child: widget.buildShareableImage(widget.totalHours, widget.totalConvs, widget.totalActions),
+              ),
+            ),
+          ),
+        ),
+        // Main content
+        AnimatedBuilder(
+          animation: Listenable.merge([_mainAnimation, _statsAnimation, _buttonAnimation]),
+          builder: (context, child) {
+            final mainOpacity = _mainAnimation.value.clamp(0.0, 1.0);
+            final statsOpacity = _statsAnimation.value.clamp(0.0, 1.0);
+            final buttonOpacity = _buttonAnimation.value.clamp(0.0, 1.0);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 48),
+                // Animated "2025" large text
+                Opacity(
+                  opacity: mainOpacity,
+                  child: Transform.scale(
+                    scale: 0.5 + mainOpacity * 0.5,
+                    alignment: Alignment.centerLeft,
+                    child: ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [
+                          Color(0xFF667eea),
+                          Color(0xFF764ba2),
+                          Color(0xFFf953c6),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(bounds),
+                      child: const Text(
+                        '2025',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 100,
+                          fontWeight: FontWeight.w900,
+                          height: 0.9,
+                          letterSpacing: -4,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                // "That's a wrap" text
+                Opacity(
+                  opacity: mainOpacity,
+                  child: Transform.translate(
+                    offset: Offset(-20 * (1 - mainOpacity), 0),
+                    child: const Text(
+                      "That's a wrap!",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 40),
+                // Stats grid with glassmorphism
+                Opacity(
+                  opacity: statsOpacity,
+                  child: Transform.translate(
+                    offset: Offset(0, 30 * (1 - statsOpacity)),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.white.withOpacity(0.15),
+                            Colors.white.withOpacity(0.05),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          // Stats row
+                          Row(
+                            children: [
+                              Expanded(child: _buildStatItem('${widget.totalHours.toStringAsFixed(0)}', 'hours', '⏱️')),
+                              Container(width: 1, height: 50, color: Colors.white.withOpacity(0.2)),
+                              Expanded(child: _buildStatItem('${widget.totalConvs}', 'convos', '💬')),
+                              Container(width: 1, height: 50, color: Colors.white.withOpacity(0.2)),
+                              Expanded(child: _buildStatItem('${widget.totalActions}', 'actions', '✅')),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Container(height: 1, color: Colors.white.withOpacity(0.15)),
+                          const SizedBox(height: 20),
+                          // Archetype badge
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  widget.archetype,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '${widget.completionRate}% done',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.7),
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // Signature phrase
+                          Row(
+                            children: [
+                              const Text('🗣️', style: TextStyle(fontSize: 20)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '"${widget.phrase}" × ${widget.phraseCount}',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontSize: 16,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                // Share button with animation
+                Opacity(
+                  opacity: buttonOpacity,
+                  child: Transform.scale(
+                    scale: 0.8 + buttonOpacity * 0.2,
+                    child: GestureDetector(
+                      onTap: widget.onShare,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                          borderRadius: BorderRadius.circular(40),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF667eea).withOpacity(0.4),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.share_rounded, color: Colors.white, size: 24),
+                            SizedBox(width: 12),
+                            Text(
+                              'Share Your Wrapped',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Footer
+                Opacity(
+                  opacity: buttonOpacity * 0.7,
+                  child: Center(
+                    child: Text(
+                      'omi.me/wrapped',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String value, String label, String emoji) {
+    return Column(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 24)),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 28,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.6),
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
