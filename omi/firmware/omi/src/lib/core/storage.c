@@ -371,7 +371,7 @@ static void write_to_tcp()
         offset += to_read;
         remaining_length -= to_read;
         size_t sent = 0;
-        while (sent < to_read) {
+        while ((sent < to_read) && is_wifi_on()) {
             int n = wifi_send_data(storage_write_buffer + sent, to_read - sent);
             if (n <= 0) {
                 // wait and retry
