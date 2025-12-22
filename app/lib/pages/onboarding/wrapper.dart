@@ -426,18 +426,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             children: [
-                              // Hide device animation for integrations page
-                              if (_controller!.index != kImportPage)
-                                Consumer<OnboardingProvider>(
-                                  builder: (context, onboardingProvider, child) {
-                                    return DeviceAnimationWidget(
-                                      animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
-                                      isConnected: onboardingProvider.isConnected,
-                                      deviceName: onboardingProvider.deviceName,
-                                    );
-                                  },
-                                ),
-                              if (_controller!.index != kImportPage) const SizedBox(height: 24),
+                              Consumer<OnboardingProvider>(
+                                builder: (context, onboardingProvider, child) {
+                                  return DeviceAnimationWidget(
+                                    animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
+                                    isConnected: onboardingProvider.isConnected,
+                                    deviceName: onboardingProvider.deviceName,
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 24),
                               kHiddenHeaderPages.contains(_controller?.index)
                                   ? const SizedBox.shrink()
                                   : Padding(
