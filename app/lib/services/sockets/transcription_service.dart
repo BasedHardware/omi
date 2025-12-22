@@ -161,6 +161,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     return;
   }
 
+  Future sendText(String message) async {
+    _socket.send(message);
+    return;
+  }
+
   @override
   void onClosed([int? closeCode]) {
     _listeners.forEach((k, v) {
