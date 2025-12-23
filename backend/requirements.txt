@@ -97,6 +97,7 @@ langchain==0.3.27
 langchain-community==0.3.31
 langchain-core==0.3.79
 langchain-openai==0.3.35
+langchain-groq==0.3.2
 langchain-pinecone==0.2.12
 pinecone==7.3.0
 langchain-text-splitters==0.3.11
