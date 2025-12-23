@@ -199,7 +199,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       ),
                     ),
                     _buildDoubleTapSetting(),
-                    _buildTripleTapSetting(), // <--- NEW: Added Triple Tap here
+                    _buildTripleTapSetting(), // <--- New Triple Tap Action
                     _buildDimmingControl(),
                     _buildMicGainControl(),
                   ],
@@ -296,6 +296,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
           ),
           const SizedBox(height: 16),
+          // Option 0: End & Process Conversation
           _buildDoubleTapOption(
             icon: Icons.stop,
             title: 'End & Process Conversation',
@@ -303,6 +304,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 0),
           ),
           const SizedBox(height: 8),
+          // Option 1: Pause/Resume Recording
           _buildDoubleTapOption(
             icon: Icons.pause,
             title: 'Pause/Resume Recording',
@@ -310,6 +312,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 1),
           ),
           const SizedBox(height: 8),
+          // Option 2: Star Ongoing Conversation
           _buildDoubleTapOption(
             icon: FontAwesomeIcons.star,
             title: 'Star Ongoing Conversation',
@@ -366,7 +369,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const SizedBox(height: 8),
           
-          // Option 1: Pause/Resume
+          // Option 1: Pause/Resume Recording
           _buildDoubleTapOption(
             icon: Icons.pause,
             title: 'Pause/Resume Recording',
@@ -375,7 +378,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const SizedBox(height: 8),
           
-          // Option 2: Star Conversation
+          // Option 2: Star Ongoing Conversation
           _buildDoubleTapOption(
             icon: FontAwesomeIcons.star,
             title: 'Star Ongoing Conversation',
