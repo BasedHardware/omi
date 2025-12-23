@@ -215,6 +215,11 @@ class CaptureProvider extends ChangeNotifier
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
+  
+  //add new timer for single tap logic
+  DateTime? _singleTapSession;
+  Timer? _singleTapTimer;
+  
 
   StreamSubscription? _storageStream;
 
@@ -450,6 +455,53 @@ class CaptureProvider extends ChangeNotifier
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("device button $buttonState");
 
+
+      // New Single Tap Logic (Start -> 10s Timer -> Process)
+      if (buttonState == 1) {
+        debugPrint("Single tap detected");
+
+        // CASE A: Session is NOT active -> START IT
+        if (_singleTapSession == null) {
+          debugPrint("Starting Voice Command Session (10s window)");
+          
+          // 1. Initialize State
+          _singleTapSession = DateTime.now();
+          _commandBytes = []; // Clear previous audio buffer
+
+          // 2. Feedback (Short Haptic)
+          _playSpeakerHaptic(deviceId, 1); 
+
+          // 3. Start 10s Timer (The "Timeout")
+          _singleTapTimer?.cancel();
+          _singleTapTimer = Timer(const Duration(seconds: 10), () {
+            debugPrint("Voice Command Session Timed Out - Disregarding");
+            _singleTapSession = null;
+            _commandBytes = []; // Throw away audio
+            _playSpeakerHaptic(deviceId, 1); // Optional: Different buzz for timeout?
+          });
+        } 
+        
+        // CASE B: Session IS active -> PROCESS IT
+        else {
+          debugPrint("Confirming Voice Command - Processing...");
+          
+          // 1. Stop the Timer
+          _singleTapTimer?.cancel();
+
+          // 2. Process the Audio
+          var data = List<List<int>>.from(_commandBytes);
+          _processVoiceCommandBytes(deviceId, data);
+
+          // 3. Reset State
+          _singleTapSession = null;
+          _commandBytes = [];
+
+          // 4. Feedback (Longer Haptic for Success)
+          _playSpeakerHaptic(deviceId, 2); 
+        }
+      }
+
+
       // double tap
       if (buttonState == 2) {
         debugPrint("Double tap detected");
@@ -519,7 +571,7 @@ class CaptureProvider extends ChangeNotifier
       }
       */
       //remove long press for voice command
-      
+
     });
   }
 
@@ -538,9 +590,15 @@ class CaptureProvider extends ChangeNotifier
       bool voiceCommandSupported = _recordingDevice != null
           ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
           : false;
-      if (_voiceCommandSession != null && voiceCommandSupported) {
+      /*if (_voiceCommandSession != null && voiceCommandSupported) {
         _commandBytes.add(snapshot.sublist(3));
       }
+      */ //remove old voicecommand session logic
+
+      if ((_voiceCommandSession != null || _singleTapSession != null) && voiceCommandSupported) {
+        _commandBytes.add(snapshot.sublist(3));
+      }
+      //add new voice command session logic
 
       // Local storage syncs
       var checkWalSupported =
@@ -805,6 +863,7 @@ class CaptureProvider extends ChangeNotifier
     _connectionStateListener?.cancel();
     _recordingTimer?.cancel();
     _metricsTimer?.cancel();
+    _singleTapTimer?.cancel(); //properly dispose singleTapTimer
 
     // Remove lifecycle observer
     if (PlatformService.isDesktop) {
