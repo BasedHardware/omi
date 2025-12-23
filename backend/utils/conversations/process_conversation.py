@@ -503,7 +503,8 @@ def process_conversation(
                 # Override the conversation title with calendar event title
                 conversation.structured.title = calendar_event.title
                 conversation.calendar_event = calendar_event
-        except Exception:
+        except Exception as e:
+            print(f"Error during calendar event linking: {e}")
             pass
 
     if not discarded:
