@@ -563,10 +563,54 @@ def process_conversation(
         # Update persona prompts with new conversation
         threading.Thread(target=update_personas_async, args=(uid,)).start()
 
+        # Send important conversation notification for long conversations (>30 minutes)
+        threading.Thread(
+            target=_send_important_conversation_notification_if_needed,
+            args=(uid, conversation),
+        ).start()
+
     # TODO: trigger external integrations here too
 
     print('process_conversation completed conversation.id=', conversation.id)
     return conversation
+
+
+def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation):
+    """
+    Send notification for long conversations (>30 minutes) that just completed.
+    Only sends once per conversation using Redis deduplication.
+    """
+    from utils.notifications import send_important_conversation_message
+
+    # Skip if conversation is discarded
+    if conversation.discarded:
+        return
+
+    # Check if we have valid timestamps to compute duration
+    if not conversation.started_at or not conversation.finished_at:
+        print(f"Cannot compute duration for conversation {conversation.id}: missing timestamps")
+        return
+
+    # Calculate duration in seconds
+    duration_seconds = (conversation.finished_at - conversation.started_at).total_seconds()
+
+    # Only notify for conversations longer than 30 minutes (1800 seconds)
+    if duration_seconds < 1800:
+        return
+
+    # Check if notification was already sent for this conversation
+    if redis_db.has_important_conversation_notification_been_sent(uid, conversation.id):
+        print(f"Important conversation notification already sent for {conversation.id}")
+        return
+
+    # Mark as sent before sending to prevent duplicates
+    redis_db.set_important_conversation_notification_sent(uid, conversation.id)
+
+    # Send the notification
+    print(
+        f"Sending important conversation notification for {conversation.id} (duration: {duration_seconds/60:.1f} mins)"
+    )
+    send_important_conversation_message(uid, conversation.id)
 
 
 def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: [str]):

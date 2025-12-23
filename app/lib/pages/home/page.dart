@@ -16,7 +16,9 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -305,6 +307,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               builder: (context) => const MemoriesPage(),
             ),
           );
+          break;
+        case "conversation":
+          // Handle conversation deep link: /conversation/{id}?share=1
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Check for share query param
+            final shouldOpenShare = navigateToUri?.queryParameters['share'] == '1';
+            final conversationId = detailPageId; // Capture non-null value
+
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted) return;
+
+              // Fetch conversation from server
+              final conversation = await getConversationById(conversationId);
+              if (conversation != null && mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConversationDetailPage(
+                      conversation: conversation,
+                      openShareToContactsOnLoad: shouldOpenShare,
+                    ),
+                  ),
+                );
+              } else {
+                debugPrint('Conversation not found: $conversationId');
+              }
+            });
+          }
           break;
         default:
       }

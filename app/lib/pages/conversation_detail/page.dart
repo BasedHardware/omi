@@ -28,6 +28,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
+import 'widgets/share_to_contacts_sheet.dart';
 // import 'share.dart';
 import 'test_prompts.dart';
 // import 'package:omi/pages/settings/developer.dart';
@@ -36,8 +37,14 @@ import 'test_prompts.dart';
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
+  final bool openShareToContactsOnLoad;
 
-  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation});
+  const ConversationDetailPage({
+    super.key,
+    this.isFromOnboarding = false,
+    required this.conversation,
+    this.openShareToContactsOnLoad = false,
+  });
 
   @override
   State<ConversationDetailPage> createState() => _ConversationDetailPageState();
@@ -187,6 +194,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
         }
       }
+
+      // Auto-open share to contacts sheet if requested (from important conversation notification)
+      if (widget.openShareToContactsOnLoad && mounted) {
+        // Small delay to ensure the page is fully rendered
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          _showShareToContactsBottomSheet();
+        }
+      }
     });
     // _animationController = AnimationController(
     //   vsync: this,
@@ -194,8 +210,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     // )..repeat(reverse: true);
     //
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
-
-    super.initState();
   }
 
   @override
@@ -206,6 +220,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Show the share to contacts bottom sheet
+  void _showShareToContactsBottomSheet() {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showShareToContactsBottomSheet(context, provider.conversation);
   }
 
   String _getTabTitle(ConversationTab tab) {
