@@ -4,6 +4,7 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
@@ -90,6 +91,12 @@ class _FolderTab extends StatelessWidget {
 
     HapticFeedback.mediumImpact();
 
+    // Track context menu opened
+    MixpanelManager().folderContextMenuOpened(
+      folderId: folder!.id,
+      folderName: folder!.name,
+    );
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1F1F25),
@@ -107,7 +114,14 @@ class _FolderTab extends StatelessWidget {
     final effectiveColor = color ?? Colors.white;
 
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        // Track folder selection
+        MixpanelManager().folderSelected(
+          folderId: folder?.id,
+          folderName: label,
+        );
+        onTap();
+      },
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -169,6 +183,7 @@ class _AddFolderButton extends StatelessWidget {
       child: GestureDetector(
         onTap: () async {
           HapticFeedback.mediumImpact();
+          MixpanelManager().createFolderButtonClicked();
           await showCreateFolderBottomSheet(context);
         },
         child: Container(
@@ -220,6 +235,15 @@ class _FolderContextMenu extends StatelessWidget {
         folder: folder,
         onDelete: (String? moveToFolderId) {
           Navigator.pop(ctx);
+
+          // Track folder deletion
+          MixpanelManager().folderDeleted(
+            folderId: folder.id,
+            folderName: folder.name,
+            conversationCount: folder.conversationCount,
+            moveToFolderId: moveToFolderId,
+          );
+
           // Fire and forget - don't wait
           folderProvider.deleteFolder(folder.id, moveToFolderId: moveToFolderId).then((success) {
             if (success) {
