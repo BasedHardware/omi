@@ -81,10 +81,6 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 #define BUTTON_PRESS 4
 #define BUTTON_RELEASE 5
 
-#define TAP_THRESHOLD 300     // 300 ms for single tap
-#define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 3000  // Change from 1000 to 3000 ms (3 seconds)
-
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
 static uint32_t inc_count_1 = 0;
@@ -153,6 +149,7 @@ static inline void notify_long_tap()
 
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
+#define LONG_PRESS_TIME 3000  // Change from 1000 to 3000 ms (3 seconds)
 
 typedef enum {
     BUTTON_EVENT_NONE,
