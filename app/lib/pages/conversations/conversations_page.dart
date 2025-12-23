@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -176,7 +177,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            const SliverToBoxAdapter(child: ScoreWidget()),
+            if (SharedPreferencesUtil().showDailyGradeEnabled) const SliverToBoxAdapter(child: ScoreWidget()),
             if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)
