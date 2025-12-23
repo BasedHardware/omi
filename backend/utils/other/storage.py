@@ -1,6 +1,8 @@
 import datetime
+import io
 import json
 import os
+import wave
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -8,6 +10,7 @@ import threading
 from google.cloud import storage
 from google.oauth2 import service_account
 from google.cloud.storage import transfer_manager
+from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
@@ -361,23 +364,22 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
         chunk_path_enc = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
         chunk_path_bin = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
 
-        chunk_blob_enc = bucket.blob(chunk_path_enc)
-        chunk_blob_bin = bucket.blob(chunk_path_bin)
-
         chunk_data = None
         is_encrypted = False
 
-        if chunk_blob_enc.exists():
-            chunk_data = chunk_blob_enc.download_as_bytes()
+        # Try encrypted first, then unencrypted
+        try:
+            chunk_data = bucket.blob(chunk_path_enc).download_as_bytes()
             is_encrypted = True
-        elif chunk_blob_bin.exists():
-            chunk_data = chunk_blob_bin.download_as_bytes()
-            is_encrypted = False
-        else:
-            print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-            return (timestamp, None)
+        except NotFound:
+            try:
+                chunk_data = bucket.blob(chunk_path_bin).download_as_bytes()
+                is_encrypted = False
+            except NotFound:
+                print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
+                return (timestamp, None)
 
-        # Normalize to PCM (decrypt if needed)
+        # Normalize to PCM (decrypt if needed
         if is_encrypted:
             pcm_data = encryption.decrypt_audio_file(chunk_data, uid)
         else:
@@ -463,10 +465,10 @@ def get_or_create_merged_audio(
     # Convert to WAV
     wav_data = pcm_to_wav_func(pcm_data)
 
-    # Upload to cache in background thread with 1-day TTL
+    # Upload to cache in background thread with 3-day TTL
     def _upload_to_cache():
         try:
-            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
             cache_blob.metadata = {
                 'expires_at': expires_at.isoformat(),
                 'audio_file_id': audio_file_id,
@@ -519,6 +521,54 @@ def delete_cached_merged_audio(uid: str, conversation_id: str) -> None:
     prefix = f'merged/{uid}/{conversation_id}/'
     for blob in bucket.list_blobs(prefix=prefix):
         blob.delete()
+
+
+def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    """Convert PCM16 data to WAV format."""
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(2)  # 16-bit audio
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
+    return wav_buffer.getvalue()
+
+
+def precache_conversation_audio(uid: str, conversation_id: str, audio_files: list) -> None:
+    """
+    Pre-cache all audio files for a conversation in a background thread.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+        audio_files: List of audio file dicts with 'id' and 'chunk_timestamps'
+    """
+    if not audio_files:
+        return
+
+    def _precache_all():
+
+        def _cache_single(af):
+            try:
+                audio_file_id = af.get('id')
+                timestamps = af.get('chunk_timestamps')
+                if not audio_file_id or not timestamps:
+                    return
+                get_or_create_merged_audio(
+                    uid=uid,
+                    conversation_id=conversation_id,
+                    audio_file_id=audio_file_id,
+                    timestamps=timestamps,
+                    pcm_to_wav_func=_pcm_to_wav,
+                )
+            except Exception as e:
+                print(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            list(executor.map(_cache_single, audio_files))
+
+    thread = threading.Thread(target=_precache_all, daemon=True)
+    thread.start()
 
 
 # **********************************
