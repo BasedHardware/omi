@@ -46,6 +46,14 @@ class ConversationProvider extends ChangeNotifier {
 
   ConversationProvider() {
     _setupMergeListener();
+    _loadSettings();
+  }
+
+  void _loadSettings() {
+    final prefs = SharedPreferencesUtil();
+    showDiscardedConversations = prefs.showDiscardedMemories;
+    showShortConversations = prefs.showShortConversations;
+    shortConversationThreshold = prefs.shortConversationThreshold;
   }
 
   void _setupMergeListener() {

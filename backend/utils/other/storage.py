@@ -2,6 +2,8 @@ import datetime
 import json
 import os
 from typing import List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -339,6 +341,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
 def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: List[float]) -> bytes:
     """
     Download and merge audio chunks on-demand, handling mixed encryption states.
+    Downloads chunks in parallel.
     Normalizes all chunks to unencrypted PCM format for consistent merging.
 
     Args:
@@ -349,13 +352,12 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
     Returns:
         Merged audio bytes (PCM16)
     """
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
-    merged_data = bytearray()
 
-    for timestamp in timestamps:
-        # Format timestamp to match upload format (3 decimal places)
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
+        """Download a single chunk and return (timestamp, pcm_data)."""
         formatted_timestamp = f'{timestamp:.3f}'
-        # Try encrypted path first
         chunk_path_enc = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.enc'
         chunk_path_bin = f'chunks/{uid}/{conversation_id}/{formatted_timestamp}.bin'
 
@@ -373,7 +375,7 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
             is_encrypted = False
         else:
             print(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
-            continue
+            return (timestamp, None)
 
         # Normalize to PCM (decrypt if needed)
         if is_encrypted:
@@ -381,12 +383,142 @@ def download_audio_chunks_and_merge(uid: str, conversation_id: str, timestamps: 
         else:
             pcm_data = chunk_data
 
-        merged_data.extend(pcm_data)
+        return (timestamp, pcm_data)
+
+    # Download chunks in parallel
+    chunk_results = {}
+    max_workers = min(10, len(timestamps))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_timestamp = {executor.submit(download_single_chunk, ts): ts for ts in timestamps}
+
+        for future in as_completed(future_to_timestamp):
+            timestamp, pcm_data = future.result()
+            if pcm_data is not None:
+                chunk_results[timestamp] = pcm_data
+
+    # Merge chunks
+    merged_data = bytearray()
+    for timestamp in timestamps:
+        if timestamp in chunk_results:
+            merged_data.extend(chunk_results[timestamp])
 
     if not merged_data:
         raise FileNotFoundError(f"No chunks found for conversation {conversation_id}")
 
     return bytes(merged_data)
+
+
+def get_cached_merged_audio_path(uid: str, conversation_id: str, audio_file_id: str) -> str:
+    """Get the GCS path for a cached merged audio file."""
+    return f'merged/{uid}/{conversation_id}/{audio_file_id}.wav'
+
+
+def get_or_create_merged_audio(
+    uid: str, conversation_id: str, audio_file_id: str, timestamps: List[float], pcm_to_wav_func
+) -> tuple[bytes, bool]:
+    """
+    Get merged audio from cache or create it.
+    Cached files are stored in GCS with 1-day TTL (via lifecycle policy).
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+        audio_file_id: Audio file ID
+        timestamps: List of chunk timestamps
+        pcm_to_wav_func: Function to convert PCM to WAV
+
+    Returns:
+        Tuple of (audio_data_bytes, was_cached)
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    cache_path = get_cached_merged_audio_path(uid, conversation_id, audio_file_id)
+    cache_blob = bucket.blob(cache_path)
+
+    # Check if cached version exists and is not expired
+    if cache_blob.exists():
+        # Check custom metadata for expiry
+        cache_blob.reload()
+        metadata = cache_blob.metadata or {}
+        expires_at_str = metadata.get('expires_at')
+
+        if expires_at_str:
+            try:
+                expires_at = datetime.datetime.fromisoformat(expires_at_str)
+                if datetime.datetime.now(datetime.timezone.utc) < expires_at:
+                    # Cache is valid, return it
+                    print(f"Serving merged audio from cache: {cache_path}")
+                    return cache_blob.download_as_bytes(), True
+                else:
+                    print(f"Cache expired for: {cache_path}")
+            except (ValueError, TypeError):
+                pass
+
+    # Cache miss or expired - create new merged file
+    print(f"Cache miss, merging audio for: {cache_path}")
+
+    # Download and merge chunks
+    pcm_data = download_audio_chunks_and_merge(uid, conversation_id, timestamps)
+
+    # Convert to WAV
+    wav_data = pcm_to_wav_func(pcm_data)
+
+    # Upload to cache in background thread with 1-day TTL
+    def _upload_to_cache():
+        try:
+            expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            cache_blob.metadata = {
+                'expires_at': expires_at.isoformat(),
+                'audio_file_id': audio_file_id,
+            }
+            cache_blob.upload_from_string(wav_data, content_type='audio/wav')
+            print(f"Cached merged audio at: {cache_path}")
+        except Exception as e:
+            print(f"Error uploading audio cache: {e}")
+
+    cache_thread = threading.Thread(target=_upload_to_cache, daemon=True)
+    cache_thread.start()
+
+    return wav_data, False
+
+
+def get_merged_audio_signed_url(uid: str, conversation_id: str, audio_file_id: str) -> str | None:
+    """
+    Get a signed URL for cached merged audio if it exists and is valid.
+
+    Returns:
+        Signed URL valid for 1 hour, or None if cache doesn't exist
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    cache_path = get_cached_merged_audio_path(uid, conversation_id, audio_file_id)
+    cache_blob = bucket.blob(cache_path)
+
+    if not cache_blob.exists():
+        return None
+
+    # Check expiry
+    cache_blob.reload()
+    metadata = cache_blob.metadata or {}
+    expires_at_str = metadata.get('expires_at')
+
+    if expires_at_str:
+        try:
+            expires_at = datetime.datetime.fromisoformat(expires_at_str)
+            if datetime.datetime.now(datetime.timezone.utc) >= expires_at:
+                return None  # Expired
+        except (ValueError, TypeError):
+            pass
+
+    # Generate signed URL valid for 1 hour
+    return _get_signed_url(cache_blob, 60)
+
+
+def delete_cached_merged_audio(uid: str, conversation_id: str) -> None:
+    """Delete all cached merged audio for a conversation."""
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    prefix = f'merged/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=prefix):
+        blob.delete()
 
 
 # **********************************
