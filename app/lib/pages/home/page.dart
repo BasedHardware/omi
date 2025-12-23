@@ -643,9 +643,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         );
                                       },
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(28),
+                                          borderRadius: BorderRadius.circular(32),
                                           color: Colors.deepPurple,
                                         ),
                                         child: const Row(
@@ -653,15 +653,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           children: [
                                             Icon(
                                               FontAwesomeIcons.solidComment,
-                                              size: 20,
+                                              size: 22,
                                               color: Colors.white,
                                             ),
-                                            SizedBox(width: 8),
+                                            SizedBox(width: 10),
                                             Text(
                                               'Ask Omi',
                                               style: TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 16,
+                                                fontSize: 17,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),

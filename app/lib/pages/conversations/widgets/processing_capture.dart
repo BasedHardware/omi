@@ -59,7 +59,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             borderRadius: BorderRadius.circular(24),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 18, 10, 16),
+            padding: const EdgeInsets.fromLTRB(10, 18, 10, 22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
