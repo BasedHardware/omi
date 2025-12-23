@@ -32,6 +32,16 @@ def get_classification_llm():
         return llm_groq_fast
     return llm_mini
 
+
+def _get_classification_parser(pydantic_model):
+    """
+    Helper to get a structured output parser using the configured classification LLM.
+    Centralizes the logic for selecting the classification model and creating a parser.
+    """
+    llm = get_classification_llm()
+    return llm.with_structured_output(pydantic_model)
+
+
 import database.users as users_db
 import database.notifications as notification_db
 from database.redis_db import add_filter_category_item
@@ -102,9 +112,7 @@ def requires_context(question: str) -> bool:
     User's Question:
     {question}
     '''
-    # Use Groq for faster classification when available
-    classification_llm = get_classification_llm()
-    with_parser = classification_llm.with_structured_output(RequiresContext)
+    with_parser = _get_classification_parser(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
     try:
         return response.value
@@ -170,9 +178,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     '''.replace(
         '    ', ''
     ).strip()
-    # Use Groq for faster classification when available
-    classification_llm = get_classification_llm()
-    with_parser = classification_llm.with_structured_output(IsAnOmiQuestion)
+    with_parser = _get_classification_parser(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
         return response.value
@@ -201,10 +207,7 @@ def retrieve_is_file_question(question: str) -> bool:
     User's Question:
     {question}
     '''
-
-    # Use Groq for faster classification when available
-    classification_llm = get_classification_llm()
-    with_parser = classification_llm.with_structured_output(IsFileQuestion)
+    with_parser = _get_classification_parser(IsFileQuestion)
     response: IsFileQuestion = with_parser.invoke(prompt)
     try:
         return response.value
@@ -230,9 +233,7 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
 
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
-    # Use Groq for faster classification when available
-    classification_llm = get_classification_llm()
-    with_parser = classification_llm.with_structured_output(DatesContext)
+    with_parser = _get_classification_parser(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
@@ -255,9 +256,7 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str], peopl
 
     Topics: {topics}
     '''
-    # Use Groq for faster classification when available
-    classification_llm = get_classification_llm()
-    with_parser = classification_llm.with_structured_output(SummaryOutput)
+    with_parser = _get_classification_parser(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
 
@@ -1101,9 +1100,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
         '    ', ''
     ).strip()
     # print(prompt)
-    # Use Groq for faster classification when available
-    classification_llm = get_classification_llm()
-    with_parser = classification_llm.with_structured_output(FiltersToUse)
+    with_parser = _get_classification_parser(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
         # print('select_structured_filters:', response.dict())

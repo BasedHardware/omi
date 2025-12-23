@@ -55,50 +55,40 @@ llm_agent_stream = ChatOpenAI(model='gpt-5.1', streaming=True)
 # =============================================================================
 
 if USE_GROQ:
+    # Centralized Groq model configurations
+    GROQ_MODELS = {
+        "fast": {
+            "model": "llama-3.1-8b-instant",
+            "temperature": 0.3,
+            "max_tokens": 512,
+        },
+        "medium": {
+            "model": "llama-3.3-70b-versatile",
+            "temperature": 0.5,
+            "max_tokens": 1024,
+        },
+        "long_context": {
+            "model": "mixtral-8x7b-32768",
+            "temperature": 0.5,
+            "max_tokens": 2048,
+        },
+    }
+
+    def _create_groq_client(config: dict, stream: bool = False):
+        """Helper to create Groq clients with consistent configuration."""
+        return ChatGroq(api_key=GROQ_API_KEY, streaming=stream, **config)
+
     # Fast models - optimized for speed (~200ms response time)
-    llm_groq_fast = ChatGroq(
-        model="llama-3.1-8b-instant",
-        temperature=0.3,
-        max_tokens=512,
-        api_key=GROQ_API_KEY,
-    )
-    llm_groq_fast_stream = ChatGroq(
-        model="llama-3.1-8b-instant",
-        temperature=0.3,
-        max_tokens=512,
-        api_key=GROQ_API_KEY,
-        streaming=True,
-    )
-    
+    llm_groq_fast = _create_groq_client(GROQ_MODELS["fast"])
+    llm_groq_fast_stream = _create_groq_client(GROQ_MODELS["fast"], stream=True)
+
     # Medium models - balanced speed and quality (~500ms response time)
-    llm_groq_medium = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.5,
-        max_tokens=1024,
-        api_key=GROQ_API_KEY,
-    )
-    llm_groq_medium_stream = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0.5,
-        max_tokens=1024,
-        api_key=GROQ_API_KEY,
-        streaming=True,
-    )
-    
+    llm_groq_medium = _create_groq_client(GROQ_MODELS["medium"])
+    llm_groq_medium_stream = _create_groq_client(GROQ_MODELS["medium"], stream=True)
+
     # Long context model - for documents and extended conversations
-    llm_groq_long_context = ChatGroq(
-        model="mixtral-8x7b-32768",
-        temperature=0.5,
-        max_tokens=2048,
-        api_key=GROQ_API_KEY,
-    )
-    llm_groq_long_context_stream = ChatGroq(
-        model="mixtral-8x7b-32768",
-        temperature=0.5,
-        max_tokens=2048,
-        api_key=GROQ_API_KEY,
-        streaming=True,
-    )
+    llm_groq_long_context = _create_groq_client(GROQ_MODELS["long_context"])
+    llm_groq_long_context_stream = _create_groq_client(GROQ_MODELS["long_context"], stream=True)
 else:
     # Fallback to OpenAI if Groq is not available
     llm_groq_fast = llm_mini
