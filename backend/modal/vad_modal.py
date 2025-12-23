@@ -7,7 +7,7 @@ from pyannote.audio import Pipeline
 
 # Instantiate pretrained voice activity detection pipeline
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-vad = Pipeline.from_pretrained("pyannote/voice-activity-detection", use_auth_token=os.getenv('HUGGINGFACE_TOKEN')).to(
+vad = Pipeline.from_pretrained("pyannote/voice-activity-detection", token=os.getenv('HUGGINGFACE_TOKEN')).to(
     device
 )
 

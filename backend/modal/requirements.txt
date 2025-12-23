@@ -38,11 +38,10 @@ grpcio-status==1.76.0
 grpclib==0.4.9
 h11==0.16.0
 h2==4.3.0
-hf-xet==1.2.0
 hpack==4.1.0
 httpcore==1.0.9
 httpx[http2]==0.28.1
-huggingface-hub==1.2.3
+huggingface-hub==0.28.1
 hyperframe==6.1.0
 hyperpyyaml==1.2.2
 idna==3.11
@@ -114,7 +113,7 @@ pytorch-lightning==2.6.0
 pytorch-metric-learning==2.9.0
 pytz==2025.2
 pyyaml==6.0.3
-
+redis==7.1.0
 requests==2.32.5
 rich==14.2.0
 rsa==4.9.1
@@ -131,6 +130,7 @@ soundfile==0.13.1
 speechbrain==1.0.0
 sqlalchemy==2.0.45
 starlette==0.37.2
+stripe==14.1.0
 sympy==1.14.0
 synchronicity==0.11.1
 threadpoolctl==3.6.0
@@ -144,12 +144,13 @@ torchmetrics==1.8.2
 tqdm==4.67.1
 triton==3.4.0
 typer==0.20.1
-typer-slim==0.20.1
 types-certifi==2021.10.8.3
 types-toml==0.10.8.20240310
 typing-extensions==4.15.0
 tzdata==2025.3
 urllib3==2.6.2
+uvicorn==0.40.0
 watchfiles==1.1.1
 yarl==1.22.0
 zipp==3.23.0
+
