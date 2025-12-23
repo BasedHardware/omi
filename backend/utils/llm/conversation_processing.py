@@ -245,19 +245,24 @@ CALENDAR MEETING CONTEXT:
        - Critical dependencies (primary user blocked without it)
        - Commitments to other people (meetings, deliverables, promises)
 
-    5. **NOT Already Being Done**: The user is NOT currently actively working on it:
-       - If user says "I am working on X" or "I am doing X right now" → DON'T extract
-       - If user says "I am in the middle of X" → DON'T extract
-       - If user says "currently doing X" → DON'T extract
-       - Only extract if it's something they NEED TO DO in the future, not something they're ALREADY doing
+    5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
+       - "I want to X" → EXTRACT (user stated intention, needs reminder)
+       - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
+       - "Today I will X" → EXTRACT (daily goal, needs tracking)
+       - "This week/month I want to X" → EXTRACT (time-bound goal)
+       
+       Only skip if user is ACTIVELY doing something RIGHT NOW:
+       - "I am currently in the middle of X" → Skip (actively doing it this moment)
+       - "Right now I'm doing X" → Skip (immediate present action)
 
-       Examples of what NOT to extract:
-       - ❌ "I am working on the budget report. Need to finish it by Friday" → User is ALREADY working on it, they know the deadline
-       - ❌ "Currently debugging the login issue" → User is actively doing it
-       - ❌ "I'm preparing for the presentation tomorrow" → User is already aware and doing it
-       - ✅ "Need to call the plumber tomorrow about the leak" → User is NOT doing it yet, needs reminder
-       - ✅ "Have to submit tax documents by March 31st" → Clear future deadline that needs tracking
-       - ✅ "Doctor said to schedule follow-up in 2 weeks" → Easy to forget, needs reminder
+       Examples:
+       - ✅ "Today, I want to complete the onboarding experience" → EXTRACT (stated goal with deadline)
+       - ✅ "I want to finish the report by Friday" → EXTRACT (intention + deadline)
+       - ✅ "This month, I want to grow users to 500k" → EXTRACT (monthly goal)
+       - ✅ "Need to call the plumber tomorrow" → EXTRACT (future task)
+       - ✅ "Have to submit tax documents by March 31st" → EXTRACT (deadline)
+       - ❌ "I'm currently on a call with the client" → Skip (happening right now)
+       - ❌ "Right now I'm debugging this issue" → Skip (immediate action)
 
     EXCLUDE these types of items (be aggressive about exclusion):
     • Things user is ALREADY doing or actively working on

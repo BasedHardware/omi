@@ -314,7 +314,18 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       
                                       // Initialize speech profile with phone mic as input source
                                       // Don't pass restartDeviceRecording - we don't want to restart device recording
-                                      await provider.initialise(usePhoneMic: true);
+                                      bool success = await provider.initialise(
+                                        usePhoneMic: true,
+                                        processConversationCallback: () {
+                                          Provider.of<CaptureProvider>(context, listen: false)
+                                              .forceProcessingCurrentConversation();
+                                        },
+                                      );
+                                      
+                                      if (!success) {
+                                        // Initialization failed, error dialog will be shown
+                                        return;
+                                      }
                                       
                                       provider.forceCompletionTimer =
                                           Timer(Duration(seconds: provider.maxDuration), () async {
@@ -351,8 +362,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               ),
                               child: TextButton(
                                 onPressed: () {
-                                  // Trigger conversation processing (like clicking "Process Now")
-                                  context.read<CaptureProvider>().forceProcessingCurrentConversation();
+                                  // Conversation processing already triggered in finalize()
                                   widget.goNext();
                                 },
                                 child: const Text(

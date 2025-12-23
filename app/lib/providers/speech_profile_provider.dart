@@ -50,20 +50,19 @@ class SpeechProfileProvider extends ChangeNotifier
   String message = '';
 
   late Function? _finalizedCallback;
+  late Function? _processConversationCallback;
 
   /// only used during onboarding /////
   String loadingText = 'Uploading your voice profile....';
   ServerConversation? conversation;
-  
+
   // Onboarding state (questions from server)
   bool usePhoneMic = false;
   String currentQuestion = '';
   int currentQuestionIndex = 0;
   int totalQuestions = 0;
 
-  double get questionProgress => totalQuestions == 0
-      ? 0.0
-      : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
+  double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
 
   void skipCurrentQuestion() {
     if (_socket?.state == SocketServiceState.connected) {
@@ -99,37 +98,50 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> initialise({Function? finalizedCallback, bool usePhoneMic = false}) async {
+  Future<bool> initialise({
+    Function? finalizedCallback,
+    Function? processConversationCallback,
+    bool usePhoneMic = false,
+  }) async {
     _finalizedCallback = finalizedCallback;
+    _processConversationCallback = processConversationCallback;
     setInitialising(true);
     this.usePhoneMic = usePhoneMic;
-    
-    if (usePhoneMic) {
-      // Phone microphone mode - use PCM16 at 16kHz
-      const codec = BleAudioCodec.pcm16;
-      audioStorage = WavBytesUtil(codec: codec, framesPerSecond: 100);
-      await _initiateWebsocket(codec: codec, sampleRate: 16000, force: true);
-      
-      // Start phone mic streaming
-      await _initiatePhoneMicStreaming();
-    } else {
-      // Device mode - use device codec
-      device = deviceProvider?.connectedDevice;
-      BleAudioCodec codec = await _getAudioCodec(device!.id);
-      audioStorage = WavBytesUtil(codec: codec, framesPerSecond: codec.getFramesPerSecond());
-      await _initiateWebsocket(codec: codec, force: true);
-      
-      if (device != null) await initiateFriendAudioStreaming();
-    }
-    
-    if (_socket?.state != SocketServiceState.connected) {
-      // wait for websocket to connect
-      await Future.delayed(const Duration(seconds: 2));
-    }
 
-    setInitialising(false);
-    setInitialised(true);
-    notifyListeners();
+    try {
+      if (usePhoneMic) {
+        // Phone microphone mode - use PCM16 at 16kHz
+        const codec = BleAudioCodec.pcm16;
+        audioStorage = WavBytesUtil(codec: codec, framesPerSecond: 100);
+        await _initiateWebsocket(codec: codec, sampleRate: 16000, force: true);
+
+        // Start phone mic streaming
+        await _initiatePhoneMicStreaming();
+      } else {
+        // Device mode - use device codec
+        device = deviceProvider?.connectedDevice;
+        BleAudioCodec codec = await _getAudioCodec(device!.id);
+        audioStorage = WavBytesUtil(codec: codec, framesPerSecond: codec.getFramesPerSecond());
+        await _initiateWebsocket(codec: codec, force: true);
+
+        if (device != null) await initiateFriendAudioStreaming();
+      }
+
+      if (_socket?.state != SocketServiceState.connected) {
+        // wait for websocket to connect
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      setInitialised(true);
+      return true;
+    } catch (e) {
+      debugPrint('Error during initialise: $e');
+      notifyError('SOCKET_INIT_FAILED');
+      return false;
+    } finally {
+      setInitialising(false);
+      notifyListeners();
+    }
   }
 
   void updateStartedRecording(bool value) {
@@ -160,21 +172,21 @@ class SpeechProfileProvider extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
   }
-  
+
   /// Start phone microphone streaming (alternative to BLE device streaming)
   Future<void> _initiatePhoneMicStreaming() async {
     debugPrint('Starting phone mic streaming for speech profile...');
-    
+
     // Request mic permission
     await Permission.microphone.request();
-    
+
     await ServiceManager.instance().mic.start(
       onByteReceived: (Uint8List bytes) {
         if (bytes.isEmpty) return;
-        
+
         // Store audio frames for speech profile upload
         audioStorage.frames.add(bytes.toList());
-        
+
         // Send to transcription socket
         if (_socket?.state == SocketServiceState.connected) {
           _socket?.send(bytes);
@@ -189,7 +201,7 @@ class SpeechProfileProvider extends ChangeNotifier
       },
     );
   }
-  
+
   /// Stop phone microphone streaming
   void _stopPhoneMicStreaming() {
     if (usePhoneMic) {
@@ -228,23 +240,46 @@ class SpeechProfileProvider extends ChangeNotifier
       debugPrint('Creating WAV file...');
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
       debugPrint('WAV file created, uploading profile...');
+
+      bool uploadSuccess = false;
       try {
-        await uploadProfile(data.item1).timeout(
+        uploadSuccess = await uploadProfile(data.item1).timeout(
           const Duration(seconds: 30),
           onTimeout: () {
             debugPrint('Profile upload timed out after 30 seconds');
             return false;
           },
         );
-        debugPrint('Profile upload completed');
+        debugPrint('Profile upload completed: $uploadSuccess');
       } catch (e) {
         debugPrint('Error uploading profile: $e');
+        uploadSuccess = false;
+      }
+
+      if (!uploadSuccess) {
+        // Upload failed - notify user but still process conversation
+        uploadingProfile = false;
+        notifyError('TOO_SHORT');
+
+        // Still trigger conversation processing
+        if (_processConversationCallback != null) {
+          debugPrint('Triggering conversation processing despite upload failure...');
+          _processConversationCallback!();
+        }
+        return;
       }
 
       SharedPreferencesUtil().hasSpeakerProfile = true;
       debugPrint('Speaker profile saved to preferences');
 
       updateLoadingText('Personalizing your experience...');
+
+      // Trigger conversation processing before marking complete
+      if (_processConversationCallback != null) {
+        debugPrint('Triggering conversation processing...');
+        _processConversationCallback!();
+      }
+
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
@@ -369,6 +404,7 @@ class SpeechProfileProvider extends ChangeNotifier
     uploadingProfile = false;
     profileCompleted = false;
     usePhoneMic = false;
+    _processConversationCallback = null;
 
     await _socket?.stop(reason: 'closing');
     notifyListeners();
@@ -439,7 +475,6 @@ class SpeechProfileProvider extends ChangeNotifier
       currentQuestion = event.question;
       currentQuestionIndex = event.questionIndex;
       totalQuestions = event.totalQuestions;
-      text = '';
       debugPrint('Received question ${event.questionIndex + 1}/${event.totalQuestions}: ${event.question}');
       notifyListeners();
     } else if (event is OnboardingQuestionAnsweredEvent) {
@@ -462,12 +497,8 @@ class SpeechProfileProvider extends ChangeNotifier
     }
     streamStartedAtSecond ??= newSegments[0].start;
 
-    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    TranscriptSegment.combineSegments(
-      segments,
-      remainSegments,
-      toRemoveSeconds: streamStartedAtSecond ?? 0,
-    );
+    final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    segments.addAll(remainSegments);
 
     // Validate single speaker
     _validateSingleSpeaker();
