@@ -552,26 +552,6 @@ class CaptureProvider extends ChangeNotifier
         }
         return;
       }
-
-      // start long press (for voice commands)
-      /*if (buttonState == 3 && _voiceCommandSession == null) {
-        _voiceCommandSession = DateTime.now();
-        _commandBytes = [];
-        _watchVoiceCommands(deviceId, _voiceCommandSession!);
-        _playSpeakerHaptic(deviceId, 1);
-      } */ 
-      //remove long press for voice command
-
-      // release (end voice command)
-      /*if (buttonState == 5 && _voiceCommandSession != null) {
-        _voiceCommandSession = null; // end session
-        var data = List<List<int>>.from(_commandBytes);
-        _commandBytes = [];
-        _processVoiceCommandBytes(deviceId, data);
-      }
-      */
-      //remove long press for voice command
-
     });
   }
 
@@ -590,16 +570,12 @@ class CaptureProvider extends ChangeNotifier
       bool voiceCommandSupported = _recordingDevice != null
           ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
           : false;
-      /*if (_voiceCommandSession != null && voiceCommandSupported) {
-        _commandBytes.add(snapshot.sublist(3));
-      }
-      */ //remove old voicecommand session logic
 
+      //add new voice command session logic
       if ((_voiceCommandSession != null || _singleTapSession != null) && voiceCommandSupported) {
         _commandBytes.add(snapshot.sublist(3));
       }
-      //add new voice command session logic
-
+      
       // Local storage syncs
       var checkWalSupported =
           (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
