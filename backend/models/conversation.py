@@ -252,6 +252,7 @@ class ConversationSource(str, Enum):
     sdcard = 'sdcard'
     external_integration = 'external_integration'
     limitless = 'limitless'
+    onboarding = 'onboarding'
 
 
 class ConversationVisibility(str, Enum):
