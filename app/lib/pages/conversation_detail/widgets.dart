@@ -26,6 +26,8 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'maps_util.dart';
 
@@ -111,20 +113,54 @@ class GetSummaryWidgets extends StatelessWidget {
     }
   }
 
-  Widget _buildInfoChips(ServerConversation conversation) {
+  String _formatAttendeesLabel(List<String> attendees) {
+    if (attendees.isEmpty) return '';
+    if (attendees.length == 1) return _formatAttendeeName(attendees[0]);
+    if (attendees.length == 2) {
+      return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])}';
+    }
+    return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])} +${attendees.length - 2}';
+  }
+
+  String _formatAttendeeName(String attendee) {
+    if (attendee.contains('@')) {
+      String localPart = attendee.split('@')[0];
+      if (localPart.isNotEmpty) {
+        return localPart[0].toUpperCase() + localPart.substring(1);
+      }
+      return localPart;
+    }
+    return attendee.split(' ')[0];
+  }
+
+  Widget _buildInfoChips(BuildContext context, ServerConversation conversation) {
     final date = _getDateFormat(conversation.startedAt ?? conversation.createdAt);
     final time = conversation.source == ConversationSource.sdcard
         ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
         : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt);
 
+    final hasCalendarEvent = conversation.calendarEvent != null;
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        // Combined date & time chip
+        // Combined date & time chip - uses Google Calendar logo when event is linked
         _buildChip(
           label: '$date, $time',
-          icon: Icons.calendar_today,
+          icon: hasCalendarEvent ? null : Icons.calendar_today,
+          leadingWidget: hasCalendarEvent
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: Image.asset(
+                    'assets/integration_app_logos/google-calendar.png',
+                    width: 14,
+                    height: 14,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              : null,
+          onTap: hasCalendarEvent ? () => _showCalendarEventDetails(context, conversation.calendarEvent!) : null,
         ),
         // Duration chip (only if segments exist)
         if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
@@ -132,12 +168,33 @@ class GetSummaryWidgets extends StatelessWidget {
             label: _getDuration(conversation),
             icon: Icons.timelapse,
           ),
+        // Attendees chip (only when calendar event is linked and has attendees)
+        if (hasCalendarEvent && conversation.calendarEvent!.attendees.isNotEmpty)
+          _buildChip(
+            label: _formatAttendeesLabel(conversation.calendarEvent!.attendees),
+            icon: Icons.people,
+            onTap: () => _showCalendarEventDetails(context, conversation.calendarEvent!),
+          ),
       ],
     );
   }
 
-  Widget _buildChip({required String label, required IconData icon}) {
-    return Container(
+  void _showCalendarEventDetails(BuildContext context, CalendarEventLink calendarEvent) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => CalendarEventDetailsSheet(calendarEvent: calendarEvent),
+    );
+  }
+
+  Widget _buildChip({
+    required String label,
+    IconData? icon,
+    Widget? leadingWidget,
+    VoidCallback? onTap,
+  }) {
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.grey.withValues(alpha: 0.16),
@@ -146,11 +203,14 @@ class GetSummaryWidgets extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: Colors.grey.shade300,
-          ),
+          if (leadingWidget != null)
+            leadingWidget
+          else if (icon != null)
+            Icon(
+              icon,
+              size: 14,
+              color: Colors.grey.shade300,
+            ),
           const SizedBox(width: 6),
           Text(
             label,
@@ -163,6 +223,14 @@ class GetSummaryWidgets extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: chip,
+      );
+    }
+    return chip;
   }
 
   @override
@@ -189,7 +257,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
                   ),
             const SizedBox(height: 8),
-            _buildInfoChips(conversation),
+            _buildInfoChips(context, conversation),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox.shrink(),
           ],
         );
@@ -1149,6 +1217,237 @@ class _GetShareOptionsState extends State<GetShareOptions> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Bottom sheet showing linked calendar event details with actions
+class CalendarEventDetailsSheet extends StatelessWidget {
+  final CalendarEventLink calendarEvent;
+
+  const CalendarEventDetailsSheet({super.key, required this.calendarEvent});
+
+  String _formatTime(DateTime time) {
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _formatDate(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(time.year, time.month, time.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (time.year == now.year) {
+      return dateTimeFormat('MMM d', time);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', time);
+    }
+  }
+
+  String _formatAttendeesLabel(List<String> attendees) {
+    if (attendees.isEmpty) return '';
+    return attendees.map((a) => _formatAttendeeName(a)).join(', ');
+  }
+
+  String _formatAttendeeName(String attendee) {
+    if (attendee.contains('@')) {
+      String localPart = attendee.split('@')[0];
+      if (localPart.isNotEmpty) {
+        return localPart[0].toUpperCase() + localPart.substring(1);
+      }
+      return localPart;
+    }
+    return attendee.split(' ')[0];
+  }
+
+  Future<void> _openInGoogleCalendar() async {
+    final urlString = calendarEvent.htmlLink;
+    if (urlString == null) return;
+
+    final url = Uri.parse(urlString);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _handleUnlink(BuildContext context) {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    HapticFeedback.mediumImpact();
+    showDialog(
+      context: context,
+      builder: (c) => getDialog(
+        context,
+        () => Navigator.pop(context),
+        () async {
+          Navigator.pop(context);
+          Navigator.pop(context); // Close the bottom sheet too
+          final success = await provider.unlinkCalendarEvent();
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(success ? 'Calendar event unlinked' : 'Failed to unlink calendar event'),
+              ),
+            );
+          }
+        },
+        'Unlink Calendar Event?',
+        'This will remove the link between this conversation and "${calendarEvent.title}".',
+        okButtonText: 'Unlink',
+      ),
+    );
+  }
+
+  void _handleAddSummary(BuildContext context) async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    HapticFeedback.mediumImpact();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Adding summary to calendar event...')),
+    );
+
+    final htmlLink = await provider.addSummaryToCalendarEvent();
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (htmlLink != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Summary added! Opening calendar event...')),
+        );
+        final url = Uri.parse(htmlLink);
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to add summary to calendar event')),
+        );
+      }
+    }
+  }
+
+  void _shareWithAttendees(BuildContext context) async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final conversationId = provider.conversation.id;
+    final link = 'https://h.omi.me/memories/$conversationId';
+
+    final emails = calendarEvent.attendeeEmails;
+
+    if (emails.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No email addresses found in attendees')),
+      );
+      return;
+    }
+
+    final subject = Uri.encodeComponent('Follow Up: ${calendarEvent.title}');
+    final body = Uri.encodeComponent('Greetings, here is the summary of our conversation:\n\n$link\n\nThanks!');
+    final mailto = Uri.parse('mailto:${emails.join(',')}?subject=$subject&body=$body');
+
+    if (await canLaunchUrl(mailto)) {
+      await launchUrl(mailto);
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open email client')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade600,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Actions only
+              _buildActionTile(
+                leadingWidget: Padding(
+                  padding: const EdgeInsets.only(top: 3, left: 2),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.asset(
+                      'assets/integration_app_logos/google-calendar.png',
+                      width: 20,
+                      height: 20,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                title: 'Open in Google Calendar',
+                onTap: _openInGoogleCalendar,
+              ),
+              _buildActionTile(
+                icon: FontAwesomeIcons.link,
+                title: 'Add link to event details',
+                onTap: () => _handleAddSummary(context),
+              ),
+              if (calendarEvent.attendeeEmails.isNotEmpty)
+                _buildActionTile(
+                  icon: FontAwesomeIcons.envelope,
+                  title: 'Share with attendees',
+                  onTap: () => _shareWithAttendees(context),
+                ),
+              _buildActionTile(
+                icon: FontAwesomeIcons.linkSlash,
+                title: 'Unlink event from calendar',
+                onTap: () => _handleUnlink(context),
+                isDestructive: true,
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    IconData? icon,
+    Widget? leadingWidget,
+    required String title,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    return ListTile(
+      leading: leadingWidget ??
+          Padding(
+            padding: const EdgeInsets.only(top: 3, left: 2),
+            child: FaIcon(
+              icon!,
+              size: 18,
+              color: isDestructive ? Colors.orange : Colors.grey.shade400,
+            ),
+          ),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isDestructive ? Colors.orange : Colors.white,
+          fontSize: 16,
+        ),
+      ),
+      onTap: onTap,
     );
   }
 }

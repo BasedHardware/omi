@@ -115,6 +115,80 @@ Future<String?> addSummaryToCalendarEvent(String conversationId) async {
   return null;
 }
 
+/// Link a specific Google Calendar event to a conversation.
+/// Returns the linked CalendarEventLink if successful, null otherwise.
+Future<CalendarEventLink?> linkCalendarEvent(String conversationId, String eventId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'event_id': eventId}),
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
+  }
+  debugPrint('linkCalendarEvent error: ${response.statusCode} - ${response.body}');
+  return null;
+}
+
+/// Auto-link a conversation to the best overlapping Google Calendar event.
+/// Returns the linked CalendarEventLink if found, null otherwise.
+Future<CalendarEventLink?> autoLinkCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event/auto-link',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
+  }
+  // 404 means no overlapping event found - not an error, just no match
+  if (response.statusCode == 404) {
+    debugPrint('autoLinkCalendarEvent: No overlapping calendar event found');
+    return null;
+  }
+  debugPrint('autoLinkCalendarEvent error: ${response.statusCode} - ${response.body}');
+  return null;
+}
+
+/// List Google Calendar events within a time range for the event picker.
+/// Returns a list of CalendarEventLink objects, or empty list on error.
+Future<List<CalendarEventLink>> listGoogleCalendarEvents({
+  DateTime? timeMin,
+  DateTime? timeMax,
+  String? query,
+  int maxResults = 20,
+}) async {
+  String url = '${Env.apiBaseUrl}v1/calendar/google/events?max_results=$maxResults';
+
+  if (timeMin != null) {
+    url += '&time_min=${timeMin.toUtc().toIso8601String()}';
+  }
+  if (timeMax != null) {
+    url += '&time_max=${timeMax.toUtc().toIso8601String()}';
+  }
+  if (query != null && query.isNotEmpty) {
+    url += '&q=${Uri.encodeComponent(query)}';
+  }
+
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List<dynamic>).map((event) => CalendarEventLink.fromJson(event)).toList();
+  }
+  debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
+  return [];
+}
+
 Future<ServerConversation?> getConversationById(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId',

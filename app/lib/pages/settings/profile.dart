@@ -15,6 +15,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
+import 'package:omi/pages/settings/calendar_integrations_page.dart';
 
 import 'delete_account.dart';
 
@@ -227,6 +228,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const CustomVocabularyPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Calendar',
+                  showBetaTag: true,
+                  icon: const FaIcon(FontAwesomeIcons.calendarDays, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const CalendarIntegrationsPage());
                   },
                 ),
               ],
