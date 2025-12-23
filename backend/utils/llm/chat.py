@@ -234,8 +234,11 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     # print(prompt)
     # print(llm_mini.invoke(prompt).content)
     with_parser = _get_classification_parser(DatesContext)
-    response: DatesContext = with_parser.invoke(prompt)
-    return response.dates_range
+    try:
+        response: DatesContext = with_parser.invoke(prompt)
+        return response.dates_range
+    except (ValidationError, Exception):
+        return []
 
 
 class SummaryOutput(BaseModel):
@@ -257,8 +260,11 @@ def chunk_extraction(segments: List[TranscriptSegment], topics: List[str], peopl
     Topics: {topics}
     '''
     with_parser = _get_classification_parser(SummaryOutput)
-    response: SummaryOutput = with_parser.invoke(prompt)
-    return response.summary
+    try:
+        response: SummaryOutput = with_parser.invoke(prompt)
+        return response.summary
+    except (ValidationError, Exception):
+        return ""
 
 
 def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
