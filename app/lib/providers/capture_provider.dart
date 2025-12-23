@@ -1399,7 +1399,7 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-Future<void> forceProcessingCurrentConversation() async {
+  Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
       ServerConversation(
