@@ -153,7 +153,7 @@ static inline void notify_long_tap()
 
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
-#define LONG_PRESS_TIME 1000  // 1000 ms for long press
+//#define LONG_PRESS_TIME 1000  // remove since long press is now defined as 3000ms
 
 typedef enum {
     BUTTON_EVENT_NONE,
