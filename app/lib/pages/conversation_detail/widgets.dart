@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -684,6 +686,26 @@ class GetAppsWidgets extends StatelessWidget {
 class GetGeolocationWidgets extends StatelessWidget {
   const GetGeolocationWidgets({super.key});
 
+  // Helper function to shorten address - show only neighborhood/area and city
+  String _getShortAddress(String? fullAddress) {
+    if (fullAddress == null || fullAddress.isEmpty) {
+      return 'Unknown location';
+    }
+
+    // Split address by commas
+    final parts = fullAddress.split(',').map((e) => e.trim()).toList();
+
+    // If address has multiple parts, take the last 2-3 meaningful parts
+    if (parts.length >= 3) {
+      // Take neighborhood/area and city (skip street address and zip code)
+      return '${parts[parts.length - 3]}, ${parts[parts.length - 2]}';
+    } else if (parts.length == 2) {
+      return '${parts[0]}, ${parts[1]}';
+    }
+
+    return fullAddress;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Selector<ConversationDetailProvider, Geolocation?>(selector: (context, provider) {
@@ -695,57 +717,103 @@ class GetGeolocationWidgets extends StatelessWidget {
         children: geolocation == null
             ? []
             : [
-                Text(
-                  'Taken at',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${geolocation.address?.decodeString}',
-                  style: TextStyle(color: Colors.grey.shade300),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () async {
                     MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
                   },
-                  child: CachedNetworkImage(
-                    imageBuilder: (context, imageProvider) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: DecorationImage(
-                            image: imageProvider,
-                            fit: BoxFit.cover,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      height: 200,
+                      child: Stack(
+                        children: [
+                          // Map Image
+                          CachedNetworkImage(
+                            imageBuilder: (context, imageProvider) {
+                              return Container(
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  image: DecorationImage(
+                                    image: imageProvider,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorWidget: (context, url, error) {
+                              return Container(
+                                height: 200,
+                                color: const Color(0xFF2A2A2A),
+                                child: const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.location_off, size: 40, color: Colors.grey),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Could not load map',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            imageUrl: MapsUtil.getMapImageUrl(
+                              geolocation.latitude!,
+                              geolocation.longitude!,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    errorWidget: (context, url, error) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Color(0xFF35343B),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Could not load Maps. Please check your internet connection.',
-                            textAlign: TextAlign.center,
+                          // Gradient blur overlay from bottom
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 80,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.6),
+                                    Colors.black.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    imageUrl: MapsUtil.getMapImageUrl(
-                      geolocation.latitude!,
-                      geolocation.longitude!,
+                          // Location text at bottom left
+                          Positioned(
+                            bottom: 16,
+                            left: 16,
+                            right: 16,
+                            child: Text(
+                              _getShortAddress(geolocation.address?.decodeString),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                shadows: [
+                                  Shadow(
+                                    offset: Offset(0, 1),
+                                    blurRadius: 2,
+                                    color: Colors.black,
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
               ],
       );
     });

@@ -257,6 +257,18 @@ Future<bool> setConversationVisibility(String conversationId, {String visibility
   return response.statusCode == 200;
 }
 
+Future<bool> setConversationStarred(String conversationId, bool starred) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/starred?starred=$starred',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('setConversationStarred: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<bool> setConversationEventsState(
   String conversationId,
   List<int> eventsIdx,
@@ -487,4 +499,64 @@ Future<bool> updateActionItemStateByMetadata(
   bool newState,
 ) async {
   return await setConversationActionItemState(conversationId, [itemIndex], [newState]);
+}
+
+// *********************************
+// ******** MERGE CONVERSATIONS ****
+// *********************************
+
+/// Response from the merge conversations API
+class MergeConversationsResponse {
+  final String status;
+  final String message;
+  final String? warning;
+  final List<String> conversationIds;
+
+  MergeConversationsResponse({
+    required this.status,
+    required this.message,
+    this.warning,
+    required this.conversationIds,
+  });
+
+  factory MergeConversationsResponse.fromJson(Map<String, dynamic> json) {
+    return MergeConversationsResponse(
+      status: json['status'] ?? 'merging',
+      message: json['message'] ?? 'Merge started',
+      warning: json['warning'],
+      conversationIds: List<String>.from(json['conversation_ids'] ?? []),
+    );
+  }
+}
+
+/// Initiate merging of multiple conversations
+Future<MergeConversationsResponse?> mergeConversations(
+  List<String> conversationIds, {
+  bool reprocess = true,
+}) async {
+  if (conversationIds.length < 2) {
+    debugPrint('mergeConversations: At least 2 conversations required');
+    return null;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/merge',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({
+      'conversation_ids': conversationIds,
+      'reprocess': reprocess,
+    }),
+  );
+
+  if (response == null) return null;
+
+  debugPrint('mergeConversations: ${response.body}');
+
+  if (response.statusCode == 200) {
+    return MergeConversationsResponse.fromJson(jsonDecode(response.body));
+  } else {
+    debugPrint('mergeConversations error: ${response.statusCode} - ${response.body}');
+    return null;
+  }
 }

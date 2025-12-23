@@ -53,6 +53,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
   bool _isSharing = false;
+  bool _isTogglingStarred = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -169,14 +170,16 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Find the proper date and index for this conversation in the grouped conversations
       var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      provider.conversationIdx = index >= 0 ? index : 0;
-      provider.selectedDate = date;
+      provider.updateConversation(widget.conversation.id, date);
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await conversationProvider.updateSearchedConvoDetails(
-            provider.conversation.id, provider.selectedDate, provider.conversationIdx);
-        provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+        final date = provider.selectedDate;
+        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
+        if (idx != -1) {
+          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        }
+        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -276,7 +279,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           context,
           () => Navigator.pop(context),
           () {
-            context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+            {
+              final convoProvider = context.read<ConversationProvider>();
+              final date = provider.selectedDate;
+              final idx = convoProvider.getConversationIndexById(provider.conversation.id, date);
+              convoProvider.deleteConversation(provider.conversation, idx);
+            }
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, {'deleted': true}); // Close detail page
           },
@@ -409,7 +417,71 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Share button (first) - directly share summary link
+                      // Star button (first) - toggle starred status
+                      Container(
+                        width: 36,
+                        height: 36,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: provider.conversation.starred
+                              ? Colors.amber.withValues(alpha: 0.3)
+                              : Colors.grey.withValues(alpha: 0.3),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: _isTogglingStarred
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _isTogglingStarred = true;
+                                  });
+                                  HapticFeedback.mediumImpact();
+                                  try {
+                                    final newStarredState = !provider.conversation.starred;
+                                    bool success = await setConversationStarred(
+                                      provider.conversation.id,
+                                      newStarredState,
+                                    );
+                                    if (!mounted) return;
+                                    if (success) {
+                                      provider.conversation.starred = newStarredState;
+                                      // Update in conversation provider
+                                      context.read<ConversationProvider>().updateConversationInSortedList(
+                                            provider.conversation,
+                                          );
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Failed to update starred status.')),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    debugPrint('Failed to toggle starred status: $e');
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() {
+                                        _isTogglingStarred = false;
+                                      });
+                                    }
+                                  }
+                                },
+                          icon: _isTogglingStarred
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : FaIcon(
+                                  provider.conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                                  size: 16.0,
+                                  color: provider.conversation.starred ? Colors.amber : Colors.white,
+                                ),
+                        ),
+                      ),
+                      // Share button (second) - directly share summary link
                       Container(
                         key: _shareButtonKey,
                         width: 36,
@@ -656,6 +728,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
+                      conversation: conversation,
                       hasSegments: conversation.transcriptSegments.isNotEmpty ||
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
@@ -935,7 +1008,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   }
 }
 
-class SummaryTab extends StatelessWidget {
+class SummaryTab extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -948,12 +1021,21 @@ class SummaryTab extends StatelessWidget {
   });
 
   @override
+  State<SummaryTab> createState() => _SummaryTabState();
+}
+
+class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Listener(
         onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
-          if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-            onTapWhenSearchEmpty!();
+          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+            widget.onTapWhenSearchEmpty!();
           }
         },
         child: GestureDetector(
@@ -961,8 +1043,8 @@ class SummaryTab extends StatelessWidget {
           onTap: () {
             FocusScope.of(context).unfocus();
             // If search is empty, call the callback to close search
-            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-              onTapWhenSearchEmpty!();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
             }
           },
           child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
@@ -982,7 +1064,8 @@ class SummaryTab extends StatelessWidget {
                             CalendarEventCard(calendarEvent: provider.conversation.calendarEvent!),
                           data.item1
                               ? const ReprocessDiscardedWidget()
-                              : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
+                              : GetAppsWidgets(searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
+                          const GetGeolocationWidgets(),
                           const SizedBox(height: 150)
                         ],
                       );
@@ -1267,7 +1350,7 @@ class CalendarEventCard extends StatelessWidget {
   }
 }
 
-class TranscriptWidgets extends StatelessWidget {
+class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1280,20 +1363,29 @@ class TranscriptWidgets extends StatelessWidget {
   });
 
   @override
+  State<TranscriptWidgets> createState() => _TranscriptWidgetsState();
+}
+
+class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Listener(
         onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
-          if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-            onTapWhenSearchEmpty!();
+          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+            widget.onTapWhenSearchEmpty!();
           }
         },
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () {
             FocusScope.of(context).unfocus();
-            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-              onTapWhenSearchEmpty!();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
             }
           },
           child: Consumer<ConversationDetailProvider>(
@@ -1328,9 +1420,9 @@ class TranscriptWidgets extends StatelessWidget {
                 canDisplaySeconds: provider.canDisplaySeconds,
                 isConversationDetail: true,
                 bottomMargin: 150,
-                searchQuery: searchQuery,
-                currentResultIndex: currentResultIndex,
-                onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+                searchQuery: widget.searchQuery,
+                currentResultIndex: widget.currentResultIndex,
+                onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {

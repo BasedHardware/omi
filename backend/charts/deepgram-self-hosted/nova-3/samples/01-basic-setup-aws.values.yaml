@@ -48,6 +48,10 @@ scaling:
         # Discuss a reasoanble value with your Deepgram Account Representative
         # Must also set engine.concurrencyLimit.activeRequests if using request ratio for autoscaling
         requestCapacityRatio:
+
+agent:
+  enabled: false
+
 api:
   affinity:
     nodeAffinity:
@@ -65,6 +69,26 @@ api:
     limits:
       memory: "8Gi"
       cpu: "4000m"
+  
+  # -- Service configuration for the API external service
+  # Uncomment and modify the service type as needed for your deployment
+  # service:
+  #   # Options: ClusterIP (default), NodePort, LoadBalancer
+  #   type: LoadBalancer
+  #   # Add annotations when using LoadBalancer type (e.g., for AWS ELB configuration)
+  #   annotations:
+  #     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  #     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+  #   # Restrict access to specific IP ranges (optional)
+  #   loadBalancerSourceRanges:
+  #     - "10.0.0.0/8"      # Allow access from private networks
+  #     - "192.168.1.0/24"  # Allow access from specific subnet
+  #   # External traffic policy: Cluster (default) or Local
+  #   externalTrafficPolicy: "Local"  # Preserve source IP and reduce hops
+
+  # -- Custom TOML sections can be added here to extend api.toml
+  # customToml: |
+  #   [custom_section]
 
 engine:
   affinity:
@@ -91,12 +115,23 @@ engine:
   concurrencyLimit:
     activeRequests:
 
+  # -- Custom TOML sections can be added here to extend engine.toml
+  # customToml: |
+  #   # Preload models on engine startup for faster initial requests
+  #   # See https://deepgram.gitbook.io/help-center/how-can-i-pre-load-models-to-reduce-cold-start-latency
+  #   [preload_models]
+  #   models = [
+  #     # Example model preload configuration:
+  #     # { model = "general-nova-3", version = "2025-09-05.12808", language = "multi", format = false }
+  #   ]
+
   modelManager:
     volumes:
       aws:
         efs:
           enabled: true
           fileSystemId: fs-xxxxxxxxxxxxxxxx # Replace with your EFS ID
+          namePrefix: dg-models
     models:
       add:
         - https://link-to-model-1.dg # Replace these links with those provided to you

@@ -82,10 +82,15 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  // Double tap behavior: true = pause/mute, false = end conversation (default)
-  bool get doubleTapPausesMuting => getBool('doubleTapPausesMuting');
+  // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
+  int get doubleTapAction => getInt('doubleTapAction');
 
-  set doubleTapPausesMuting(bool value) => saveBool('doubleTapPausesMuting', value);
+  set doubleTapAction(int value) => saveInt('doubleTapAction', value);
+
+  // Keep backward compatibility
+  bool get doubleTapPausesMuting => doubleTapAction == 1;
+
+  set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
 
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
@@ -165,6 +170,11 @@ class SharedPreferencesUtil {
   set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
+
+  // Daily grade widget on homepage - default is false (experimental feature)
+  set showDailyGradeEnabled(bool value) => saveBool('showDailyGradeEnabled', value);
+
+  bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
 
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
@@ -248,9 +258,29 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
-  bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: true);
+  bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: false);
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  // Show short conversations - default is false (hidden)
+  bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
+
+  set showShortConversations(bool value) => saveBool('showShortConversations', value);
+
+  // Short conversation threshold in seconds - default is 60 (1 minute)
+  // Options: 60 (1 min), 120 (2 min), 180 (3 min), 240 (4 min), 300 (5 min)
+  int get shortConversationThreshold => getInt('shortConversationThreshold', defaultValue: 60);
+
+  set shortConversationThreshold(int value) => saveInt('shortConversationThreshold', value);
+
+  // Transcription settings (cached for fast preload)
+  bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
+
+  set cachedSingleLanguageMode(bool value) => saveBool('cachedSingleLanguageMode', value);
+
+  List<String> get cachedTranscriptionVocabulary => getStringList('cachedTranscriptionVocabulary');
+
+  set cachedTranscriptionVocabulary(List<String> value) => saveStringList('cachedTranscriptionVocabulary', value);
 
   // User primary language preferences
   String get userPrimaryLanguage => getString('userPrimaryLanguage');
@@ -418,6 +448,23 @@ class SharedPreferencesUtil {
   set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
   String get calendarType => getString('calendarType2', defaultValue: 'manual');
+
+  set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
+
+  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled') ?? false;
+
+  // Calendar UI Settings
+  set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
+
+  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants') ?? false;
+
+  set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
+
+  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar') ?? true;
+
+  set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
+
+  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
 
   //--------------------------------- Auth ------------------------------------//
 

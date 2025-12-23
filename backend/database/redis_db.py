@@ -411,6 +411,25 @@ def get_in_progress_conversation_id(uid: str) -> str:
     return conversation_id.decode()
 
 
+def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int = 86400):
+    """Store the meeting_id for a conversation. TTL defaults to 24 hours."""
+    r.set(f'conversation:{conversation_id}:meeting_id', meeting_id)
+    r.expire(f'conversation:{conversation_id}:meeting_id', ttl)
+
+
+def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:
+    """Retrieve the meeting_id associated with a conversation."""
+    meeting_id = r.get(f'conversation:{conversation_id}:meeting_id')
+    if not meeting_id:
+        return None
+    return meeting_id.decode()
+
+
+def remove_conversation_meeting_id(conversation_id: str):
+    """Remove the meeting_id association for a conversation."""
+    r.delete(f'conversation:{conversation_id}:meeting_id')
+
+
 def set_user_webhook_db(uid: str, wtype: str, url: str):
     r.set(f'users:{uid}:developer:webhook:{wtype}', url)
 
@@ -545,16 +564,29 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 
 
-def cache_dev_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
-    """Caches the user_id for a given hashed Developer API key."""
-    r.set(f'dev_api_key:{hashed_key}', user_id, ex=ttl)
+def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
+    """Caches the user_id and scopes for a given hashed Developer API key."""
+    cache_data = {"user_id": user_id, "scopes": scopes}
+    r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 
 @try_catch_decorator
 def get_cached_dev_api_key_user_id(hashed_key: str) -> Optional[str]:
     """Retrieves the user_id for a given hashed Developer API key from cache."""
-    user_id = r.get(f'dev_api_key:{hashed_key}')
-    return user_id.decode() if user_id else None
+    cached = r.get(f'dev_api_key:{hashed_key}')
+    if not cached:
+        return None
+    data = json.loads(cached.decode())
+    return data.get("user_id")
+
+
+@try_catch_decorator
+def get_cached_dev_api_key_data(hashed_key: str) -> Optional[dict]:
+    """Retrieves the user_id and scopes for a given hashed Developer API key from cache."""
+    cached = r.get(f'dev_api_key:{hashed_key}')
+    if not cached:
+        return None
+    return json.loads(cached.decode())
 
 
 @try_catch_decorator

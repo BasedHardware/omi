@@ -21,7 +21,31 @@ The Omi MCP server enables AI assistants like Claude to interact with your Omi d
 
 ---
 
-## Getting Started
+## Hosted MCP Server
+
+The easiest way to specific Omi as an MCP server is to use our hosted endpoint with SSE (Server-Sent Events).
+
+<Steps>
+  <Step title="Generate an API Key" icon="key">
+    Open the Omi app and navigate to **Settings → Developer → MCP** to generate your API key.
+  </Step>
+  <Step title="Configure your Client" icon="sliders">
+    Use the following connection details in your MCP client (like [Poke](https://poke.com)):
+    
+    - **Server URL:** `https://api.omi.me/v1/mcp/sse` (or shown custom URL)
+    - **API Key:** `omi_mcp_...` (your generated key)
+
+    ### Example: Poke
+
+    <img src="/images/poke-mcp-setup.png" alt="Poke MCP Setup" className="rounded-xl border border-gray-200 dark:border-gray-800" />
+  </Step>
+</Steps>
+
+---
+
+## Using Docker MCP Server
+
+If you prefer to run the MCP server locally:
 
 <Steps>
   <Step title="Generate an API Key" icon="key">

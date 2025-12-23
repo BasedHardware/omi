@@ -5,7 +5,8 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:provider/provider.dart';
 
 class LanguageSelectionDialog {
-  static Future<void> show(BuildContext context, {bool isRequired = false, bool forceShow = false}) async {
+  static Future<void> show(BuildContext context,
+      {bool isRequired = false, bool forceShow = false, bool showSingleLanguageWarning = false}) async {
     final homeProvider = Provider.of<HomeProvider>(context, listen: false);
 
     // If the user has already set a primary language and it's not required or forced, don't show the dialog
@@ -99,6 +100,29 @@ class LanguageSelectionDialog {
                         fontSize: 14,
                       ),
                     ),
+                    if (showSingleLanguageWarning) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2A),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFF8E8E93).withOpacity(0.3)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Single Language Mode is enabled. Translation is disabled for higher accuracy.',
+                                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     TextField(
                       onChanged: filterLanguages,

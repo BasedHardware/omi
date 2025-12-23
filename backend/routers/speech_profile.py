@@ -60,7 +60,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
     if aseg.duration_seconds < 5 or aseg.duration_seconds > 120:
-        raise HTTPException(status_code=400, detail="Audio duration is invalid")
+        raise HTTPException(status_code=400, detail="Audio duration is invalid (must be 5-120 seconds)")
 
     apply_vad_for_speech_profile(file_path)
 

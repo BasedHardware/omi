@@ -23,6 +23,9 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   String updateMessage = '';
   bool isLoading = false;
 
+  // Store reference to provider for safe disposal
+  DeviceProvider? _deviceProvider;
+
   @override
   void initState() {
     var device = widget.device!;
@@ -51,9 +54,22 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Save reference to provider for safe access in dispose
+    _deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+  }
+
+  @override
   void dispose() {
-    final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-    deviceProvider.resetFirmwareUpdateState();
+    // Defer the reset to after the frame completes to avoid calling
+    // notifyListeners() while the widget tree is locked
+    final provider = _deviceProvider;
+    if (provider != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        provider.resetFirmwareUpdateState();
+      });
+    }
     super.dispose();
   }
 

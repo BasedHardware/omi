@@ -31,6 +31,8 @@ scaling:
   # @default -- ``
   replicas:
     api: 1
+    # -- Engine replicas can be specified either as a single number for one engine type,
+    # or as individual counts for each engine type when Voice Agent is enabled.
     engine: 1
 
   # -- Enable pod autoscaling based on system load/traffic.
@@ -99,6 +101,129 @@ scaling:
               value: 25
               periodSeconds: 60
 
+agent:
+  # -- (bool) Whether to enable voice agent. Disabled by default
+  enabled: false
+  # -- (int) Timeout in milliseconds for end-of-turn detection
+  eotTimeoutMs: 3500
+  # -- (int) Maximum number of characters allowed in a conversation history
+  maxConversationChars: 15000
+  # -- (bool) Whether to allow non-public URLs (such as `localhost`) in custom endpoints. Disabled by default
+  allowNonpublicEndpoints: false
+  # -- Configuration for LLM providers and their available models
+  # @default -- ``
+  llmProviders:
+    # -- OpenAI provider configuration
+    # @default -- ``
+    open_ai:
+      # -- Display name for the OpenAI provider
+      name: "OpenAI"
+      # -- Available OpenAI models and their configurations
+      # @default -- ``
+      models:
+        gpt-4o-mini:
+          # -- Display name for the GPT-4o mini model
+          name: "GPT-4o mini"
+          # -- Service tier for this model (standard or advanced)
+          tier: "standard"
+          # -- Whether this model is publicly available
+          public: true
+        gpt-3-5-turbo:
+          name: "GPT-3.5 Turbo"
+          tier: "standard"
+          public: false
+        gpt-4o:
+          name: "GPT-4o"
+          tier: "advanced"
+          public: false
+    # -- Anthropic provider configuration
+    # @default -- ``
+    anthropic:
+      name: "Anthropic"
+      # -- Available Anthropic models and their configurations
+      # @default -- ``
+      models:
+        claude-3-haiku-20240307:
+          name: "Claude 3 Haiku"
+          tier: "standard"
+          public: true
+        claude-3-opus-20240229:
+          name: "Claude 3 Opus"
+          tier: "advanced"
+          public: false
+        claude-3-5-haiku-20241022:
+          name: "Claude 3.5 Haiku"
+          tier: "standard"
+          public: false
+        claude-3-5-sonnet-20240620:
+          name: "Claude 3.5 Sonnet"
+          tier: "advanced"
+          public: false
+        claude-3-5-sonnet-latest:
+          name: "Claude 3.5 Sonnet"
+          tier: "advanced"
+          public: false
+    # -- Groq provider configuration
+    # @default -- ``
+    groq:
+      name: "Groq"
+      # -- Available Groq models and their configurations
+      # @default -- ``
+      models:
+        mixtral-8x7b-32768:
+          name: "Mixtral 8x7B"
+          tier: "standard"
+          public: false
+        llama3-8b-8192:
+          name: "Llama 3 8B"
+          tier: "standard"
+          public: false
+        llama3-70b-8192:
+          name: "Llama 3 70B"
+          tier: "advanced"
+          public: false
+    # -- Deepgram provider configuration
+    # @default -- ``
+    deepgram:
+      name: "Deepgram"
+      # -- Available Deepgram models and their configurations
+      # @default -- ``
+      models:
+        llama-3-1-8b-instruct:
+          name: "Llama 3.1 8B Instruct"
+          tier: "standard"
+          public: false
+    # -- xAI provider configuration
+    # @default -- ``
+    x_ai:
+      name: "xAI"
+      # -- Available xAI models and their configurations
+      # @default -- ``
+      models:
+        grok-2-latest:
+          name: "Grok 2 Latest"
+          tier: "standard"
+          public: false
+    # -- Google provider configuration
+    # @default -- ``
+    google:
+      name: "Google"
+      # -- Available Google models and their configurations
+      # @default -- ``
+      models:
+        gemini-2.5-flash:
+          name: "Gemini 2.5 Flash"
+          tier: "standard"
+          public: false
+        gemini-2.0-flash:
+          name: "Gemini 2.0 Flash"
+          tier: "standard"
+          public: false
+        gemini-2.0-flash-lite:
+          name: "Gemini 2.0 Flash Lite"
+          tier: "standard"
+          public: false
+
 api:
   # -- namePrefix is the prefix to apply to the name of all K8s objects
   # associated with the Deepgram API containers.
@@ -112,13 +237,31 @@ api:
     # -- pullPolicy configures how the Kubelet attempts to pull the Deepgram API image
     pullPolicy: IfNotPresent
     # -- tag defines which Deepgram release to use for API containers
-    tag: release-250331
+    tag: release-251118
 
   # -- Additional labels to add to API resources
   additionalLabels: {}
 
   # -- (object) Additional annotations to add to the API deployment
   additionalAnnotations:
+
+  # -- Service configuration for the API external service
+  # @default -- ``
+  service:
+    # -- Service type for the API external service. Options: ClusterIP, NodePort, LoadBalancer
+    # @default -- `ClusterIP`
+    type: ClusterIP
+    # -- Additional annotations to add to the service when type is LoadBalancer
+    # @default -- ``
+    annotations: {}
+    # -- List of IP CIDR ranges allowed to access the LoadBalancer service
+    # Only applies when service type is LoadBalancer
+    # @default -- ``
+    loadBalancerSourceRanges: []
+    # -- External traffic policy for LoadBalancer service. Options: Cluster, Local
+    # Only applies when service type is LoadBalancer
+    # @default -- ``
+    externalTrafficPolicy: ""
 
   updateStrategy:
     rollingUpdate:
@@ -165,8 +308,19 @@ api:
   # to apply to API pods.
   tolerations: []
 
-  # -- [Security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) for API pods.
+  # -- [Node selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector)
+  # to apply to API pods.
+  nodeSelector: {}
+
+  # -- [Topology spread constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#topologyspreadconstraints-field)
+  # to apply to API pods.
+  topologySpreadConstraints: []
+
+  # -- [Pod-level security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod) for API pods.
   securityContext: {}
+
+  # -- [Container-level security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container) for API containers.
+  containerSecurityContext: {}
 
   serviceAccount:
     # -- Specifies whether to create a default service account for the Deepgram API Deployment.
@@ -228,11 +382,17 @@ api:
 
     # -- Enables entity-based redaction on pre-recorded audio
     # *if* a valid entity detection model is available.
-    entityRedaction: false
+    entityRedaction: true
 
     # -- Enables format entity tags on pre-recorded audio
     # *if* a valid NER model is available.
-    formatEntityTags: false
+    formatEntityTags: true
+    
+    # -- Enables usage metadata redaction; set to false to disable redaction of usage metadata
+    redactUsage: true
+
+    # -- Enables Flux turn-based streaming STT
+    listenV2: false
 
     # -- If API is receiving requests faster than Engine can process them, a request
     # queue will form. By default, this queue is stored in memory. Under high load,
@@ -267,6 +427,9 @@ api:
       # Default is 1GB, expressed in bytes.
       maxResponseSize: "1073741824"
 
+  # -- Custom TOML sections can be added to extend api.toml
+  customToml:
+
 engine:
   # -- namePrefix is the prefix to apply to the name of all K8s objects
   # associated with the Deepgram Engine containers.
@@ -280,13 +443,31 @@ engine:
     # -- pullPolicy configures how the Kubelet attempts to pull the Deepgram Engine image
     pullPolicy: IfNotPresent
     # -- tag defines which Deepgram release to use for Engine containers
-    tag: release-250331
+    tag: release-251118
 
   # -- Additional labels to add to Engine resources
   additionalLabels: {}
 
   # -- (object) Additional annotations to add to the Engine deployment
   additionalAnnotations:
+
+  # -- Service configuration for the Engine metrics service
+  # @default -- ``
+  service:
+    # -- Service type for the Engine metrics service. Options: ClusterIP, NodePort, LoadBalancer
+    # @default -- `ClusterIP`
+    type: ClusterIP
+    # -- Additional annotations to add to the service when type is LoadBalancer
+    # @default -- ``
+    annotations: {}
+    # -- List of IP CIDR ranges allowed to access the LoadBalancer service
+    # Only applies when service type is LoadBalancer
+    # @default -- ``
+    loadBalancerSourceRanges: []
+    # -- External traffic policy for LoadBalancer service. Options: Cluster, Local
+    # Only applies when service type is LoadBalancer
+    # @default -- ``
+    externalTrafficPolicy: ""
 
   updateStrategy:
     rollingUpdate:
@@ -353,9 +534,19 @@ engine:
   # -- [Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
   # to apply to Engine pods.
   tolerations: []
+  # -- [Topology spread constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#topologyspreadconstraints-field)
+  # to apply to Engine pods.
+  topologySpreadConstraints: []
 
-  # -- [Security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) for API pods.
+  # -- [Node selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector)
+  # to apply to Engine pods.
+  nodeSelector: {}
+
+  # -- [Pod-level security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod) for Engine pods.
   securityContext: {}
+
+  # -- [Container-level security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container) for Engine containers.
+  containerSecurityContext: {}
 
   serviceAccount:
     # -- Specifies whether to create a default service account for the Deepgram Engine Deployment.
@@ -375,6 +566,9 @@ engine:
     # are able to accept the request, the API will return a 429 HTTP response
     # to the client. The `nil` default means no limit will be set.
     activeRequests:
+
+  # -- Custom TOML sections can be added to extend engine.toml
+  customToml:
 
   # -- Configure Engine containers to listen for requests from API containers.
   # @default -- ``
@@ -473,7 +667,13 @@ engine:
   features:
     # -- Enables format entity tags on streaming audio
     # *if* a valid NER model is available.
-    streamingNer: false
+    streamingNer: true
+    # -- Enables use of 36-language detection model.
+    useV2LanguageDetection: false
+
+  flux:
+    # -- Enables Flux turn-based streaming STT
+    enabled: false
 
   # -- chunking defines the size of audio chunks to process in seconds.
   # Adjusting these values will affect both inference performance and accuracy
@@ -536,7 +736,7 @@ licenseProxy:
     # Deepgram images into a private container registry.
     path: quay.io/deepgram/self-hosted-license-proxy
     # -- tag defines which Deepgram release to use for License Proxy containers
-    tag: release-250331
+    tag: release-251118
     # -- pullPolicy configures how the Kubelet attempts to pull the Deepgram
     # License Proxy image
     pullPolicy: IfNotPresent
@@ -546,6 +746,24 @@ licenseProxy:
 
   # -- (object) Additional annotations to add to the LicenseProxy deployment
   additionalAnnotations:
+
+  # -- Service configuration for the License Proxy status service
+  # @default -- ``
+  service:
+    # -- Service type for the License Proxy status service. Options: ClusterIP, NodePort, LoadBalancer
+    # @default -- `ClusterIP`
+    type: ClusterIP
+    # -- Additional annotations to add to the service when type is LoadBalancer
+    # @default -- ``
+    annotations: {}
+    # -- List of IP CIDR ranges allowed to access the LoadBalancer service
+    # Only applies when service type is LoadBalancer
+    # @default -- ``
+    loadBalancerSourceRanges: []
+    # -- External traffic policy for LoadBalancer service. Options: Cluster, Local
+    # Only applies when service type is LoadBalancer
+    # @default -- ``
+    externalTrafficPolicy: ""
 
   updateStrategy:
     # -- For the LicenseProxy, we only expose maxSurge and not maxUnavailable.
@@ -590,9 +808,19 @@ licenseProxy:
   # -- [Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
   # to apply to License Proxy pods.
   tolerations: []
+  # -- [Topology spread constraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#topologyspreadconstraints-field)
+  # to apply to License Proxy pods.
+  topologySpreadConstraints: []
 
-  # -- [Security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/) for API pods.
+  # -- [Node selector](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector)
+  # to apply to License Proxy pods.
+  nodeSelector: {}
+
+  # -- [Pod-level security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod) for License Proxy pods.
   securityContext: {}
+
+  # -- [Container-level security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-container) for License Proxy containers.
+  containerSecurityContext: {}
 
   serviceAccount:
     # -- Specifies whether to create a default service account for the Deepgram License Proxy Deployment.
@@ -796,3 +1024,27 @@ prometheus-adapter:
           overrides:
             namespace: { resource: "namespace" }
             pod: { resource: "pod" }
+
+# -- Aura-2 specific configuration options
+# @default -- ``
+aura2:
+  # -- Enable Aura-2 features and configuration
+  enabled: false
+  
+  # -- English language configuration for Aura-2
+  # @default -- ``
+  english:
+    enabled: false
+    maxBatchSize: 8
+    t2cUuid: ""
+    c2aUuid: ""
+    cudaVisibleDevices: "0,1"
+    
+  # -- Spanish language configuration for Aura-2
+  # @default -- ``
+  spanish:
+    enabled: false
+    maxBatchSize: 8
+    t2cUuid: ""
+    c2aUuid: ""
+    cudaVisibleDevices: "2,3"

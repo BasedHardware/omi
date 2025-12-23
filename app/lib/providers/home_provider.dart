@@ -17,6 +17,7 @@ class HomeProvider extends ChangeNotifier {
   bool isChatFieldFocused = false;
   bool isConvoSearchFieldFocused = false;
   bool isMemoriesSearchFieldFocused = false;
+  bool showConvoSearchBar = false;
   bool hasSpeakerProfile = true;
   bool isLoading = false;
   String userPrimaryLanguage = SharedPreferencesUtil().userPrimaryLanguage;
@@ -26,10 +27,20 @@ class HomeProvider extends ChangeNotifier {
   final Map<String, String> availableLanguages = {
     // Top languages first
     'English': 'en',
+    'English (US)': 'en-US',
+    'English (UK)': 'en-GB',
+    'English (Australia)': 'en-AU',
+    'English (New Zealand)': 'en-NZ',
+    'English (India)': 'en-IN',
     'Spanish': 'es',
+    'Spanish (Latin America)': 'es-419',
     'Chinese (Mandarin, Simplified)': 'zh',
+    'Chinese (Mandarin, Simplified, CN)': 'zh-CN',
+    'Chinese (Mandarin, Simplified, Hans)': 'zh-Hans',
     'Hindi': 'hi',
     'Portuguese': 'pt',
+    'Portuguese (Brazil)': 'pt-BR',
+    'Portuguese (Portugal)': 'pt-PT',
     'Russian': 'ru',
     'Japanese': 'ja',
     'German': 'de',
@@ -37,20 +48,24 @@ class HomeProvider extends ChangeNotifier {
     'Bulgarian': 'bg',
     'Catalan': 'ca',
     'Chinese (Mandarin, Traditional)': 'zh-TW',
+    'Chinese (Mandarin, Traditional, Hant)': 'zh-Hant',
     'Chinese (Cantonese, Traditional)': 'zh-HK',
     'Czech': 'cs',
     'Danish': 'da',
+    'Danish (Denmark)': 'da-DK',
     'Dutch': 'nl',
     'Estonian': 'et',
     'Finnish': 'fi',
     'Flemish': 'nl-BE',
     'French': 'fr',
+    'French (Canada)': 'fr-CA',
     'German (Switzerland)': 'de-CH',
     'Greek': 'el',
     'Hungarian': 'hu',
     'Indonesian': 'id',
     'Italian': 'it',
     'Korean': 'ko',
+    'Korean (Korea)': 'ko-KR',
     'Latvian': 'lv',
     'Lithuanian': 'lt',
     'Malay': 'ms',
@@ -59,7 +74,9 @@ class HomeProvider extends ChangeNotifier {
     'Romanian': 'ro',
     'Slovak': 'sk',
     'Swedish': 'sv',
+    'Swedish (Sweden)': 'sv-SE',
     'Thai': 'th',
+    'Thai (Thailand)': 'th-TH',
     'Turkish': 'tr',
     'Ukrainian': 'uk',
     'Vietnamese': 'vi',
@@ -68,21 +85,50 @@ class HomeProvider extends ChangeNotifier {
   HomeProvider() {
     chatFieldFocusNode.addListener(_onFocusChange);
     appsSearchFieldFocusNode.addListener(_onFocusChange);
-    convoSearchFieldFocusNode.addListener(_onFocusChange);
+    convoSearchFieldFocusNode.addListener(_onConvoSearchFocusChange);
     memoriesSearchFieldFocusNode.addListener(_onFocusChange);
   }
 
   void _onFocusChange() {
     isChatFieldFocused = chatFieldFocusNode.hasFocus;
     isAppsSearchFieldFocused = appsSearchFieldFocusNode.hasFocus;
-    isConvoSearchFieldFocused = convoSearchFieldFocusNode.hasFocus;
     isMemoriesSearchFieldFocused = memoriesSearchFieldFocusNode.hasFocus;
+    notifyListeners();
+  }
+
+  void _onConvoSearchFocusChange() {
+    isConvoSearchFieldFocused = convoSearchFieldFocusNode.hasFocus;
+    // Don't auto-hide search bar when focus is lost - the widget will handle visibility
+    // based on whether there's an active search query
     notifyListeners();
   }
 
   void setIndex(int index) {
     selectedIndex = index;
     notifyListeners();
+  }
+
+  void toggleConvoSearchBar() {
+    showConvoSearchBar = !showConvoSearchBar;
+    if (showConvoSearchBar) {
+      // Focus the search field when showing the search bar
+      // Use a post-frame callback for reliability.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        convoSearchFieldFocusNode.requestFocus();
+      });
+    } else {
+      // Clear search and unfocus when hiding
+      convoSearchFieldFocusNode.unfocus();
+    }
+    notifyListeners();
+  }
+
+  void hideConvoSearchBar() {
+    if (showConvoSearchBar) {
+      showConvoSearchBar = false;
+      convoSearchFieldFocusNode.unfocus();
+      notifyListeners();
+    }
   }
 
   void setIsLoading(bool loading) {
@@ -180,7 +226,7 @@ class HomeProvider extends ChangeNotifier {
   void dispose() {
     chatFieldFocusNode.removeListener(_onFocusChange);
     appsSearchFieldFocusNode.removeListener(_onFocusChange);
-    convoSearchFieldFocusNode.removeListener(_onFocusChange);
+    convoSearchFieldFocusNode.removeListener(_onConvoSearchFocusChange);
     memoriesSearchFieldFocusNode.removeListener(_onFocusChange);
     memoriesSearchFieldFocusNode.dispose();
     chatFieldFocusNode.dispose();

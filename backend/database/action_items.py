@@ -257,6 +257,45 @@ def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dic
     return get_action_items(uid, conversation_id=conversation_id)
 
 
+def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
+    """
+    Get multiple action items by their IDs in a single batch operation.
+
+    Args:
+        uid: User ID
+        action_item_ids: List of action item IDs
+
+    Returns:
+        List of action items (only those that exist), in the same order as the input IDs
+    """
+    if not action_item_ids:
+        return []
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+
+    # Firestore batch get operation
+    doc_refs = [action_items_ref.document(item_id) for item_id in action_item_ids]
+    docs = db.get_all(doc_refs)
+
+    # Create a map to preserve order
+    action_items_map = {}
+    for doc in docs:
+        if doc.exists:
+            data = doc.to_dict()
+            data['id'] = doc.id
+            action_item = _prepare_action_item_for_read(data)
+            action_items_map[doc.id] = action_item
+
+    # Return in the same order as input IDs
+    action_items = []
+    for item_id in action_item_ids:
+        if item_id in action_items_map:
+            action_items.append(action_items_map[item_id])
+
+    return action_items
+
+
 # *****************************
 # ********** UPDATE ***********
 # *****************************

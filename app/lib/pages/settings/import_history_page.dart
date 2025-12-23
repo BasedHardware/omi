@@ -85,6 +85,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
   Future<void> _startLimitlessImport() async {
     try {
+      if (!mounted) return;
       setState(() => _isUploading = true);
 
       // Pick ZIP file
@@ -96,7 +97,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
       if (result == null || result.files.isEmpty) {
         debugPrint('User cancelled file picker');
-        setState(() => _isUploading = false);
+        if (mounted) {
+          setState(() => _isUploading = false);
+        }
         return;
       }
 
@@ -112,7 +115,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             ),
           );
         }
-        setState(() => _isUploading = false);
+        if (mounted) {
+          setState(() => _isUploading = false);
+        }
         return;
       }
 
@@ -123,7 +128,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final response = await startLimitlessImport(file);
       debugPrint('Import response: ${response?.jobId}');
 
-      setState(() => _isUploading = false);
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
 
       if (response != null) {
         // Refresh the list and start polling
@@ -167,8 +174,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       }
     } on PlatformException catch (e) {
       debugPrint('FilePicker PlatformException: ${e.code} - ${e.message}');
-      setState(() => _isUploading = false);
       if (mounted) {
+        setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error opening file picker: ${e.message}'),
@@ -179,8 +186,8 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     } catch (e, stackTrace) {
       debugPrint('Import error: $e');
       debugPrint('Stack trace: $stackTrace');
-      setState(() => _isUploading = false);
       if (mounted) {
+        setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),

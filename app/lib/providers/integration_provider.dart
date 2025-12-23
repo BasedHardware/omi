@@ -5,10 +5,17 @@ import 'package:omi/pages/settings/integrations_page.dart';
 
 class IntegrationProvider extends ChangeNotifier {
   final Map<String, bool> _integrations = {};
+  bool _isLoading = false;
+  bool _hasLoaded = false;
 
   Map<String, bool> get integrations => _integrations;
+  bool get isLoading => _isLoading;
+  bool get hasLoaded => _hasLoaded;
 
   Future<void> loadFromBackend() async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
       final responses = await Future.wait([
         getIntegration('google_calendar'),
@@ -32,9 +39,12 @@ class IntegrationProvider extends ChangeNotifier {
       await SharedPreferencesUtil().saveBool('twitter_connected', _integrations['twitter'] ?? false);
       await SharedPreferencesUtil().saveBool('github_connected', _integrations['github'] ?? false);
 
-      notifyListeners();
+      _hasLoaded = true;
     } catch (e) {
       debugPrint('Error loading integrations from backend: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

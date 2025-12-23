@@ -21,8 +21,18 @@ from models.conversation import (
 )
 from models.conversation import Conversation as ConversationModel
 from models.transcript_segment import TranscriptSegment
-from dependencies import get_uid_from_dev_api_key, get_current_user_id
+from dependencies import (
+    get_uid_from_dev_api_key,
+    get_current_user_id,
+    get_uid_with_conversations_read,
+    get_uid_with_conversations_write,
+    get_uid_with_memories_read,
+    get_uid_with_memories_write,
+    get_uid_with_action_items_read,
+    get_uid_with_action_items_write,
+)
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
+from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.llm.memories import identify_category_for_memory
 from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message
@@ -44,10 +54,28 @@ def get_keys(uid: str = Depends(get_current_user_id)):
 
 @router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["developer"])
 def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
+    """
+    Create a new Developer API key with optional scopes.
+
+    - **name**: Descriptive name for the key
+    - **scopes**: Optional list of scopes. If not provided, defaults to read-only access.
+      Available scopes:
+      - conversations:read
+      - conversations:write
+      - memories:read
+      - memories:write
+      - action_items:read
+      - action_items:write
+    """
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
-    raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip())
+    # Validate scopes if provided
+    if key_data.scopes is not None:
+        if not validate_scopes(key_data.scopes):
+            raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
+
+    raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
@@ -100,7 +128,7 @@ class BatchMemoriesResponse(BaseModel):
 
 @router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_memories_read),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
@@ -122,7 +150,7 @@ def get_memories(
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
 def create_memory(
     request: CreateMemoryRequest,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_memories_write),
 ):
     """
     Create a new memory for the authenticated user.
@@ -175,7 +203,7 @@ def create_memory(
 @router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_memories_write),
 ):
     """
     Create multiple memories in a batch.
@@ -278,7 +306,7 @@ class BatchActionItemsResponse(BaseModel):
 
 @router.get("/v1/dev/user/action-items", tags=["developer"], response_model=List[ActionItemResponse])
 def get_action_items(
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_action_items_read),
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
@@ -315,7 +343,7 @@ def get_action_items(
 @router.post("/v1/dev/user/action-items", response_model=ActionItemResponse, tags=["developer"])
 def create_action_item(
     request: CreateActionItemRequest,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_action_items_write),
 ):
     """
     Create a new action item for the authenticated user.
@@ -355,7 +383,7 @@ def create_action_item(
 @router.post("/v1/dev/user/action-items/batch", response_model=BatchActionItemsResponse, tags=["developer"])
 def create_action_items_batch(
     request: BatchActionItemsRequest,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_action_items_write),
 ):
     """
     Create multiple action items in a batch.
@@ -385,21 +413,21 @@ def create_action_items_batch(
     # Create batch
     created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
 
-    # Fetch created items and send FCM messages
-    created_items = []
-    for idx, item_id in enumerate(created_ids):
-        item = action_items_db.get_action_item(uid, item_id)
-        if item:
-            created_items.append(ActionItemResponse(**item))
+    # Fetch all created items in a single batch query
+    created_items_list = action_items_db.get_action_items_by_ids(uid, created_ids)
 
-            # Send FCM data message if action item has a due date
-            if idx < len(request.action_items) and request.action_items[idx].due_at:
-                send_action_item_data_message(
-                    user_id=uid,
-                    action_item_id=item_id,
-                    description=request.action_items[idx].description.strip(),
-                    due_at=request.action_items[idx].due_at.isoformat(),
-                )
+    # Send FCM messages for items with due dates
+    for idx, item in enumerate(created_items_list):
+        if idx < len(request.action_items) and request.action_items[idx].due_at:
+            send_action_item_data_message(
+                user_id=uid,
+                action_item_id=item['id'],
+                description=request.action_items[idx].description.strip(),
+                due_at=request.action_items[idx].due_at.isoformat(),
+            )
+
+    # Convert to response objects
+    created_items = [ActionItemResponse(**item) for item in created_items_list]
 
     return BatchActionItemsResponse(action_items=created_items, created_count=len(created_items))
 
@@ -514,7 +542,7 @@ def get_conversations(
     limit: int = 25,
     offset: int = 0,
     include_transcript: bool = False,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_conversations_read),
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -551,7 +579,7 @@ def get_conversations(
 @router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])
 def create_conversation(
     request: CreateConversationRequest,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_conversations_write),
 ):
     """
     Create a new conversation from text for the authenticated user.
@@ -629,7 +657,7 @@ def create_conversation(
 @router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
-    uid: str = Depends(get_uid_from_dev_api_key),
+    uid: str = Depends(get_uid_with_conversations_write),
 ):
     """
     Create a new conversation from structured transcript segments.

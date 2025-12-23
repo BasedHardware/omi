@@ -66,9 +66,9 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Omi.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
+	<string>Omi accesses your calendar to automatically detect upcoming meetings and help you start recording at the right time. Your calendar data stays private and is never sent to our servers.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
+	<string>Omi accesses your calendar to automatically detect upcoming meetings and help you start recording at the right time. Your calendar data stays private and is never sent to our servers.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is required to report issues</string>
 	<key>NSContactsUsageDescription</key>

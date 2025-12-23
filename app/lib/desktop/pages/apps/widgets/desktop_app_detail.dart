@@ -1278,7 +1278,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
     );
     if (app.isNotPersona()) {
       Share.share(
-        'Check out this app on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://h.omi.me/apps/${app.id}',
+        'https://h.omi.me/apps/${app.id}',
         subject: app.name,
       );
     } else {

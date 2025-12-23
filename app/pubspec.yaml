@@ -70,6 +70,7 @@ dependencies:
       ref: master
 
   # Utils
+  pool: ^1.5.1
   collection: ^1.19.1
   flutter_blue_plus: 1.33.6
   flutter_blue_plus_windows: 1.24.21
@@ -130,6 +131,7 @@ dependencies:
   in_app_review: ^2.0.9
   fl_chart: ^0.68.0
   image: ^4.3.0
+  calendar_date_picker2: ^2.0.1
 
 dependency_overrides:
   js: ^0.7.1
@@ -169,8 +171,6 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
-  config:
-    enable-swift-package-manager: false
   assets:
     - assets/images/stars.png
     - assets/images/herologo.png

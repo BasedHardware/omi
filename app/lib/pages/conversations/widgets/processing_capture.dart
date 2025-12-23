@@ -52,14 +52,19 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
         },
         child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           width: double.maxFinite,
           decoration: BoxDecoration(
             color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 18, 10, 16),
+            padding: EdgeInsets.fromLTRB(
+              10,
+              18,
+              10,
+              (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ? 22 : 16,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,35 +315,70 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Left: Status tag
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF35343B),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
-                        style: const TextStyle(
-                          color: Color(0xFFC9CBCF),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                // Left: Status tag + Star indicator
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF35343B),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      const SizedBox(width: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
+                            style: const TextStyle(
+                              color: Color(0xFFC9CBCF),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Star indicator when conversation is marked for starring
+                    if (provider.isConversationMarkedForStarring) ...[
+                      const SizedBox(width: 8),
                       Container(
-                        width: 6,
-                        height: 6,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                          shape: BoxShape.circle,
+                          color: Colors.amber.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FaIcon(
+                              FontAwesomeIcons.solidStar,
+                              size: 12,
+                              color: Colors.amber,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Starred',
+                              style: TextStyle(
+                                color: Colors.amber,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
                 // Right: Control buttons for both device and phone recording
                 Row(
@@ -346,16 +386,20 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   children: [
                     // Pause/Resume button
                     GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        // Track mute/pause action
+                      onTap: () async {
                         if (!isPaused) {
+                          // Muting: double impact for a satisfying "click-click" feel
+                          HapticFeedback.heavyImpact();
+                          await Future.delayed(const Duration(milliseconds: 80));
+                          HapticFeedback.lightImpact();
                           // User is pausing/muting
                           MixpanelManager().recordingMuteToggled(
                             isMuted: true,
                             recordingType: isDeviceRecording ? 'device' : 'phone_mic',
                           );
                         } else {
+                          // Unmuting: standard haptic feedback
+                          HapticFeedback.mediumImpact();
                           // User is resuming
                           MixpanelManager().recordingMuteToggled(
                             isMuted: false,
