@@ -141,17 +141,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void updateConversation(String conversationId, DateTime date) {
-    selectedDate = date;
     final list = conversationProvider?.groupedConversations[date];
     if (list != null) {
       final conv = list.firstWhereOrNull((c) => c.id == conversationId);
       if (conv != null) {
+        selectedDate = date;
         _cachedConversationId = conv.id;
         _cachedConversation = conv;
+        appResponseExpanded = List.filled(conv.appResults.length, false);
+        notifyListeners();
       }
     }
-    appResponseExpanded = List.filled(conversation.appResults.length, false);
-    notifyListeners();
   }
 
   void updateEventState(bool state, int i) {
