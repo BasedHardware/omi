@@ -367,8 +367,10 @@ void check_button_level(struct k_work *work_item)
     if (event != BUTTON_EVENT_NONE) {
         btn_last_event = event;
     }
-    // Reset last event on release so we can press again later
-    if (event == BUTTON_EVENT_RELEASE || (!btn_is_pressed && tap_count == 0 && event == BUTTON_EVENT_NONE)) {
+    
+    // Reset last event when button is fully idle so we can press again later
+    // UPDATED: Simplified logic here (removed dead code)
+    if (!btn_is_pressed && tap_count == 0 && event == BUTTON_EVENT_NONE) {
          if (btn_last_event == BUTTON_EVENT_LONG_PRESS) {
              btn_last_event = BUTTON_EVENT_NONE;
          }
