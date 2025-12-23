@@ -15,6 +15,7 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
+import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
@@ -263,6 +264,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   }
 
   Widget _buildSettingsCard() {
+    final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
@@ -271,47 +274,49 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       child: Column(
         children: [
           _buildSettingsItem(
-            icon: FontAwesomeIcons.boxArchive,
-            title: 'Complete Archive',
-            trailing: Transform.scale(
-              scale: 0.85,
-              child: CupertinoSwitch(
-                value: SharedPreferencesUtil().unlimitedLocalStorageEnabled,
-                onChanged: (value) {
-                  if (value) {
-                    _showConsentDialog(context, () {
-                      setState(() {
-                        SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-                      });
-                      context.read<SyncProvider>().refreshWals();
-                    });
-                  } else {
-                    setState(() {
-                      SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-                    });
-                    context.read<SyncProvider>().refreshWals();
-                  }
-                },
-                activeTrackColor: Colors.deepPurpleAccent,
+            icon: FontAwesomeIcons.mobile,
+            title: 'Store Audio on Phone',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isPhoneStorageOn ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                borderRadius: BorderRadius.circular(100),
+              ),
+              child: Text(
+                isPhoneStorageOn ? 'On' : 'Off',
+                style: TextStyle(
+                  color: isPhoneStorageOn ? Colors.green : Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
+            showChevron: true,
+            onTap: () {
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(builder: (context) => const LocalStoragePage()),
+                  )
+                  .then((_) => setState(() {}));
+            },
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           Consumer<UserProvider>(
             builder: (context, userProvider, child) {
+              final isCloudOn = userProvider.privateCloudSyncEnabled;
               return _buildSettingsItem(
                 icon: FontAwesomeIcons.cloud,
-                title: 'Private Cloud Sync',
+                title: 'Store Audio on Cloud',
                 trailing: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2E),
+                    color: isCloudOn ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Text(
-                    userProvider.privateCloudSyncEnabled ? 'On' : 'Off',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    isCloudOn ? 'On' : 'Off',
+                    style: TextStyle(
+                      color: isCloudOn ? Colors.green : Colors.white,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -407,65 +412,6 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showConsentDialog(BuildContext context, VoidCallback onConfirm) {
-    bool consentConfirmed = false;
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1C1C1E),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Text('Privacy Notice',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Recordings may capture others\' voices. Ensure you have consent from all participants.',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: consentConfirmed,
-                      onChanged: (value) => setState(() => consentConfirmed = value ?? false),
-                      activeColor: Colors.deepPurple,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                    ),
-                    const Expanded(
-                      child: Text('I have consent from all participants',
-                          style: TextStyle(color: Colors.white70, fontSize: 14)),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500)),
-              ),
-              TextButton(
-                onPressed: consentConfirmed
-                    ? () {
-                        Navigator.of(context).pop();
-                        onConfirm();
-                      }
-                    : null,
-                child: Text('Enable',
-                    style: TextStyle(
-                        color: consentConfirmed ? Colors.deepPurple : Colors.grey.shade600,
-                        fontWeight: FontWeight.w600)),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
@@ -770,8 +716,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title:
-                const Text('Storage', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            title: const Text('Offline Sync',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
             centerTitle: true,
             actions: [
               PullDownButton(
@@ -816,9 +762,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 16),
-                          _buildSettingsCard(),
-                          const SizedBox(height: 16),
                           _buildProcessCard(syncProvider),
+                          const SizedBox(height: 16),
+                          _buildSettingsCard(),
                           const SizedBox(height: 20),
                           _buildSectionHeader('Recordings'),
                           _buildFilterChips(statsSnapshot.data),
