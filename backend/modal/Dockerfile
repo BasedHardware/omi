@@ -3,7 +3,7 @@ FROM python:3.11 AS builder
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
-COPY backend/requirements.txt /tmp/requirements.txt
+COPY backend/modal/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 FROM python:3.11-slim
