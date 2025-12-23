@@ -66,6 +66,15 @@ class _AppShellState extends State<AppShell> {
           AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
         }
       }
+    } else if (uri.pathSegments.first == 'wrapped') {
+      if (mounted) {
+        PlatformManager.instance.mixpanel.track('Wrapped Opened From DeepLink');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const Wrapped2025Page(),
+          ),
+        );
+      }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback
       final error = uri.queryParameters['error'];
