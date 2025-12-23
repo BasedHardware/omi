@@ -693,9 +693,7 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
     ).strip()
 
     try:
-        # Use Groq for faster classification when available
-        classification_llm = get_classification_llm()
-        with_parser = classification_llm.with_structured_output(TopicsContext)
+        with_parser = _get_classification_parser(TopicsContext)
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
