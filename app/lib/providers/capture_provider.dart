@@ -502,20 +502,24 @@ class CaptureProvider extends ChangeNotifier
       }
 
       // start long press (for voice commands)
-      if (buttonState == 3 && _voiceCommandSession == null) {
+      /*if (buttonState == 3 && _voiceCommandSession == null) {
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
         _watchVoiceCommands(deviceId, _voiceCommandSession!);
         _playSpeakerHaptic(deviceId, 1);
-      }
+      } */ 
+      //remove long press for voice command
 
       // release (end voice command)
-      if (buttonState == 5 && _voiceCommandSession != null) {
+      /*if (buttonState == 5 && _voiceCommandSession != null) {
         _voiceCommandSession = null; // end session
         var data = List<List<int>>.from(_commandBytes);
         _commandBytes = [];
         _processVoiceCommandBytes(deviceId, data);
       }
+      */
+      //remove long press for voice command
+      
     });
   }
 
