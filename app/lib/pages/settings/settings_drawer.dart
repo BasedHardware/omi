@@ -11,6 +11,7 @@ import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -370,16 +371,27 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   );
                 },
               ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Device Settings',
-                icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const DeviceSettings(),
-                    ),
+              Consumer<DeviceProvider>(
+                builder: (context, deviceProvider, child) {
+                  if (!deviceProvider.isConnected) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: [
+                      const Divider(height: 1, color: Color(0xFF3C3C43)),
+                      _buildSettingsItem(
+                        title: 'Device Settings',
+                        icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const DeviceSettings(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),
