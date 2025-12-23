@@ -91,6 +91,8 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
 static ssize_t
 features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, void *buf, uint16_t len, uint16_t offset);
 
+const char* app_settings_get_device_name(void);
+
 // Forward declarations for update functions and callbacks
 static void update_phy(struct bt_conn *conn);
 static void update_data_length(struct bt_conn *conn);
@@ -154,6 +156,51 @@ static struct bt_uuid_128 settings_dim_ratio_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10011, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 static struct bt_uuid_128 settings_mic_gain_characteristic_uuid =
     BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10012, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 settings_device_name_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10013, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+// Forward declaration 
+int app_settings_save_device_name(const char *name, size_t len);
+
+static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
+                                                  const struct bt_gatt_attr *attr,
+                                                  const void *buf,
+                                                  uint16_t len,
+                                                  uint16_t offset,
+                                                  uint8_t flags)
+{
+    if (len > 32 || len == 0) {
+        LOG_WRN("Invalid name length: %u", len);
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    char name[33];
+    memcpy(name, buf, len);
+    name[len] = '\0';
+
+    LOG_INF("Received new device name: %s", name);
+
+    int err = app_settings_save_device_name(name, len);
+    if (err) {
+        LOG_ERR("Failed to save device name: %d", err);
+        return BT_GATT_ERR(BT_ATT_ERR_WRITE_NOT_PERMITTED);
+    }
+
+    // Update runtime name immediately so scans show it
+    bt_set_name(name);
+
+    return len;
+}
+
+static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
+                                                 const struct bt_gatt_attr *attr,
+                                                 void *buf,
+                                                 uint16_t len,
+                                                 uint16_t offset)
+{
+    const char *name = bt_get_name();
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));
+}
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -168,6 +215,13 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_mic_gain_read_handler,
                            settings_mic_gain_write_handler,
+                           NULL),
+    // NEW: Device Name Characteristic
+    BT_GATT_CHARACTERISTIC(&settings_device_name_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_device_name_read_handler,
+                           settings_device_name_write_handler,
                            NULL),
 };
 
@@ -953,6 +1007,9 @@ int transport_start()
         LOG_ERR("Transport bluetooth init failed (err %d)", err);
         return err;
     }
+
+    bt_set_name(app_settings_get_device_name());
+
     LOG_INF("Transport bluetooth initialized");
     //  Enable accelerometer
 #ifdef CONFIG_OMI_ENABLE_ACCELEROMETER

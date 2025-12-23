@@ -453,6 +453,33 @@ abstract class DeviceConnection {
 
   Future<int?> performGetMicGain();
 
+  // New Device Name Methods (Default implementation checks for support)
+
+  Future<void> setDeviceName(String name) async {
+    if (await isConnected()) {
+      return await performSetDeviceName(name);
+    }
+    _showDeviceDisconnectedNotification();
+  }
+
+  Future<void> performSetDeviceName(String name) async {
+    // Default implementation: do nothing or log warning
+    debugPrint("performSetDeviceName not implemented for ${device.type}");
+  }
+
+  Future<String?> getDeviceName() async {
+    if (await isConnected()) {
+      return await performGetDeviceName();
+    }
+    _showDeviceDisconnectedNotification();
+    return null;
+  }
+
+  Future<String?> performGetDeviceName() async {
+    // Default implementation
+    return null;
+  }
+
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(
       title: '${device.name} Disconnected',

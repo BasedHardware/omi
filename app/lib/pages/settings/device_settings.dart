@@ -687,10 +687,83 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
   var provider = Provider.of<DeviceProvider>(context, listen: true);
 
+  void showRenameDialog() {
+    if (device == null) return;
+    String newName = device.name;
+    final controller = TextEditingController(text: newName);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.grey.shade900,
+          title: const Text('Rename Device', style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: controller,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              labelText: 'Device Name',
+              hintText: 'Enter new name',
+              labelStyle: TextStyle(color: Colors.grey),
+              hintStyle: TextStyle(color: Colors.grey),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey)),
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () async {
+                newName = controller.text.trim();
+                if (newName.isNotEmpty) {
+                  Navigator.pop(dialogContext);
+
+                  var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+                  if (connection != null) {
+                    // 1. Send Command to Firmware
+                    await connection.setDeviceName(newName);
+
+                    // 2. Update Local Data
+                    BtDevice updatedDevice = BtDevice(
+                      id: device.id,
+                      name: newName,
+                      type: device.type,
+                      rssi: device.rssi,
+                    );
+
+                    await SharedPreferencesUtil().btDeviceSet(updatedDevice);
+                    SharedPreferencesUtil().deviceName = newName;
+                    provider.setConnectedDevice(updatedDevice);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Renamed to $newName')),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Device not connected')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save', style: TextStyle(color: Colors.deepPurpleAccent)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   return [
     ListTile(
       title: const Text('Device Name'),
       subtitle: Text(device?.name ?? 'Omi DevKit'),
+      trailing: IconButton(
+        icon: const Icon(Icons.edit, size: 20, color: Colors.white),
+        onPressed: showRenameDialog,
+      ),
     ),
     ListTile(
       title: const Text('Device ID'),
