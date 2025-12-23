@@ -92,6 +92,11 @@ class SharedPreferencesUtil {
 
   set doubleTapPausesMuting(bool value) => doubleTapAction = value ? 1 : 0;
 
+  // Triple tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
+  int get tripleTapAction => getInt('tripleTapAction');
+
+  set tripleTapAction(int value) => saveInt('tripleTapAction', value);
+
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
     final configJson = getString('customSttConfig');

@@ -80,11 +80,15 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 #define LONG_TAP 3
 #define BUTTON_PRESS 4
 #define BUTTON_RELEASE 5
+#define TRIPLE_TAP 6
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
 static uint32_t inc_count_1 = 0;
 static uint32_t inc_count_0 = 0;
+
+// change logic to account for triple tap capability
+static int tap_count = 0;
 
 static int final_button_state[2] = {0, 0};
 const static int threshold = 10;
@@ -134,6 +138,17 @@ static inline void notify_double_tap()
     }
 }
 
+//add triple tap log
+static inline void notify_triple_tap()
+{
+    final_button_state[0] = TRIPLE_TAP;
+    LOG_INF("Button triple tap");
+    struct bt_conn *conn = get_current_connection();
+    if (conn != NULL) {
+        bt_gatt_notify(conn, &button_service.attrs[1], &final_button_state, sizeof(final_button_state));
+    }
+}
+
 static inline void notify_long_tap()
 {
     final_button_state[0] = LONG_TAP; // button press
@@ -155,6 +170,7 @@ typedef enum {
     BUTTON_EVENT_NONE,
     BUTTON_EVENT_SINGLE_TAP,
     BUTTON_EVENT_DOUBLE_TAP,
+    BUTTON_EVENT_TRIPLE_TAP,
     BUTTON_EVENT_LONG_PRESS,
     BUTTON_EVENT_RELEASE
 } ButtonEvent;
@@ -167,6 +183,7 @@ static bool btn_is_pressed;
 
 static u_int8_t btn_last_event = BUTTON_EVENT_NONE;
 
+/* // old check button logic
 void check_button_level(struct k_work *work_item)
 {
     current_time = current_time + 1;
@@ -227,6 +244,13 @@ void check_button_level(struct k_work *work_item)
         notify_double_tap();
     }
 
+    // Triple tap 
+    if (event == BUTTON_EVENT_TRIPLE_TAP) {
+        LOG_INF("triple tap detected\n");
+        btn_last_event = event;
+        notify_triple_tap();
+    }
+
     // Long press, one time event
     if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
     LOG_INF("long press detected (3 seconds) - turning off\n");
@@ -254,6 +278,105 @@ void check_button_level(struct k_work *work_item)
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
     return 0;
 }
+*/
+
+void check_button_level(struct k_work *work_item)
+{
+    current_time++;
+
+    uint8_t btn_state = was_pressed ? BUTTON_PRESSED : BUTTON_RELEASED;
+    ButtonEvent event = BUTTON_EVENT_NONE;
+
+    // 1. Handle Press (Start of a tap)
+    if (btn_state == BUTTON_PRESSED && !btn_is_pressed) {
+        btn_is_pressed = true;
+        btn_press_start_time = current_time;
+    } 
+    
+    // 2. Handle Release (End of a tap)
+    else if (btn_state == BUTTON_RELEASED && btn_is_pressed) {
+        btn_is_pressed = false;
+        btn_release_time = current_time;
+        
+        uint32_t press_duration = (btn_release_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL;
+
+        // Only count as a tap if it was short (not a long press)
+        if (press_duration < TAP_THRESHOLD) {
+            tap_count++;
+            btn_last_tap_time = current_time; // Reset the "waiting" timer
+
+            // If we hit 3, fire immediately!
+            if (tap_count >= 3) {
+                event = BUTTON_EVENT_TRIPLE_TAP;
+                tap_count = 0; // Reset
+            }
+        }
+    }
+
+    // 3. Handle Long Press (While holding)
+    if (btn_is_pressed && (current_time - btn_press_start_time) * BUTTON_CHECK_INTERVAL >= LONG_PRESS_TIME) {
+        event = BUTTON_EVENT_LONG_PRESS;
+    }
+
+    // 4. Handle Timeouts (Decide if it was Single or Double)
+    // If we have taps pending, button is released, and time window has passed...
+    if (tap_count > 0 && !btn_is_pressed) {
+        uint32_t time_since_last_tap = (current_time - btn_last_tap_time) * BUTTON_CHECK_INTERVAL;
+        
+        if (time_since_last_tap > DOUBLE_TAP_WINDOW) {
+            // Time is up! What did we get?
+            if (tap_count == 1) {
+                event = BUTTON_EVENT_SINGLE_TAP;
+            } else if (tap_count == 2) {
+                event = BUTTON_EVENT_DOUBLE_TAP;
+            }
+            
+            // Note: Triple is handled immediately above, so we don't check for 3 here.
+            tap_count = 0; // Done processing
+        }
+    }
+
+    // 5. Fire Events
+
+    // Single Tap
+    if (event == BUTTON_EVENT_SINGLE_TAP) {
+        LOG_INF("Single tap detected");
+        notify_tap();
+    }
+
+    // Double Tap
+    if (event == BUTTON_EVENT_DOUBLE_TAP) {
+        LOG_INF("Double tap detected");
+        notify_double_tap();
+    }
+
+    // Triple Tap
+    if (event == BUTTON_EVENT_TRIPLE_TAP) {
+        LOG_INF("Triple tap detected");
+        notify_triple_tap();
+    }
+
+    // Long Press (Trigger once)
+    if (event == BUTTON_EVENT_LONG_PRESS && btn_last_event != BUTTON_EVENT_LONG_PRESS) {
+        LOG_INF("Long press detected - turning off");
+        notify_long_tap();
+        turnoff_all(); 
+    }
+
+    // Track last event to prevent repeating Long Press
+    if (event != BUTTON_EVENT_NONE) {
+        btn_last_event = event;
+    }
+    // Reset last event on release so we can press again later
+    if (event == BUTTON_EVENT_RELEASE || (!btn_is_pressed && tap_count == 0 && event == BUTTON_EVENT_NONE)) {
+         if (btn_last_event == BUTTON_EVENT_LONG_PRESS) {
+             btn_last_event = BUTTON_EVENT_NONE;
+         }
+    }
+
+    k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
+}
+
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn,
                                                const struct bt_gatt_attr *attr,

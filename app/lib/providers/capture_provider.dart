@@ -552,6 +552,56 @@ class CaptureProvider extends ChangeNotifier
         }
         return;
       }
+
+    // New Triple Tap Placeholder (Value 6)
+    if (buttonState == 6) {
+      debugPrint("Triple tap detected");
+
+      if (_isProcessingButtonEvent) {
+             debugPrint("Triple tap: already processing, ignoring");
+             return;
+        }
+
+        int tripleTapAction = SharedPreferencesUtil().tripleTapAction;
+      
+        if (tripleTapAction == 1) {
+          // Pause/resume recording
+          debugPrint("Triple tap: toggling pause/mute");
+          _isProcessingButtonEvent = true;
+          if (_isPaused) {
+            resumeDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              debugPrint("Error resuming device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
+          } else {
+            pauseDeviceRecording().then((_) {
+              _isProcessingButtonEvent = false;
+            }).catchError((e) {
+              debugPrint("Error pausing device recording: $e");
+              _isProcessingButtonEvent = false;
+            });
+          }
+        } else if (tripleTapAction == 2) {
+          // Star ongoing conversation (doesn't end it)
+          debugPrint("Triple tap: marking conversation for starring");
+          if (!_starOngoingConversation) {
+            markConversationForStarring();
+            // Haptic feedback to confirm
+            HapticFeedback.mediumImpact();
+          } else {
+            // Toggle off if already marked
+            unmarkConversationForStarring();
+            HapticFeedback.lightImpact();
+          }
+        } else {
+          // End conversation and process (default)
+          debugPrint("Triple tap: processing conversation");
+          forceProcessingCurrentConversation();
+        }
+        return;
+      }
     });
   }
 
