@@ -171,6 +171,11 @@ class SharedPreferencesUtil {
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
 
+  // Daily grade widget on homepage - default is false (experimental feature)
+  set showDailyGradeEnabled(bool value) => saveBool('showDailyGradeEnabled', value);
+
+  bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled');
