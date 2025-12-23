@@ -59,6 +59,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.other.storage import precache_conversation_audio
 
 
 def _get_structured(
@@ -543,6 +544,8 @@ def process_conversation(
                 conversations_db.update_conversation(
                     uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
                 )
+                # Pre-cache audio files in background
+                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
         except Exception as e:
             print(f"Error creating audio files: {e}")
 
