@@ -12,7 +12,10 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/pages/settings/calendar_integrations_page.dart';
+import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp;
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -25,6 +28,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
@@ -262,10 +266,63 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await provider.reprocessConversation();
         }
         break;
+      case 'link_event':
+        _handleLinkEvent(context, provider);
+        break;
       case 'delete':
         _handleDelete(context, provider);
         break;
     }
+  }
+
+  void _handleLinkEvent(BuildContext context, ConversationDetailProvider provider) {
+    // Check if Google Calendar is connected
+    final integrationProvider = Provider.of<IntegrationProvider>(context, listen: false);
+    final isConnected = integrationProvider.isAppConnected(IntegrationApp.googleCalendar);
+
+    if (!isConnected) {
+      _showCalendarNotConnectedDialog(context);
+      return;
+    }
+
+    // Show event picker directly
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => const CalendarEventPickerSheet(),
+    );
+  }
+
+  void _showCalendarNotConnectedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Google Calendar Not Connected', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Connect your Google Calendar to link conversations to calendar events.',
+          style: TextStyle(color: Color(0xFF8E8E93)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(c);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CalendarIntegrationsPage()),
+              );
+            },
+            child: const Text('Connect', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleDelete(BuildContext context, ConversationDetailProvider provider) {
@@ -608,6 +665,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
                             //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
                             // ),
+                            if (provider.conversation.calendarEvent == null)
+                              PullDownMenuItem(
+                                title: 'Link Event',
+                                iconWidget: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Image.asset(
+                                    'assets/integration_app_logos/google-calendar.png',
+                                    width: 17,
+                                    height: 17,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                onTap: () => _handleMenuSelection(context, 'link_event', provider),
+                              ),
                             PullDownMenuItem(
                               title: 'Test Prompt',
                               iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
@@ -1052,23 +1123,373 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
             builder: (context, data, child) {
               return Stack(
                 children: [
-                  ListView(
-                    shrinkWrap: true,
-                    children: [
-                      const GetSummaryWidgets(),
-                      data.item1
-                          ? const ReprocessDiscardedWidget()
-                          : GetAppsWidgets(
-                              searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
-                      const GetGeolocationWidgets(),
-                      const SizedBox(height: 150),
-                    ],
+                  Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      return ListView(
+                        shrinkWrap: true,
+                        children: [
+                          const GetSummaryWidgets(),
+                          // Calendar event is now shown via chips under the title (in GetSummaryWidgets)
+                          data.item1
+                              ? const ReprocessDiscardedWidget()
+                              : GetAppsWidgets(
+                                  searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
+                          const GetGeolocationWidgets(),
+                          const SizedBox(height: 150)
+                        ],
+                      );
+                    },
                   ),
                 ],
               );
             },
           ),
         ));
+  }
+}
+
+/// Bottom sheet for picking a calendar event to link
+class CalendarEventPickerSheet extends StatefulWidget {
+  const CalendarEventPickerSheet({super.key});
+
+  @override
+  State<CalendarEventPickerSheet> createState() => _CalendarEventPickerSheetState();
+}
+
+class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
+  List<CalendarEventLink> _events = [];
+  String? _suggestedEventId;
+  bool _isLoading = true;
+  bool _isLinking = false;
+  String? _linkingEventId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final events = await provider.listCalendarEventsForPicker();
+
+    if (mounted) {
+      // Find the best matching event based on time overlap
+      final conversation = provider.conversation;
+      final conversationStart = conversation.startedAt ?? conversation.createdAt;
+      final conversationEnd = conversation.finishedAt ?? conversationStart.add(const Duration(hours: 1));
+
+      String? bestMatchId;
+      double bestOverlapSeconds = 0;
+
+      for (final event in events) {
+        final overlapStart = event.startTime.isAfter(conversationStart) ? event.startTime : conversationStart;
+        final overlapEnd = event.endTime.isBefore(conversationEnd) ? event.endTime : conversationEnd;
+        final overlapDuration = overlapEnd.difference(overlapStart).inSeconds.toDouble();
+
+        if (overlapDuration > 0) {
+          // Also consider overlap percentage of event duration
+          final eventDuration = event.endTime.difference(event.startTime).inSeconds.toDouble();
+          final overlapPercentage = eventDuration > 0 ? overlapDuration / eventDuration : 0;
+
+          // Prefer events with at least 5 minutes overlap OR 50% overlap
+          if ((overlapDuration >= 300 || overlapPercentage >= 0.5) && overlapDuration > bestOverlapSeconds) {
+            bestOverlapSeconds = overlapDuration;
+            bestMatchId = event.eventId;
+          }
+        }
+      }
+
+      // Sort events: suggested first, then by start time
+      final sortedEvents = List<CalendarEventLink>.from(events);
+      if (bestMatchId != null) {
+        sortedEvents.sort((a, b) {
+          if (a.eventId == bestMatchId) return -1;
+          if (b.eventId == bestMatchId) return 1;
+          return a.startTime.compareTo(b.startTime);
+        });
+      }
+
+      setState(() {
+        _events = sortedEvents;
+        _suggestedEventId = bestMatchId;
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatTime(DateTime time) {
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _formatDate(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(time.year, time.month, time.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (time.year == now.year) {
+      return dateTimeFormat('MMM d', time);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', time);
+    }
+  }
+
+  Future<void> _linkEvent(CalendarEventLink event) async {
+    setState(() {
+      _isLinking = true;
+      _linkingEventId = event.eventId;
+    });
+    HapticFeedback.mediumImpact();
+
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final linked = await provider.linkCalendarEvent(event.eventId);
+
+    if (!mounted) return;
+
+    if (linked != null) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Linked to "${event.title}"')),
+      );
+    } else {
+      setState(() {
+        _isLinking = false;
+        _linkingEventId = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to link calendar event')),
+      );
+    }
+  }
+
+  Widget _buildShimmerList() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade600,
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: 4,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 14,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 12,
+                        width: 140,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEventTile(CalendarEventLink event, bool isSuggested, bool isLinkingThis) {
+    return GestureDetector(
+      onTap: _isLinking ? null : () => _linkEvent(event),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/integration_app_logos/google-calendar.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  if (isSuggested)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Suggested',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      '${_formatDate(event.startTime)}, ${_formatTime(event.startTime)} – ${_formatTime(event.endTime)}',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            _isLinking && isLinkingThis
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                  )
+                : Icon(
+                    Icons.add_circle_outline,
+                    color: _isLinking ? Colors.grey.shade700 : Colors.grey,
+                    size: 22,
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade600,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Text(
+                  'Link Event',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(Icons.close, color: Colors.grey, size: 24),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Color(0xFF2A2A2E), height: 1),
+          // Content
+          Flexible(
+            child: _isLoading
+                ? _buildShimmerList()
+                : _events.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Text(
+                            'No calendar events found around this time.',
+                            style: TextStyle(color: Colors.grey, fontSize: 15),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _events.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          color: Color(0xFF2A2A2E),
+                          height: 1,
+                          indent: 16,
+                          endIndent: 16,
+                        ),
+                        itemBuilder: (context, index) {
+                          final event = _events[index];
+                          final isLinkingThis = _linkingEventId == event.eventId;
+                          final isSuggested = event.eventId == _suggestedEventId;
+                          return _buildEventTile(event, isSuggested, isLinkingThis);
+                        },
+                      ),
+          ),
+          // Safe area padding at bottom
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+        ],
+      ),
+    );
   }
 }
 

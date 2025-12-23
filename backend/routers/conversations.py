@@ -9,6 +9,7 @@ import database.users as users_db
 from database.vector_db import delete_vector
 from models.conversation import (
     BaseModel,
+    CalendarEventLink,
     CalendarMeetingContext,
     Conversation,
     ConversationPhoto,
@@ -34,6 +35,9 @@ from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.retrieval.tools.calendar_tools import get_google_calendar_event, update_google_calendar_event
+from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.conversations.calendar_linking import get_overlapping_calendar_event
 
 router = APIRouter()
 
@@ -149,6 +153,262 @@ def patch_conversation_title(conversation_id: str, title: str, uid: str = Depend
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
+
+
+@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Unlink a calendar event from a conversation.
+    This removes the calendar_event field from the conversation.
+    """
+    _get_valid_conversation_by_id(uid, conversation_id)
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': None})
+    return {'status': 'Ok'}
+
+
+class LinkCalendarEventRequest(BaseModel):
+    event_id: str
+
+
+def _extract_attendees(event: dict) -> tuple[list[str], list[str]]:
+    """Extract attendee names and emails from a Google Calendar event."""
+    names = []
+    emails = []
+    for attendee in event.get('attendees', []):
+        if attendee.get('self', False):
+            continue
+        email = attendee.get('email', '')
+        name = attendee.get('displayName') or email
+        if name:
+            names.append(name)
+        if email:
+            emails.append(email)
+    return names, emails
+
+
+def _parse_event_times(event: dict) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Parse start and end times from a Google Calendar event."""
+    start = event.get('start', {})
+    end = event.get('end', {})
+    try:
+        if 'dateTime' in start:
+            start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
+        elif 'date' in start:
+            start_dt = datetime.fromisoformat(start['date'] + 'T00:00:00+00:00')
+        else:
+            return None, None
+
+        if 'dateTime' in end:
+            end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
+        elif 'date' in end:
+            end_dt = datetime.fromisoformat(end['date'] + 'T23:59:59+00:00')
+        else:
+            return None, None
+
+        return start_dt, end_dt
+    except (ValueError, KeyError):
+        return None, None
+
+
+def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
+    """Convert a raw Google Calendar event to CalendarEventLink model."""
+    start_time, end_time = _parse_event_times(event)
+    if start_time is None or end_time is None:
+        return None
+
+    attendee_names, attendee_emails = _extract_attendees(event)
+
+    return CalendarEventLink(
+        event_id=event.get('id', ''),
+        title=event.get('summary', 'Untitled Event'),
+        attendees=attendee_names,
+        attendee_emails=attendee_emails,
+        start_time=start_time,
+        end_time=end_time,
+        html_link=event.get('htmlLink'),
+    )
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/calendar-event", response_model=CalendarEventLink, tags=['conversations']
+)
+def link_calendar_event(
+    conversation_id: str,
+    request: LinkCalendarEventRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Link a specific Google Calendar event to an existing conversation.
+    Fetches the event details and stores the calendar_event on the conversation.
+    """
+    _get_valid_conversation_by_id(uid, conversation_id)
+
+    # Get Google Calendar access token
+    integration = users_db.get_integration(uid, 'google_calendar')
+    if not integration or not integration.get('connected'):
+        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+
+    access_token = integration.get('access_token')
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token found")
+
+    # Fetch the event from Google Calendar
+    try:
+        event = get_google_calendar_event(access_token, request.event_id)
+    except Exception as e:
+        error_msg = str(e)
+        # Try to refresh token if authentication failed
+        if "Authentication failed" in error_msg or "401" in error_msg:
+            new_token = refresh_google_token(uid, integration)
+            if new_token:
+                try:
+                    event = get_google_calendar_event(new_token, request.event_id)
+                except Exception as retry_error:
+                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+            else:
+                raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar event: {error_msg}")
+
+    # Convert to CalendarEventLink
+    calendar_event = _event_to_calendar_event_link(event)
+    if calendar_event is None:
+        raise HTTPException(status_code=400, detail="Could not parse calendar event times")
+
+    # Persist to Firestore
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.dict()})
+
+    return calendar_event
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/calendar-event/auto-link",
+    response_model=CalendarEventLink,
+    tags=['conversations'],
+)
+def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Auto-link a conversation to the best overlapping Google Calendar event.
+    Uses the conversation's started_at/finished_at to find a matching event.
+    Returns 404 if no overlapping event is found.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+
+    # Get conversation times
+    started_at = conversation.get('started_at')
+    finished_at = conversation.get('finished_at')
+
+    # Fall back to created_at if times are not available
+    if not started_at:
+        started_at = conversation.get('created_at')
+    if not finished_at:
+        finished_at = started_at
+
+    if not started_at:
+        raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
+
+    # Parse datetimes if they're strings
+    if isinstance(started_at, str):
+        started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+    if isinstance(finished_at, str):
+        finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+
+    # Ensure timezone-aware
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    if finished_at.tzinfo is None:
+        finished_at = finished_at.replace(tzinfo=timezone.utc)
+
+    # Find overlapping calendar event
+    calendar_event = get_overlapping_calendar_event(uid, started_at, finished_at)
+
+    if calendar_event is None:
+        raise HTTPException(status_code=404, detail="No overlapping calendar event found")
+
+    # Persist to Firestore
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': calendar_event.dict()})
+
+    return calendar_event
+
+
+def _add_summary_to_calendar_event_with_token(
+    access_token: str,
+    event_id: str,
+    conversation_id: str,
+) -> dict:
+    """Helper function to add summary link to calendar event with given token."""
+    # Get existing event to preserve current description
+    existing_event = get_google_calendar_event(access_token, event_id)
+    current_description = existing_event.get('description', '') or ''
+
+    # Build the conversation link
+    conversation_link = f"https://h.omi.me/memories/{conversation_id}"
+
+    # Check if we already added the link (to avoid duplicates)
+    if conversation_link in current_description:
+        return {
+            'status': 'Ok',
+            'html_link': existing_event.get('htmlLink'),
+        }
+
+    # Append just the link
+    if current_description:
+        new_description = f"{current_description}\n\n{conversation_link}"
+    else:
+        new_description = conversation_link
+
+    # Update the calendar event
+    updated_event = update_google_calendar_event(
+        access_token=access_token,
+        event_id=event_id,
+        description=new_description,
+    )
+
+    return {
+        'status': 'Ok',
+        'html_link': updated_event.get('htmlLink'),
+    }
+
+
+@router.post("/v1/conversations/{conversation_id}/calendar-event/add-summary", tags=['conversations'])
+def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Add conversation summary to the linked calendar event description.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+
+    calendar_event = conversation.get('calendar_event')
+    if not calendar_event:
+        raise HTTPException(status_code=400, detail="No calendar event linked to this conversation")
+
+    event_id = calendar_event.get('event_id')
+    if not event_id:
+        raise HTTPException(status_code=400, detail="Calendar event ID not found")
+
+    # Get Google Calendar access token
+    integration = users_db.get_integration(uid, 'google_calendar')
+    if not integration or not integration.get('connected'):
+        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+
+    access_token = integration.get('access_token')
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token found")
+
+    try:
+        return _add_summary_to_calendar_event_with_token(access_token, event_id, conversation_id)
+    except Exception as e:
+        error_msg = str(e)
+
+        # Try to refresh token if authentication failed
+        if "401" in error_msg or "Authentication" in error_msg.lower():
+            new_token = refresh_google_token(uid, integration)
+            if new_token:
+                try:
+                    return _add_summary_to_calendar_event_with_token(new_token, event_id, conversation_id)
+                except Exception as retry_error:
+                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+
+        raise HTTPException(status_code=500, detail=f"Failed to update calendar event: {error_msg}")
 
 
 @router.get(
