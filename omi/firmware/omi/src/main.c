@@ -264,6 +264,10 @@ int main(void)
         return ret;
     }
     LOG_INF("Button initialized");
+    
+    //check long press to turn on
+    check_boot_long_press();
+
     activate_button_work();
 #endif
 

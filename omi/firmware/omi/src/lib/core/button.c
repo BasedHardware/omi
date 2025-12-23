@@ -436,3 +436,31 @@ void force_button_state(FSM_STATE_T state)
 {
     current_button_state = state;
 }
+
+
+// change boot logic to 3 seconds
+
+void check_boot_long_press(void)
+{
+    LOG_INF("Checking for power-on hold...");
+    
+    // We want a 3 second hold (30 checks * 100ms)
+    for (int i = 0; i < 30; i++) {
+        // 1. Wait 100ms
+        k_msleep(100);
+
+        // 2. Check if button is released 
+        if (gpio_pin_get_dt(&usr_btn) == 0) {
+            LOG_INF("Button released too early (<3s). Powering off.");
+            
+            turnoff_all(); // Go back to sleep immediately
+            return; // Should not reach here, but for safety
+        }
+    }
+
+    // 3. Worked
+    LOG_INF("Power-on hold confirmed. Booting up.");
+    
+    // Success feedback
+    play_haptic_milli(500); // Long buzz signify on
+}

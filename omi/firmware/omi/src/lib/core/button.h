@@ -17,4 +17,7 @@ void force_button_state(FSM_STATE_T state);
 // Input message queue from evt/button.c
 extern struct k_msgq input_button;
 
+//new boot 3s timer
+void check_boot_long_press(void);
+
 #endif
