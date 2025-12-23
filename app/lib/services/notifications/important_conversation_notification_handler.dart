@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 /// Event data for important conversation completion
 class ImportantConversationEvent {
@@ -46,6 +47,9 @@ class ImportantConversationNotificationHandler {
 
     debugPrint('[ImportantConversationNotification] Important conversation completed: $conversationId');
     debugPrint('[ImportantConversationNotification] Navigate to: $navigateTo');
+
+    // Track notification received
+    MixpanelManager().importantConversationNotificationReceived(conversationId);
 
     // Broadcast the event so providers can update their state
     _importantConversationController.add(ImportantConversationEvent(
