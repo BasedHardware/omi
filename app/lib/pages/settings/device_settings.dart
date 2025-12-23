@@ -199,7 +199,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       ),
                     ),
                     _buildDoubleTapSetting(),
-                    _buildTripleTapSetting(), // <--- New Triple Tap Action
+                    _buildTripleTapSetting(),
                     _buildDimmingControl(),
                     _buildMicGainControl(),
                   ],
@@ -264,72 +264,32 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     });
   }
 
+  // REFACTORED: Specific Settings Wrappers  
   Widget _buildDoubleTapSetting() {
-    int currentAction = SharedPreferencesUtil().doubleTapAction;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade800, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Double Tap Action',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Choose what happens when you double tap the device button',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Option 0: End & Process Conversation
-          _buildDoubleTapOption(
-            icon: Icons.stop,
-            title: 'End & Process Conversation',
-            isSelected: currentAction == 0,
-            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 0),
-          ),
-          const SizedBox(height: 8),
-          // Option 1: Pause/Resume Recording
-          _buildDoubleTapOption(
-            icon: Icons.pause,
-            title: 'Pause/Resume Recording',
-            isSelected: currentAction == 1,
-            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 1),
-          ),
-          const SizedBox(height: 8),
-          // Option 2: Star Ongoing Conversation
-          _buildDoubleTapOption(
-            icon: FontAwesomeIcons.star,
-            title: 'Star Ongoing Conversation',
-            subtitle: 'Mark to star when conversation ends',
-            isSelected: currentAction == 2,
-            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 2),
-            iconColor: Colors.amber,
-          ),
-        ],
-      ),
+    return _buildTapActionSection(
+      title: 'Double Tap Action',
+      subtitle: 'Choose what happens when you double tap the device button',
+      currentAction: SharedPreferencesUtil().doubleTapAction,
+      onActionChanged: (val) => setState(() => SharedPreferencesUtil().doubleTapAction = val),
     );
   }
 
-  // New Triple Tap Widget
   Widget _buildTripleTapSetting() {
-    int currentAction = SharedPreferencesUtil().tripleTapAction;
+    return _buildTapActionSection(
+      title: 'Triple Tap Action',
+      subtitle: 'Choose what happens when you triple tap the device button',
+      currentAction: SharedPreferencesUtil().tripleTapAction,
+      onActionChanged: (val) => setState(() => SharedPreferencesUtil().tripleTapAction = val),
+    );
+  }
 
+  // REFACTORED: Generic Reusable Components
+  Widget _buildTapActionSection({
+    required String title,
+    required String subtitle,
+    required int currentAction,
+    required Function(int) onActionChanged,
+  }) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -341,50 +301,47 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Triple Tap Action',
-            style: TextStyle(
+          Text(
+            title,
+            style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
               color: Colors.white,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Choose what happens when you triple tap the device button',
-            style: TextStyle(
+          Text(
+            subtitle,
+            style: const TextStyle(
               fontSize: 12,
               color: Colors.grey,
               height: 1.3,
             ),
           ),
           const SizedBox(height: 16),
-          
-          // Option 0: End & Process Conversation
-          _buildDoubleTapOption(
+          // Option 0
+          _buildTapActionOption(
             icon: Icons.stop,
             title: 'End & Process Conversation',
             isSelected: currentAction == 0,
-            onTap: () => setState(() => SharedPreferencesUtil().tripleTapAction = 0),
+            onTap: () => onActionChanged(0),
           ),
           const SizedBox(height: 8),
-          
-          // Option 1: Pause/Resume Recording
-          _buildDoubleTapOption(
+          // Option 1
+          _buildTapActionOption(
             icon: Icons.pause,
             title: 'Pause/Resume Recording',
             isSelected: currentAction == 1,
-            onTap: () => setState(() => SharedPreferencesUtil().tripleTapAction = 1),
+            onTap: () => onActionChanged(1),
           ),
           const SizedBox(height: 8),
-          
-          // Option 2: Star Ongoing Conversation
-          _buildDoubleTapOption(
+          // Option 2
+          _buildTapActionOption(
             icon: FontAwesomeIcons.star,
             title: 'Star Ongoing Conversation',
             subtitle: 'Mark to star when conversation ends',
             isSelected: currentAction == 2,
-            onTap: () => setState(() => SharedPreferencesUtil().tripleTapAction = 2),
+            onTap: () => onActionChanged(2),
             iconColor: Colors.amber,
           ),
         ],
@@ -392,8 +349,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  // Reusing the option builder for both Double and Triple tap
-  Widget _buildDoubleTapOption({
+  Widget _buildTapActionOption({
     required IconData icon,
     required String title,
     String? subtitle,
@@ -455,6 +411,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
+  // Existing Dimming/Mic Logic
   Widget _buildDimmingControl() {
     if (!_isDimRatioLoaded) {
       return const Center(child: CircularProgressIndicator());

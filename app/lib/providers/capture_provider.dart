@@ -455,58 +455,37 @@ class CaptureProvider extends ChangeNotifier
       var buttonState = ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
       debugPrint("device button $buttonState");
 
-
-      // New Single Tap Logic (Start -> 10s Timer -> Process)
+      // 1. Single Tap Logic
       if (buttonState == 1) {
         debugPrint("Single tap detected");
-
-        // CASE A: Session is NOT active -> START IT
         if (_singleTapSession == null) {
           debugPrint("Starting Voice Command Session (10s window)");
-          
-          // 1. Initialize State
           _singleTapSession = DateTime.now();
-          _commandBytes = []; // Clear previous audio buffer
-
-          // 2. Feedback (Short Haptic)
+          _commandBytes = [];
           _playSpeakerHaptic(deviceId, 1); 
 
-          // 3. Start 10s Timer (The "Timeout")
           _singleTapTimer?.cancel();
           _singleTapTimer = Timer(const Duration(seconds: 10), () {
-            debugPrint("Voice Command Session Timed Out - Disregarding");
+            debugPrint("Voice Command Session Timed Out");
             _singleTapSession = null;
-            _commandBytes = []; // Throw away audio
-            _playSpeakerHaptic(deviceId, 1); // Optional: Different buzz for timeout?
+            _commandBytes = [];
+            _playSpeakerHaptic(deviceId, 1); 
           });
-        } 
-        
-        // CASE B: Session IS active -> PROCESS IT
-        else {
-          debugPrint("Confirming Voice Command - Processing...");
-          
-          // 1. Stop the Timer
+        } else {
+          debugPrint("Confirming Voice Command");
           _singleTapTimer?.cancel();
-
-          // 2. Process the Audio
           var data = List<List<int>>.from(_commandBytes);
           _processVoiceCommandBytes(deviceId, data);
-
-          // 3. Reset State
           _singleTapSession = null;
           _commandBytes = [];
-
-          // 4. Feedback (Longer Haptic for Success)
           _playSpeakerHaptic(deviceId, 2); 
         }
       }
 
-
-      // double tap
+      // 2. Double Tap Logic
       if (buttonState == 2) {
         debugPrint("Double tap detected");
 
-        // Guard: ignore if already processing a button event
         if (_isProcessingButtonEvent) {
           debugPrint("Double tap: already processing, ignoring");
           return;
@@ -515,49 +494,43 @@ class CaptureProvider extends ChangeNotifier
         int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
 
         if (doubleTapAction == 1) {
-          // Pause/resume recording
+          // Action: Toggle Recording
           debugPrint("Double tap: toggling pause/mute");
           _isProcessingButtonEvent = true;
-          if (_isPaused) {
-            resumeDeviceRecording().then((_) {
-              _isProcessingButtonEvent = false;
-            }).catchError((e) {
-              debugPrint("Error resuming device recording: $e");
-              _isProcessingButtonEvent = false;
-            });
-          } else {
-            pauseDeviceRecording().then((_) {
-              _isProcessingButtonEvent = false;
-            }).catchError((e) {
-              debugPrint("Error pausing device recording: $e");
-              _isProcessingButtonEvent = false;
-            });
-          }
-        } else if (doubleTapAction == 2) {
-          // Star ongoing conversation (doesn't end it)
+          Future<void> action = _isPaused ? resumeDeviceRecording() : pauseDeviceRecording();
+          action.catchError((e) {
+            debugPrint("Error toggling recording: $e");
+          }).whenComplete(() {
+            _isProcessingButtonEvent = false;
+          });
+        } 
+        else if (doubleTapAction == 2) {
+          // Action: Star Conversation
           debugPrint("Double tap: marking conversation for starring");
           if (!_starOngoingConversation) {
             markConversationForStarring();
-            // Haptic feedback to confirm
             HapticFeedback.mediumImpact();
           } else {
-            // Toggle off if already marked
             unmarkConversationForStarring();
             HapticFeedback.lightImpact();
           }
-        } else {
-          // End conversation and process (default)
+        } 
+        else {
+          // Action: End & Process (FIXED)
           debugPrint("Double tap: processing conversation");
-          forceProcessingCurrentConversation();
+          _isProcessingButtonEvent = true;
+          forceProcessingCurrentConversation().whenComplete(() {
+             _isProcessingButtonEvent = false;
+          });
         }
         return;
       }
 
-    // New Triple Tap Placeholder (Value 6)
-    if (buttonState == 6) {
-      debugPrint("Triple tap detected");
+      // 3. Triple Tap Logic
+      if (buttonState == 6) {
+        debugPrint("Triple tap detected");
 
-      if (_isProcessingButtonEvent) {
+        if (_isProcessingButtonEvent) {
              debugPrint("Triple tap: already processing, ignoring");
              return;
         }
@@ -565,40 +538,34 @@ class CaptureProvider extends ChangeNotifier
         int tripleTapAction = SharedPreferencesUtil().tripleTapAction;
       
         if (tripleTapAction == 1) {
-          // Pause/resume recording
+          // Action: Toggle Recording
           debugPrint("Triple tap: toggling pause/mute");
           _isProcessingButtonEvent = true;
-          if (_isPaused) {
-            resumeDeviceRecording().then((_) {
-              _isProcessingButtonEvent = false;
-            }).catchError((e) {
-              debugPrint("Error resuming device recording: $e");
-              _isProcessingButtonEvent = false;
-            });
-          } else {
-            pauseDeviceRecording().then((_) {
-              _isProcessingButtonEvent = false;
-            }).catchError((e) {
-              debugPrint("Error pausing device recording: $e");
-              _isProcessingButtonEvent = false;
-            });
-          }
-        } else if (tripleTapAction == 2) {
-          // Star ongoing conversation (doesn't end it)
+          Future<void> action = _isPaused ? resumeDeviceRecording() : pauseDeviceRecording();
+          action.catchError((e) {
+            debugPrint("Error toggling recording: $e");
+          }).whenComplete(() {
+            _isProcessingButtonEvent = false;
+          });
+        } 
+        else if (tripleTapAction == 2) {
+          // Action: Star Conversation
           debugPrint("Triple tap: marking conversation for starring");
           if (!_starOngoingConversation) {
             markConversationForStarring();
-            // Haptic feedback to confirm
             HapticFeedback.mediumImpact();
           } else {
-            // Toggle off if already marked
             unmarkConversationForStarring();
             HapticFeedback.lightImpact();
           }
-        } else {
-          // End conversation and process (default)
+        } 
+        else {
+          // Action: End & Process (FIXED)
           debugPrint("Triple tap: processing conversation");
-          forceProcessingCurrentConversation();
+          _isProcessingButtonEvent = true;
+          forceProcessingCurrentConversation().whenComplete(() {
+             _isProcessingButtonEvent = false;
+          });
         }
         return;
       }
@@ -1432,23 +1399,31 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation() async {
+Future<void> forceProcessingCurrentConversation() async {
     _resetStateVariables();
     conversationProvider!.addProcessingConversation(
       ServerConversation(
           id: '0', createdAt: DateTime.now(), structured: Structured('', ''), status: ConversationStatus.processing),
     );
-    processInProgressConversation().then((result) {
+
+    try {
+      // FIX: Use 'await' so we stay here until it finishes
+      var result = await processInProgressConversation();
+
       if (result == null || result.conversation == null) {
         conversationProvider!.removeProcessingConversation('0');
         return;
       }
+      
       conversationProvider!.removeProcessingConversation('0');
       result.conversation!.isNew = true;
-      _processConversationCreated(result.conversation, result.messages);
-    });
-
-    return;
+      await _processConversationCreated(result.conversation, result.messages);
+      
+    } catch (e) {
+      // Safety: If it crashes, remove the loading spinner so the UI doesn't freeze
+      conversationProvider!.removeProcessingConversation('0');
+      debugPrint("Error processing conversation: $e");
+    }
   }
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
