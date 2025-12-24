@@ -341,7 +341,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
-          ChangeNotifierProvider(create: (context) => MemoriesProvider()),
+          ChangeNotifierProxyProvider<ConnectivityProvider, MemoriesProvider>(
+            create: (context) => MemoriesProvider(),
+            update: (context, connectivity, previous) =>
+                (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
+          ),
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
