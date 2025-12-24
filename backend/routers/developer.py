@@ -100,7 +100,7 @@ class CleanerMemory(BaseModel):
     user_review: Optional[bool] = None
     manually_added: bool
     edited: bool
-    visibility: str
+    visibility: Optional[str] = 'private'
     scoring: Optional[str] = None
 
 
