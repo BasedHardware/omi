@@ -32,7 +32,7 @@ router = APIRouter()
 
 @router.get('/v3/speech-profile', tags=['v3'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return {'has_profile': get_user_has_speech_profile(uid) > 0}
+    return {'has_profile': get_user_has_speech_profile(uid, max_age_days=90)}
 
 
 @router.get('/v4/speech-profile', tags=['v3'])

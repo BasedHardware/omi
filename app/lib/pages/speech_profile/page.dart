@@ -143,7 +143,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                 builder: (c) => getDialog(
                   context,
                   () {
-                    provider.resetSegments();
+                    provider.close();
                     Navigator.pop(context);
                   },
                   () {},
