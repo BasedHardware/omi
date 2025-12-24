@@ -21,6 +21,9 @@ import 'package:permission_handler/permission_handler.dart';
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements IDeviceServiceSubsciption, ITransctiptSegmentSocketServiceListener {
+  // Special speaker ID for Omi question segments (must match backend OnboardingHandler.OMI_SPEAKER_ID)
+  static const String omiSpeakerId = 'omi';
+
   DeviceProvider? deviceProvider;
   bool? permissionEnabled;
   bool loading = false;
@@ -212,8 +215,13 @@ class SpeechProfileProvider extends ChangeNotifier
 
   _handleCompletion() async {
     if (uploadingProfile || profileCompleted) return;
-    String text = segments.map((e) => e.text).join(' ').trim();
-    int wordsCount = text.split(' ').length;
+    // Only count words from user segments, not Omi questions
+    String userText = segments
+        .where((e) => e.speaker != omiSpeakerId)
+        .map((e) => e.text)
+        .join(' ')
+        .trim();
+    int wordsCount = userText.split(' ').length;
     percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
     notifyListeners();
     if (percentageCompleted == 1) {
@@ -338,10 +346,13 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   _validateSingleSpeaker() {
-    int speakersCount = segments.map((e) => e.speaker).toSet().length;
+    // Filter out Omi question segments for speaker validation
+    final userSegments = segments.where((e) => e.speaker != omiSpeakerId).toList();
+    
+    int speakersCount = userSegments.map((e) => e.speaker).toSet().length;
     debugPrint('_validateSingleSpeaker speakers count: $speakersCount');
     if (speakersCount > 1) {
-      var speakerToWords = segments.fold<Map<int, int>>(
+      var speakerToWords = userSegments.fold<Map<int, int>>(
         {},
         (previousValue, element) {
           previousValue[element.speakerId] = (previousValue[element.speakerId] ?? 0) + element.text.split(' ').length;
@@ -349,7 +360,7 @@ class SpeechProfileProvider extends ChangeNotifier
         },
       );
       debugPrint('speakerToWords: $speakerToWords');
-      if (speakerToWords.values.every((element) => element / segments.length > 0.08)) {
+      if (speakerToWords.values.every((element) => element / userSegments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');
       }
     }
@@ -374,7 +385,12 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   void updateProgressMessage() {
-    text = segments.map((e) => e.text).join(' ').trim();
+    // Only show user's speech, not Omi questions
+    text = segments
+        .where((e) => e.speaker != omiSpeakerId)
+        .map((e) => e.text)
+        .join(' ')
+        .trim();
     int wordsCount = text.split(' ').length;
     message = 'Keep speaking until you get 100%.';
     if (wordsCount > 10) {
@@ -492,18 +508,28 @@ class SpeechProfileProvider extends ChangeNotifier
 
     debugPrint('onSegmentReceived: ${newSegments.length} new segments, existing: ${segments.length}');
 
-    if (segments.isEmpty) {
-      audioStorage.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
+    // Filter out Omi question segments for audio trimming calculation
+    final userSegments = newSegments.where((s) => s.speaker != omiSpeakerId).toList();
+
+    if (segments.isEmpty && userSegments.isNotEmpty) {
+      audioStorage.removeFramesRange(fromSecond: 0, toSecond: userSegments[0].start.toInt());
     }
-    streamStartedAtSecond ??= newSegments[0].start;
+    if (userSegments.isNotEmpty) {
+      streamStartedAtSecond ??= userSegments[0].start;
+    }
 
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
     segments.addAll(remainSegments);
 
-    // Validate single speaker
+    // Validate single speaker (exclude Omi segments)
     _validateSingleSpeaker();
 
-    text = segments.map((e) => e.text).join(' ').trim();
+    // Display only user's speech, not Omi's questions
+    text = segments
+        .where((e) => e.speaker != omiSpeakerId)
+        .map((e) => e.text)
+        .join(' ')
+        .trim();
     percentageCompleted = questionProgress;
 
     notifyInfo('SCROLL_DOWN');
