@@ -178,7 +178,7 @@ static ssize_t settings_device_name_write_handler(struct bt_conn *conn,
     memcpy(name, buf, len);
     name[len] = '\0';
 
-    LOG_INF("Received new device name: %s", name);
+    LOG_INF("Received new device name: %s", log_strdup(name));
 
     int err = app_settings_save_device_name(name, len);
     if (err) {

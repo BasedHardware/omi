@@ -700,6 +700,7 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
           title: const Text('Rename Device', style: TextStyle(color: Colors.white)),
           content: TextField(
             controller: controller,
+            maxLength: 20,
             style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               labelText: 'Device Name',
@@ -719,28 +720,46 @@ List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
               onPressed: () async {
                 newName = controller.text.trim();
                 if (newName.isNotEmpty) {
+                  // 1. Close the dialog immediately for better UX
                   Navigator.pop(dialogContext);
 
+                  // 2. Connect
                   var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+
+                  // CHECK 1: If user left the screen while connecting, stop here.
+                  if (!context.mounted) return;
+
                   if (connection != null) {
-                    // 1. Send Command to Firmware
-                    await connection.setDeviceName(newName);
+                    try {
+                      // 3. Send Command to Firmware
+                      await connection.setDeviceName(newName);
 
-                    // 2. Update Local Data
-                    BtDevice updatedDevice = BtDevice(
-                      id: device.id,
-                      name: newName,
-                      type: device.type,
-                      rssi: device.rssi,
-                    );
+                      // 4. Update Local Data
+                      BtDevice updatedDevice = BtDevice(
+                        id: device.id,
+                        name: newName,
+                        type: device.type,
+                        rssi: device.rssi,
+                      );
 
-                    await SharedPreferencesUtil().btDeviceSet(updatedDevice);
-                    SharedPreferencesUtil().deviceName = newName;
-                    provider.setConnectedDevice(updatedDevice);
+                      await SharedPreferencesUtil().btDeviceSet(updatedDevice);
+                      SharedPreferencesUtil().deviceName = newName;
+                      provider.setConnectedDevice(updatedDevice);
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Renamed to $newName')),
-                    );
+                      // CHECK 2: Vital check before using context after "await" operations
+                      if (!context.mounted) return;
+
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Renamed to $newName')),
+                      );
+                    } catch (e) {
+                      debugPrint("Rename failed: $e");
+                      // Safe check before showing error
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to rename device')),
+                      );
+                    }
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Device not connected')),

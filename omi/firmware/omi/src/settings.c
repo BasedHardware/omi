@@ -54,7 +54,7 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         rc = read_cb(cb_arg, device_name, len);
         if (rc >= 0) {
             device_name[rc] = '\0'; // Ensure null termination
-            LOG_INF("Loaded device_name: %s", device_name);
+            LOG_INF("Loaded device_name: %s", log_strdup(device_name));
             return 0;
         }
         return rc;
@@ -78,7 +78,7 @@ int app_settings_init(void)
         LOG_ERR("Failed to load settings (err %d)", err);
     }
 
-    LOG_INF("Settings initialized. Dim: %u, Gain: %u, Name: %s", dim_light_ratio, mic_gain, device_name);
+    LOG_INF("Settings initialized. Dim: %u, Gain: %u, Name: %s", dim_light_ratio, mic_gain, log_strdup(device_name));
     return err;
 }
 
@@ -129,7 +129,7 @@ int app_settings_save_device_name(const char *name, size_t len)
     if (err) {
         LOG_ERR("Failed to save device_name (err %d)", err);
     } else {
-        LOG_INF("Saved device_name: %s", device_name);
+        LOG_INF("Saved device_name: %s", log_strdup(device_name));
     }
     return err;
 }
