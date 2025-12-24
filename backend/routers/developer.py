@@ -95,6 +95,7 @@ class CleanerMemory(BaseModel):
     id: str
     content: str
     category: MemoryCategory
+    created_at: datetime
     updated_at: datetime
     reviewed: bool
     user_review: Optional[bool] = None
