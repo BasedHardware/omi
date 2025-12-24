@@ -110,7 +110,10 @@ class AppleRemindersService {
   }
 
   /// Add an action item to Apple Reminders with automatic permission handling
-  Future<AppleRemindersResult> addActionItem(String actionItemDescription) async {
+  Future<AppleRemindersResult> addActionItem(
+    String actionItemDescription, {
+    DateTime? dueDate,
+  }) async {
     if (!isAvailable) {
       return AppleRemindersResult.unsupported;
     }
@@ -128,6 +131,7 @@ class AppleRemindersService {
     final success = await addReminder(
       title: actionItemDescription,
       notes: 'From Omi',
+      dueDate: dueDate,
       listName: 'Reminders',
     );
 

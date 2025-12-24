@@ -29,10 +29,19 @@ export const useAuth = (): UseAuthReturn => {
         setLoading(false);
         setAuthError(null); // Clear any previous errors
       });
+      
+      // If no unsubscribe was returned, Firebase might not be configured
+      // Set loading to false after a short delay to allow the callback to fire
+      if (!unsubscribe || unsubscribe.toString().includes('no-op')) {
+        setTimeout(() => {
+          setLoading(false);
+          setUser(null);
+        }, 100);
+      }
     } catch (error) {
       const e = error as Error;
-      console.error('❌ Firebase auth initialization failed:', e.message);
-      setAuthError(e.message);
+      console.warn('⚠️  Firebase auth initialization failed (running without auth):', e.message);
+      setAuthError(null); // Don't show error if Firebase is not configured
       setLoading(false);
       // Don't crash the app - just set user to null and continue
       setUser(null);
