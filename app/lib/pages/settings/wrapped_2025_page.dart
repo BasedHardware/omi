@@ -155,7 +155,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         await Future.delayed(const Duration(milliseconds: 200));
       }
 
-      final image = await boundary.toImage(pixelRatio: 3.0);
+      final image = await boundary.toImage(pixelRatio: 1.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) return;
 

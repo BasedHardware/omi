@@ -1414,28 +1414,31 @@ class FinalCollageShareTemplate extends StatelessWidget {
   }
 
   Widget _buildPhrasesTile() {
-    return _buildTile(
-      title: 'TOP PHRASES',
-      color: WrappedColors.orange,
-      content: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: topPhrases.take(3).toList().asMap().entries.map((entry) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              '"${entry.value}"',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w600,
-                fontStyle: FontStyle.italic,
-                decoration: TextDecoration.none,
+    return SizedBox(
+      width: double.infinity,
+      child: _buildTile(
+        title: 'TOP PHRASES',
+        color: WrappedColors.orange,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: topPhrases.take(3).toList().asMap().entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '"${entry.value}"',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                  fontStyle: FontStyle.italic,
+                  decoration: TextDecoration.none,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
