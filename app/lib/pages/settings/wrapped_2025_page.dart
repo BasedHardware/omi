@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/http/api/wrapped.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -53,14 +54,51 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   @override
   void initState() {
     super.initState();
+    MixpanelManager().wrappedPageOpened();
     _loadWrappedStatus();
+    _pageController.addListener(_onPageChanged);
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _pageController.removeListener(_onPageChanged);
     _pageController.dispose();
     super.dispose();
+  }
+
+  void _onPageChanged() {
+    if (_pageController.page != null) {
+      final page = _pageController.page!.round();
+      if (page != _currentPage) {
+        setState(() => _currentPage = page);
+        _trackCardView(page);
+      }
+    }
+  }
+
+  void _trackCardView(int page) {
+    final cardNames = [
+      'Intro',
+      'Year in Numbers',
+      'Top Categories',
+      'Actions',
+      'Memorable Days',
+      'Best Moments',
+      'My Buddies',
+      'Obsessions',
+      'Movie Recommendations',
+      'Biggest Struggle',
+      'Biggest Win',
+      'Top Phrases',
+      'Summary Collage',
+    ];
+    if (page >= 0 && page < cardNames.length) {
+      MixpanelManager().wrappedCardViewed(
+        cardName: cardNames[page],
+        cardIndex: page,
+      );
+    }
   }
 
   Future<void> _loadWrappedStatus() async {
@@ -102,12 +140,27 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
         if (_status != WrappedStatus.processing) {
           timer.cancel();
+          if (_status == WrappedStatus.done && _result != null) {
+            final totalHours = (_result?['total_time_hours'] ?? 0.0) as num;
+            final totalMinutes = (totalHours * 60).toInt();
+            final totalConvs = _result?['total_conversations'] ?? 0;
+            final daysActive = _result?['days_active'] ?? 0;
+            MixpanelManager().wrappedGenerationCompleted(
+              totalConversations: totalConvs,
+              totalMinutes: totalMinutes,
+              daysActive: daysActive,
+            );
+          } else if (_status == WrappedStatus.error) {
+            MixpanelManager().wrappedGenerationFailed(error: _error);
+          }
         }
       }
     });
   }
 
   Future<void> _generateWrapped() async {
+    MixpanelManager().wrappedGenerationStarted();
+
     setState(() {
       _status = WrappedStatus.processing;
       _progress = {'step': 'Starting...', 'pct': 0.0};
@@ -124,6 +177,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         _startPolling();
       }
     } else {
+      MixpanelManager().wrappedGenerationFailed(error: 'Failed to start generation');
       setState(() {
         _status = WrappedStatus.error;
         _error = 'Failed to start generation. Please try again.';
@@ -133,6 +187,31 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
   /// Share a template by rendering it offstage, capturing, and sharing
   Future<void> _shareTemplate(Widget template, String filename) async {
+    // Map filename to card name and index
+    final Map<String, Map<String, dynamic>> filenameToCard = {
+      'omi_wrapped_stats': {'name': 'Year in Numbers', 'index': 1},
+      'omi_wrapped_categories': {'name': 'Top Categories', 'index': 2},
+      'omi_wrapped_actions': {'name': 'Actions', 'index': 3},
+      'omi_wrapped_days': {'name': 'Memorable Days', 'index': 4},
+      'omi_wrapped_moments': {'name': 'Best Moments', 'index': 5},
+      'omi_wrapped_buddies': {'name': 'My Buddies', 'index': 6},
+      'omi_wrapped_obsessions': {'name': 'Obsessions', 'index': 7},
+      'omi_wrapped_movies': {'name': 'Movie Recommendations', 'index': 8},
+      'omi_wrapped_struggle': {'name': 'Biggest Struggle', 'index': 9},
+      'omi_wrapped_win': {'name': 'Biggest Win', 'index': 10},
+      'omi_wrapped_phrases': {'name': 'Top Phrases', 'index': 11},
+      'omi_wrapped_2025': {'name': 'Summary Collage', 'index': 12},
+    };
+
+    final cardInfo = filenameToCard[filename];
+    final cardName = cardInfo?['name'] ?? filename;
+    final cardIndex = cardInfo?['index'] ?? -1;
+
+    MixpanelManager().wrappedShareButtonClicked(
+      cardName: cardName,
+      cardIndex: cardIndex,
+    );
+
     try {
       HapticFeedback.mediumImpact();
 
@@ -147,6 +226,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       final boundary = _shareTemplateKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         debugPrint('Share template boundary is null for $filename');
+        MixpanelManager().wrappedShareFailed(
+          cardName: cardName,
+          cardIndex: cardIndex,
+          error: 'Boundary is null',
+        );
         return;
       }
 
@@ -157,7 +241,14 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
 
       final image = await boundary.toImage(pixelRatio: 1.5);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return;
+      if (byteData == null) {
+        MixpanelManager().wrappedShareFailed(
+          cardName: cardName,
+          cardIndex: cardIndex,
+          error: 'Byte data is null',
+        );
+        return;
+      }
 
       final bytes = byteData.buffer.asUint8List();
 
@@ -174,6 +265,12 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
         sharePositionOrigin: sharePositionOrigin,
       );
 
+      MixpanelManager().wrappedSharedSuccessfully(
+        cardName: cardName,
+        cardIndex: cardIndex,
+        fileSizeBytes: bytes.length,
+      );
+
       // Clear the template after sharing
       if (mounted) {
         setState(() {
@@ -182,6 +279,11 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
       }
     } catch (e) {
       debugPrint('Error sharing $filename: $e');
+      MixpanelManager().wrappedShareFailed(
+        cardName: cardName,
+        cardIndex: cardIndex,
+        error: e.toString(),
+      );
       if (mounted) {
         setState(() {
           _currentShareTemplate = null;
