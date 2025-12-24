@@ -1,4 +1,6 @@
 import asyncio
+import time
+import uuid
 from typing import Callable, Dict, List, Optional
 
 from utils.llm.clients import llm_mini
@@ -16,9 +18,13 @@ ONBOARDING_QUESTIONS = [
 class OnboardingHandler:
     """Handles onboarding question flow via websocket"""
 
-    def __init__(self, uid: str, send_message: Callable):
+    # Special speaker ID for Omi question segments (use 99 to avoid conflicts with real speakers)
+    OMI_SPEAKER_ID = 99
+
+    def __init__(self, uid: str, send_message: Callable, stream_transcript: Optional[Callable] = None):
         self.uid = uid
         self.send_message = send_message
+        self.stream_transcript = stream_transcript  # Callback to inject segments into transcript stream
         self.questions = ONBOARDING_QUESTIONS.copy()
         self.current_question_index = 0
         self.answers: List[Dict] = []
@@ -26,6 +32,8 @@ class OnboardingHandler:
         self.silence_timer: Optional[asyncio.Task] = None
         self.is_checking_answer = False
         self.completed = False
+        self.start_time: Optional[float] = None  # Track when onboarding started
+        self.last_segment_end: float = 0.0  # Track end time for question segment timing
 
     @property
     def current_question(self) -> Optional[Dict]:
@@ -33,13 +41,55 @@ class OnboardingHandler:
             return self.questions[self.current_question_index]
         return None
 
+    def _get_elapsed_time(self) -> float:
+        """Get elapsed time since onboarding started."""
+        if self.start_time is None:
+            self.start_time = time.time()
+        return time.time() - self.start_time
+
+    def _create_question_segment(self) -> Optional[Dict]:
+        """Create a transcript segment for the current question."""
+        if not self.current_question:
+            return None
+
+        # Question segment starts after last segment ended, with small gap
+        start_time = self.last_segment_end + 0.5 if self.last_segment_end > 0 else 0.0
+        # Estimate end time based on question length (rough: 150 words per minute)
+        words = len(self.current_question['question'].split())
+        duration = max(1.0, words / 2.5)  # At least 1 second
+        end_time = start_time + duration
+
+        return {
+            'id': str(uuid.uuid4()),
+            'text': self.current_question['question'],
+            'start': start_time,
+            'end': end_time,
+            'speaker': f'SPEAKER_{self.OMI_SPEAKER_ID}',  # Use consistent format with STT output
+            'speaker_id': self.OMI_SPEAKER_ID,
+            'is_user': False,
+            'person_id': None,
+        }
+
+    def update_segment_timing(self, segments: List[dict]):
+        """Update timing tracking based on received segments."""
+        for segment in segments:
+            end_time = segment.get('end', 0)
+            if end_time > self.last_segment_end:
+                self.last_segment_end = end_time
+
     def on_segments_received(self, segments: List[dict]):
         """Called when new transcript segments are received"""
         if self.completed or self.is_checking_answer:
             return
 
-        # Accumulate transcript for current question
-        new_text = ' '.join(s.get('text', '') for s in segments).strip()
+        # Update timing tracking
+        self.update_segment_timing(segments)
+
+        # Accumulate transcript for current question (ignore Omi segments)
+        new_text = ' '.join(
+            s.get('text', '') for s in segments
+            if s.get('speaker_id') != self.OMI_SPEAKER_ID
+        ).strip()
         if new_text:
             if self.current_transcript:
                 self.current_transcript += ' ' + new_text
@@ -174,14 +224,22 @@ Reply with only "yes" or "no"."""
         await self.send_message(event)
 
     async def send_current_question(self):
-        """Send current question to client"""
+        """Send current question to client and inject as transcript segment"""
         if self.current_question:
+            # Create and inject question segment into transcript stream
+            question_segment = self._create_question_segment()
+            if question_segment and self.stream_transcript:
+                self.stream_transcript([question_segment])
+                # Update last_segment_end to account for the question segment
+                self.last_segment_end = question_segment['end']
+
             await self._send_event(
                 'onboarding_question',
                 {
                     'question': self.current_question['question'],
                     'question_index': self.current_question_index,
                     'total_questions': len(self.questions),
+                    'question_segment_id': question_segment['id'] if question_segment else None,
                 },
             )
 

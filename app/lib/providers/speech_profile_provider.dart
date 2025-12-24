@@ -16,14 +16,12 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/constants.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements IDeviceServiceSubsciption, ITransctiptSegmentSocketServiceListener {
-  // Special speaker ID for Omi question segments (must match backend OnboardingHandler.OMI_SPEAKER_ID)
-  static const String omiSpeakerId = 'omi';
-
   DeviceProvider? deviceProvider;
   bool? permissionEnabled;
   bool loading = false;
@@ -217,7 +215,7 @@ class SpeechProfileProvider extends ChangeNotifier
     if (uploadingProfile || profileCompleted) return;
     // Only count words from user segments, not Omi questions
     String userText = segments
-        .where((e) => e.speaker != omiSpeakerId)
+        .where((e) => e.speakerId != omiSpeakerId)
         .map((e) => e.text)
         .join(' ')
         .trim();
@@ -347,7 +345,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
   _validateSingleSpeaker() {
     // Filter out Omi question segments for speaker validation
-    final userSegments = segments.where((e) => e.speaker != omiSpeakerId).toList();
+    final userSegments = segments.where((e) => e.speakerId != omiSpeakerId).toList();
     
     int speakersCount = userSegments.map((e) => e.speaker).toSet().length;
     debugPrint('_validateSingleSpeaker speakers count: $speakersCount');
@@ -387,7 +385,7 @@ class SpeechProfileProvider extends ChangeNotifier
   void updateProgressMessage() {
     // Only show user's speech, not Omi questions
     text = segments
-        .where((e) => e.speaker != omiSpeakerId)
+        .where((e) => e.speakerId != omiSpeakerId)
         .map((e) => e.text)
         .join(' ')
         .trim();
@@ -509,7 +507,7 @@ class SpeechProfileProvider extends ChangeNotifier
     debugPrint('onSegmentReceived: ${newSegments.length} new segments, existing: ${segments.length}');
 
     // Filter out Omi question segments for audio trimming calculation
-    final userSegments = newSegments.where((s) => s.speaker != omiSpeakerId).toList();
+    final userSegments = newSegments.where((s) => s.speakerId != omiSpeakerId).toList();
 
     if (segments.isEmpty && userSegments.isNotEmpty) {
       audioStorage.removeFramesRange(fromSecond: 0, toSecond: userSegments[0].start.toInt());
@@ -526,7 +524,7 @@ class SpeechProfileProvider extends ChangeNotifier
 
     // Display only user's speech, not Omi's questions
     text = segments
-        .where((e) => e.speaker != omiSpeakerId)
+        .where((e) => e.speakerId != omiSpeakerId)
         .map((e) => e.text)
         .join(' ')
         .trim();

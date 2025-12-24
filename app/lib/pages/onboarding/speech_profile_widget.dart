@@ -132,7 +132,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   builder: (c) => getDialog(
                     context,
                     () {
-                      provider.resetSegments();
+                      provider.close();
                       Navigator.pop(context);
                     },
                     () {},

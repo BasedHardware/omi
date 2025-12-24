@@ -249,6 +249,10 @@ async def _listen(
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+
+    # Initialize segment buffers early (before onboarding handler needs them)
+    realtime_segment_buffers = []
+    realtime_photo_buffers: list[ConversationPhoto] = []
     
     # Onboarding handler
     onboarding_handler: Optional[OnboardingHandler] = None
@@ -259,7 +263,13 @@ async def _listen(
                     await websocket.send_json(event)
                 except Exception as e:
                     print(f"Error sending onboarding event: {e}", uid, session_id)
-        onboarding_handler = OnboardingHandler(uid, send_onboarding_event)
+
+        def onboarding_stream_transcript(segments: List[dict]):
+            """Inject onboarding question segments into the transcript stream."""
+            nonlocal realtime_segment_buffers
+            realtime_segment_buffers.extend(segments)
+
+        onboarding_handler = OnboardingHandler(uid, send_onboarding_event, onboarding_stream_transcript)
         asyncio.create_task(onboarding_handler.send_current_question())
     
     locked_conversation_ids: Set[str] = set()
@@ -678,9 +688,6 @@ async def _listen(
     deepgram_socket = None
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
-
-    realtime_segment_buffers = []
-    realtime_photo_buffers: list[ConversationPhoto] = []
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
@@ -1245,10 +1252,13 @@ async def _listen(
                         segment["end"] -= seconds_to_trim
                         segments_to_process[i] = segment
 
-                newly_processed_segments = [
-                    TranscriptSegment(**s, speech_profile_processed=speech_profile_complete.is_set())
-                    for s in segments_to_process
-                ]
+                newly_processed_segments = []
+                for s in segments_to_process:
+                    segment = TranscriptSegment(**s, speech_profile_processed=speech_profile_complete.is_set())
+                    # In onboarding mode, force is_user=True for non-Omi segments (user's answers)
+                    if onboarding_mode and s.get('speaker_id') != OnboardingHandler.OMI_SPEAKER_ID:
+                        segment.is_user = True
+                    newly_processed_segments.append(segment)
                 words_transcribed = len(" ".join([seg.text for seg in newly_processed_segments]).split())
                 if words_transcribed > 0:
                     words_transcribed_since_last_record += words_transcribed
