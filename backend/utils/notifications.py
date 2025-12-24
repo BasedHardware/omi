@@ -371,7 +371,51 @@ def send_merge_completed_message(user_id: str, merged_conversation_id: str, remo
             response = messaging.send(message)
             print(f'Merge completed message sent to device: {response}')
         except Exception as e:
-            _handle_send_error(e, token)
+            print(f'FCM send error for merge completed: {e}')
+
+
+def send_important_conversation_message(user_id: str, conversation_id: str):
+    """
+    Sends a data-only FCM message when a long conversation (>30 min) completes.
+
+    The app receives this and:
+    - Shows a local notification: "You just had an important convo, click to share summary"
+    - On tap: navigates to conversation detail with share sheet auto-open
+
+    Args:
+        user_id: The user's Firebase UID
+        conversation_id: ID of the completed conversation
+    """
+    tokens = notification_db.get_all_tokens(user_id)
+    if not tokens:
+        print(f"No notification tokens found for user {user_id} for important conversation notification")
+        return
+
+    # FCM data values must be strings
+    data = {
+        'type': 'important_conversation',
+        'conversation_id': conversation_id,
+        'navigate_to': f'/conversation/{conversation_id}?share=1',
+    }
+
+    for token in tokens:
+        message = messaging.Message(
+            data=data,
+            token=token,
+            android=messaging.AndroidConfig(priority='high'),
+            apns=messaging.APNSConfig(
+                headers={
+                    'apns-priority': '10',
+                },
+                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
+            ),
+        )
+
+        try:
+            response = messaging.send(message)
+            print(f'Important conversation message sent to device: {response}')
+        except Exception as e:
+            print(f'FCM send error for important conversation: {e}')
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):

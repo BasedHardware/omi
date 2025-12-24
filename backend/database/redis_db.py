@@ -694,6 +694,21 @@ def has_silent_user_notification_been_sent(uid: str) -> bool:
 
 
 # ******************************************************
+# ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
+# ******************************************************
+
+
+def set_important_conversation_notification_sent(uid: str, conversation_id: str):
+    """Mark that important conversation notification was sent for this conversation (no expiry - one-time per conversation)"""
+    r.set(f'users:{uid}:important_conv_notif:{conversation_id}', '1')
+
+
+def has_important_conversation_notification_been_sent(uid: str, conversation_id: str) -> bool:
+    """Check if important conversation notification was already sent for this conversation"""
+    return r.exists(f'users:{uid}:important_conv_notif:{conversation_id}')
+
+
+# ******************************************************
 # ******** CONVERSATION SUMMARY APP IDS ****************
 # ******************************************************
 
