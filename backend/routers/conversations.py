@@ -655,7 +655,8 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     if not full_transcript:
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
-    summary = generate_summary_with_prompt(full_transcript, request.prompt)
+    # Pass language code from conversation to match app behavior
+    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
 
     return {"summary": summary}
 

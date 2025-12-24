@@ -949,14 +949,15 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
         return None
 
 
-def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
-    prompt = f"""
+def generate_summary_with_prompt(conversation_text: str, prompt: str, language_code: str = 'en') -> str:
+    # Build prompt matching the app processing format (without forced "be concise" constraint)
+    full_prompt = f"""
     Your task is: {prompt}
+
+    Language: The conversation language is {language_code}. Use the same language {language_code} for your response.
 
     The conversation is:
     {conversation_text}
-
-    You must output only the summary, no other text. Make sure to be concise and clear.
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = llm_medium_experiment.invoke(full_prompt)
     return response.content
