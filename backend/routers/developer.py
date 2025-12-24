@@ -103,6 +103,7 @@ class CleanerMemory(BaseModel):
     edited: bool
     visibility: Optional[str] = 'private'
     scoring: Optional[str] = None
+    tags: List[str]
 
 
 class CreateMemoryRequest(BaseModel):
