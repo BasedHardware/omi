@@ -18,6 +18,156 @@ from models.conversation import (
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
 
+# =============================================
+#            FOLDER ASSIGNMENT
+# =============================================
+
+
+class FolderAssignment(BaseModel):
+    """Model for AI folder assignment response."""
+
+    folder_id: str = Field(description="The ID of the best matching folder for this conversation")
+    confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Confidence score for folder assignment (0.0 to 1.0)"
+    )
+    reasoning: str = Field(default="", description="Brief explanation of why this folder was chosen")
+
+
+def build_folders_context(folders: List[dict]) -> str:
+    """
+    Build context string for LLM folder assignment using natural language descriptions.
+
+    Each folder's description explains what conversations belong in it,
+    allowing the AI to match based on intent rather than keywords.
+    """
+    if not folders:
+        return "No folders available. Use default assignment."
+
+    lines = []
+    for folder in folders:
+        folder_id = folder.get('id', '')
+        name = folder.get('name', '')
+        description = folder.get('description', '')
+        is_default = folder.get('is_default', False)
+
+        # Format: folder_id | "Folder Name" → Description
+        if description:
+            line = f'- {folder_id} | "{name}" → {description}'
+        else:
+            line = f'- {folder_id} | "{name}"'
+
+        if is_default:
+            line += " (DEFAULT - use when no other folder matches)"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def assign_conversation_to_folder(
+    transcript: str,
+    title: str,
+    overview: str,
+    category: str,
+    user_folders: List[dict],
+) -> Tuple[Optional[str], float, str]:
+    """
+    Use AI to assign a conversation to the most appropriate folder.
+
+    Args:
+        transcript: The conversation transcript
+        title: The conversation title
+        overview: The conversation overview/summary
+        category: The conversation category
+        user_folders: List of user's folders with id, name, description, is_default
+
+    Returns:
+        Tuple of (folder_id, confidence, reasoning)
+        Returns (None, 0.0, reason) if assignment fails or confidence is too low
+    """
+    if not user_folders:
+        return None, 0.0, "No folders available"
+
+    folders_context = build_folders_context(user_folders)
+
+    # Find default folder for fallback
+    default_folder = next((f for f in user_folders if f.get('is_default')), None)
+    default_folder_id = default_folder.get('id') if default_folder else None
+
+    # Build conversation context
+    conversation_context = f"""
+Title: {title}
+Category: {category}
+Overview: {overview}
+
+Transcript excerpt (first 500 chars):
+{transcript[:500] if transcript else 'No transcript'}
+""".strip()
+
+    prompt_text = '''You are an expert at organizing conversations into folders.
+
+The user has organized their folders with descriptions that explain what belongs in each:
+
+{folders_context}
+
+Based on the **primary topic and intent** of the conversation below, choose the folder whose description best matches.
+
+CONVERSATION:
+{conversation_context}
+
+DECISION PROCESS:
+1. What is the main subject being discussed?
+2. Which folder description aligns best with this subject?
+3. If multiple folders could apply, choose based on the **primary purpose** of the conversation
+4. If no folder clearly matches (confidence < 0.5), use the DEFAULT folder
+
+Example reasoning:
+- A conversation about "meeting with trainer to plan an AI fitness app" could match both Health and Technology
+- Since the primary purpose is building an app, Technology is the better match
+
+Provide:
+- folder_id: The ID of the best matching folder (from the list above)
+- confidence: A score from 0.0 to 1.0 indicating match strength
+  * 0.8-1.0: Clear match - conversation clearly fits the folder description
+  * 0.5-0.8: Reasonable match - conversation relates to the folder description
+  * Below 0.5: Weak match - use the DEFAULT folder instead
+- reasoning: Brief explanation of your choice
+
+{format_instructions}'''
+
+    folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_mini | folder_parser
+
+    try:
+        response: FolderAssignment = chain.invoke(
+            {
+                'folders_context': folders_context,
+                'conversation_context': conversation_context,
+                'format_instructions': folder_parser.get_format_instructions(),
+            }
+        )
+
+        # Validate the folder_id exists
+        valid_folder_ids = {f.get('id') for f in user_folders}
+        if response.folder_id not in valid_folder_ids:
+            return default_folder_id, 0.3, f"Invalid folder ID returned, using default"
+
+        # If confidence is too low, use default folder
+        if response.confidence < 0.5 and default_folder_id:
+            return (
+                default_folder_id,
+                response.confidence,
+                f"Low confidence ({response.confidence:.2f}), using default folder",
+            )
+
+        return response.folder_id, response.confidence, response.reasoning
+
+    except Exception as e:
+        print(f'Error assigning conversation to folder: {e}')
+        return default_folder_id, 0.0, f"Error: {str(e)}"
+
+
 class DiscardConversation(BaseModel):
     discard: bool = Field(description="If the conversation should be discarded or not")
 

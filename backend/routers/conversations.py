@@ -111,9 +111,10 @@ def get_conversations(
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    print('get_conversations', uid, limit, offset, statuses)
+    print('get_conversations', uid, limit, offset, statuses, folder_id)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
@@ -126,6 +127,7 @@ def get_conversations(
         statuses=statuses.split(",") if len(statuses) > 0 else [],
         start_date=start_date,
         end_date=end_date,
+        folder_id=folder_id,
     )
 
     for conv in conversations:

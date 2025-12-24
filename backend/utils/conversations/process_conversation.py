@@ -16,6 +16,7 @@ import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 import database.action_items as action_items_db
+import database.folders as folders_db
 import database.calendar_meetings as calendar_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
@@ -41,6 +42,7 @@ from utils.llm.conversation_processing import (
     select_best_app_for_conversation,
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
+    assign_conversation_to_folder,
 )
 from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
@@ -490,6 +492,36 @@ def process_conversation(
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
+    # AI-based folder assignment
+    assigned_folder_id = None
+    if not discarded and not is_reprocess and not conversation.folder_id:
+        try:
+            # Get user's folders
+            user_folders = folders_db.get_folders(uid)
+            if not user_folders:
+                user_folders = folders_db.initialize_system_folders(uid)
+
+            if user_folders and conversation.structured:
+                folder_id, confidence, reasoning = assign_conversation_to_folder(
+                    transcript=(
+                        conversation.get_transcript(False, people=people)
+                        if hasattr(conversation, 'get_transcript')
+                        else ''
+                    ),
+                    title=conversation.structured.title or '',
+                    overview=conversation.structured.overview or '',
+                    category=conversation.structured.category.value if conversation.structured.category else 'other',
+                    user_folders=user_folders,
+                )
+                if folder_id:
+                    conversation.folder_id = folder_id
+                    assigned_folder_id = folder_id
+                    print(
+                        f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
+                    )
+        except Exception as e:
+            print(f"Error during folder assignment for conversation {conversation.id}: {e}")
+
     if not discarded:
         # Analytics tracking
         insights_gained = 0
@@ -551,6 +583,10 @@ def process_conversation(
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
+
+    # Update folder conversation count after conversation is saved
+    if assigned_folder_id:
+        folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
     if not is_reprocess:
         threading.Thread(

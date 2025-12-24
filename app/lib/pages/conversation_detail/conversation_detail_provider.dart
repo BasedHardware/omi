@@ -485,6 +485,27 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  Future<void> refreshConversation() async {
+    try {
+      final updatedConversation = await getConversationById(conversation.id);
+      if (updatedConversation != null) {
+        _cachedConversation = updatedConversation;
+        conversationProvider?.updateConversation(updatedConversation);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error refreshing conversation: $e');
+    }
+  }
+
+  void updateFolderIdLocally(String? newFolderId) {
+    if (_cachedConversation != null) {
+      _cachedConversation!.folderId = newFolderId;
+      conversationProvider?.updateConversation(_cachedConversation!);
+      notifyListeners();
+    }
+  }
+
   String? _preferredSummarizationAppId;
 
   String? get preferredSummarizationAppId => _preferredSummarizationAppId;
