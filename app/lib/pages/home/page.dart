@@ -19,6 +19,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -305,6 +306,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               builder: (context) => const MemoriesPage(),
             ),
           );
+          break;
+        case "wrapped":
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const Wrapped2025Page(),
+                ),
+              );
+            }
+          });
           break;
         default:
       }

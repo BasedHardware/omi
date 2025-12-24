@@ -1397,4 +1397,82 @@ class MixpanelManager {
   void createFolderButtonClicked() {
     track('Create Folder Button Clicked');
   }
+
+  // ============================================================================
+  // WRAPPED 2025 TRACKING
+  // ============================================================================
+
+  void wrappedPageOpened() {
+    track('Wrapped Page Opened');
+  }
+
+  void wrappedGenerationStarted() {
+    track('Wrapped Generation Started');
+    startTimingEvent('Wrapped Generation Completed');
+  }
+
+  void wrappedGenerationCompleted({
+    required int totalConversations,
+    required int totalMinutes,
+    required int daysActive,
+  }) {
+    track('Wrapped Generation Completed', properties: {
+      'total_conversations': totalConversations,
+      'total_minutes': totalMinutes,
+      'days_active': daysActive,
+    });
+  }
+
+  void wrappedGenerationFailed({String? error}) {
+    track('Wrapped Generation Failed', properties: {
+      if (error != null) 'error': error,
+    });
+  }
+
+  void wrappedCardViewed({
+    required String cardName,
+    required int cardIndex,
+  }) {
+    track('Wrapped Card Viewed', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+    });
+  }
+
+  void wrappedShareButtonClicked({
+    required String cardName,
+    required int cardIndex,
+  }) {
+    track('Wrapped Share Button Clicked', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+    });
+    startTimingEvent('Wrapped Shared Successfully');
+  }
+
+  void wrappedSharedSuccessfully({
+    required String cardName,
+    required int cardIndex,
+    int? fileSizeBytes,
+  }) {
+    track('Wrapped Shared Successfully', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+      if (fileSizeBytes != null) 'file_size_bytes': fileSizeBytes,
+      if (fileSizeBytes != null) 'file_size_kb': (fileSizeBytes / 1024).round(),
+      if (fileSizeBytes != null) 'file_size_mb': (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2),
+    });
+  }
+
+  void wrappedShareFailed({
+    required String cardName,
+    required int cardIndex,
+    String? error,
+  }) {
+    track('Wrapped Share Failed', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+      if (error != null) 'error': error,
+    });
+  }
 }
