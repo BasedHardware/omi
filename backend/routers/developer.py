@@ -96,7 +96,7 @@ class CleanerMemory(BaseModel):
     content: str
     category: MemoryCategory
     visibility: Optional[str] = 'private'
-    tags: List[str]
+    tags: List[str] = []
     created_at: datetime
     updated_at: datetime
     manually_added: bool
