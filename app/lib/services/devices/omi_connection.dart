@@ -556,6 +556,7 @@ class OmiDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(settingsServiceUuid, settingsDeviceNameCharacteristicUuid, bytes);
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error setting device name: $e');
+      rethrow;
     }
   }
 
