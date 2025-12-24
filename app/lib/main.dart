@@ -40,16 +40,19 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -93,6 +96,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await ActionItemNotificationHandler.handleUpdateMessage(data, channelKey);
   } else if (messageType == 'action_item_delete') {
     await ActionItemNotificationHandler.handleDeletionMessage(data);
+  } else if (messageType == 'merge_completed') {
+    await MergeNotificationHandler.handleMergeCompleted(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
   }
 }
 
@@ -338,6 +347,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
           ChangeNotifierProvider(create: (context) => IntegrationProvider()),
+          ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
+          ChangeNotifierProvider(create: (context) => FolderProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(

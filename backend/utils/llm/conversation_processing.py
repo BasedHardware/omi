@@ -6,8 +6,166 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from models.app import App
-from models.conversation import Structured, Conversation, ActionItem, Event, ConversationPhoto, ActionItemsExtraction
+from models.conversation import (
+    CalendarMeetingContext,
+    Structured,
+    Conversation,
+    ActionItem,
+    Event,
+    ConversationPhoto,
+    ActionItemsExtraction,
+)
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
+
+
+# =============================================
+#            FOLDER ASSIGNMENT
+# =============================================
+
+
+class FolderAssignment(BaseModel):
+    """Model for AI folder assignment response."""
+
+    folder_id: str = Field(description="The ID of the best matching folder for this conversation")
+    confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Confidence score for folder assignment (0.0 to 1.0)"
+    )
+    reasoning: str = Field(default="", description="Brief explanation of why this folder was chosen")
+
+
+def build_folders_context(folders: List[dict]) -> str:
+    """
+    Build context string for LLM folder assignment using natural language descriptions.
+
+    Each folder's description explains what conversations belong in it,
+    allowing the AI to match based on intent rather than keywords.
+    """
+    if not folders:
+        return "No folders available. Use default assignment."
+
+    lines = []
+    for folder in folders:
+        folder_id = folder.get('id', '')
+        name = folder.get('name', '')
+        description = folder.get('description', '')
+        is_default = folder.get('is_default', False)
+
+        # Format: folder_id | "Folder Name" → Description
+        if description:
+            line = f'- {folder_id} | "{name}" → {description}'
+        else:
+            line = f'- {folder_id} | "{name}"'
+
+        if is_default:
+            line += " (DEFAULT - use when no other folder matches)"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def assign_conversation_to_folder(
+    transcript: str,
+    title: str,
+    overview: str,
+    category: str,
+    user_folders: List[dict],
+) -> Tuple[Optional[str], float, str]:
+    """
+    Use AI to assign a conversation to the most appropriate folder.
+
+    Args:
+        transcript: The conversation transcript
+        title: The conversation title
+        overview: The conversation overview/summary
+        category: The conversation category
+        user_folders: List of user's folders with id, name, description, is_default
+
+    Returns:
+        Tuple of (folder_id, confidence, reasoning)
+        Returns (None, 0.0, reason) if assignment fails or confidence is too low
+    """
+    if not user_folders:
+        return None, 0.0, "No folders available"
+
+    folders_context = build_folders_context(user_folders)
+
+    # Find default folder for fallback
+    default_folder = next((f for f in user_folders if f.get('is_default')), None)
+    default_folder_id = default_folder.get('id') if default_folder else None
+
+    # Build conversation context
+    conversation_context = f"""
+Title: {title}
+Category: {category}
+Overview: {overview}
+
+Transcript excerpt (first 500 chars):
+{transcript[:500] if transcript else 'No transcript'}
+""".strip()
+
+    prompt_text = '''You are an expert at organizing conversations into folders.
+
+The user has organized their folders with descriptions that explain what belongs in each:
+
+{folders_context}
+
+Based on the **primary topic and intent** of the conversation below, choose the folder whose description best matches.
+
+CONVERSATION:
+{conversation_context}
+
+DECISION PROCESS:
+1. What is the main subject being discussed?
+2. Which folder description aligns best with this subject?
+3. If multiple folders could apply, choose based on the **primary purpose** of the conversation
+4. If no folder clearly matches (confidence < 0.5), use the DEFAULT folder
+
+Example reasoning:
+- A conversation about "meeting with trainer to plan an AI fitness app" could match both Health and Technology
+- Since the primary purpose is building an app, Technology is the better match
+
+Provide:
+- folder_id: The ID of the best matching folder (from the list above)
+- confidence: A score from 0.0 to 1.0 indicating match strength
+  * 0.8-1.0: Clear match - conversation clearly fits the folder description
+  * 0.5-0.8: Reasonable match - conversation relates to the folder description
+  * Below 0.5: Weak match - use the DEFAULT folder instead
+- reasoning: Brief explanation of your choice
+
+{format_instructions}'''
+
+    folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_mini | folder_parser
+
+    try:
+        response: FolderAssignment = chain.invoke(
+            {
+                'folders_context': folders_context,
+                'conversation_context': conversation_context,
+                'format_instructions': folder_parser.get_format_instructions(),
+            }
+        )
+
+        # Validate the folder_id exists
+        valid_folder_ids = {f.get('id') for f in user_folders}
+        if response.folder_id not in valid_folder_ids:
+            return default_folder_id, 0.3, f"Invalid folder ID returned, using default"
+
+        # If confidence is too low, use default folder
+        if response.confidence < 0.5 and default_folder_id:
+            return (
+                default_folder_id,
+                response.confidence,
+                f"Low confidence ({response.confidence:.2f}), using default folder",
+            )
+
+        return response.folder_id, response.confidence, response.reasoning
+
+    except Exception as e:
+        print(f'Error assigning conversation to folder: {e}')
+        return default_folder_id, 0.0, f"Error: {str(e)}"
 
 
 class DiscardConversation(BaseModel):
@@ -90,6 +248,7 @@ def extract_action_items(
     tz: str,
     photos: List[ConversationPhoto] = None,
     existing_action_items: List[dict] = None,
+    calendar_meeting_context: 'CalendarMeetingContext' = None,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -114,6 +273,26 @@ def extract_action_items(
         if photo_descriptions != 'None':
             context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
+    # Add calendar meeting context if available
+    calendar_context_str = ""
+    if calendar_meeting_context:
+        participants_str = ", ".join(
+            [
+                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
+                for p in calendar_meeting_context.participants
+            ]
+        )
+        calendar_context_str = f"""
+CALENDAR MEETING CONTEXT:
+- Meeting Title: {calendar_meeting_context.title}
+- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
+- Duration: {calendar_meeting_context.duration_minutes} minutes
+- Platform: {calendar_meeting_context.platform or 'Not specified'}
+- Participants: {participants_str or 'None listed'}
+{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
+"""
+        context_parts.insert(0, calendar_context_str.strip())
+
     if not context_parts:
         return []
 
@@ -135,7 +314,16 @@ def extract_action_items(
 
     prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract high-quality, actionable tasks from the provided content.
 
-    The content language is {language_code}. Use the same language {language_code} for your response.{existing_items_context}
+    The content language is {language_code}. Use the same language {language_code} for your response.
+
+    CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
+    - The conversation DEFINITELY happened between the named participants
+    - NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc. when participant names are available
+    - Match transcript speakers to participant names by analyzing the conversation context
+    - Use participant names in ALL action items (e.g., "Follow up with Sarah" NOT "Follow up with Speaker 0")
+    - Reference the meeting title/context when relevant to the action item
+    - Consider the scheduled meeting time and duration when extracting due dates
+    - If you cannot confidently match a speaker to a name, use the action description without speaker references{existing_items_context}
 
     CRITICAL DEDUPLICATION RULES (Check BEFORE extracting):
     • DO NOT extract action items that are >95% similar to existing ones listed above
@@ -184,8 +372,12 @@ def extract_action_items(
        - Look for cues: who is asking questions, who is receiving advice/tasks, who initiates topics
        - For tasks assigned to the primary user: phrase them directly (start with verb)
        - For tasks assigned to others: include them ONLY if primary user is dependent on them or needs to track them
-       - If a person's name is mentioned and there's high confidence (>90%) they are a speaker, use that name
-       - NEVER use "Speaker 0", "Speaker 1", etc. in the final action item description
+       - **CRITICAL**: When CALENDAR MEETING CONTEXT provides participant names:
+         * Analyze the transcript to match speakers to the named participants
+         * Use the actual participant names in ALL action items
+         * ABSOLUTELY NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc.
+         * Example: "Follow up with Sarah about budget" NOT "Follow up with Speaker 0 about budget"
+       - If no calendar context: NEVER use "Speaker 0", "Speaker 1", etc. in the final action item description
        - If unsure about names, use natural phrasing like "Follow up on...", "Ensure...", etc.
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
@@ -203,19 +395,24 @@ def extract_action_items(
        - Critical dependencies (primary user blocked without it)
        - Commitments to other people (meetings, deliverables, promises)
 
-    5. **NOT Already Being Done**: The user is NOT currently actively working on it:
-       - If user says "I am working on X" or "I am doing X right now" → DON'T extract
-       - If user says "I am in the middle of X" → DON'T extract
-       - If user says "currently doing X" → DON'T extract
-       - Only extract if it's something they NEED TO DO in the future, not something they're ALREADY doing
+    5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
+       - "I want to X" → EXTRACT (user stated intention, needs reminder)
+       - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
+       - "Today I will X" → EXTRACT (daily goal, needs tracking)
+       - "This week/month I want to X" → EXTRACT (time-bound goal)
+       
+       Only skip if user is ACTIVELY doing something RIGHT NOW:
+       - "I am currently in the middle of X" → Skip (actively doing it this moment)
+       - "Right now I'm doing X" → Skip (immediate present action)
 
-       Examples of what NOT to extract:
-       - ❌ "I am working on the budget report. Need to finish it by Friday" → User is ALREADY working on it, they know the deadline
-       - ❌ "Currently debugging the login issue" → User is actively doing it
-       - ❌ "I'm preparing for the presentation tomorrow" → User is already aware and doing it
-       - ✅ "Need to call the plumber tomorrow about the leak" → User is NOT doing it yet, needs reminder
-       - ✅ "Have to submit tax documents by March 31st" → Clear future deadline that needs tracking
-       - ✅ "Doctor said to schedule follow-up in 2 weeks" → Easy to forget, needs reminder
+       Examples:
+       - ✅ "Today, I want to complete the onboarding experience" → EXTRACT (stated goal with deadline)
+       - ✅ "I want to finish the report by Friday" → EXTRACT (intention + deadline)
+       - ✅ "This month, I want to grow users to 500k" → EXTRACT (monthly goal)
+       - ✅ "Need to call the plumber tomorrow" → EXTRACT (future task)
+       - ✅ "Have to submit tax documents by March 31st" → EXTRACT (deadline)
+       - ❌ "I'm currently on a call with the client" → Skip (happening right now)
+       - ❌ "Right now I'm debugging this issue" → Skip (immediate action)
 
     EXCLUDE these types of items (be aggressive about exclusion):
     • Things user is ALREADY doing or actively working on
@@ -351,6 +548,7 @@ def get_transcript_structure(
     tz: str,
     photos: List[ConversationPhoto] = None,
     existing_action_items: List[dict] = None,
+    calendar_meeting_context: 'CalendarMeetingContext' = None,
 ) -> Structured:
     context_parts = []
     if transcript and transcript.strip():
@@ -361,6 +559,27 @@ def get_transcript_structure(
         if photo_descriptions != 'None':
             context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
+    # Add calendar meeting context if available
+    calendar_context_str = ""
+    if calendar_meeting_context:
+        participants_str = ", ".join(
+            [
+                f"{p.name} <{p.email}>" if p.name and p.email else p.name or p.email or "Unknown"
+                for p in calendar_meeting_context.participants
+            ]
+        )
+        calendar_context_str = f"""
+CALENDAR MEETING CONTEXT:
+- Meeting Title: {calendar_meeting_context.title}
+- Scheduled Time: {calendar_meeting_context.start_time.strftime('%Y-%m-%d %H:%M UTC')}
+- Duration: {calendar_meeting_context.duration_minutes} minutes
+- Platform: {calendar_meeting_context.platform or 'Not specified'}
+- Participants: {participants_str or 'None listed'}
+{f'- Meeting Notes: {calendar_meeting_context.notes}' if calendar_meeting_context.notes else ''}
+{f'- Meeting Link: {calendar_meeting_context.meeting_link}' if calendar_meeting_context.meeting_link else ''}
+"""
+        context_parts.insert(0, calendar_context_str.strip())
+
     if not context_parts:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
@@ -369,8 +588,18 @@ def get_transcript_structure(
     prompt_text = '''You are an expert content analyzer. Your task is to analyze the provided content (which could be a transcript, a series of photo descriptions from a wearable camera, or both) and provide structure and clarity.
     The content language is {language_code}. Use the same language {language_code} for your response.
 
-    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip")
-    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details.
+    CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
+    - The conversation DEFINITELY happened between the named participants
+    - NEVER use "Speaker 0", "Speaker 1", "Speaker 2", etc. when participant names are available
+    - Match transcript speakers to participant names by carefully analyzing the conversation context
+    - Use participant names throughout the title, overview, and all generated content
+    - Use the meeting title as a strong signal for the conversation title (but you can refine it based on the actual discussion)
+    - Use the meeting platform and scheduled time to provide better context in the overview
+    - Consider the meeting notes/description when analyzing the conversation's purpose
+    - If there are 2-3 participants with known names, naturally mention them in the title (e.g., "Sarah and John Discuss Q2 Budget", "Team Meeting with Alex, Maria, and Chris")
+
+    For the title, Write a clear, compelling headline (≤ 10 words) that captures the central topic and outcome. Use Title Case, avoid filler words, and include a key noun + verb where possible (e.g., "Team Finalizes Q2 Budget" or "Family Plans Weekend Road Trip"). If calendar context provides participant names (2-3 people), naturally include them when relevant (e.g., "John and Sarah Plan Marketing Campaign").
+    For the overview, condense the content into a summary with the main topics discussed or scenes observed, making sure to capture the key points and important details. When calendar context provides participant names, you MUST use their actual names instead of "Speaker 0" or "Speaker 1" to make the summary readable and personal. Analyze the transcript to understand who said what and match speakers to participant names.
     For the emoji, select a single emoji that vividly reflects the core subject, mood, or outcome of the content. Strive for an emoji that is specific and evocative, rather than generic (e.g., prefer 🎉 for a celebration over 👍 for general agreement, or 💡 for a new idea over 🧠 for general thought).
 
     For the category, classify the content into one of the available categories.
@@ -424,7 +653,9 @@ def get_transcript_structure(
         event.created = False
 
     # Extract action items separately
-    action_items = extract_action_items(transcript, started_at, language_code, tz, photos, existing_action_items)
+    action_items = extract_action_items(
+        transcript, started_at, language_code, tz, photos, existing_action_items, calendar_meeting_context
+    )
     response.action_items = action_items
 
     return response

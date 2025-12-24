@@ -24,6 +24,7 @@ from websockets.exceptions import ConnectionClosed
 av.logging.set_level(av.logging.ERROR)
 
 import database.conversations as conversations_db
+import database.calendar_meetings as calendar_db
 import database.users as user_db
 from database.users import get_user_transcription_preferences
 from database import redis_db
@@ -78,6 +79,7 @@ from utils.subscription import has_transcription_credits
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.webhooks import get_audio_bytes_webhook_seconds
+from utils.onboarding import OnboardingHandler
 
 router = APIRouter()
 
@@ -157,6 +159,7 @@ async def _listen(
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
+    onboarding_mode: bool = False,
 ):
     session_id = str(uuid.uuid4())
     print(
@@ -170,9 +173,14 @@ async def _listen(
         stt_service,
         conversation_timeout,
         f'custom_stt={custom_stt_mode}',
+        f'onboarding={onboarding_mode}',
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
+
+    # Onboarding mode overrides: no speech profile (creating new one), single language
+    if onboarding_mode:
+        include_speech_profile = False
 
     try:
         await websocket.accept()
@@ -209,6 +217,10 @@ async def _listen(
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
 
+    # Onboarding mode: force single language for better accuracy
+    if onboarding_mode:
+        single_language_mode = True
+
     # Always include "Omi" as predefined vocabulary
     vocabulary = list({"Omi"} | set(vocabulary))
 
@@ -237,6 +249,19 @@ async def _listen(
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+    
+    # Onboarding handler
+    onboarding_handler: Optional[OnboardingHandler] = None
+    if onboarding_mode:
+        async def send_onboarding_event(event: dict):
+            if websocket_active and websocket.client_state == WebSocketState.CONNECTED:
+                try:
+                    await websocket.send_json(event)
+                except Exception as e:
+                    print(f"Error sending onboarding event: {e}", uid, session_id)
+        onboarding_handler = OnboardingHandler(uid, send_onboarding_event)
+        asyncio.create_task(onboarding_handler.send_current_question())
+    
     locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
@@ -485,6 +510,46 @@ async def _listen(
         )
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
+
+        detected_meeting_id = None
+
+        # Only check for meetings if source is desktop
+        if conversation_source == ConversationSource.desktop:
+            now = datetime.now(timezone.utc)
+            # Check ±2 minute window
+            time_window = timedelta(minutes=2)
+            start_range = now - time_window
+            end_range = now + time_window
+
+            meetings = calendar_db.get_meetings_in_time_range(uid, start_range, end_range)
+
+            if len(meetings) == 1:
+                # Exactly one meeting found
+                detected_meeting_id = meetings[0]['id']
+            elif len(meetings) > 1:
+                closest_meeting = None
+                smallest_diff = None
+
+                for meeting in meetings:
+                    # Calculate absolute time difference between meeting start and now
+                    time_diff = abs((meeting['start_time'] - now).total_seconds())
+
+                    if smallest_diff is None or time_diff < smallest_diff:
+                        smallest_diff = time_diff
+                        closest_meeting = meeting
+
+                if closest_meeting:
+                    detected_meeting_id = closest_meeting['id']
+                    print(
+                        f"Selected closest meeting: {closest_meeting['title']} (diff: {smallest_diff}s)",
+                        uid,
+                        session_id,
+                    )
+
+        # Store meeting association if auto-detected
+        if detected_meeting_id:
+            redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
+
         current_conversation_id = new_conversation_id
         seconds_to_trim = None
         seconds_to_add = None
@@ -1210,6 +1275,10 @@ async def _listen(
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
 
+                # Onboarding: pass segments to handler for answer detection
+                if onboarding_handler and not onboarding_handler.completed:
+                    onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
+
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
 
@@ -1450,6 +1519,9 @@ async def _listen(
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
+                        elif json_data.get('type') == 'skip_question':
+                            if onboarding_handler and not onboarding_handler.completed:
+                                await onboarding_handler.skip_current_question()
                         elif json_data.get('type') == 'suggested_transcript':
                             if use_custom_stt:
                                 suggested_segments = json_data.get('segments', [])
@@ -1604,6 +1676,10 @@ async def _listen(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid, session_id)
 
+        # Clean up onboarding handler
+        if onboarding_handler:
+            onboarding_handler.cleanup()
+
         # Clean up collections to aid garbage collection
         try:
             locked_conversation_ids.clear()
@@ -1634,8 +1710,10 @@ async def listen_handler(
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
+    onboarding: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
+    onboarding_mode = onboarding == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -1648,4 +1726,5 @@ async def listen_handler(
         conversation_timeout=conversation_timeout,
         source=source,
         custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
     )
