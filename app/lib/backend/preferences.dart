@@ -177,6 +177,11 @@ class SharedPreferencesUtil {
 
   bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
 
+  // Wrapped 2025 - track if user has viewed their wrapped
+  set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
+
+  bool get hasViewedWrapped2025 => getBool('hasViewedWrapped2025', defaultValue: false);
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled');

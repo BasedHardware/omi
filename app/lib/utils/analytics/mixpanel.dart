@@ -1474,6 +1474,10 @@ class MixpanelManager {
     track('Wrapped Page Opened');
   }
 
+  void wrappedBannerClicked() {
+    track('Wrapped Banner Clicked');
+  }
+
   void wrappedGenerationStarted() {
     track('Wrapped Generation Started');
     startTimingEvent('Wrapped Generation Completed');
