@@ -46,7 +46,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 8. Move to the backend directory: `cd backend`
 
-9. Create your environment file: `cp .env.template .env`
+9. Create your environment file: `cp env.template .env`
 
 10. Set up Redis
     - [Upstash](https://console.upstash.com/) is recommended - sign up and create a free instance
