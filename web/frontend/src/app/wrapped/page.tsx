@@ -18,7 +18,8 @@ function isMobileDevice(userAgent: string): boolean {
 }
 
 function getDeepLink(): string {
-  return 'omi://wrapped';
+  // Use Universal Link format
+  return 'https://h.omi.me/wrapped';
 }
 
 function getAppStoreLink(userAgent: string): string {
