@@ -302,8 +302,6 @@ def delete_memory(
 
     memories_db.delete_memory(uid, memory_id)
 
-    return
-
 
 @router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])
 def update_memory(
@@ -517,8 +515,6 @@ def delete_action_item(
     """
     if not action_items_db.delete_action_item(uid, action_item_id):
         raise HTTPException(status_code=404, detail="Action item not found")
-
-    return
 
 
 @router.patch("/v1/dev/user/action-items/{action_item_id}", response_model=ActionItemResponse, tags=["developer"])
@@ -978,8 +974,6 @@ def delete_conversation_endpoint(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     conversations_db.delete_conversation(uid, conversation_id)
-
-    return
 
 
 @router.patch("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
