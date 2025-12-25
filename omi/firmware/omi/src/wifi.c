@@ -975,6 +975,7 @@ int wifi_send_data(const uint8_t *data, size_t len)
 					return -ENODEV;
 				}
 				tcp_close_socket();
+				set_wifi_state(WIFI_STATE_ON);
 				net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
 				stop_tcp_traffic = true;
 				tcp_next_setup_ms = now_ms + 1000;
