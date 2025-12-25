@@ -198,6 +198,22 @@ def create_memory(
     # Save to database
     memories_db.create_memory(uid, memory_db.dict())
 
+    # Update personas asynchronously if visibility is public
+    if memory.visibility == 'public':
+        threading.Thread(target=update_personas_async, args=(uid,)).start()
+
+    return MemoryResponse(
+        id=memory_db.id,
+        content=memory_db.content,
+        category=memory_db.category,
+        visibility=memory_db.visibility,
+        tags=memory_db.tags,
+        created_at=memory_db.created_at,
+        updated_at=memory_db.updated_at,
+        manually_added=memory_db.manually_added,
+        scoring=memory_db.scoring,
+    )
+
 
 @router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
 def create_memories_batch(
@@ -286,10 +302,6 @@ def delete_memory(
 
     memories_db.delete_memory(uid, memory_id)
 
-    # Update personas asynchronously if the deleted memory was public
-    if memory.get('visibility') == 'public':
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
-
     return
 
 
@@ -322,11 +334,6 @@ def update_memory(
         if request.visibility not in ['public', 'private']:
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
         memories_db.change_memory_visibility(uid, memory_id, request.visibility)
-
-    # Update personas if visibility changed to/from public
-    new_visibility = request.visibility if request.visibility else old_visibility
-    if old_visibility != new_visibility and (old_visibility == 'public' or new_visibility == 'public'):
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
 
     return memories_db.get_memory(uid, memory_id)
 
