@@ -1553,13 +1553,40 @@ class LimitlessDeviceConnection extends DeviceConnection {
       null;
 
   @override
-  Future<int> performGetFeatures() async => 0;
+  Future<int> performGetFeatures() async => OmiFeatures.ledDimming;
+
+  List<int> _encodeSetLedBrightness(int brightness) {
+    final msg = <int>[];
+
+    msg.addAll(_encodeField(1, 0, _encodeVarint(brightness.clamp(0, 100))));
+    final cmd = [..._encodeMessage(26, msg), ..._encodeRequestData()];
+    return _encodeBleWrapper(cmd);
+  }
+
+  int? _lastLedBrightness;
 
   @override
-  Future<void> performSetLedDimRatio(int ratio) async {}
+  Future<void> performSetLedDimRatio(int ratio) async {
+    if (!_isInitialized) {
+      debugPrint('Limitless: Device not initialized');
+      return;
+    }
+
+    try {
+      final brightness = ratio.clamp(0, 100);
+      final cmd = _encodeSetLedBrightness(brightness);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      _lastLedBrightness = brightness;
+      debugPrint('Limitless: Set LED brightness to $brightness');
+    } catch (e) {
+      debugPrint('Limitless: Error setting LED brightness: $e');
+    }
+  }
 
   @override
-  Future<int?> performGetLedDimRatio() async => null;
+  Future<int?> performGetLedDimRatio() async {
+    return _lastLedBrightness;
+  }
 
   @override
   Future<void> performSetMicGain(int gain) async {}
