@@ -474,75 +474,49 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
 
-      final size = boundary.size;
-      const double scale = 3.0;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+      
+      // Load branding requirements manually for the share image
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-
-      final int width = (size.width * scale).toInt();
-      final int height = (size.height * scale).toInt();
-
-      canvas.drawRect(Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()), Paint()..color = Colors.black);
-
-      final screenshotPainter = GraphPainter3D(
-        nodes: simulation.nodes,
-        edges: simulation.edges,
-        nodeMap: simulation.nodeMap,
-        rotationX: _rotationX,
-        rotationY: _rotationY,
-        panX: _panX * scale,
-        panY: _panY * scale,
-        zoom: _zoom * scale,
-        screenshotMode: true,
-      );
-      screenshotPainter.paint(canvas, Size(width.toDouble(), height.toDouble()));
-
-      final Paint paint = Paint();
-
-      final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
-      final Uint8List logoBytes = logoData.buffer.asUint8List();
-      final ui.Codec codec = await ui.instantiateImageCodec(logoBytes);
-      final ui.FrameInfo frameInfo = await codec.getNextFrame();
-      final ui.Image logoImage = frameInfo.image;
-
-      const double logoHeight = 100.0;
-      final double logoScale = logoHeight / logoImage.height;
-      final double logoWidth = logoImage.width * logoScale;
-
-      canvas.drawImageRect(
-        logoImage,
-        Rect.fromLTWH(0, 0, logoImage.width.toDouble(), logoImage.height.toDouble()),
-        Rect.fromLTWH(50, height - logoHeight - 50, logoWidth, logoHeight),
-        paint,
-      );
-
+      final paint = Paint();
+      
+      // Draw graph image
+      canvas.drawImage(image, Offset.zero, paint);
+      
+      // Draw minimal branding "omi.me" at top center
       final textSpan = TextSpan(
         text: 'omi.me',
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.85),
-          fontSize: 42,
-          fontWeight: FontWeight.w500,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 72,
+          fontWeight: FontWeight.bold,
+          letterSpacing: -1.0,
         ),
       );
-
       final textPainter = TextPainter(
         text: textSpan,
         textDirection: TextDirection.ltr,
       );
       textPainter.layout();
-      textPainter.paint(canvas, Offset(50 + logoWidth + 20, height - logoHeight / 2 - textPainter.height / 2 - 50));
+      
+      // Center horizontally, near top
+      final xPos = (image.width - textPainter.width) / 2;
+      final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
+      
+      textPainter.paint(canvas, Offset(xPos, yPos));
 
-      final ui.Image brandedImage = await recorder.endRecording().toImage(width, height);
-      final ByteData? brandedByteData = await brandedImage.toByteData(format: ui.ImageByteFormat.png);
-      if (brandedByteData == null) return;
-
-      final Uint8List pngBytes = brandedByteData.buffer.asUint8List();
+      final finalImage = await recorder.endRecording().toImage(image.width, image.height);
+      final finalByteData = await finalImage.toByteData(format: ui.ImageByteFormat.png);
+      if (finalByteData == null) return;
 
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/omi_knowledge_graph.png');
-      await file.writeAsBytes(pngBytes);
+      final file = await File('${tempDir.path}/memory_graph.png').create();
+      await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
-      await Share.shareXFiles([XFile(file.path)], text: 'Check out my OMI Knowledge Graph! 🧠');
+      await Share.shareXFiles([XFile(file.path)], text: 'Check out my memory graph!');
     } catch (e) {
       debugPrint('Error sharing graph: $e');
     }
@@ -554,33 +528,22 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Knowledge Graph', style: TextStyle(color: Colors.white70)),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.purpleAccent.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.purpleAccent.withOpacity(0.5)),
-              ),
-              child: const Text('BETA', style: TextStyle(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-            ),
-          ],
+        title: const Text(
+          'omi.me',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
+        centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
-        leading: const BackButton(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         actions: [
-          if (simulation.nodes.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.ios_share, color: Colors.white),
-              onPressed: _shareGraph,
-              tooltip: 'Share',
-            ),
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: _shareGraph,
+          ),
         ],
       ),
       body: _buildBody(),
@@ -717,31 +680,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                     ),
                   );
                 },
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 32,
-            right: 32,
-            child: IgnorePointer(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/images/herologo.png',
-                    height: 48,
-                    width: 48,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'omi.me',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.85),
-                      fontSize: 24,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),

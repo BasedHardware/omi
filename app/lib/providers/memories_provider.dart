@@ -138,31 +138,19 @@ class MemoriesProvider extends ChangeNotifier {
   Future<void> _loadFilter() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // Migrate old single selection if exists and new list is empty
-    if (!prefs.containsKey('memories_filter_categories') && prefs.containsKey('memories_filter')) {
-       final oldFilter = prefs.getString('memories_filter');
-       if (oldFilter != null && oldFilter != 'all') {
-          try {
-             _selectedCategories.add(MemoryCategory.values.firstWhere((e) => e.name == oldFilter));
-             // Save new format
-             await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
-          } catch (_) {}
-       }
-       // remove old key
-       await prefs.remove('memories_filter');
+    final filterList = prefs.getStringList('memories_filter_categories');
+    
+    if (filterList == null) {
+      _selectedCategories = {MemoryCategory.interesting, MemoryCategory.manual};
     } else {
-      final filterList = prefs.getStringList('memories_filter_categories');
-      if (filterList != null) {
-        _selectedCategories.clear();
-        for (var name in filterList) {
-          try {
-            _selectedCategories.add(MemoryCategory.values.firstWhere((e) => e.name == name));
-          } catch (_) {
-            // ignore invalid categories
-          }
-        }
-      }
+      _selectedCategories = filterList
+          .map((e) => MemoryCategory.values.firstWhere(
+                (c) => c.name == e,
+                orElse: () => MemoryCategory.interesting,
+              ))
+          .toSet();
     }
+    notifyListeners();
   }
 
   Future<void> loadMemories() async {
