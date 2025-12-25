@@ -408,7 +408,8 @@ description: "Create and retrieve memories via the Developer API"
         "https://api.omi.me/v1/dev/user/memories/mem_xyz789",
         headers={"Authorization": f"Bearer {API_KEY}"}
     )
-    if response.status_code == 204:
+    result = response.json()
+    if result["success"]:
         print("Memory deleted successfully")
     ```
   </Tab>
@@ -421,16 +422,19 @@ description: "Create and retrieve memories via the Developer API"
         headers: { Authorization: `Bearer ${API_KEY}` }
       }
     );
-    if (response.status === 204) {
+    const result = await response.json();
+    if (result.success) {
       console.log("Memory deleted successfully");
     }
     ```
   </Tab>
 </Tabs>
 
-<Accordion title="Response" icon="check" defaultOpen={true}>
-  ```
-  204 No Content
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "success": true
+  }
   ```
 </Accordion>
 

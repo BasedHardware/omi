@@ -418,7 +418,8 @@ When updating `due_at`, a push notification is sent to the Omi app to remind the
         "https://api.omi.me/v1/dev/user/action-items/action_abc123",
         headers={"Authorization": f"Bearer {API_KEY}"}
     )
-    if response.status_code == 204:
+    result = response.json()
+    if result["success"]:
         print("Action item deleted successfully")
     ```
   </Tab>
@@ -431,16 +432,19 @@ When updating `due_at`, a push notification is sent to the Omi app to remind the
         headers: { Authorization: `Bearer ${API_KEY}` }
       }
     );
-    if (response.status === 204) {
+    const result = await response.json();
+    if (result.success) {
       console.log("Action item deleted successfully");
     }
     ```
   </Tab>
 </Tabs>
 
-<Accordion title="Response" icon="check" defaultOpen={true}>
-  ```
-  204 No Content
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "success": true
+  }
   ```
 </Accordion>
 
