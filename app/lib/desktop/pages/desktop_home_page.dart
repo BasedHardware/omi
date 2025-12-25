@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -10,7 +9,7 @@ import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/pages/settings/calendar_settings_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
 import 'package:omi/desktop/pages/settings/desktop_shortcuts_page.dart';
 import 'package:omi/services/shortcut_service.dart';
@@ -314,59 +313,61 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           if (previousConnection != isConnected && connectivityProvider.isInitialized) {
             previousConnection = isConnected;
             if (!isConnected) {
-              Future.delayed(const Duration(seconds: 2), () {
-                if (mounted && !connectivityProvider.isConnected) {
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'No internet connection. Please check your connection.',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      backgroundColor: const Color(0xFF424242),
-                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              });
+              // TODO: Re-enable when internet connection banners are redesigned
+              // Future.delayed(const Duration(seconds: 2), () {
+              //   if (mounted && !connectivityProvider.isConnected) {
+              //     ScaffoldMessenger.of(ctx).showMaterialBanner(
+              //       MaterialBanner(
+              //         content: const Text(
+              //           'No internet connection. Please check your connection.',
+              //           style: TextStyle(color: Colors.white70),
+              //         ),
+              //         backgroundColor: const Color(0xFF424242),
+              //         leading: const Icon(Icons.wifi_off, color: Colors.white70),
+              //         actions: [
+              //           TextButton(
+              //             onPressed: () {
+              //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+              //             },
+              //             child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
+              //           ),
+              //         ],
+              //       ),
+              //     );
+              //   }
+              // });
             } else {
               // Handle connection restored
               Future.delayed(Duration.zero, () {
-                if (mounted) {
-                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'Internet connection is restored.',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: const Color(0xFF2E7D32),
-                      leading: const Icon(Icons.wifi, color: Colors.white),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            if (mounted) {
-                              ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                            }
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
-                        ),
-                      ],
-                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        if (mounted) {
-                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                        }
-                      }),
-                    ),
-                  );
-                }
+                // TODO: Re-enable when internet connection banners are redesigned
+                // if (mounted) {
+                //   ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //   ScaffoldMessenger.of(ctx).showMaterialBanner(
+                //     MaterialBanner(
+                //       content: const Text(
+                //         'Internet connection is restored.',
+                //         style: TextStyle(color: Colors.white),
+                //       ),
+                //       backgroundColor: const Color(0xFF2E7D32),
+                //       leading: const Icon(Icons.wifi, color: Colors.white),
+                //       actions: [
+                //         TextButton(
+                //           onPressed: () {
+                //             if (mounted) {
+                //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //             }
+                //           },
+                //           child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
+                //         ),
+                //       ],
+                //       onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                //         if (mounted) {
+                //           ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //         }
+                //       }),
+                //     ),
+                //   );
+                // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
@@ -1083,9 +1084,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
         // Settings options
         _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
         _buildPopupMenuItem('usage', FontAwesomeIcons.chartBar, 'Plan & Usage', profileCardWidth),
+        _buildPopupMenuItem('calendar', FontAwesomeIcons.calendar, 'Calendar Integration', profileCardWidth),
         if (ShortcutService.isSupported)
           _buildPopupMenuItem('shortcuts', Icons.keyboard, 'Keyboard Shortcuts', profileCardWidth),
-        _buildPopupMenuItem('device', Icons.bluetooth_connected, 'Device Settings', profileCardWidth),
         _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
         _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
 
@@ -1197,10 +1198,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           ),
         );
         break;
-      case 'device':
+      case 'calendar':
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => const DeviceSettings(),
+            builder: (context) => const CalendarSettingsPage(),
           ),
         );
         break;

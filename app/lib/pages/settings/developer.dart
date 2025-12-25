@@ -566,12 +566,15 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   // Transcription Section
                   GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
+                    onTap: () async {
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const TranscriptionSettingsPage(),
                         ),
                       );
+                      if (mounted) {
+                        setState(() {});
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -1647,6 +1650,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           icon: FontAwesomeIcons.lightbulb,
                           value: provider.followUpQuestionEnabled,
                           onChanged: provider.onFollowUpQuestionChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Daily Grade
+                        _buildExperimentalItem(
+                          title: 'Daily Grade',
+                          description: 'Show daily grade card on homepage',
+                          icon: FontAwesomeIcons.chartLine,
+                          value: provider.showDailyGradeEnabled,
+                          onChanged: provider.onShowDailyGradeChanged,
                         ),
                       ],
                     ),

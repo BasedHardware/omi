@@ -161,6 +161,85 @@ env:
         key: ENCRYPTION_SECRET
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-dev-private-cloud-sync"
+  - name: BUCKET_PLUGINS_LOGOS
+    value: "plugin_resources"
+  - name: DD_SERVICE
+    value: "pusher"
+  - name: DD_ENV
+    value: "dev"
+  - name: DD_TRACE_SAMPLE_RATE
+    value: "1"
+  - name: DD_SITE
+    value: "us5.datadoghq.com"
+  - name: DD_TRACE_PROPAGATION_STYLE
+    value: "datadog"
+  - name: DD_TRACE_ENABLED
+    value: "false"
+  - name: DD_VERSION
+    value: "1"
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: DD_API_KEY
+  - name: LANGCHAIN_TRACING_V2
+    value: "false"
+  - name: LANGCHAIN_ENDPOINT
+    value: "https://api.smith.langchain.com"
+  - name: LANGCHAIN_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: LANGCHAIN_API_KEY
+  - name: LANGCHAIN_PROJECT
+    value: "development"
+  - name: DD_LOGS_ENABLED
+    value: "false"
+  - name: STRIPE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: STRIPE_API_KEY
+  - name: STRIPE_WEBHOOK_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: STRIPE_WEBHOOK_SECRET
+  - name: MARKETPLACE_APP_REVIEWERS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MARKETPLACE_APP_REVIEWERS
+  - name: TYPESENSE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: TYPESENSE_HOST
+  - name: TYPESENSE_HOST_PORT
+    value: "443"
+  - name: TYPESENSE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: TYPESENSE_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "false"
+  - name: DEEPGRAM_SELF_HOSTED_URL
+    value: "https://dg.omiapi.com"
+  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+    value: "1000000"
+  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+    value: "0"
+  - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
+    value: "price_1RrxXL1F8wnoWYvwIddzR902"
+  - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
+    value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
+  - name: SUBSCRIPTION_LAUNCH_DATE
+    value: "2025-08-21"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

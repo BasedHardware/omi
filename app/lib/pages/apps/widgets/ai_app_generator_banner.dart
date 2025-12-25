@@ -34,7 +34,7 @@ class AiAppGeneratorBanner extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(18.0),
           border: Border.all(
             color: const Color(0xFF8B5CF6).withOpacity(0.3),
             width: 1,
