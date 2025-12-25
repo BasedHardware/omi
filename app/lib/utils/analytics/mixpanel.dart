@@ -1398,6 +1398,76 @@ class MixpanelManager {
     track('Create Folder Button Clicked');
   }
 
+  void conversationDetailFolderChipClicked({
+    required String conversationId,
+    String? currentFolderId,
+  }) {
+    track('Conversation Detail Folder Chip Clicked', properties: {
+      'conversation_id': conversationId,
+      if (currentFolderId != null) 'current_folder_id': currentFolderId,
+      'has_folder': currentFolderId != null,
+      'duration_seconds': conversation.getDurationInSeconds(),
+    });
+  }
+
+  void conversationMovedToFolder({
+    required String conversationId,
+    String? fromFolderId,
+    String? toFolderId,
+    required String source,
+  }) {
+    track('Conversation Moved To Folder', properties: {
+      'conversation_id': conversationId,
+      if (fromFolderId != null) 'from_folder_id': fromFolderId,
+      if (toFolderId != null) 'to_folder_id': toFolderId,
+      'source': source,
+      'was_in_folder': fromFolderId != null,
+      'duration_seconds': conversation.getDurationInSeconds(),
+    });
+  }
+
+  void starredFilterToggled({
+    required bool enabled,
+    String? selectedFolderId,
+  }) {
+    track('Starred Filter Toggled', properties: {
+      'enabled': enabled,
+      if (selectedFolderId != null) 'selected_folder_id': selectedFolderId,
+      'has_folder_filter': selectedFolderId != null,
+    });
+  }
+
+  void conversationStarToggled({
+    required ServerConversation conversation,
+    required bool starred,
+    required String source,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['starred'] = starred;
+    properties['source'] = source;
+    properties['duration_seconds'] = conversation.getDurationInSeconds();
+
+    // Get the summarized app id if available
+    if (conversation.appResults.isNotEmpty) {
+      var summarizedApp = conversation.appResults.firstOrNull;
+      if (summarizedApp != null && summarizedApp.appId != null) {
+        properties['summary_app_id'] = summarizedApp.appId!;
+      }
+    }
+
+    track('Conversation Star Toggled', properties: properties);
+  }
+
+  void omiDoubleTap({
+    required String feature,
+    Map<String, dynamic>? additionalProperties,
+  }) {
+    track('Omi Double Tap', properties: {
+      'feature': feature,
+      if (additionalProperties != null) ...additionalProperties,
+    });
+  }
+
   // ============================================================================
   // WRAPPED 2025 TRACKING
   // ============================================================================

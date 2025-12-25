@@ -188,9 +188,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {
-                if (folderProvider.folders.isEmpty) {
-                  return const SliverToBoxAdapter(child: SizedBox.shrink());
-                }
                 return SliverToBoxAdapter(
                   child: FolderTabs(
                     folders: folderProvider.folders,
@@ -198,6 +195,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     onFolderSelected: (folderId) {
                       convoProvider.filterByFolder(folderId);
                     },
+                    showStarredOnly: convoProvider.showStarredOnly,
+                    onStarredToggle: convoProvider.toggleStarredFilter,
                   ),
                 );
               },

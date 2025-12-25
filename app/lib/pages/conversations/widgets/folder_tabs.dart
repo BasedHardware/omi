@@ -10,20 +10,137 @@ import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
-class FolderTabs extends StatelessWidget {
+class FolderTabs extends StatefulWidget {
   final List<Folder> folders;
   final String? selectedFolderId;
   final Function(String?) onFolderSelected;
+  final bool showStarredOnly;
+  final VoidCallback onStarredToggle;
 
   const FolderTabs({
     super.key,
     required this.folders,
     required this.selectedFolderId,
     required this.onFolderSelected,
+    required this.showStarredOnly,
+    required this.onStarredToggle,
   });
 
   @override
+  State<FolderTabs> createState() => _FolderTabsState();
+}
+
+class _FolderTabsState extends State<FolderTabs> {
+  final ScrollController _scrollController = ScrollController();
+  String? _previousSelectedFolderId;
+  bool _previousShowStarredOnly = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousSelectedFolderId = widget.selectedFolderId;
+    _previousShowStarredOnly = widget.showStarredOnly;
+  }
+
+  @override
+  void didUpdateWidget(FolderTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-scroll to top when selection changes
+    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
+      _previousSelectedFolderId = widget.selectedFolderId;
+      _previousShowStarredOnly = widget.showStarredOnly;
+      _scrollToStart();
+    }
+  }
+
+  void _scrollToStart() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildStarredTab() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _FolderTab(
+        label: 'Starred',
+        icon: '⭐',
+        color: Colors.amber,
+        isSelected: widget.showStarredOnly,
+        skipFolderTracking: true,
+        onTap: () {
+          // Track starred filter toggle with the NEW state (opposite of current)
+          MixpanelManager().starredFilterToggled(
+            enabled: !widget.showStarredOnly,
+            selectedFolderId: widget.selectedFolderId,
+          );
+          widget.onStarredToggle();
+        },
+      ),
+    );
+  }
+
+  Widget _buildFolderTab(Folder folder) {
+    final isSelected = widget.selectedFolderId == folder.id;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _FolderTab(
+        label: folder.name,
+        icon: folder.icon,
+        color: folder.colorValue,
+        count: folder.conversationCount,
+        isSelected: isSelected,
+        // If already selected, clicking clears the selection
+        onTap: () => widget.onFolderSelected(isSelected ? null : folder.id),
+        folder: folder,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Build ordered list of tabs: selected item comes first (after "All" and "Starred")
+    final List<Widget> tabs = [];
+
+    // "All" tab always first
+    tabs.add(_FolderTab(
+      label: 'All',
+      isSelected: widget.selectedFolderId == null,
+      onTap: () => widget.onFolderSelected(null),
+    ));
+    tabs.add(const SizedBox(width: 8));
+
+    // Starred always second (right after "All")
+    tabs.add(_buildStarredTab());
+
+    // If a folder is selected, show it first (after Starred)
+    final selectedFolder = widget.selectedFolderId != null
+        ? widget.folders.where((f) => f.id == widget.selectedFolderId).firstOrNull
+        : null;
+    if (selectedFolder != null) {
+      tabs.add(_buildFolderTab(selectedFolder));
+    }
+
+    // Add remaining folders (excluding selected one)
+    for (final folder in widget.folders) {
+      if (folder.id != widget.selectedFolderId) {
+        tabs.add(_buildFolderTab(folder));
+      }
+    }
+
+    // Extra padding at the end for scroll
+    tabs.add(const SizedBox(width: 8));
+
     return Container(
       height: 36,
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -32,32 +149,10 @@ class FolderTabs extends StatelessWidget {
           // Scrollable folder tabs
           Expanded(
             child: ListView(
+              controller: _scrollController,
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.only(left: 16),
-              children: [
-                // "All" tab
-                _FolderTab(
-                  label: 'All',
-                  isSelected: selectedFolderId == null,
-                  onTap: () => onFolderSelected(null),
-                ),
-                const SizedBox(width: 8),
-                // Folder tabs
-                ...folders.map((folder) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: _FolderTab(
-                        label: folder.name,
-                        icon: folder.icon,
-                        color: folder.colorValue,
-                        count: folder.conversationCount,
-                        isSelected: selectedFolderId == folder.id,
-                        onTap: () => onFolderSelected(folder.id),
-                        folder: folder,
-                      ),
-                    )),
-                // Extra padding at the end for scroll
-                const SizedBox(width: 8),
-              ],
+              children: tabs,
             ),
           ),
           // Fixed add button
@@ -77,6 +172,7 @@ class _FolderTab extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Folder? folder;
+  final bool skipFolderTracking;
 
   const _FolderTab({
     required this.label,
@@ -86,6 +182,7 @@ class _FolderTab extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.folder,
+    this.skipFolderTracking = false,
   });
 
   void _showContextMenu(BuildContext context) {
@@ -116,11 +213,13 @@ class _FolderTab extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        // Track folder selection
-        MixpanelManager().folderSelected(
-          folderId: folder?.id,
-          folderName: label,
-        );
+        // Track folder selection (skip for Starred tab which has its own tracking)
+        if (!skipFolderTracking) {
+          MixpanelManager().folderSelected(
+            folderId: folder?.id,
+            folderName: label,
+          );
+        }
         onTap();
       },
       onLongPress: folder != null ? () => _showContextMenu(context) : null,

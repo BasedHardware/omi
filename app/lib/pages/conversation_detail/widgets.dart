@@ -165,6 +165,13 @@ class GetSummaryWidgets extends StatelessWidget {
     return GestureDetector(
       onTap: () async {
         HapticFeedback.selectionClick();
+
+        // Track folder chip clicked
+        MixpanelManager().conversationDetailFolderChipClicked(
+          conversationId: conversationId,
+          currentFolderId: currentFolderId,
+        );
+
         final folderProvider = Provider.of<FolderProvider>(context, listen: false);
         if (folderProvider.folders.isEmpty) {
           await folderProvider.loadFolders();
@@ -177,6 +184,14 @@ class GetSummaryWidgets extends StatelessWidget {
         // If folder was changed, update locally immediately for instant UI feedback
         if (newFolderId != null && context.mounted) {
           context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
+
+          // Track conversation moved to folder
+          MixpanelManager().conversationMovedToFolder(
+            conversationId: conversationId,
+            fromFolderId: currentFolderId,
+            toFolderId: newFolderId,
+            source: 'detail_page_sheet',
+          );
         }
       },
       child: Container(
