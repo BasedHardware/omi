@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
@@ -20,29 +22,8 @@ const List<Color> folderColors = [
   Color(0xFF6B7280), // Gray
 ];
 
-/// Available folder icons for selection.
-const List<String> folderIcons = [
-  '📁',
-  '💼',
-  '🏠',
-  '📚',
-  '👨‍👩‍👧‍👦',
-  '❤️',
-  '🎮',
-  '✈️',
-  '🏥',
-  '🛒',
-  '💰',
-  '🎵',
-  '🎨',
-  '📝',
-  '💬',
-  '🌎',
-  '🛠️',
-  '🍔',
-  '🏆',
-  '🔒',
-];
+/// Available folder icons for selection (uses the shared list from folder_icon_mapper).
+const List<String> folderIcons = folderIconStrings;
 
 /// Bottom sheet for creating or editing a folder.
 class CreateFolderBottomSheet extends StatefulWidget {
@@ -332,7 +313,11 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
           border: isSelected ? Border.all(color: _selectedColor, width: 1.5) : null,
         ),
         child: Center(
-          child: Text(icon, style: const TextStyle(fontSize: 18)),
+          child: FaIcon(
+            folderIconToFa(icon),
+            size: 16,
+            color: isSelected ? _selectedColor : ResponsiveHelper.textSecondary,
+          ),
         ),
       ),
     );
