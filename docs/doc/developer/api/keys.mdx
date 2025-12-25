@@ -1,0 +1,382 @@
+---
+title: "API Keys"
+description: "Manage your Developer API keys"
+---
+
+## Endpoints
+
+<CardGroup cols={3}>
+  <Card title="GET" icon="download" color="#22c55e">
+    List all keys
+  </Card>
+  <Card title="POST" icon="upload" color="#3b82f6">
+    Create new key
+  </Card>
+  <Card title="DELETE" icon="trash" color="#ef4444">
+    Revoke key
+  </Card>
+</CardGroup>
+
+---
+
+## List API Keys
+
+<Card title="GET /v1/dev/keys" icon="download" color="#22c55e" horizontal>
+  Retrieve all your developer API keys
+</Card>
+
+<Note>
+This endpoint requires authentication with an existing API key or user session. The secret key values are not returned (only the prefix is shown).
+</Note>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/keys"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        "https://api.omi.me/v1/dev/keys",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    keys = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/keys",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const keys = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="Response Example" icon="code" defaultOpen={true}>
+    ```json
+    [
+      {
+        "id": "key_123abc",
+        "name": "My Analytics Dashboard",
+        "key_prefix": "omi_dev_abc123",
+        "created_at": "2025-01-15T10:30:00Z",
+        "last_used_at": "2025-01-20T14:22:00Z"
+      },
+      {
+        "id": "key_456def",
+        "name": "Automation Script",
+        "key_prefix": "omi_dev_def456",
+        "created_at": "2025-01-18T09:00:00Z",
+        "last_used_at": null
+      }
+    ]
+    ```
+  </Accordion>
+  <Accordion title="Response Fields" icon="list">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `id` | string | Unique key identifier (used for deletion) |
+    | `name` | string | Descriptive name you gave the key |
+    | `key_prefix` | string | First part of the key (for identification) |
+    | `created_at` | datetime | When the key was created |
+    | `last_used_at` | datetime | When the key was last used (null if never used) |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Create API Key
+
+<Card title="POST /v1/dev/keys" icon="upload" color="#3b82f6" horizontal>
+  Create a new developer API key
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `name` | string | **Yes** | Descriptive name for the key |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.omi.me/v1/dev/keys" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"name": "My New Integration"}'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.post(
+        "https://api.omi.me/v1/dev/keys",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={"name": "My New Integration"}
+    )
+    new_key = response.json()
+    print(f"Store this key securely: {new_key['key']}")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/keys",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name: "My New Integration" })
+      }
+    );
+    const newKey = await response.json();
+    console.log(`Store this key securely: ${newKey.key}`);
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "key_789ghi",
+    "name": "My New Integration",
+    "key_prefix": "omi_dev_ghi789",
+    "key": "omi_dev_ghi789_full_secret_key_here",
+    "created_at": "2025-01-20T15:00:00Z",
+    "last_used_at": null
+  }
+  ```
+</Accordion>
+
+<Warning>
+The full API key (`key` field) is only returned once during creation. Store it securely immediately - you won't be able to see it again!
+</Warning>
+
+---
+
+## Revoke API Key
+
+<Card title="DELETE /v1/dev/keys/{key_id}" icon="trash" color="#ef4444" horizontal>
+  Revoke (delete) a specific API key permanently
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `key_id` | string | The ID of the key to revoke |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X DELETE "https://api.omi.me/v1/dev/keys/key_789ghi" \
+      -H "Authorization: Bearer $API_KEY"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.delete(
+        f"https://api.omi.me/v1/dev/keys/key_789ghi",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    if response.status_code == 204:
+        print("Key revoked successfully")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/keys/key_789ghi",
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_KEY}` }
+      }
+    );
+    if (response.status === 204) {
+      console.log("Key revoked successfully");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response" icon="check" defaultOpen={true}>
+  ```
+  204 No Content
+  ```
+</Accordion>
+
+<Tip>
+If a key is compromised, revoke it immediately and create a new one.
+</Tip>
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Descriptive Names" icon="tag" color="#22c55e">
+    Name keys after their purpose (e.g., "Analytics Dashboard", "Zapier Integration")
+  </Card>
+  <Card title="One Key Per Application" icon="key" color="#3b82f6">
+    Create separate keys for different apps so you can revoke them independently
+  </Card>
+  <Card title="Monitor Usage" icon="chart-line" color="#a855f7">
+    Check `last_used_at` to identify unused or potentially compromised keys
+  </Card>
+  <Card title="Rotate Regularly" icon="rotate" color="#f59e0b">
+    Periodically create new keys and revoke old ones
+  </Card>
+</CardGroup>
+
+---
+
+## Use Case: Key Management Script
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    API_KEY = "omi_dev_your_api_key"
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    def list_keys():
+        """List all API keys"""
+        response = requests.get(
+            "https://api.omi.me/v1/dev/keys",
+            headers=headers
+        )
+        return response.json()
+
+    def create_key(name):
+        """Create a new API key"""
+        response = requests.post(
+            "https://api.omi.me/v1/dev/keys",
+            headers=headers,
+            json={"name": name}
+        )
+        return response.json()
+
+    def revoke_key(key_id):
+        """Revoke an API key"""
+        response = requests.delete(
+            f"https://api.omi.me/v1/dev/keys/{key_id}",
+            headers=headers
+        )
+        return response.status_code == 204
+
+    # List existing keys
+    print("Current API keys:")
+    for key in list_keys():
+        last_used = key.get("last_used_at", "Never")
+        print(f"  - {key['name']} ({key['key_prefix']}...) - Last used: {last_used}")
+
+    # Create a new key
+    print("\nCreating new key...")
+    new_key = create_key("Test Integration")
+    print(f"Created: {new_key['name']}")
+    print(f"Key: {new_key['key']}")  # Store this securely!
+
+    # Revoke a key (example)
+    # if revoke_key("key_123abc"):
+    #     print("Key revoked successfully")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const API_KEY = process.env.OMI_API_KEY;
+    const headers = {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    async function listKeys() {
+      const response = await fetch("https://api.omi.me/v1/dev/keys", { headers });
+      return response.json();
+    }
+
+    async function createKey(name) {
+      const response = await fetch("https://api.omi.me/v1/dev/keys", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name })
+      });
+      return response.json();
+    }
+
+    async function revokeKey(keyId) {
+      const response = await fetch(`https://api.omi.me/v1/dev/keys/${keyId}`, {
+        method: "DELETE",
+        headers
+      });
+      return response.status === 204;
+    }
+
+    // List existing keys
+    console.log("Current API keys:");
+    const keys = await listKeys();
+    keys.forEach(key => {
+      const lastUsed = key.last_used_at || "Never";
+      console.log(`  - ${key.name} (${key.key_prefix}...) - Last used: ${lastUsed}`);
+    });
+
+    // Create a new key
+    console.log("\nCreating new key...");
+    const newKey = await createKey("Test Integration");
+    console.log(`Created: ${newKey.name}`);
+    console.log(`Key: ${newKey.key}`);  // Store this securely!
+
+    // Revoke a key (example)
+    // if (await revokeKey("key_123abc")) {
+    //   console.log("Key revoked successfully");
+    // }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Managing Keys in the App
+
+You can also manage API keys directly in the Omi app:
+
+<Steps>
+  <Step title="Open Omi App" icon="mobile">
+    Launch the Omi app on your device
+  </Step>
+  <Step title="Navigate to Settings" icon="gear">
+    Go to **Settings → Developer**
+  </Step>
+  <Step title="Manage Keys" icon="key">
+    Under "Developer API Keys" you can:
+    - View all your keys
+    - Create new keys
+    - Delete existing keys
+  </Step>
+</Steps>
+
+<Info>
+Keys created in the app and via the API are the same - you can manage them from either place.
+</Info>
