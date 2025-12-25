@@ -1,11 +1,10 @@
 import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
 import { Metadata } from 'next';
-import envConfig from '@/src/constants/envConfig';
 
 export const metadata: Metadata = {
   title: 'Your 2025 Wrapped | Omi',
-  description: 'See your personalized Omi Wrapped for 2025. Discover your memories, conversations, and highlights from the year.',
+  description:
+    'See your personalized Omi Wrapped for 2025. Discover your memories, conversations, and highlights from the year.',
   openGraph: {
     title: 'Your 2025 Wrapped | Omi',
     description: 'See your personalized Omi Wrapped for 2025.',
@@ -15,11 +14,6 @@ export const metadata: Metadata = {
 
 function isMobileDevice(userAgent: string): boolean {
   return /android|iphone|ipad|ipod|mobile/i.test(userAgent);
-}
-
-function getDeepLink(): string {
-  // Use Universal Link format
-  return 'https://h.omi.me/wrapped';
 }
 
 function getAppStoreLink(userAgent: string): string {
@@ -32,7 +26,6 @@ function getAppStoreLink(userAgent: string): string {
 export default async function WrappedPage() {
   const userAgent = headers().get('user-agent') || '';
   const isMobile = isMobileDevice(userAgent);
-  const deepLink = getDeepLink();
   const appStoreLink = getAppStoreLink(userAgent);
 
   return (
@@ -44,42 +37,17 @@ export default async function WrappedPage() {
 
       {isMobile ? (
         <>
-          {/* Auto-redirect script for mobile */}
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `
-                (function() {
-                  var deepLink = "${deepLink}";
-                  var appStoreLink = "${appStoreLink}";
-
-                  // Try to open the app via deep link
-                  window.location.href = deepLink;
-
-                  // Fallback to app store after a delay if app doesn't open
-                  setTimeout(function() {
-                    window.location.href = appStoreLink;
-                  }, 2500);
-                })();
-              `,
-            }}
-          />
-          <a
-            href={deepLink}
-            className="mb-4 rounded-xl bg-white px-8 py-4 text-lg font-semibold text-[#0B0F17] transition-all duration-300 hover:bg-gray-200"
-          >
-            Open in Omi App
-          </a>
           <a
             href={appStoreLink}
-            className="text-sm text-gray-400 underline hover:text-white"
+            className="mb-4 rounded-xl bg-white px-8 py-4 text-lg font-semibold text-[#0B0F17] transition-all duration-300 hover:bg-gray-200"
           >
-            Don&apos;t have the app? Download it here
+            Get the Omi App
           </a>
         </>
       ) : (
         <>
           <p className="mb-6 text-gray-400">
-            Scan the QR code or visit this page on your mobile device to see your Wrapped.
+            Visit this page on your mobile device to see your Wrapped.
           </p>
           <div className="flex gap-4">
             <a
