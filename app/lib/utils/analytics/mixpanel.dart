@@ -1406,7 +1406,6 @@ class MixpanelManager {
       'conversation_id': conversationId,
       if (currentFolderId != null) 'current_folder_id': currentFolderId,
       'has_folder': currentFolderId != null,
-      'duration_seconds': conversation.getDurationInSeconds(),
     });
   }
 
@@ -1422,7 +1421,6 @@ class MixpanelManager {
       if (toFolderId != null) 'to_folder_id': toFolderId,
       'source': source,
       'was_in_folder': fromFolderId != null,
-      'duration_seconds': conversation.getDurationInSeconds(),
     });
   }
 
