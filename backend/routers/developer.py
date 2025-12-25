@@ -91,9 +91,19 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 
 class CleanerMemory(BaseModel):
+    # Core fields (aligned with MemoryResponse)
     id: str
     content: str
     category: MemoryCategory
+    visibility: Optional[str] = 'private'
+    tags: List[str] = []
+    created_at: datetime
+    updated_at: datetime
+    manually_added: bool
+    scoring: Optional[str] = None
+    reviewed: bool
+    user_review: Optional[bool] = None
+    edited: bool
 
 
 class CreateMemoryRequest(BaseModel):

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -39,6 +42,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
+      }
+
+      // Load folders for folder tabs
+      final folderProvider = Provider.of<FolderProvider>(context, listen: false);
+      if (folderProvider.folders.isEmpty) {
+        await folderProvider.loadFolders();
       }
 
       // Check if we should show the app review prompt for first conversation
@@ -175,8 +184,25 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               },
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
+            // Folder tabs
+            Consumer2<FolderProvider, ConversationProvider>(
+              builder: (context, folderProvider, convoProvider, _) {
+                if (folderProvider.folders.isEmpty) {
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+                }
+                return SliverToBoxAdapter(
+                  child: FolderTabs(
+                    folders: folderProvider.folders,
+                    selectedFolderId: convoProvider.selectedFolderId,
+                    onFolderSelected: (folderId) {
+                      convoProvider.filterByFolder(folderId);
+                    },
+                  ),
+                );
+              },
+            ),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            const SliverToBoxAdapter(child: ScoreWidget()),
+            if (SharedPreferencesUtil().showDailyGradeEnabled) const SliverToBoxAdapter(child: ScoreWidget()),
             if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)

@@ -55,7 +55,7 @@ class _BasicNotificationService implements NotificationInterface {
   }
 
   @override
-  void showNotification({
+  Future<void> showNotification({
     required int id,
     required String title,
     required String body,
@@ -63,7 +63,11 @@ class _BasicNotificationService implements NotificationInterface {
     bool wakeUpScreen = false,
     NotificationSchedule? schedule,
     NotificationLayout layout = NotificationLayout.Default,
-  }) {
+  }) async {
+    final allowed = await _awesomeNotifications.isNotificationAllowed();
+    if (!allowed) {
+      return;
+    }
     _awesomeNotifications.createNotification(
       content: NotificationContent(
         id: id,

@@ -68,6 +68,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   final GlobalKey _addButtonKey = GlobalKey();
 
   late FocusNode _focusNode;
+  late FocusNode _inputFocusNode;
 
   @override
   bool get wantKeepAlive => true;
@@ -77,6 +78,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     apps = prefs.appsList;
     scrollController = ScrollController();
     _focusNode = FocusNode();
+    _inputFocusNode = FocusNode(onKeyEvent: (node, event) {
+      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          return KeyEventResult.ignored;
+        }
+        if (textController.text.trim().isEmpty) {
+          return KeyEventResult.handled;
+        }
+        _sendMessageUtil(textController.text.trim());
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    });
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -175,6 +189,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     _slideController.dispose();
     _pulseController.dispose();
     _focusNode.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -1177,7 +1192,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernTextInput() {
-    return OmiMessageInput(controller: textController);
+    return OmiMessageInput(
+      controller: textController,
+      focusNode: _inputFocusNode,
+    );
   }
 
   Widget _buildModernVoiceButton() {

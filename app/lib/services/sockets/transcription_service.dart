@@ -36,7 +36,7 @@ abstract interface class ITransctiptSegmentSocketServiceListener {
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language,
-      {super.source, super.customSttMode})
+      {super.source, super.customSttMode, super.onboardingMode})
       : super.create(includeSpeechProfile: false);
 }
 
@@ -74,6 +74,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool customSttMode;
   String? sttConfigId;
 
+  bool onboardingMode;
+
   TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec,
@@ -82,6 +84,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.source,
     this.customSttMode = false,
     this.sttConfigId,
+    this.onboardingMode = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -93,6 +96,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (customSttMode) {
       params += '&custom_stt=enabled';
+    }
+
+    if (onboardingMode) {
+      params += '&onboarding=enabled';
     }
 
     String url =
@@ -111,6 +118,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.source,
     this.customSttMode = false,
     this.sttConfigId,
+    this.onboardingMode = false,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -149,6 +157,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   Future send(dynamic message) async {
+    _socket.send(message);
+    return;
+  }
+
+  Future sendText(String message) async {
     _socket.send(message);
     return;
   }

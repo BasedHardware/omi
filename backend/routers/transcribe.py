@@ -79,6 +79,7 @@ from utils.subscription import has_transcription_credits
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.webhooks import get_audio_bytes_webhook_seconds
+from utils.onboarding import OnboardingHandler
 
 router = APIRouter()
 
@@ -158,6 +159,7 @@ async def _listen(
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
+    onboarding_mode: bool = False,
 ):
     session_id = str(uuid.uuid4())
     print(
@@ -171,9 +173,14 @@ async def _listen(
         stt_service,
         conversation_timeout,
         f'custom_stt={custom_stt_mode}',
+        f'onboarding={onboarding_mode}',
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
+
+    # Onboarding mode overrides: no speech profile (creating new one), single language
+    if onboarding_mode:
+        include_speech_profile = False
 
     try:
         await websocket.accept()
@@ -210,6 +217,10 @@ async def _listen(
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
 
+    # Onboarding mode: force single language for better accuracy
+    if onboarding_mode:
+        single_language_mode = True
+
     # Always include "Omi" as predefined vocabulary
     vocabulary = list({"Omi"} | set(vocabulary))
 
@@ -238,6 +249,29 @@ async def _listen(
 
     websocket_active = True
     websocket_close_code = 1001  # Going Away, don't close with good from backend
+
+    # Initialize segment buffers early (before onboarding handler needs them)
+    realtime_segment_buffers = []
+    realtime_photo_buffers: list[ConversationPhoto] = []
+    
+    # Onboarding handler
+    onboarding_handler: Optional[OnboardingHandler] = None
+    if onboarding_mode:
+        async def send_onboarding_event(event: dict):
+            if websocket_active and websocket.client_state == WebSocketState.CONNECTED:
+                try:
+                    await websocket.send_json(event)
+                except Exception as e:
+                    print(f"Error sending onboarding event: {e}", uid, session_id)
+
+        def onboarding_stream_transcript(segments: List[dict]):
+            """Inject onboarding question segments into the transcript stream."""
+            nonlocal realtime_segment_buffers
+            realtime_segment_buffers.extend(segments)
+
+        onboarding_handler = OnboardingHandler(uid, send_onboarding_event, onboarding_stream_transcript)
+        asyncio.create_task(onboarding_handler.send_current_question())
+    
     locked_conversation_ids: Set[str] = set()
     speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
     segment_person_assignment_map: Dict[str, str] = {}
@@ -654,9 +688,6 @@ async def _listen(
     deepgram_socket = None
     deepgram_profile_socket = None  # Temporary socket for speech profile phase
     speech_profile_complete = asyncio.Event()  # Signals when speech profile send is done
-
-    realtime_segment_buffers = []
-    realtime_photo_buffers: list[ConversationPhoto] = []
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
@@ -1221,10 +1252,13 @@ async def _listen(
                         segment["end"] -= seconds_to_trim
                         segments_to_process[i] = segment
 
-                newly_processed_segments = [
-                    TranscriptSegment(**s, speech_profile_processed=speech_profile_complete.is_set())
-                    for s in segments_to_process
-                ]
+                newly_processed_segments = []
+                for s in segments_to_process:
+                    segment = TranscriptSegment(**s, speech_profile_processed=speech_profile_complete.is_set())
+                    # In onboarding mode, force is_user=True for non-Omi segments (user's answers)
+                    if onboarding_mode and s.get('speaker_id') != OnboardingHandler.OMI_SPEAKER_ID:
+                        segment.is_user = True
+                    newly_processed_segments.append(segment)
                 words_transcribed = len(" ".join([seg.text for seg in newly_processed_segments]).split())
                 if words_transcribed > 0:
                     words_transcribed_since_last_record += words_transcribed
@@ -1250,6 +1284,10 @@ async def _listen(
 
                 if transcript_send is not None and user_has_credits:
                     transcript_send([segment.dict() for segment in transcript_segments])
+
+                # Onboarding: pass segments to handler for answer detection
+                if onboarding_handler and not onboarding_handler.completed:
+                    onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
 
                 if translation_enabled:
                     await translate(conversation.transcript_segments[starts:ends], conversation.id)
@@ -1491,6 +1529,9 @@ async def _listen(
                             await handle_image_chunk(
                                 uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
                             )
+                        elif json_data.get('type') == 'skip_question':
+                            if onboarding_handler and not onboarding_handler.completed:
+                                await onboarding_handler.skip_current_question()
                         elif json_data.get('type') == 'suggested_transcript':
                             if use_custom_stt:
                                 suggested_segments = json_data.get('segments', [])
@@ -1645,6 +1686,10 @@ async def _listen(
             except Exception as e:
                 print(f"Error closing Pusher: {e}", uid, session_id)
 
+        # Clean up onboarding handler
+        if onboarding_handler:
+            onboarding_handler.cleanup()
+
         # Clean up collections to aid garbage collection
         try:
             locked_conversation_ids.clear()
@@ -1675,8 +1720,10 @@ async def listen_handler(
     conversation_timeout: int = 120,
     source: Optional[str] = None,
     custom_stt: str = 'disabled',
+    onboarding: str = 'disabled',
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
+    onboarding_mode = onboarding == 'enabled'
     await _listen(
         websocket,
         uid,
@@ -1689,4 +1736,5 @@ async def listen_handler(
         conversation_timeout=conversation_timeout,
         source=source,
         custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
     )
