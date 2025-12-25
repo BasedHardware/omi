@@ -184,6 +184,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               },
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
+            getProcessingConversationsWidget(convoProvider.processingConversations),
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {
@@ -201,7 +202,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 );
               },
             ),
-            getProcessingConversationsWidget(convoProvider.processingConversations),
             if (SharedPreferencesUtil().showDailyGradeEnabled) const SliverToBoxAdapter(child: ScoreWidget()),
             if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
