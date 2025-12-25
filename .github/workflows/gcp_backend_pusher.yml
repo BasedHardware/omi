@@ -1,5 +1,9 @@
 name: Deploy Backend Pusher to GKE
 
+# TEMPLATE - Configured for BasedHardware's GCP project
+# TODO: Reconfigure with your own GCP project details before enabling
+# See: DEPLOYMENT_NOTES.md for setup instructions
+
 on:
 #  push:
 #    branches: [ "main" ]

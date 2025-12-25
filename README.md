@@ -26,6 +26,21 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 
 </div>
 
+---
+
+## About This Fork
+
+This is a personal fork of [BasedHardware/omi](https://github.com/BasedHardware/omi) for self-hosting and Limitless pendant integration.
+
+- **Upstream**: [BasedHardware/omi](https://github.com/BasedHardware/omi) (original project)
+- **This Fork**: [TheSimpleApp/omi](https://github.com/TheSimpleApp/omi)
+- **Setup Guide**: See [SELF_HOSTING_GUIDE.md](SELF_HOSTING_GUIDE.md)
+- **Deployment**: See [DEPLOYMENT_NOTES.md](DEPLOYMENT_NOTES.md)
+
+For contributions to the original project, submit PRs to [BasedHardware/omi](https://github.com/BasedHardware/omi).
+
+---
+
 [//]: # "## Features"
 [//]: #
 [//]: # "- **Real-Time AI Audio Processing**: Leverage powerful on-device AI capabilities for real-time audio analysis."
@@ -38,7 +53,7 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 Get the omi app running locally:
 
 ```bash
-git clone https://github.com/BasedHardware/omi.git
+git clone https://github.com/TheSimpleApp/omi.git
 cd omi/app
 
 bash setup.sh ios     # android, macos
