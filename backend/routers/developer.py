@@ -286,7 +286,7 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
-@router.delete("/v1/dev/user/memories/{memory_id}", status_code=204, tags=["developer"])
+@router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])
 def delete_memory(
     memory_id: str,
     uid: str = Depends(get_uid_with_memories_write),
@@ -301,6 +301,7 @@ def delete_memory(
         raise HTTPException(status_code=404, detail="Memory not found")
 
     memories_db.delete_memory(uid, memory_id)
+    return {"success": True}
 
 
 @router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])
@@ -503,7 +504,7 @@ def create_action_items_batch(
     return BatchActionItemsResponse(action_items=created_items, created_count=len(created_items))
 
 
-@router.delete("/v1/dev/user/action-items/{action_item_id}", status_code=204, tags=["developer"])
+@router.delete("/v1/dev/user/action-items/{action_item_id}", tags=["developer"])
 def delete_action_item(
     action_item_id: str,
     uid: str = Depends(get_uid_with_action_items_write),
@@ -515,6 +516,7 @@ def delete_action_item(
     """
     if not action_items_db.delete_action_item(uid, action_item_id):
         raise HTTPException(status_code=404, detail="Action item not found")
+    return {"success": True}
 
 
 @router.patch("/v1/dev/user/action-items/{action_item_id}", response_model=ActionItemResponse, tags=["developer"])
@@ -957,7 +959,7 @@ def create_conversation_from_segments(
     )
 
 
-@router.delete("/v1/dev/user/conversations/{conversation_id}", status_code=204, tags=["developer"])
+@router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])
 def delete_conversation_endpoint(
     conversation_id: str,
     uid: str = Depends(get_uid_with_conversations_write),
@@ -974,6 +976,7 @@ def delete_conversation_endpoint(
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     conversations_db.delete_conversation(uid, conversation_id)
+    return {"success": True}
 
 
 @router.patch("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
