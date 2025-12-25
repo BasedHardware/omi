@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/webhooks.dart';
@@ -22,6 +23,7 @@ import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -186,9 +188,13 @@ class GetSummaryWidgets extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              folder?.icon ?? '📁',
-              style: const TextStyle(fontSize: 14),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: FaIcon(
+                folderIconToFa(folder?.icon),
+                size: 12,
+                color: folder != null ? folder.colorValue : Colors.grey.shade300,
+              ),
             ),
             const SizedBox(width: 6),
             Text(
