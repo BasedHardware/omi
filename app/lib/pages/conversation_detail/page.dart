@@ -449,6 +449,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       context.read<ConversationProvider>().updateConversationInSortedList(
                                             provider.conversation,
                                           );
+                                      // Track star/unstar action
+                                      MixpanelManager().conversationStarToggled(
+                                        conversation: provider.conversation,
+                                        starred: newStarredState,
+                                        source: 'detail_page_button',
+                                      );
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text('Failed to update starred status.')),

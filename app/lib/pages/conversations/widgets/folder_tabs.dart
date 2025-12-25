@@ -77,7 +77,15 @@ class _FolderTabsState extends State<FolderTabs> {
         icon: '⭐',
         color: Colors.amber,
         isSelected: widget.showStarredOnly,
-        onTap: widget.onStarredToggle,
+        skipFolderTracking: true,
+        onTap: () {
+          // Track starred filter toggle with the NEW state (opposite of current)
+          MixpanelManager().starredFilterToggled(
+            enabled: !widget.showStarredOnly,
+            selectedFolderId: widget.selectedFolderId,
+          );
+          widget.onStarredToggle();
+        },
       ),
     );
   }
@@ -164,6 +172,7 @@ class _FolderTab extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Folder? folder;
+  final bool skipFolderTracking;
 
   const _FolderTab({
     required this.label,
@@ -173,6 +182,7 @@ class _FolderTab extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.folder,
+    this.skipFolderTracking = false,
   });
 
   void _showContextMenu(BuildContext context) {
@@ -203,11 +213,13 @@ class _FolderTab extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        // Track folder selection
-        MixpanelManager().folderSelected(
-          folderId: folder?.id,
-          folderName: label,
-        );
+        // Track folder selection (skip for Starred tab which has its own tracking)
+        if (!skipFolderTracking) {
+          MixpanelManager().folderSelected(
+            folderId: folder?.id,
+            folderName: label,
+          );
+        }
         onTap();
       },
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
