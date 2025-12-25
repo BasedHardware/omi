@@ -84,6 +84,7 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(developer.router)
 app.include_router(imports.router)
+app.include_router(wrapped.router)
 app.include_router(knowledge_graph.router)
 
 
