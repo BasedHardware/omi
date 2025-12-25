@@ -585,7 +585,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       );
     }
 
-    if (simulation.nodes.isEmpty) {
+    // Check if graph is effectively empty (only has user node or truly empty)
+    final bool isEmpty = simulation.nodes.isEmpty || 
+        (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
+
+    if (isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
