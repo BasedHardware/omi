@@ -618,57 +618,86 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     return LayoutBuilder(builder: (context, constraints) {
-      return GestureDetector(
-        onTapUp: (details) => _handleTap(details, Size(constraints.maxWidth, constraints.maxHeight)),
-      onScaleStart: (details) {
-        simulation.wake();
-        _lastPanStart = details.focalPoint;
-        _baseZoom = _zoom;
-      },
-      onScaleUpdate: (details) {
-        if (_lastPanStart != null) {
-          final delta = details.focalPoint - _lastPanStart!;
+      return Stack(
+        children: [
+          GestureDetector(
+            onTapUp: (details) => _handleTap(details, Size(constraints.maxWidth, constraints.maxHeight)),
+            onScaleStart: (details) {
+              simulation.wake();
+              _lastPanStart = details.focalPoint;
+              _baseZoom = _zoom;
+            },
+            onScaleUpdate: (details) {
+              if (_lastPanStart != null) {
+                final delta = details.focalPoint - _lastPanStart!;
 
-          if (details.pointerCount >= 2) {
-            _panX += delta.dx;
-            _panY += delta.dy;
-            if (details.scale != 1.0) {
-              _zoom = _baseZoom * details.scale;
-              _zoom = _zoom.clamp(0.2, 5.0);
-            }
-          } else {
-            _rotationY -= delta.dx * 0.005;
-            _rotationX += delta.dy * 0.005;
-          }
+                if (details.pointerCount >= 2) {
+                  _panX += delta.dx;
+                  _panY += delta.dy;
+                  if (details.scale != 1.0) {
+                    _zoom = _baseZoom * details.scale;
+                    _zoom = _zoom.clamp(0.2, 5.0);
+                  }
+                } else {
+                  _rotationY -= delta.dx * 0.005;
+                  _rotationX += delta.dy * 0.005;
+                }
 
-          _lastPanStart = details.focalPoint;
-          _repaintNotifier.value++;
-        }
-      },
-      onScaleEnd: (_) => _lastPanStart = null,
-      child: RepaintBoundary(
-        key: _graphKey,
-        child: ValueListenableBuilder<int>(
-          valueListenable: _repaintNotifier,
-          builder: (context, _, __) {
-            return CustomPaint(
-              size: Size.infinite,
-              painter: GraphPainter3D(
-                nodes: simulation.nodes,
-                edges: simulation.edges,
-                nodeMap: simulation.nodeMap,
-                rotationX: _rotationX,
-                rotationY: _rotationY,
-                panX: _panX,
-                panY: _panY,
-                zoom: _zoom,
-                highlightedNodeIds: _highlightedNodeIds,
+                _lastPanStart = details.focalPoint;
+                _repaintNotifier.value++;
+              }
+            },
+            onScaleEnd: (_) => _lastPanStart = null,
+            child: RepaintBoundary(
+              key: _graphKey,
+              child: ValueListenableBuilder<int>(
+                valueListenable: _repaintNotifier,
+                builder: (context, _, __) {
+                  return CustomPaint(
+                    size: Size.infinite,
+                    painter: GraphPainter3D(
+                      nodes: simulation.nodes,
+                      edges: simulation.edges,
+                      nodeMap: simulation.nodeMap,
+                      rotationX: _rotationX,
+                      rotationY: _rotationY,
+                      panX: _panX,
+                      panY: _panY,
+                      zoom: _zoom,
+                      highlightedNodeIds: _highlightedNodeIds,
+                    ),
+                  );
+                },
               ),
-            );
-          },
-        ),
-      ),
-    );
+            ),
+          ),
+          Positioned(
+            bottom: 32,
+            right: 32,
+            child: IgnorePointer(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/herologo.png',
+                    height: 48,
+                    width: 48,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'omi.me',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.85),
+                      fontSize: 24,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
     });
   }
   
