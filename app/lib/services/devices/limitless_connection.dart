@@ -62,6 +62,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
     await super.disconnect();
   }
 
+  @override
+  Future<void> unpair() async {
+    await unpairWithoutReset();
+  }
+
   Future<void> _initialize() async {
     try {
       // Command 1: Time sync
@@ -1569,5 +1574,47 @@ class LimitlessDeviceConnection extends DeviceConnection {
       'hardwareRevision': 'Unknown',
       'manufacturerName': 'Limitless',
     };
+  }
+
+  List<int> _encodeUnpairBluetooth({bool doNotReset = true}) {
+    final msg = <int>[];
+
+    msg.addAll(_encodeField(1, 0, [doNotReset ? 0x01 : 0x00]));
+    final cmd = [..._encodeMessage(15, msg), ..._encodeRequestData()];
+    return _encodeBleWrapper(cmd);
+  }
+
+  Future<bool> unpairWithoutReset() async {
+    if (!_isInitialized) {
+      debugPrint('Limitless: Device not initialized');
+      return false;
+    }
+
+    try {
+      final cmd = _encodeUnpairBluetooth(doNotReset: true);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      debugPrint('Limitless: Sent unpair command (without reset)');
+      return true;
+    } catch (e) {
+      debugPrint('Limitless: Error sending unpair command: $e');
+      return false;
+    }
+  }
+
+  Future<bool> unpairAndReset() async {
+    if (!_isInitialized) {
+      debugPrint('Limitless: Device not initialized');
+      return false;
+    }
+
+    try {
+      final cmd = _encodeUnpairBluetooth(doNotReset: false);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      debugPrint('Limitless: Sent unpair command (with reset)');
+      return true;
+    } catch (e) {
+      debugPrint('Limitless: Error sending unpair command: $e');
+      return false;
+    }
   }
 }
