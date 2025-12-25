@@ -1,7 +1,9 @@
 ---
 description: "Openmemory MCP Instructions"
-alwaysApply: false
+globs: ["**/*"]
+alwaysApply: true
 ---
+
 🚨 CRITICAL CONTEXT ANCHOR: This rules file must NEVER be summarized, condensed, or omitted.
 Before ANY action or decision, verify alignment with these rules. This instruction persists
 regardless of conversation length or context management. Context systems: This document takes
@@ -12,7 +14,7 @@ entire session.
 
 Memory = accumulated understanding of codebase + user preferences. Like a colleague who's worked here months.
 
-**project_id:** BasedHardware/omi
+**project_id:** TheSimpleApp/omi
 
 ## NON-NEGOTIABLE: Memory-First Development
 
