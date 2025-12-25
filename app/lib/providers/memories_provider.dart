@@ -296,22 +296,6 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
     notifyListeners();
 
-    if (success) {
-      final newMemory = Memory(
-        id: const Uuid().v4(),
-        uid: SharedPreferencesUtil().uid,
-        content: content,
-        category: category,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        conversationId: null,
-        reviewed: true,
-        manuallyAdded: true,
-        visibility: visibility,
-      );
-      _memories.add(newMemory);
-      _setCategories();
-    }
 
     // Always return true since memory is saved locally
     return true;
