@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -13,24 +14,28 @@ class MemoryManagementSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppStyles.backgroundSecondary,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildHeader(context),
-            const Divider(height: 1, color: Colors.white10),
-            _buildFilterSection(context),
-            const Divider(height: 1, color: Colors.white10),
-            _buildMemoryCount(context),
-            _buildActionButtons(context),
-          ],
-        ),
-      ),
+    return Consumer<MemoriesProvider>(
+      builder: (context, provider, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppStyles.backgroundSecondary,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHeader(context),
+                const Divider(height: 1, color: Colors.white10),
+                _buildFilterSection(context),
+                const Divider(height: 1, color: Colors.white10),
+                _buildMemoryCount(context),
+                _buildActionButtons(context),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -73,11 +78,23 @@ class MemoryManagementSheet extends StatelessWidget {
   }
 
   Widget _buildFilterOption(BuildContext context, String label, MemoryCategory? category) {
-    final isSelected = provider.categoryFilter == category;
+    // If category is null, it represents "All"
+    // For "All", it is selected if the set is empty.
+    final bool isSelected;
+    if (category == null) {
+      isSelected = provider.selectedCategories.isEmpty;
+    } else {
+      isSelected = provider.selectedCategories.contains(category);
+    }
+
     return InkWell(
       onTap: () {
-        provider.setCategoryFilter(category);
-        Navigator.pop(context);
+        if (category == null) {
+          provider.clearCategoryFilter();
+        } else {
+          provider.toggleCategoryFilter(category);
+        }
+        // Do NOT pop here to allow multiple selections
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

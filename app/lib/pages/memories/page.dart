@@ -365,21 +365,21 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   Icon(Icons.note_add, size: 48, color: Colors.grey.shade600),
                                   const SizedBox(height: 16),
                                   Text(
-                                    provider.searchQuery.isEmpty && provider.categoryFilter == null
+                                    provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
                                         ? 'No memories yet'
-                                        : provider.categoryFilter != null
-                                            ? provider.categoryFilter == MemoryCategory.interesting
+                                        : provider.selectedCategories.isNotEmpty
+                                            ? provider.selectedCategories.contains(MemoryCategory.interesting) && provider.selectedCategories.length == 1
                                                 ? 'No interesting memories yet'
-                                                : provider.categoryFilter == MemoryCategory.system
+                                                : provider.selectedCategories.contains(MemoryCategory.system) && provider.selectedCategories.length == 1
                                                     ? 'No system memories yet'
-                                                    : 'No memories in this category'
+                                                    : 'No memories in these categories'
                                             : 'No memories found',
                                     style: TextStyle(
                                       color: Colors.grey.shade400,
                                       fontSize: 18,
                                     ),
                                   ),
-                                  if (provider.searchQuery.isEmpty && provider.categoryFilter == null) ...[
+                                  if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
                                     const SizedBox(height: 8),
                                     TextButton(
                                       onPressed: () => showMemoryDialog(context, provider),

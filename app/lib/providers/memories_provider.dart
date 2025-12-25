@@ -14,7 +14,7 @@ class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
   bool _loading = true;
   String _searchQuery = '';
-  MemoryCategory? _categoryFilter;
+  Set<MemoryCategory> _selectedCategories = {};
   bool _excludeInteresting = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
@@ -22,7 +22,7 @@ class MemoriesProvider extends ChangeNotifier {
   List<Memory> get memories => _memories;
   bool get loading => _loading;
   String get searchQuery => _searchQuery;
-  MemoryCategory? get categoryFilter => _categoryFilter;
+  Set<MemoryCategory> get selectedCategories => _selectedCategories;
   bool get excludeInteresting => _excludeInteresting;
 
   List<Memory> get filteredMemories {
@@ -36,9 +36,9 @@ class MemoriesProvider extends ChangeNotifier {
       if (_excludeInteresting) {
         // Show all categories except interesting
         categoryMatch = memory.category != MemoryCategory.interesting;
-      } else if (_categoryFilter != null) {
-        // Show only selected category
-        categoryMatch = memory.category == _categoryFilter;
+      } else if (_selectedCategories.isNotEmpty) {
+        // Show only selected categories
+        categoryMatch = _selectedCategories.contains(memory.category);
       } else {
         // Show all categories if no filter is applied
         categoryMatch = true;
@@ -64,17 +64,34 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setCategoryFilter(MemoryCategory? category) async {
-    _categoryFilter = category;
+  void toggleCategoryFilter(MemoryCategory category) async {
+    if (_selectedCategories.contains(category)) {
+      _selectedCategories.remove(category);
+    } else {
+      _selectedCategories.add(category);
+    }
     _excludeInteresting = false; // Reset exclude filter when setting a category filter
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    if (category == null) {
-      await prefs.setString('memories_filter', 'all');
-    } else {
-      await prefs.setString('memories_filter', category.name);
-    }
+    await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+  }
+
+  void clearCategoryFilter() async {
+    _selectedCategories.clear();
+    _excludeInteresting = false;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('memories_filter_categories');
+    // Clear old single filter key as well to be clean
+    await prefs.remove('memories_filter');
+  }
+
+  // Deprecated/Modified: kept as alias if needed but unused internally now
+  void setCategoryFilter(MemoryCategory? category) {
+      // Do nothing or migrate logic if called from legacy code?
+      // Assuming we are updating all call sites.
   }
 
   void _setCategories() {
@@ -92,15 +109,29 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> _loadFilter() async {
     final prefs = await SharedPreferences.getInstance();
-    final filter = prefs.getString('memories_filter');
-    if (filter != null) {
-      if (filter == 'all') {
-        _categoryFilter = null;
-      } else {
-        try {
-          _categoryFilter = MemoryCategory.values.firstWhere((e) => e.name == filter);
-        } catch (_) {
-          _categoryFilter = null;
+    
+    // Migrate old single selection if exists and new list is empty
+    if (!prefs.containsKey('memories_filter_categories') && prefs.containsKey('memories_filter')) {
+       final oldFilter = prefs.getString('memories_filter');
+       if (oldFilter != null && oldFilter != 'all') {
+          try {
+             _selectedCategories.add(MemoryCategory.values.firstWhere((e) => e.name == oldFilter));
+             // Save new format
+             await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+          } catch (_) {}
+       }
+       // remove old key
+       await prefs.remove('memories_filter');
+    } else {
+      final filterList = prefs.getStringList('memories_filter_categories');
+      if (filterList != null) {
+        _selectedCategories.clear();
+        for (var name in filterList) {
+          try {
+            _selectedCategories.add(MemoryCategory.values.firstWhere((e) => e.name == name));
+          } catch (_) {
+            // ignore invalid categories
+          }
         }
       }
     }
