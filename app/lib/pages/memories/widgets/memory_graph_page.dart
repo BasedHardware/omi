@@ -13,11 +13,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
+import 'package:omi/backend/preferences.dart';
+
 class GraphNode3D {
   final String id;
   final String label;
   final String nodeType;
   final Color baseColor;
+  final bool isFixed;
 
   v.Vector3 position;
   v.Vector3 velocity;
@@ -32,6 +35,7 @@ class GraphNode3D {
     required this.nodeType,
     required this.baseColor,
     required v.Vector3 initialPosition,
+    this.isFixed = false,
   })  : position = initialPosition,
         velocity = v.Vector3.zero(),
         force = v.Vector3.zero();
@@ -123,12 +127,16 @@ class ForceDirectedSimulation3D {
         final fy = (dy / dist) * forceVal;
         final fz = (dz / dist) * forceVal;
 
-        n1.force.x += fx;
-        n1.force.y += fy;
-        n1.force.z += fz;
-        n2.force.x -= fx;
-        n2.force.y -= fy;
-        n2.force.z -= fz;
+        if (!n1.isFixed) {
+          n1.force.x += fx;
+          n1.force.y += fy;
+          n1.force.z += fz;
+        }
+        if (!n2.isFixed) {
+          n2.force.x -= fx;
+          n2.force.y -= fy;
+          n2.force.z -= fz;
+        }
       }
     }
 
@@ -149,15 +157,20 @@ class ForceDirectedSimulation3D {
       final fy = (dy / dist) * forceVal;
       final fz = (dz / dist) * forceVal;
 
-      n1.force.x += fx;
-      n1.force.y += fy;
-      n1.force.z += fz;
-      n2.force.x -= fx;
-      n2.force.y -= fy;
-      n2.force.z -= fz;
+      if (!n1.isFixed) {
+        n1.force.x += fx;
+        n1.force.y += fy;
+        n1.force.z += fz;
+      }
+      if (!n2.isFixed) {
+        n2.force.x -= fx;
+        n2.force.y -= fy;
+        n2.force.z -= fz;
+      }
     }
 
     for (var node in nodes) {
+      if (node.isFixed) continue;
       final cx = -node.position.x * centerGravity;
       final cy = -node.position.y * centerGravity;
       final cz = -node.position.z * centerGravity;
@@ -167,6 +180,12 @@ class ForceDirectedSimulation3D {
     }
 
     for (var node in nodes) {
+      if (node.isFixed) {
+        node.velocity.setZero();
+        node.position.setZero(); // Force to center
+        continue;
+      }
+      
       node.velocity.x = (node.velocity.x + node.force.x * dt) * damping;
       node.velocity.y = (node.velocity.y + node.force.y * dt) * damping;
       node.velocity.z = (node.velocity.z + node.force.z * dt) * damping;
@@ -324,7 +343,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   }
 
   bool _isSameGraph(List<dynamic> newNodes, List<dynamic> newEdges) {
-    if (newNodes.length != simulation.nodes.length) return false;
+    final hasUserNode = simulation.nodes.any((n) => n.id == 'user-node');
+    // If we expect N+1 nodes (content + user), we should account for that
+    if (newNodes.length + (hasUserNode ? 0 : 1) != simulation.nodes.length) return false;
     if (newEdges.length != simulation.edges.length) return false;
     
     final currentIds = simulation.nodes.map((n) => n.id).toSet();
@@ -373,15 +394,43 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final nodes = data['nodes'] as List<dynamic>? ?? [];
     final edges = data['edges'] as List<dynamic>? ?? [];
 
+    final userName = SharedPreferencesUtil().givenName;
+    final userLabel = userName.isNotEmpty ? userName : 'Me';
+    bool userNodeFound = false;
+
     for (var nodeData in nodes) {
+      final label = nodeData['label'] as String? ?? '';
+      final isUser = label.trim().toLowerCase() == userLabel.toLowerCase();
+      
+      if (isUser) userNodeFound = true;
+
       final node = GraphNode3D(
         id: nodeData['id'] ?? '',
-        label: nodeData['label'] ?? '',
+        label: label,
         nodeType: nodeData['node_type'] ?? 'concept',
-        baseColor: _colorForType(nodeData['node_type'] ?? 'concept'),
-        initialPosition: _randomPos3D(),
+        baseColor: isUser ? Colors.white : _colorForType(nodeData['node_type'] ?? 'concept'),
+        initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
+        isFixed: isUser,
       );
+      
+      if (isUser) node.position.setZero();
+      
       simulation.addNode(node);
+    }
+
+    if (!userNodeFound) {
+      if (!simulation.nodeMap.containsKey('user-node')) {
+        final userNode = GraphNode3D(
+          id: 'user-node',
+          label: userLabel,
+          nodeType: 'person',
+          baseColor: Colors.white,
+          initialPosition: v.Vector3.zero(),
+          isFixed: true,
+        );
+        userNode.position.setZero();
+        simulation.addNode(userNode);
+      }
     }
 
     for (var edgeData in edges) {
