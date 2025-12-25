@@ -500,9 +500,16 @@ def decode_files_to_wav(files_path: List[str]):
     return wav_files
 
 
-def retrieve_vad_segments(path: str, segmented_paths: set):
-    start_timestamp = get_timestamp_from_path(path)
-    voice_segments = vad_is_empty(path, return_segments=True, cache=True)
+def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+    try:
+        start_timestamp = get_timestamp_from_path(path)
+        voice_segments = vad_is_empty(path, return_segments=True, cache=True)
+    except Exception as e:
+        error_msg = f"VAD failed for {path}: {str(e)}"
+        print(error_msg)
+        if errors is not None:
+            errors.append(error_msg)
+        raise  # Re-raise to ensure thread failure is visible
 
     segments = []
     # should we merge more aggressively, to avoid too many small segments? ~ not for now
@@ -654,8 +661,18 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             [t.join() for t in threads[i : i + chunk_size]]
 
     segmented_paths = set()
-    threads = [threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths)) for path in wav_paths]
+    vad_errors = []
+    threads = [
+        threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors)) for path in wav_paths
+    ]
     chunk_threads(threads)
+
+    # Check for VAD errors - if any failed, abort to prevent data loss
+    if vad_errors:
+        error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
+        if len(vad_errors) > 3:
+            error_detail += f" (and {len(vad_errors) - 3} more)"
+        raise HTTPException(status_code=500, detail=error_detail)
 
     print('sync_local_files len(segmented_paths)', len(segmented_paths))
 
