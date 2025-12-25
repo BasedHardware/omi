@@ -153,11 +153,11 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadMemories() async {
+  Future<void> loadMemories({int limit = 100}) async {
     _loading = true;
     notifyListeners();
 
-    _memories = await getMemories();
+    _memories = await getMemories(limit: limit);
     _loading = false;
     _setCategories();
   }

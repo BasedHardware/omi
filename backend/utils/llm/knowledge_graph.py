@@ -1,6 +1,9 @@
 from typing import List, Dict, Any, Optional
 import uuid
 import logging
+import json
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -80,7 +83,6 @@ def extract_knowledge_from_memory(
             'aliases': node.get('aliases', [])
         })
     
-    import json
     existing_nodes_json = json.dumps(existing_nodes_summary) if existing_nodes_summary else "None yet"
 
     try:
@@ -150,9 +152,6 @@ def extract_knowledge_from_memory(
 
 
 def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name: str = "User") -> Dict[str, Any]:
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    import threading
-    
     kg_db.delete_knowledge_graph(uid)
     
     node_lock = threading.Lock()
@@ -173,11 +172,9 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
                 'aliases': node.get('aliases', [])
             })
         
-        import json
         existing_nodes_json = json.dumps(existing_nodes_summary) if existing_nodes_summary else "None yet"
         
         try:
-            from langchain_core.output_parsers import PydanticOutputParser
             parser = PydanticOutputParser(pydantic_object=KnowledgeGraphExtraction)
             prompt = EXTRACTION_PROMPT.format(
                 existing_nodes_json=existing_nodes_json,
@@ -186,7 +183,6 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
                 format_instructions=parser.get_format_instructions()
             )
             
-            from .clients import llm_mini
             response = llm_mini.invoke(prompt)
             extraction: KnowledgeGraphExtraction = parser.parse(response.content)
             
