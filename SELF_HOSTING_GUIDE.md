@@ -116,6 +116,13 @@ iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocola
 # Close and reopen PowerShell after installation
 ```
 
+**Note:** If `choco` is not recognized after installation, run the project initialization script:
+```powershell
+. .\init-project.ps1
+```
+
+This refreshes the PATH and ensures Chocolatey is available in your current session.
+
 ### 2.2 Install Required Software
 
 ```powershell
