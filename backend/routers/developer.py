@@ -198,22 +198,6 @@ def create_memory(
     # Save to database
     memories_db.create_memory(uid, memory_db.dict())
 
-    # Update personas asynchronously if visibility is public
-    if memory.visibility == 'public':
-        threading.Thread(target=update_personas_async, args=(uid,)).start()
-
-    return MemoryResponse(
-        id=memory_db.id,
-        content=memory_db.content,
-        category=memory_db.category,
-        visibility=memory_db.visibility,
-        tags=memory_db.tags,
-        created_at=memory_db.created_at,
-        updated_at=memory_db.updated_at,
-        manually_added=memory_db.manually_added,
-        scoring=memory_db.scoring,
-    )
-
 
 @router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
 def create_memories_batch(
