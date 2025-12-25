@@ -9,8 +9,17 @@ description: "Create and retrieve conversations via the Developer API"
   <Card title="GET" icon="download" color="#22c55e">
     Retrieve conversations
   </Card>
+  <Card title="GET Single" icon="file" color="#22c55e">
+    Get one conversation
+  </Card>
   <Card title="POST" icon="upload" color="#3b82f6">
     Create from text
+  </Card>
+  <Card title="PATCH" icon="pen" color="#a855f7">
+    Update conversation
+  </Card>
+  <Card title="DELETE" icon="trash" color="#ef4444">
+    Delete conversation
   </Card>
   <Card title="POST Segments" icon="waveform-lines" color="#3b82f6">
     Create from transcript
@@ -417,6 +426,239 @@ Memories and action items are extracted asynchronously. Use the GET endpoints to
 <Note>
 Unlike text-based conversations, transcript segments ARE stored in the `transcript_segments` field and can be retrieved with `include_transcript=true`.
 </Note>
+
+---
+
+## Get Single Conversation
+
+<Card title="GET /v1/dev/user/conversations/{conversation_id}" icon="file" color="#22c55e" horizontal>
+  Retrieve a single conversation by ID
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `conversation_id` | string | The ID of the conversation to retrieve |
+  </Accordion>
+  <Accordion title="Query Parameters" icon="sliders" defaultOpen={true}>
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `include_transcript` | boolean | false | Include full transcript segments |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/conversations/conv_456?include_transcript=true"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        "https://api.omi.me/v1/dev/user/conversations/conv_456",
+        headers={"Authorization": f"Bearer {API_KEY}"},
+        params={"include_transcript": True}
+    )
+    conversation = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/conversations/conv_456?include_transcript=true",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const conversation = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "conv_456",
+    "created_at": "2025-01-20T13:50:00Z",
+    "started_at": "2025-01-20T13:50:00Z",
+    "finished_at": "2025-01-20T14:10:00Z",
+    "language": "en",
+    "source": "external_integration",
+    "structured": {
+      "title": "Q1 Goals Discussion",
+      "overview": "Meeting to discuss quarterly goals and budget preparation",
+      "emoji": "📊",
+      "category": "business",
+      "action_items": [
+        {
+          "description": "Prepare budget by Friday",
+          "completed": false
+        }
+      ],
+      "events": []
+    }
+  }
+  ```
+</Accordion>
+
+---
+
+## Update Conversation
+
+<Card title="PATCH /v1/dev/user/conversations/{conversation_id}" icon="pen" color="#a855f7" horizontal>
+  Update a conversation's title or discard status
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `conversation_id` | string | The ID of the conversation to update |
+  </Accordion>
+  <Accordion title="Request Body" icon="code" defaultOpen={true}>
+    | Parameter | Type | Required | Description |
+    |-----------|------|----------|-------------|
+    | `title` | string | No | New title (1-500 characters) |
+    | `discarded` | boolean | No | Whether the conversation is discarded |
+
+    At least one field must be provided.
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X PATCH "https://api.omi.me/v1/dev/user/conversations/conv_456" \
+      -H "Authorization: Bearer $API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "title": "Q1 Planning Meeting - Budget Discussion"
+      }'
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.patch(
+        "https://api.omi.me/v1/dev/user/conversations/conv_456",
+        headers={
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={"title": "Q1 Planning Meeting - Budget Discussion"}
+    )
+    conversation = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/conversations/conv_456",
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: "Q1 Planning Meeting - Budget Discussion"
+        })
+      }
+    );
+    const conversation = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "id": "conv_456",
+    "created_at": "2025-01-20T13:50:00Z",
+    "started_at": "2025-01-20T13:50:00Z",
+    "finished_at": "2025-01-20T14:10:00Z",
+    "language": "en",
+    "source": "external_integration",
+    "structured": {
+      "title": "Q1 Planning Meeting - Budget Discussion",
+      "overview": "Meeting to discuss quarterly goals and budget preparation",
+      "emoji": "📊",
+      "category": "business",
+      "action_items": [],
+      "events": []
+    }
+  }
+  ```
+</Accordion>
+
+<Tip>
+Use `discarded: true` to hide a conversation from the main list without permanently deleting it.
+</Tip>
+
+---
+
+## Delete Conversation
+
+<Card title="DELETE /v1/dev/user/conversations/{conversation_id}" icon="trash" color="#ef4444" horizontal>
+  Delete a conversation permanently
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Path Parameters" icon="route" defaultOpen={true}>
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `conversation_id` | string | The ID of the conversation to delete |
+  </Accordion>
+</AccordionGroup>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -X DELETE "https://api.omi.me/v1/dev/user/conversations/conv_456" \
+      -H "Authorization: Bearer $API_KEY"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.delete(
+        "https://api.omi.me/v1/dev/user/conversations/conv_456",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    if response.status_code == 204:
+        print("Conversation deleted successfully")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/conversations/conv_456",
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${API_KEY}` }
+      }
+    );
+    if (response.status === 204) {
+      console.log("Conversation deleted successfully");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Accordion title="Response" icon="check" defaultOpen={true}>
+  ```
+  204 No Content
+  ```
+</Accordion>
+
+<Warning>
+This action is permanent. Deleted conversations and their associated photos cannot be recovered. Consider using `PATCH` with `discarded: true` to hide a conversation instead.
+</Warning>
 
 ---
 
