@@ -36,6 +36,8 @@ from routers import (
     calendar_meetings,
     imports,
     knowledge_graph,
+    wrapped,
+    folders,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -84,6 +86,8 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(developer.router)
 app.include_router(imports.router)
+app.include_router(wrapped.router)
+app.include_router(folders.router)
 app.include_router(knowledge_graph.router)
 
 
