@@ -10,6 +10,7 @@ import threading
 from google.cloud import storage
 from google.oauth2 import service_account
 from google.cloud.storage import transfer_manager
+from google.cloud.exceptions import NotFound as BlobNotFound
 from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
@@ -248,7 +249,10 @@ def get_syncing_file_temporal_signed_url(file_path: str):
 def delete_syncing_temporal_file(file_path: str):
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
-    blob.delete()
+    try:
+        blob.delete()
+    except BlobNotFound:
+        pass
 
 
 # ************************************************
