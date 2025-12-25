@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class WrappedBanner extends StatefulWidget {
   const WrappedBanner({super.key});
@@ -30,11 +32,17 @@ class _WrappedBannerState extends State<WrappedBanner> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    // Don't show banner if user has already viewed their wrapped
+    if (SharedPreferencesUtil().hasViewedWrapped2025) {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: GestureDetector(
         onTap: () {
           HapticFeedback.mediumImpact();
+          MixpanelManager().wrappedBannerClicked();
           Navigator.push(
             context,
             MaterialPageRoute(
