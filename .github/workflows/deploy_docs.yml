@@ -1,6 +1,10 @@
 # Simple workflow for deploying static content to GitHub Pages
 name: Deploy static content to Pages
 
+# TEMPLATE - Configured for BasedHardware's GCP project
+# TODO: Reconfigure with your own GCP project details before enabling
+# See: DEPLOYMENT_NOTES.md for setup instructions
+
 on:
   # thinh's comment: Disabled, use mintlify fn
   # Runs on pushes targeting the default branch

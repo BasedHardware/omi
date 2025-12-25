@@ -1,5 +1,9 @@
 name: Deploy Speech Models to Cloud RUN
 
+# TEMPLATE - Configured for BasedHardware's GCP project
+# TODO: Reconfigure with your own GCP project details before enabling
+# See: DEPLOYMENT_NOTES.md for setup instructions
+
 # TODO: determine if changes to backend folder before pushing
 
 on:
