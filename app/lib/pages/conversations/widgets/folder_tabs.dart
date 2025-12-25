@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
@@ -23,7 +25,7 @@ class FolderTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: 36,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
@@ -109,7 +111,6 @@ class _FolderTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     // Use a visible color for "All" tab (white), otherwise use folder color
     final effectiveColor = color ?? Colors.white;
 
@@ -125,48 +126,33 @@ class _FolderTab extends StatelessWidget {
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? effectiveColor.withValues(alpha: 0.15) : theme.colorScheme.surface,
+          color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? effectiveColor : Colors.grey.withValues(alpha: 0.3),
-            width: 1,
-          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Text(icon!, style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: FaIcon(
+                  folderIconToFa(icon),
+                  size: 12,
+                  color: isSelected ? effectiveColor : Colors.grey[400],
+                ),
+              ),
+              const SizedBox(width: 5),
             ],
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? effectiveColor : theme.textTheme.bodyMedium?.color,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                fontSize: 14,
+                color: isSelected ? effectiveColor : Colors.grey[400],
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 13,
               ),
             ),
-            if (count != null && count! > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isSelected ? effectiveColor.withValues(alpha: 0.3) : Colors.grey.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  count! > 99 ? '99+' : count.toString(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: isSelected ? effectiveColor : Colors.grey[600],
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -187,19 +173,16 @@ class _AddFolderButton extends StatelessWidget {
           await showCreateFolderBottomSheet(context);
         },
         child: Container(
-          width: 36,
-          height: 36,
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-            color: Colors.grey.withValues(alpha: 0.15),
+            color: Colors.grey.withValues(alpha: 0.12),
             shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.grey.withValues(alpha: 0.3),
-            ),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.add,
-            size: 20,
-            color: Colors.grey,
+            size: 18,
+            color: Colors.grey[400],
           ),
         ),
       ),
@@ -289,7 +272,11 @@ class _FolderContextMenu extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(folder.icon, style: const TextStyle(fontSize: 20)),
+                  FaIcon(
+                    folderIconToFa(folder.icon),
+                    size: 18,
+                    color: folder.colorValue,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     folder.name,
@@ -378,7 +365,11 @@ class _DeleteFolderSheet extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Center(
-                        child: Text(folder.icon, style: const TextStyle(fontSize: 22)),
+                        child: FaIcon(
+                          folderIconToFa(folder.icon),
+                          size: 20,
+                          color: Colors.red.withValues(alpha: 0.8),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -494,7 +485,11 @@ class _MoveOption extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
-                    child: Text(icon, style: const TextStyle(fontSize: 20)),
+                    child: FaIcon(
+                      folderIconToFa(icon),
+                      size: 18,
+                      color: color,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -558,7 +553,14 @@ class FolderChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(folder.icon, style: const TextStyle(fontSize: 12)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: FaIcon(
+                folderIconToFa(folder.icon),
+                size: 10,
+                color: folder.colorValue,
+              ),
+            ),
             const SizedBox(width: 4),
             Text(
               folder.name,

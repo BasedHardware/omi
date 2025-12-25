@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 
@@ -157,7 +159,11 @@ class _FolderListItem extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
-                    child: Text(folder.icon, style: const TextStyle(fontSize: 20)),
+                    child: FaIcon(
+                      folderIconToFa(folder.icon),
+                      size: 18,
+                      color: folder.colorValue,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
