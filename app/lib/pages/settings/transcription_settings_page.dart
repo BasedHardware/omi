@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,8 +28,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
-  bool _showLogs = false;
+  bool _showLogs = true;
   bool _isSaving = false;
+  Timer? _logRefreshTimer;
   String? _validationError;
 
   // Device codec compatibility
@@ -48,6 +50,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   final Map<SttProvider, String> _schemaJsonPerProvider = {};
   final Map<SttProvider, bool> _requestJsonCustomized = {};
 
+  // Version counter to force autocomplete rebuild after JSON edits
+  int _configSyncVersion = 0;
+
   bool _showApiKey = false;
 
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
@@ -62,6 +67,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     super.initState();
     _loadConfig();
     _checkConnectedDevice();
+    _startLogRefreshTimer();
+  }
+
+  void _startLogRefreshTimer() {
+    _logRefreshTimer?.cancel();
+    _logRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_showLogs && mounted) {
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _checkConnectedDevice() async {
@@ -109,6 +124,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Initialize JSON configs for all providers
       _initializeJsonConfigs();
+
+      // Auto-expand advanced if current provider has modified configs
+      if (_requestJsonCustomized[_selectedProvider] == true) {
+        _showAdvanced = true;
+      }
     });
   }
 
@@ -167,10 +187,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void _initializeJsonConfigs() {
     // Initialize JSON configs for all providers
     for (final config in SttProviderConfig.allProviders) {
-      _regenerateRequestJson(config.provider);
-      final template = CustomSttConfig.getFullTemplateJson(config.provider);
-      _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
-      _requestJsonCustomized[config.provider] = false;
+      // Skip if already loaded as customized (from _populateUIFromConfig)
+      if (_requestJsonCustomized[config.provider] != true) {
+        _regenerateRequestJson(config.provider);
+        _requestJsonCustomized[config.provider] = false;
+      }
+      // Only set schema if not already set
+      if (_schemaJsonPerProvider[config.provider] == null) {
+        final template = CustomSttConfig.getFullTemplateJson(config.provider);
+        _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+      }
     }
   }
 
@@ -391,6 +417,202 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
   }
 
+  Future<void> _exportConfig() async {
+    final config = _buildCurrentConfig();
+    
+    // Build exportable config (exclude sensitive API key)
+    final exportableConfig = <String, dynamic>{
+      'provider': config.provider.name,
+      'language': config.language ?? _currentConfig.defaultLanguage,
+      'model': config.model ?? _currentConfig.defaultModel,
+      if (config.url != null) 'url': config.url,
+      if (config.host != null) 'host': config.host,
+      if (config.port != null) 'port': config.port,
+      if (config.requestType != null) 'request_type': config.requestType,
+      if (config.headers != null) 'headers': _sanitizeHeaders(config.headers!),
+      if (config.params != null) 'params': config.params,
+      if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
+      if (config.schemaJson != null) 'schema': config.schemaJson,
+    };
+
+    final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
+    
+    await Clipboard.setData(ClipboardData(text: jsonString));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Configuration copied to clipboard'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Map<String, String> _sanitizeHeaders(Map<String, String> headers) {
+    // Remove or mask sensitive header values
+    return headers.map((key, value) {
+      final lowerKey = key.toLowerCase();
+      if (lowerKey == 'authorization' || lowerKey.contains('api') || lowerKey.contains('key')) {
+        return MapEntry(key, '<YOUR_API_KEY>');
+      }
+      return MapEntry(key, value);
+    });
+  }
+
+  Future<void> _importConfig() async {
+    final controller = TextEditingController();
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: const Text(
+          'Import Configuration',
+          style: TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Paste your JSON configuration below:',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0D0D),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade800),
+                ),
+                child: TextField(
+                  controller: controller,
+                  maxLines: null,
+                  expands: true,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '{\n  "provider": "deepgramLive",\n  ...\n}',
+                    hintStyle: TextStyle(color: Colors.grey.shade700),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'You\'ll need to add your own API key after importing',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+              if (clipboardData?.text != null) {
+                controller.text = clipboardData!.text!;
+              }
+            },
+            child: const Text('Paste', style: TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Import', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      _parseAndApplyConfig(result);
+    }
+  }
+
+  void _parseAndApplyConfig(String jsonString) {
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      final config = CustomSttConfig.fromJson(json);
+      
+      // Validate provider
+      if (config.provider == SttProvider.omi) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Invalid provider in configuration'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _selectedProvider = config.provider;
+        _configsPerProvider[_selectedProvider] = config;
+        
+        // Update UI fields
+        _apiKeyController.text = config.apiKey ?? '';
+        _urlController.text = config.url ?? '';
+        _hostController.text = config.host ?? '127.0.0.1';
+        _portController.text = (config.port ?? 8080).toString();
+        
+        // Update JSON configs
+        if (config.requestType != null || config.headers != null || config.params != null) {
+          final requestConfig = <String, dynamic>{};
+          if (config.url != null) requestConfig['url'] = config.url;
+          if (config.requestType != null) requestConfig['request_type'] = config.requestType;
+          if (config.headers != null) requestConfig['headers'] = config.headers;
+          if (config.params != null) requestConfig['params'] = config.params;
+          if (config.audioFieldName != null) requestConfig['audio_field_name'] = config.audioFieldName;
+          
+          _requestJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
+          _requestJsonCustomized[_selectedProvider] = true;
+        } else {
+          _regenerateRequestJson(_selectedProvider);
+          _requestJsonCustomized[_selectedProvider] = false;
+        }
+        
+        if (config.schemaJson != null) {
+          _schemaJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
+        }
+        
+        _configSyncVersion++;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Imported ${SttProviderConfig.get(_selectedProvider).displayName} configuration'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Invalid JSON: ${e.toString().split('\n').first}'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -403,6 +625,20 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           icon: const Icon(Icons.arrow_back_ios, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          if (_useCustomStt) ...[
+            IconButton(
+              icon: const Icon(Icons.file_download_outlined, size: 20),
+              tooltip: 'Import configuration',
+              onPressed: _importConfig,
+            ),
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              tooltip: 'Export configuration',
+              onPressed: _exportConfig,
+            ),
+          ],
+        ],
       ),
       body: Column(
         children: [
@@ -639,7 +875,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                       _regenerateRequestJson(provider);
                     }
 
-                    if (provider == SttProvider.custom) {
+                    // Auto-expand advanced if provider has custom config or is custom type
+                    if (provider == SttProvider.custom || _requestJsonCustomized[provider] == true) {
                       _showAdvanced = true;
                     }
                   });
@@ -749,7 +986,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
         const SizedBox(height: 10),
         Autocomplete<String>(
-          key: ValueKey('${_selectedProvider.name}_$label'),
+          key: ValueKey('${_selectedProvider.name}_${label}_$_configSyncVersion'),
           initialValue: TextEditingValue(text: value),
           optionsBuilder: (TextEditingValue textEditingValue) {
             if (textEditingValue.text.isEmpty) {
@@ -1226,9 +1463,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             }
           } catch (_) {}
 
-          // Update stored config with values from JSON
+          // Update stored config with values from JSON and force UI sync
           if (newLanguage != null || newModel != null) {
             _updateCurrentProviderConfig(language: newLanguage, model: newModel);
+            // Increment version to force autocomplete widgets to rebuild with new values
+            _configSyncVersion++;
           }
 
           // Mark as customized if it differs from auto-generated
@@ -1295,54 +1534,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   size: 18,
                 ),
                 const Spacer(),
-                if (_showLogs) ...[
-                  if (logs.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: logService.logsAsText));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
-                        );
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.copy, color: Colors.grey.shade500, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Copy',
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                  ],
+                if (_showLogs && logs.isNotEmpty) ...[
                   GestureDetector(
-                    onTap: () => setState(() {}),
-                    child: Row(
-                      children: [
-                        Icon(Icons.refresh, color: Colors.grey.shade500, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Refresh',
-                          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                        ),
-                      ],
-                    ),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: logService.logsAsText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
+                      );
+                    },
+                    child: Icon(Icons.copy, color: Colors.grey.shade500, size: 16),
                   ),
-                  if (logs.isNotEmpty) ...[
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: () {
-                        logService.clear();
-                        setState(() {});
-                      },
-                      child: Text(
-                        'Clear',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                      ),
-                    ),
-                  ],
                 ],
               ],
             ),
@@ -1482,6 +1683,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   @override
   void dispose() {
+    _logRefreshTimer?.cancel();
     _apiKeyController.dispose();
     _hostController.dispose();
     _portController.dispose();

@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/http/shared.dart';
-import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -18,10 +16,6 @@ abstract class IPureSocketListener {
   void onMessage(dynamic message);
   void onClosed([int? closeCode]);
   void onError(Object err, StackTrace trace);
-
-  void onInternetConnectionFailed() {}
-
-  void onMaxRetriesReach() {}
 }
 
 abstract class IPureSocket {
@@ -34,8 +28,6 @@ abstract class IPureSocket {
 
   void setListener(IPureSocketListener listener);
 
-  void onConnectionStateChanged(bool isConnected);
-
   void onMessage(dynamic message);
   void onConnected();
   void onClosed();
@@ -47,11 +39,6 @@ class PureSocketMessage {
 }
 
 class PureSocket implements IPureSocket {
-  StreamSubscription<bool>? _connectionStateListener;
-  bool _isConnected = ConnectivityService().isConnected;
-  Timer? _internetLostDelayTimer;
-  bool _stopped = false; // Prevents reconnects after stop() is called
-
   WebSocketChannel? _channel;
   WebSocketChannel get channel {
     if (_channel == null) {
@@ -61,19 +48,14 @@ class PureSocket implements IPureSocket {
   }
 
   PureSocketStatus _status = PureSocketStatus.notConnected;
+  @override
   PureSocketStatus get status => _status;
 
   IPureSocketListener? _listener;
 
-  int _retries = 0;
-
   String url;
 
-  PureSocket(this.url) {
-    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
-      onConnectionStateChanged(isConnected);
-    });
-  }
+  PureSocket(this.url);
 
   void setListener(IPureSocketListener listener) {
     _listener = listener;
@@ -81,14 +63,6 @@ class PureSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
-    return await _connect();
-  }
-
-  Future<bool> _connect() async {
-    if (_stopped) {
-      debugPrint("[Socket] Connect ignored - socket was stopped");
-      return false;
-    }
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
@@ -135,7 +109,6 @@ class PureSocket implements IPureSocket {
       return false;
     }
     _status = PureSocketStatus.connected;
-    _retries = 0;
     DebugLogManager.logEvent('pure_socket_connected', {
       'url': url,
     });
@@ -181,18 +154,12 @@ class PureSocket implements IPureSocket {
     onClosed(_channel?.closeCode);
   }
 
-  Future _cleanUp() async {
-    _internetLostDelayTimer?.cancel();
-    _connectionStateListener?.cancel();
-  }
-
+  @override
   Future stop() async {
-    _stopped = true; // Prevent any further reconnect attempts
     DebugLogManager.logEvent('pure_socket_stopping', {
       'url': url,
     });
     await disconnect();
-    await _cleanUp();
   }
 
   @override
@@ -253,90 +220,5 @@ class PureSocket implements IPureSocket {
   @override
   void send(message) {
     _channel?.sink.add(message);
-  }
-
-  void _reconnect() async {
-    if (_stopped) {
-      debugPrint("[Socket] Reconnect skipped - socket was stopped");
-      DebugLogManager.logEvent('pure_socket_reconnect_skipped_stopped', {
-        'url': url,
-      });
-      return;
-    }
-    debugPrint("[Socket] reconnect...${_retries + 1}...");
-    DebugLogManager.logEvent('pure_socket_reconnect_attempt', {
-      'url': url,
-      'attempt': _retries + 1,
-      'max_retries': 8,
-    });
-    const int initialBackoffTimeMs = 1000; // 1 second
-    const double multiplier = 1.5;
-    const int maxRetries = 8;
-
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
-      debugPrint("[Socket] Can not reconnect, because socket is $_status");
-      return;
-    }
-
-    await _cleanUp();
-
-    var ok = await _connect();
-    if (ok) {
-      return;
-    }
-
-    // retry
-    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
-    await Future.delayed(Duration(milliseconds: waitInMilliseconds));
-
-    // Double-check stopped flag after delay
-    if (_stopped) {
-      debugPrint("[Socket] Reconnect aborted after delay - socket was stopped");
-      return;
-    }
-
-    _retries++;
-    if (_retries > maxRetries) {
-      debugPrint("[Socket] Reach max retries $maxRetries");
-      DebugLogManager.logWarning('pure_socket_max_retries', {
-        'url': url,
-        'max_retries': maxRetries,
-      });
-      _listener?.onMaxRetriesReach();
-      return;
-    }
-    _reconnect();
-  }
-
-  @override
-  void onConnectionStateChanged(bool isConnected) {
-    debugPrint("[Socket] Internet connection changed $isConnected socket $_status");
-    DebugLogManager.logEvent('pure_socket_connection_state_changed', {
-      'url': url,
-      'is_connected': isConnected,
-      'socket_status': _status.toString(),
-    });
-    _isConnected = isConnected;
-    if (isConnected) {
-      if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
-        return;
-      }
-      _reconnect();
-    } else {
-      var that = this;
-      _internetLostDelayTimer?.cancel();
-      _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
-        if (_isConnected) {
-          return;
-        }
-
-        DebugLogManager.logWarning('pure_socket_internet_lost_timeout', {
-          'url': url,
-          'timeout_seconds': 60,
-        });
-        await that.disconnect();
-        _listener?.onInternetConnectionFailed();
-      });
-    }
   }
 }

@@ -1,8 +1,7 @@
 import asyncio
 import concurrent.futures
 import threading
-from datetime import datetime
-from datetime import time
+from datetime import datetime, time
 
 import pytz
 
@@ -10,8 +9,9 @@ import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 from models.notification_message import NotificationMessage
+from models.conversation import Conversation
 from utils.llm.external_integrations import get_conversation_summary
-from utils.notifications import send_notification, send_bulk_notification
+from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 
 
@@ -51,15 +51,39 @@ async def send_daily_summary_notification():
 
 def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
+    user_tz_name = user_data[2] if len(user_data) > 2 else None
+
     # Note: user_data[1] was fcm_token, no longer needed
     daily_summary_title = "Here is your action plan for tomorrow"  # TODO: maybe include llm a custom message for this
-    memories = conversations_db.filter_conversations_by_date(
-        uid, datetime.combine(datetime.now().date(), time.min), datetime.now()
+
+    # Calculate user's day boundaries in their timezone, then convert to UTC for database query
+    start_date_utc = None
+    end_date_utc = None
+    if user_tz_name:
+        try:
+            user_tz = pytz.timezone(user_tz_name)
+            now_in_user_tz = datetime.now(user_tz)
+            start_of_day_user_tz = user_tz.localize(datetime.combine(now_in_user_tz.date(), time.min))
+            end_of_day_user_tz = now_in_user_tz
+            start_date_utc = start_of_day_user_tz.astimezone(pytz.utc)
+            end_date_utc = end_of_day_user_tz.astimezone(pytz.utc)
+        except Exception as e:
+            print(e)
+
+    # Fallback to UTC if timezone not available
+    if not start_date_utc or not end_date_utc:
+        now_utc = datetime.now(pytz.utc)
+        start_date_utc = datetime.combine(now_utc.date(), time.min).replace(tzinfo=pytz.utc)
+        end_date_utc = now_utc
+
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=start_date_utc
     )
-    if not memories:
+    if not conversations_data or len(conversations_data) == 0:
         return
-    else:
-        summary = get_conversation_summary(uid, memories)
+
+    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+    summary = get_conversation_summary(uid, conversations)
 
     ai_message = NotificationMessage(
         text=summary,
@@ -70,13 +94,14 @@ def _send_summary_notification(user_data: tuple):
     )
     chat_db.add_summary_message(summary, uid)
     threading.Thread(target=day_summary_webhook, args=(uid, summary)).start()
-    send_notification(uid, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message))
+    tokens = user_data[1] if len(user_data) > 1 else None
+    send_notification(uid, daily_summary_title, summary, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens)
 
 
 async def _send_bulk_summary_notification(users: list):
     loop = asyncio.get_running_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        tasks = [loop.run_in_executor(pool, _send_summary_notification, uid) for uid in users]
+        tasks = [loop.run_in_executor(pool, _send_summary_notification, user_tokens) for user_tokens in users]
         await asyncio.gather(*tasks)
 
 

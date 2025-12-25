@@ -19,6 +19,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -30,6 +31,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -39,8 +41,11 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
+import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
 
@@ -305,6 +310,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ),
           );
           break;
+        case "wrapped":
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const Wrapped2025Page(),
+                ),
+              );
+            }
+          });
+          break;
         default:
       }
     });
@@ -343,58 +360,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               connectivityProvider.previousConnection != isConnected) {
             previousConnection = isConnected;
             if (!isConnected) {
-              Future.delayed(const Duration(seconds: 2), () {
-                if (mounted && !connectivityProvider.isConnected) {
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'No internet connection. Please check your connection.',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      backgroundColor: const Color(0xFF424242), // Dark gray instead of red
-                      leading: const Icon(Icons.wifi_off, color: Colors.white70),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              });
+              // TODO: Re-enable when internet connection banners are redesigned
+              // Future.delayed(const Duration(seconds: 2), () {
+              //   if (mounted && !connectivityProvider.isConnected) {
+              //     ScaffoldMessenger.of(ctx).showMaterialBanner(
+              //       MaterialBanner(
+              //         content: const Text(
+              //           'No internet connection. Please check your connection.',
+              //           style: TextStyle(color: Colors.white70),
+              //         ),
+              //         backgroundColor: const Color(0xFF424242), // Dark gray instead of red
+              //         leading: const Icon(Icons.wifi_off, color: Colors.white70),
+              //         actions: [
+              //           TextButton(
+              //             onPressed: () {
+              //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+              //             },
+              //             child: const Text('Dismiss', style: TextStyle(color: Colors.white70)),
+              //           ),
+              //         ],
+              //       ),
+              //     );
+              //   }
+              // });
             } else {
               Future.delayed(Duration.zero, () {
-                if (mounted) {
-                  ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                  ScaffoldMessenger.of(ctx).showMaterialBanner(
-                    MaterialBanner(
-                      content: const Text(
-                        'Internet connection is restored.',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
-                      leading: const Icon(Icons.wifi, color: Colors.white),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            if (mounted) {
-                              ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                            }
-                          },
-                          child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
-                        ),
-                      ],
-                      onVisible: () => Future.delayed(const Duration(seconds: 3), () {
-                        if (mounted) {
-                          ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
-                        }
-                      }),
-                    ),
-                  );
-                }
+                // TODO: Re-enable when internet connection banners are redesigned
+                // if (mounted) {
+                //   ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //   ScaffoldMessenger.of(ctx).showMaterialBanner(
+                //     MaterialBanner(
+                //       content: const Text(
+                //         'Internet connection is restored.',
+                //         style: TextStyle(color: Colors.white),
+                //       ),
+                //       backgroundColor: const Color(0xFF2E7D32), // Dark green instead of bright green
+                //       leading: const Icon(Icons.wifi, color: Colors.white),
+                //       actions: [
+                //         TextButton(
+                //           onPressed: () {
+                //             if (mounted) {
+                //               ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //             }
+                //           },
+                //           child: const Text('Dismiss', style: TextStyle(color: Colors.white)),
+                //         ),
+                //       ],
+                //       onVisible: () => Future.delayed(const Duration(seconds: 3), () {
+                //         if (mounted) {
+                //           ScaffoldMessenger.of(ctx).hideCurrentMaterialBanner();
+                //         }
+                //       }),
+                //     ),
+                //   );
+                // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
                   if (mounted) {
@@ -640,44 +659,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         );
                                       },
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(28),
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Colors.deepPurple.shade700,
-                                              Colors.purple.shade700,
-                                              Colors.deepPurple.shade700,
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                          border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.3),
-                                            width: 1,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.deepPurpleAccent.withValues(alpha: 0.3),
-                                              blurRadius: 8,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                          ],
+                                          borderRadius: BorderRadius.circular(32),
+                                          color: Colors.deepPurple,
                                         ),
                                         child: const Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
                                               FontAwesomeIcons.solidComment,
-                                              size: 20,
+                                              size: 22,
                                               color: Colors.white,
                                             ),
-                                            SizedBox(width: 8),
+                                            SizedBox(width: 10),
                                             Text(
-                                              'Chat',
+                                              'Ask Omi',
                                               style: TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 16,
+                                                fontSize: 17,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -691,6 +691,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           }
                         },
                       ),
+                      // Merge action bar - floats above bottom nav when in selection mode
+                      if (homeProvider.selectedIndex == 0)
+                        const Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: MergeActionBar(),
+                        ),
                     ],
                   ),
                 ),
@@ -793,17 +801,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     return const SizedBox.shrink();
                   }
 
-                  // Hide search button if search bar is visible OR if there's an active search query
-                  bool shouldShowSearchButton = !homeProvider.showConvoSearchBar && convoProvider.previousQuery.isEmpty;
+                  // Hide search button if there's an active search query
+                  bool shouldShowSearchButton = convoProvider.previousQuery.isEmpty;
                   return Row(
                     children: [
-                      // Search button - only show when search bar is hidden and no active search
+                      // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
                         Container(
                           width: 36,
                           height: 36,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF1F1F25),
+                          decoration: BoxDecoration(
+                            color: homeProvider.showConvoSearchBar
+                                ? Colors.deepPurple.withValues(alpha: 0.5)
+                                : const Color(0xFF1F1F25),
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
@@ -852,12 +862,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 context: context,
                                 builder: (BuildContext context) {
                                   return Container(
-                                    height: 300,
+                                    height: 420,
                                     padding: const EdgeInsets.only(top: 6.0),
                                     margin: EdgeInsets.only(
                                       bottom: MediaQuery.of(context).viewInsets.bottom,
                                     ),
-                                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                                    color: const Color(0xFF1F1F25),
                                     child: SafeArea(
                                       top: false,
                                       child: Column(
@@ -914,15 +924,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           ),
                                           // Date picker
                                           Expanded(
-                                            child: Container(
-                                              color: const Color(0xFF1F1F25),
-                                              child: CupertinoDatePicker(
-                                                mode: CupertinoDatePickerMode.date,
-                                                initialDateTime: DateTime.now(),
-                                                minimumDate: DateTime(2020),
-                                                maximumDate: DateTime.now(),
-                                                onDateTimeChanged: (DateTime newDate) {
-                                                  selectedDate = newDate;
+                                            child: Material(
+                                              color: ResponsiveHelper.backgroundSecondary,
+                                              child: CalendarDatePicker2(
+                                                config: getDefaultCalendarConfig(
+                                                  firstDate: DateTime(2020),
+                                                  lastDate: DateTime.now(),
+                                                  currentDate: DateTime.now(),
+                                                ),
+                                                value: [selectedDate],
+                                                onValueChanged: (dates) {
+                                                  if (dates.isNotEmpty && dates[0] != null) {
+                                                    selectedDate = dates[0]!;
+                                                  }
                                                 },
                                               ),
                                             ),
@@ -934,30 +948,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 },
                               );
                             }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Star filter button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: convoProvider.showStarredOnly
-                              ? Colors.amber.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(
-                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
-                            size: 16,
-                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            convoProvider.toggleStarredFilter();
                           },
                         ),
                       ),

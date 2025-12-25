@@ -31,7 +31,8 @@ async def _connect_to_trigger_pusher(uid: str, sample_rate: int = 8000):
         ws_host = PusherAPI.replace("http", "ws")
         socket = await websockets.connect(
             f"{ws_host}/v1/trigger/listen?uid={uid}&sample_rate={sample_rate}",
-            ping_interval=15,
+            ping_interval=30,
+            ping_timeout=60,
         )
         print("Connected to Pusher transcripts trigger WebSocket.", uid)
         return socket

@@ -4,6 +4,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/apps.dart';
+import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -22,8 +23,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   // late ServerConversation memory;
 
-  int conversationIdx = 0;
   DateTime selectedDate = DateTime.now();
+  String? _cachedConversationId;
 
   bool isLoading = false;
   bool loadingReprocessConversation = false;
@@ -52,18 +53,28 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   ServerConversation? _cachedConversation;
   ServerConversation get conversation {
-    if (conversationProvider == null ||
-        !conversationProvider!.groupedConversations.containsKey(selectedDate) ||
-        conversationProvider!.groupedConversations[selectedDate] == null ||
-        conversationProvider!.groupedConversations[selectedDate]!.length <= conversationIdx) {
-      // Return cached conversation if available, otherwise create an empty one
-      if (_cachedConversation == null) {
-        throw StateError("No conversation available");
+    final list = conversationProvider?.groupedConversations[selectedDate];
+    final id = _cachedConversationId;
+
+    ServerConversation? result;
+
+    if (list != null && list.isNotEmpty) {
+      if (id != null) {
+        result = list.firstWhereOrNull((c) => c.id == id);
       }
-      return _cachedConversation!;
+      result ??= list.first;
+      _cachedConversationId = result.id;
     }
-    _cachedConversation = conversationProvider!.groupedConversations[selectedDate]![conversationIdx];
-    return _cachedConversation!;
+
+    result ??= _cachedConversation;
+    if (result != null &&
+        result.createdAt.year == selectedDate.year &&
+        result.createdAt.month == selectedDate.month &&
+        result.createdAt.day == selectedDate.day) {
+      return _cachedConversation = result;
+    }
+
+    throw StateError("No valid conversation found");
   }
 
   List<bool> appResponseExpanded = [];
@@ -130,11 +141,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  void updateConversation(int memIdx, DateTime date) {
-    conversationIdx = memIdx;
-    selectedDate = date;
-    appResponseExpanded = List.filled(conversation.appResults.length, false);
-    notifyListeners();
+  void updateConversation(String conversationId, DateTime date) {
+    final list = conversationProvider?.groupedConversations[date];
+    if (list != null) {
+      final conv = list.firstWhereOrNull((c) => c.id == conversationId);
+      if (conv != null) {
+        selectedDate = date;
+        _cachedConversationId = conv.id;
+        _cachedConversation = conv;
+        appResponseExpanded = List.filled(conv.appResults.length, false);
+        notifyListeners();
+      }
+    }
   }
 
   void updateEventState(bool state, int i) {
@@ -213,6 +231,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     loadPreferredSummarizationApp();
 
     fetchAndCacheEnabledConversationApps();
+
+    // Pre-cache audio files in background
+    if (conversation.hasAudio()) {
+      precacheConversationAudio(conversation.id);
+    }
 
     if (!conversation.discarded) {
       getHasConversationSummaryRating(conversation.id).then((value) {
@@ -458,7 +481,29 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   void setCachedConversation(ServerConversation conversation) {
     _cachedConversation = conversation;
+    _cachedConversationId = conversation.id;
     notifyListeners();
+  }
+
+  Future<void> refreshConversation() async {
+    try {
+      final updatedConversation = await getConversationById(conversation.id);
+      if (updatedConversation != null) {
+        _cachedConversation = updatedConversation;
+        conversationProvider?.updateConversation(updatedConversation);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error refreshing conversation: $e');
+    }
+  }
+
+  void updateFolderIdLocally(String? newFolderId) {
+    if (_cachedConversation != null) {
+      _cachedConversation!.folderId = newFolderId;
+      conversationProvider?.updateConversation(_cachedConversation!);
+      notifyListeners();
+    }
   }
 
   String? _preferredSummarizationAppId;

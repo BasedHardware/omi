@@ -1,12 +1,16 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/webhooks.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -15,8 +19,11 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -109,30 +116,119 @@ class GetSummaryWidgets extends StatelessWidget {
     }
   }
 
-  Widget _buildInfoChips(ServerConversation conversation) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        // Date chip
-        _buildChip(
-          label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
-          icon: Icons.calendar_today,
+  Widget _buildInfoChips(BuildContext context, ServerConversation conversation) {
+    return Consumer<FolderProvider>(
+      builder: (context, folderProvider, _) {
+        final folder = conversation.folderId != null ? folderProvider.getFolderById(conversation.folderId!) : null;
+
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            // Date chip
+            _buildChip(
+              label: _getDateFormat(conversation.startedAt ?? conversation.createdAt),
+              icon: Icons.calendar_today,
+            ),
+            // Time chip
+            _buildChip(
+              label: conversation.source == ConversationSource.sdcard
+                  ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+                  : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
+              icon: Icons.access_time,
+            ),
+            // Duration chip
+            if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
+              _buildChip(
+                label: _getDuration(conversation),
+                icon: Icons.timelapse,
+              ),
+            // Folder chip
+            _buildFolderChip(
+              context: context,
+              folder: folder,
+              conversationId: conversation.id,
+              currentFolderId: conversation.folderId,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFolderChip({
+    required BuildContext context,
+    required Folder? folder,
+    required String conversationId,
+    required String? currentFolderId,
+  }) {
+    return GestureDetector(
+      onTap: () async {
+        HapticFeedback.selectionClick();
+
+        // Track folder chip clicked
+        MixpanelManager().conversationDetailFolderChipClicked(
+          conversationId: conversationId,
+          currentFolderId: currentFolderId,
+        );
+
+        final folderProvider = Provider.of<FolderProvider>(context, listen: false);
+        if (folderProvider.folders.isEmpty) {
+          await folderProvider.loadFolders();
+        }
+        final newFolderId = await showMoveToFolderSheet(
+          context,
+          conversationId: conversationId,
+          currentFolderId: currentFolderId,
+        );
+        // If folder was changed, update locally immediately for instant UI feedback
+        if (newFolderId != null && context.mounted) {
+          context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
+
+          // Track conversation moved to folder
+          MixpanelManager().conversationMovedToFolder(
+            conversationId: conversationId,
+            fromFolderId: currentFolderId,
+            toFolderId: newFolderId,
+            source: 'detail_page_sheet',
+          );
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: folder != null ? folder.colorValue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(20),
         ),
-        // Time chip
-        _buildChip(
-          label: conversation.source == ConversationSource.sdcard
-              ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-              : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-          icon: Icons.access_time,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: FaIcon(
+                folderIconToFa(folder?.icon),
+                size: 12,
+                color: folder != null ? folder.colorValue : Colors.grey.shade300,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              folder?.name ?? 'No Folder',
+              style: TextStyle(
+                color: folder != null ? folder.colorValue : Colors.grey.shade300,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 16,
+              color: folder != null ? folder.colorValue : Colors.grey.shade300,
+            ),
+          ],
         ),
-        // Duration chip (only if segments exist)
-        if (conversation.transcriptSegments.isNotEmpty && _getDuration(conversation).isNotEmpty)
-          _buildChip(
-            label: _getDuration(conversation),
-            icon: Icons.timelapse,
-          ),
-      ],
+      ),
     );
   }
 
@@ -189,7 +285,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 32, color: Colors.white),
                   ),
             const SizedBox(height: 16),
-            _buildInfoChips(conversation),
+            _buildInfoChips(context, conversation),
             const SizedBox(height: 16),
             conversation.discarded ? const SizedBox.shrink() : const SizedBox(height: 8),
           ],
@@ -687,6 +783,26 @@ class GetAppsWidgets extends StatelessWidget {
 class GetGeolocationWidgets extends StatelessWidget {
   const GetGeolocationWidgets({super.key});
 
+  // Helper function to shorten address - show only neighborhood/area and city
+  String _getShortAddress(String? fullAddress) {
+    if (fullAddress == null || fullAddress.isEmpty) {
+      return 'Unknown location';
+    }
+
+    // Split address by commas
+    final parts = fullAddress.split(',').map((e) => e.trim()).toList();
+
+    // If address has multiple parts, take the last 2-3 meaningful parts
+    if (parts.length >= 3) {
+      // Take neighborhood/area and city (skip street address and zip code)
+      return '${parts[parts.length - 3]}, ${parts[parts.length - 2]}';
+    } else if (parts.length == 2) {
+      return '${parts[0]}, ${parts[1]}';
+    }
+
+    return fullAddress;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Selector<ConversationDetailProvider, Geolocation?>(selector: (context, provider) {
@@ -698,57 +814,103 @@ class GetGeolocationWidgets extends StatelessWidget {
         children: geolocation == null
             ? []
             : [
-                Text(
-                  'Taken at',
-                  style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${geolocation.address?.decodeString}',
-                  style: TextStyle(color: Colors.grey.shade300),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () async {
                     MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
                   },
-                  child: CachedNetworkImage(
-                    imageBuilder: (context, imageProvider) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          image: DecorationImage(
-                            image: imageProvider,
-                            fit: BoxFit.cover,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      height: 200,
+                      child: Stack(
+                        children: [
+                          // Map Image
+                          CachedNetworkImage(
+                            imageBuilder: (context, imageProvider) {
+                              return Container(
+                                height: 200,
+                                decoration: BoxDecoration(
+                                  image: DecorationImage(
+                                    image: imageProvider,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorWidget: (context, url, error) {
+                              return Container(
+                                height: 200,
+                                color: const Color(0xFF2A2A2A),
+                                child: const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.location_off, size: 40, color: Colors.grey),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Could not load map',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            imageUrl: MapsUtil.getMapImageUrl(
+                              geolocation.latitude!,
+                              geolocation.longitude!,
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    errorWidget: (context, url, error) {
-                      return Container(
-                        margin: const EdgeInsets.only(top: 10, bottom: 8),
-                        height: 200,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: Color(0xFF35343B),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Could not load Maps. Please check your internet connection.',
-                            textAlign: TextAlign.center,
+                          // Gradient blur overlay from bottom
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 80,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.6),
+                                    Colors.black.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    imageUrl: MapsUtil.getMapImageUrl(
-                      geolocation.latitude!,
-                      geolocation.longitude!,
+                          // Location text at bottom left
+                          Positioned(
+                            bottom: 16,
+                            left: 16,
+                            right: 16,
+                            child: Text(
+                              _getShortAddress(geolocation.address?.decodeString),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                shadows: [
+                                  Shadow(
+                                    offset: Offset(0, 1),
+                                    blurRadius: 2,
+                                    color: Colors.black,
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
               ],
       );
     });

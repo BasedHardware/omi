@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,7 +9,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
-import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/utils/audio/audio_transcoder.dart';
@@ -67,11 +65,6 @@ class StreamingSttConfig {
 
 /// Gemini Live streaming socket with setup message and base64 audio encoding
 class GeminiStreamingSttSocket implements IPureSocket {
-  StreamSubscription<bool>? _connectionStateListener;
-  bool _isConnected = ConnectivityService().isConnected;
-  Timer? _internetLostDelayTimer;
-  bool _stopped = false;  // Prevents reconnects after stop() is called
-
   WebSocketChannel? _channel;
 
   final String apiKey;
@@ -86,7 +79,6 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
   IPureSocketListener? _listener;
 
-  int _retries = 0;
   double _audioOffsetSeconds = 0;
   bool _setupSent = false;
 
@@ -96,15 +88,11 @@ class GeminiStreamingSttSocket implements IPureSocket {
 
   GeminiStreamingSttSocket({
     required this.apiKey,
-    this.model = 'gemini-2.0-flash-live-001',
+    this.model = 'gemini-2.5-flash-native-audio-preview-12-2025',
     this.language = 'en',
     this.sampleRate = 16000,
     this.transcoder,
-  }) {
-    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
-      onConnectionStateChanged(isConnected);
-    });
-  }
+  });
 
   @override
   void setListener(IPureSocketListener listener) {
@@ -112,14 +100,10 @@ class GeminiStreamingSttSocket implements IPureSocket {
   }
 
   String get _wsUrl =>
-      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey';
+      'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=$apiKey';
 
   @override
   Future<bool> connect() async {
-    if (_stopped) {
-      CustomSttLogService.instance.info('GeminiStreaming', 'Connect ignored - socket was stopped');
-      return false;
-    }
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
@@ -137,7 +121,6 @@ class GeminiStreamingSttSocket implements IPureSocket {
       await _channel!.ready;
 
       _status = PureSocketStatus.connected;
-      _retries = 0;
       _setupSent = false;
       DebugLogManager.logEvent('gemini_streaming_connected', {
         'model': model,
@@ -186,18 +169,9 @@ class GeminiStreamingSttSocket implements IPureSocket {
       'setup': {
         'model': 'models/$model',
         'generationConfig': {
-          'responseModalities': ['TEXT'],
+          'responseModalities': ['AUDIO'],
         },
-        'systemInstruction': {
-          'parts': [
-            {
-              'text': 'You are a speech-to-text transcription service. '
-                  'Listen to the audio and transcribe it accurately in $language. '
-                  'Return only the transcription text, no explanations or formatting. '
-                  'If you cannot understand the audio, return an empty string.',
-            }
-          ]
-        }
+        'inputAudioTranscription': {},
       }
     };
 
@@ -239,18 +213,21 @@ class GeminiStreamingSttSocket implements IPureSocket {
         return;
       }
 
+      // Handle server content with inputTranscription
+      final serverContent = json['serverContent'];
+      if (serverContent == null) return;
+
+      // Check for turn complete
+      if (serverContent['turnComplete'] == true) {
+        CustomSttLogService.instance.info('GeminiStreaming', 'Turn complete');
+        return;
+      }
+
+      // Extract input transcription (the new response format)
+      final inputTranscription = serverContent['inputTranscription'];
       String? text;
-      if (json.containsKey('serverContent')) {
-        final serverContent = json['serverContent'];
-        if (serverContent != null && serverContent.containsKey('modelTurn')) {
-          final modelTurn = serverContent['modelTurn'];
-          if (modelTurn != null && modelTurn.containsKey('parts')) {
-            final parts = modelTurn['parts'] as List?;
-            if (parts != null && parts.isNotEmpty) {
-              text = parts[0]['text'] as String?;
-            }
-          }
-        }
+      if (inputTranscription != null) {
+        text = inputTranscription['text'] as String?;
       }
 
       if (text != null && text.trim().isNotEmpty) {
@@ -380,21 +357,14 @@ class GeminiStreamingSttSocket implements IPureSocket {
     onClosed();
   }
 
-  Future _cleanUp() async {
-    _internetLostDelayTimer?.cancel();
-    _connectionStateListener?.cancel();
+  @override
+  Future stop() async {
+    DebugLogManager.logEvent('gemini_streaming_stopping', {});
+    await disconnect();
     _frameBuffer.clear();
     _bufferedBytes = 0;
     _audioOffsetSeconds = 0;
     _setupSent = false;
-  }
-
-  @override
-  Future stop() async {
-    _stopped = true;  // Prevent any further reconnect attempts
-    DebugLogManager.logEvent('gemini_streaming_stopping', {});
-    await disconnect();
-    await _cleanUp();
   }
 
   @override
@@ -424,83 +394,11 @@ class GeminiStreamingSttSocket implements IPureSocket {
     DebugLogManager.logError(err, trace, 'gemini_streaming_error');
     _listener?.onError(err, trace);
   }
-
-  void _reconnect() async {
-    if (_stopped) {
-      CustomSttLogService.instance.info('GeminiStreaming', 'Reconnect skipped - socket was stopped');
-      return;
-    }
-    CustomSttLogService.instance.info('GeminiStreaming', 'Reconnecting... attempt ${_retries + 1}');
-    DebugLogManager.logEvent('gemini_streaming_reconnect_attempt', {
-      'attempt': _retries + 1,
-      'max_retries': 8,
-    });
-    const int initialBackoffTimeMs = 1000;
-    const double multiplier = 1.5;
-    const int maxRetries = 8;
-
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
-      return;
-    }
-
-    await _cleanUp();
-
-    var ok = await connect();
-    if (ok) return;
-
-    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
-    await Future.delayed(Duration(milliseconds: waitInMilliseconds));
-    
-    // Double-check stopped flag after delay
-    if (_stopped) {
-      CustomSttLogService.instance.info('GeminiStreaming', 'Reconnect aborted after delay - socket was stopped');
-      return;
-    }
-    
-    _retries++;
-    if (_retries > maxRetries) {
-      CustomSttLogService.instance.error('GeminiStreaming', 'Max retries reached');
-      DebugLogManager.logWarning('gemini_streaming_max_retries', {
-        'max_retries': maxRetries,
-      });
-      _listener?.onMaxRetriesReach();
-      return;
-    }
-    _reconnect();
-  }
-
-  @override
-  void onConnectionStateChanged(bool isConnected) {
-    CustomSttLogService.instance.info('GeminiStreaming', 'Internet: $isConnected, status: $_status');
-    DebugLogManager.logEvent('gemini_streaming_connection_state_changed', {
-      'is_connected': isConnected,
-      'socket_status': _status.toString(),
-    });
-    _isConnected = isConnected;
-    if (isConnected) {
-      if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
-        return;
-      }
-      _reconnect();
-    } else {
-      _internetLostDelayTimer?.cancel();
-      _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
-        if (_isConnected) return;
-        DebugLogManager.logWarning('gemini_streaming_internet_lost_timeout', {});
-        await disconnect();
-        _listener?.onInternetConnectionFailed();
-      });
-    }
-  }
 }
 
 /// Streaming STT socket that sends audio immediately and receives transcripts in real-time
 class PureStreamingSttSocket implements IPureSocket {
-  StreamSubscription<bool>? _connectionStateListener;
-  bool _isConnected = ConnectivityService().isConnected;
-  Timer? _internetLostDelayTimer;
   Timer? _keepAliveTimer;
-  bool _stopped = false;  // Prevents reconnects after stop() is called
 
   WebSocketChannel? _channel;
 
@@ -512,18 +410,13 @@ class PureStreamingSttSocket implements IPureSocket {
 
   IPureSocketListener? _listener;
 
-  int _retries = 0;
   double _audioOffsetSeconds = 0;
 
   // Buffer for accumulating small frames before sending
   final List<Uint8List> _frameBuffer = [];
   int _bufferedBytes = 0;
 
-  PureStreamingSttSocket({required this.config}) {
-    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
-      onConnectionStateChanged(isConnected);
-    });
-  }
+  PureStreamingSttSocket({required this.config});
 
   @override
   void setListener(IPureSocketListener listener) {
@@ -532,10 +425,6 @@ class PureStreamingSttSocket implements IPureSocket {
 
   @override
   Future<bool> connect() async {
-    if (_stopped) {
-      CustomSttLogService.instance.info(config.serviceId, 'Connect ignored - socket was stopped');
-      return false;
-    }
     if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
       return false;
     }
@@ -554,7 +443,6 @@ class PureStreamingSttSocket implements IPureSocket {
       await _channel!.ready;
 
       _status = PureSocketStatus.connected;
-      _retries = 0;
       DebugLogManager.logEvent('streaming_stt_connected', {
         'service_id': config.serviceId,
         'url': config.url,
@@ -781,23 +669,16 @@ class PureStreamingSttSocket implements IPureSocket {
     onClosed();
   }
 
-  Future _cleanUp() async {
-    _internetLostDelayTimer?.cancel();
-    _connectionStateListener?.cancel();
-    _keepAliveTimer?.cancel();
-    _frameBuffer.clear();
-    _bufferedBytes = 0;
-    _audioOffsetSeconds = 0;
-  }
-
   @override
   Future stop() async {
-    _stopped = true;  // Prevent any further reconnect attempts
     DebugLogManager.logEvent('streaming_stt_stopping', {
       'service_id': config.serviceId,
     });
     await disconnect();
-    await _cleanUp();
+    _keepAliveTimer?.cancel();
+    _frameBuffer.clear();
+    _bufferedBytes = 0;
+    _audioOffsetSeconds = 0;
   }
 
   @override
@@ -829,78 +710,5 @@ class PureStreamingSttSocket implements IPureSocket {
       'service_id': config.serviceId,
     });
     _listener?.onError(err, trace);
-  }
-
-  void _reconnect() async {
-    if (_stopped) {
-      CustomSttLogService.instance.info(config.serviceId, 'Reconnect skipped - socket was stopped');
-      return;
-    }
-    CustomSttLogService.instance.info(config.serviceId, 'Reconnecting... attempt ${_retries + 1}');
-    DebugLogManager.logEvent('streaming_stt_reconnect_attempt', {
-      'service_id': config.serviceId,
-      'attempt': _retries + 1,
-      'max_retries': 8,
-    });
-    const int initialBackoffTimeMs = 1000;
-    const double multiplier = 1.5;
-    const int maxRetries = 8;
-
-    if (_status == PureSocketStatus.connecting || _status == PureSocketStatus.connected) {
-      return;
-    }
-
-    await _cleanUp();
-
-    var ok = await connect();
-    if (ok) return;
-
-    int waitInMilliseconds = pow(multiplier, _retries).toInt() * initialBackoffTimeMs;
-    await Future.delayed(Duration(milliseconds: waitInMilliseconds));
-    
-    // Double-check stopped flag after delay
-    if (_stopped) {
-      CustomSttLogService.instance.info(config.serviceId, 'Reconnect aborted after delay - socket was stopped');
-      return;
-    }
-    
-    _retries++;
-    if (_retries > maxRetries) {
-      CustomSttLogService.instance.error(config.serviceId, 'Max retries reached');
-      DebugLogManager.logWarning('streaming_stt_max_retries', {
-        'service_id': config.serviceId,
-        'max_retries': maxRetries,
-      });
-      _listener?.onMaxRetriesReach();
-      return;
-    }
-    _reconnect();
-  }
-
-  @override
-  void onConnectionStateChanged(bool isConnected) {
-    CustomSttLogService.instance.info(config.serviceId, 'Internet: $isConnected, status: $_status');
-    DebugLogManager.logEvent('streaming_stt_connection_state_changed', {
-      'service_id': config.serviceId,
-      'is_connected': isConnected,
-      'socket_status': _status.toString(),
-    });
-    _isConnected = isConnected;
-    if (isConnected) {
-      if (_status == PureSocketStatus.connected || _status == PureSocketStatus.connecting) {
-        return;
-      }
-      _reconnect();
-    } else {
-      _internetLostDelayTimer?.cancel();
-      _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
-        if (_isConnected) return;
-        DebugLogManager.logWarning('streaming_stt_internet_lost_timeout', {
-          'service_id': config.serviceId,
-        });
-        await disconnect();
-        _listener?.onInternetConnectionFailed();
-      });
-    }
   }
 }

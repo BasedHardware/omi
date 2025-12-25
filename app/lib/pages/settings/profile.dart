@@ -14,6 +14,8 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/conversation_display_settings.dart';
+
 import 'delete_account.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -262,6 +264,14 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.solidCreditCard, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const PaymentsPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: 'Conversation Display',
+                  icon: const FaIcon(FontAwesomeIcons.list, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const ConversationDisplaySettings());
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
