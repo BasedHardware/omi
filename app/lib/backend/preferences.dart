@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -171,6 +172,16 @@ class SharedPreferencesUtil {
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
 
+  // Daily grade widget on homepage - default is false (experimental feature)
+  set showDailyGradeEnabled(bool value) => saveBool('showDailyGradeEnabled', value);
+
+  bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
+
+  // Wrapped 2025 - track if user has viewed their wrapped
+  set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
+
+  bool get hasViewedWrapped2025 => getBool('hasViewedWrapped2025', defaultValue: false);
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled');
@@ -253,9 +264,20 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
-  bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: true);
+  bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: false);
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
+
+  // Show short conversations - default is false (hidden)
+  bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
+
+  set showShortConversations(bool value) => saveBool('showShortConversations', value);
+
+  // Short conversation threshold in seconds - default is 60 (1 minute)
+  // Options: 60 (1 min), 120 (2 min), 180 (3 min), 240 (4 min), 300 (5 min)
+  int get shortConversationThreshold => getInt('shortConversationThreshold', defaultValue: 60);
+
+  set shortConversationThreshold(int value) => saveInt('shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
   bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
@@ -368,6 +390,33 @@ class SharedPreferencesUtil {
     saveStringList('cachedMessages', messages);
   }
 
+  // Pending memories - memories created offline that need to be synced
+  List<Memory> get pendingMemories {
+    final memories = getStringList('pendingMemories');
+    return memories.map((e) => Memory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set pendingMemories(List<Memory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('pendingMemories', memories);
+  }
+
+  void addPendingMemory(Memory memory) {
+    final List<Memory> memories = pendingMemories;
+    memories.add(memory);
+    pendingMemories = memories;
+  }
+
+  void removePendingMemory(String memoryId) {
+    final List<Memory> memories = pendingMemories;
+    memories.removeWhere((m) => m.id == memoryId);
+    pendingMemories = memories;
+  }
+
+  void clearPendingMemories() {
+    saveStringList('pendingMemories', []);
+  }
+
   List<Person> get cachedPeople {
     final people = getStringList('cachedPeople');
     return people.map((e) => Person.fromJson(jsonDecode(e))).toList();
@@ -432,6 +481,23 @@ class SharedPreferencesUtil {
   set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
 
   String get calendarType => getString('calendarType2', defaultValue: 'manual');
+
+  set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
+
+  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled') ?? false;
+
+  // Calendar UI Settings
+  set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
+
+  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants') ?? false;
+
+  set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
+
+  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar') ?? true;
+
+  set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
+
+  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds') ?? [];
 
   //--------------------------------- Auth ------------------------------------//
 

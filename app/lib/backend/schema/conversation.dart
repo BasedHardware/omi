@@ -40,6 +40,7 @@ enum ConversationSource {
   apple_watch,
   phone,
   desktop,
+  limitless,
 }
 
 class ConversationExternalData {
@@ -57,7 +58,7 @@ enum ConversationPostProcessingStatus { not_started, in_progress, completed, can
 
 enum ConversationPostProcessingModel { fal_whisperx, custom_whisperx }
 
-enum ConversationStatus { in_progress, processing, completed, failed }
+enum ConversationStatus { in_progress, processing, merging, completed, failed }
 
 class ConversationPostProcessing {
   final ConversationPostProcessingStatus status;
@@ -125,6 +126,48 @@ class ConversationPhoto {
       };
 }
 
+class AudioFile {
+  final String id;
+  final String uid;
+  final String conversationId;
+  final List<double> chunkTimestamps;
+  final String provider;
+  final DateTime? startedAt;
+  final double duration;
+
+  AudioFile({
+    required this.id,
+    required this.uid,
+    required this.conversationId,
+    required this.chunkTimestamps,
+    this.provider = 'gcp',
+    this.startedAt,
+    required this.duration,
+  });
+
+  factory AudioFile.fromJson(Map<String, dynamic> json) {
+    return AudioFile(
+      id: json['id'] ?? '',
+      uid: json['uid'] ?? '',
+      conversationId: json['conversation_id'] ?? '',
+      chunkTimestamps: (json['chunk_timestamps'] as List<dynamic>?)?.map((e) => (e as num).toDouble()).toList() ?? [],
+      provider: json['provider'] ?? 'gcp',
+      startedAt: json['started_at'] != null ? DateTime.parse(json['started_at']).toLocal() : null,
+      duration: (json['duration'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'uid': uid,
+        'conversation_id': conversationId,
+        'chunk_timestamps': chunkTimestamps,
+        'provider': provider,
+        'started_at': startedAt?.toUtc().toIso8601String(),
+        'duration': duration,
+      };
+}
+
 class ServerConversation {
   final String id;
   final DateTime createdAt;
@@ -135,6 +178,7 @@ class ServerConversation {
   final List<TranscriptSegment> transcriptSegments;
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
+  final List<AudioFile> audioFiles;
 
   final List<AppResponse> appResults;
   final List<String> suggestedSummarizationApps;
@@ -148,6 +192,7 @@ class ServerConversation {
   final bool deleted;
   final bool isLocked;
   bool starred;
+  String? folderId;
 
   // local label
   bool isNew = false;
@@ -163,6 +208,7 @@ class ServerConversation {
     this.suggestedSummarizationApps = const [],
     this.geolocation,
     this.photos = const [],
+    this.audioFiles = const [],
     this.discarded = false,
     this.deleted = false,
     this.source,
@@ -171,6 +217,7 @@ class ServerConversation {
     this.status = ConversationStatus.completed,
     this.isLocked = false,
     this.starred = false,
+    this.folderId,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -191,6 +238,7 @@ class ServerConversation {
       photos: json['photos'] != null
           ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
           : [],
+      audioFiles: ((json['audio_files'] ?? []) as List<dynamic>).map((af) => AudioFile.fromJson(af)).toList(),
       discarded: json['discarded'] ?? false,
       source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
@@ -202,6 +250,7 @@ class ServerConversation {
           : ConversationStatus.completed,
       isLocked: json['is_locked'] ?? false,
       starred: json['starred'] ?? false,
+      folderId: json['folder_id'],
     );
   }
 
@@ -225,6 +274,7 @@ class ServerConversation {
       'status': status.toString().split('.').last,
       'is_locked': isLocked,
       'starred': starred,
+      'folder_id': folderId,
     };
   }
 
@@ -303,6 +353,12 @@ class ServerConversation {
 
     return lastEndTime.toInt();
   }
+
+  /// Check if this conversation has audio files available
+  bool hasAudio() => audioFiles.isNotEmpty;
+
+  /// Get the primary audio file (first one)
+  AudioFile? getPrimaryAudioFile() => audioFiles.isNotEmpty ? audioFiles.first : null;
 }
 
 class SyncLocalFilesResponse {

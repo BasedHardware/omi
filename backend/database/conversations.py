@@ -182,7 +182,51 @@ def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
 ):
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if len(statuses) > 0:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    # Apply date range filters if provided
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    # Sort
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    # Limits
+    conversations_ref = conversations_ref.limit(limit).offset(offset)
+
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_without_photos(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    include_discarded: bool = False,
+    statuses: List[str] = [],
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+):
+    """
+    Same as get_conversations but without loading photos.
+    Much faster for bulk operations like Wrapped where photos aren't needed.
+    """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
@@ -320,10 +364,85 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     conversation_ref.update({'structured.title': title})
 
 
+def delete_conversation_photos(uid: str, conversation_id: str) -> int:
+    """
+    Delete all photos in a conversation's photos subcollection.
+
+    IMPORTANT: Firestore does NOT cascade delete subcollections when you delete
+    a parent document. This function must be called before deleting a conversation.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+
+    Returns:
+        Number of photos deleted
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    photos_ref = conversation_ref.collection('photos')
+
+    # Get all photo documents
+    photos = photos_ref.stream()
+    deleted_count = 0
+
+    # Delete in batches of 500 (Firestore batch limit)
+    batch = db.batch()
+    batch_count = 0
+
+    for photo_doc in photos:
+        batch.delete(photo_doc.reference)
+        batch_count += 1
+        deleted_count += 1
+
+        if batch_count >= 500:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
+
+    # Commit remaining
+    if batch_count > 0:
+        batch.commit()
+
+    return deleted_count
+
+
 def delete_conversation(uid, conversation_id):
+    """
+    Delete a conversation and its photos subcollection.
+
+    Args:
+        uid: User ID
+        conversation_id: Conversation ID
+    """
+    # Delete photos subcollection first
+    delete_conversation_photos(uid, conversation_id)
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.delete()
+
+
+def update_conversation_merged_data(uid: str, conversation_id: str, merged_data: dict):
+    """
+    Update a conversation with merged data from multiple conversations.
+
+    This function handles the bulk update of all merged fields and respects
+    the conversation's data protection level.
+
+    Args:
+        uid: User ID
+        conversation_id: Primary conversation ID to update
+        merged_data: Dictionary containing all merged fields
+    """
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    doc_snapshot = doc_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    prepared_data = _prepare_conversation_for_write(merged_data, uid, doc_level)
+    doc_ref.update(prepared_data)
 
 
 def delete_conversations_by_source(uid: str, source: str, batch_size: int = 450) -> int:

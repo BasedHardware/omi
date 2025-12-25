@@ -1037,7 +1037,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
               if (widget.actionItem.isLocked)
                 Positioned.fill(
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 3.0, sigmaY: 3.0),
+                    filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
                         MixpanelManager().paywallOpened('Action Item');

@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 
 enum IntegrationApp {
   whoop,
@@ -17,13 +18,16 @@ enum IntegrationApp {
   twitter,
   github,
   googleCalendar,
+  gmail,
 }
 
 extension IntegrationAppExtension on IntegrationApp {
   String get displayName {
     switch (this) {
       case IntegrationApp.googleCalendar:
-        return 'Google';
+        return 'Google Calendar';
+      case IntegrationApp.gmail:
+        return 'Gmail';
       case IntegrationApp.whoop:
         return 'Whoop';
       case IntegrationApp.notion:
@@ -39,6 +43,8 @@ extension IntegrationAppExtension on IntegrationApp {
     switch (this) {
       case IntegrationApp.googleCalendar:
         return 'google_calendar';
+      case IntegrationApp.gmail:
+        return 'gmail';
       case IntegrationApp.whoop:
         return 'whoop';
       case IntegrationApp.notion:
@@ -56,6 +62,8 @@ extension IntegrationAppExtension on IntegrationApp {
         // Use logo from assets - file is google-calendar.png
         // Direct path works even if not in generated assets file
         return 'assets/integration_app_logos/google-calendar.png';
+      case IntegrationApp.gmail:
+        return 'assets/integration_app_logos/gmail-logo.jpeg';
       case IntegrationApp.whoop:
         // Use logo from assets - file is whoop.png
         // Direct path works even if not in generated assets file
@@ -77,6 +85,8 @@ extension IntegrationAppExtension on IntegrationApp {
     switch (this) {
       case IntegrationApp.googleCalendar:
         return Icons.calendar_today;
+      case IntegrationApp.gmail:
+        return Icons.mail;
       case IntegrationApp.whoop:
         return Icons.favorite; // Heart icon for health/fitness
       case IntegrationApp.notion:
@@ -92,6 +102,8 @@ extension IntegrationAppExtension on IntegrationApp {
     switch (this) {
       case IntegrationApp.googleCalendar:
         return const Color(0xFF4285F4);
+      case IntegrationApp.gmail:
+        return const Color(0xFFEA4335);
       case IntegrationApp.whoop:
         return const Color(0xFF00D9FF); // Whoop brand color (cyan)
       case IntegrationApp.notion:
@@ -104,13 +116,12 @@ extension IntegrationAppExtension on IntegrationApp {
   }
 
   bool get isAvailable {
-  //  return true; // All integrations are available
-    return this != IntegrationApp.googleCalendar;
+    return this != IntegrationApp.gmail;
   }
 
-  String get comingSoonText {
-    return 'Coming Soon';
-  }
+  // String get comingSoonText {
+  //   return 'Coming Soon';
+  // }
 }
 
 class IntegrationsPage extends StatefulWidget {
@@ -351,28 +362,29 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     return context.read<IntegrationProvider>().isAppConnected(app);
   }
 
-  Widget _buildOverlappingLogo(String path, double size) {
-    return Container(
-      width: size,
-      height: size,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.asset(
-          path,
-          width: size,
-          height: size,
-          fit: BoxFit.contain,
+
+
+  Widget _buildShimmerButton() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade600,
+      child: Container(
+        width: 70,
+        height: 28,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(16),
         ),
       ),
     );
   }
 
-  Widget _buildAppTile(IntegrationApp app) {
+  Widget _buildAppTile(IntegrationApp app, bool isLoading) {
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
 
     return GestureDetector(
-      onTap: isAvailable
+      onTap: isAvailable && !isLoading
           ? () {
               if (isConnected) {
                 // If GitHub is connected, open settings page
@@ -395,64 +407,27 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
         child: Row(
           children: [
-            // App Icon/Logo - Stacked for Google, single for others
-            app == IntegrationApp.googleCalendar
-                ? SizedBox(
-                    width: 68, // Width for 2 overlapping logos (40px icon + 28px offset)
-                    height: 40,
-                    child: Stack(
-                      children: [
-                        // Gmail logo
-                        Positioned(
-                          left: 0,
-                          child: _buildOverlappingLogo(
-                            'assets/integration_app_logos/gmail-logo.jpeg',
-                            40,
-                          ),
-                        ),
-                        // Calendar logo
-                        Positioned(
-                          left: 28,
-                          child: _buildOverlappingLogo(
-                            'assets/integration_app_logos/google-calendar.png',
-                            40,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
+            // App Icon/Logo
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: app.logoPath != null
+                  ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: app.logoPath != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.asset(
-                              app.logoPath!,
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(
-                                    app.icon,
-                                    color: isAvailable ? app.iconColor : Colors.grey,
-                                    size: 24,
-                                  ),
-                                );
-                              },
-                            ),
-                          )
-                        : Container(
+                      child: Image.asset(
+                        app.logoPath!,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
                             decoration: BoxDecoration(
-                              color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                              color: isAvailable
+                                  ? app.iconColor.withOpacity(0.2)
+                                  : Colors.grey.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
@@ -460,45 +435,40 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                               color: isAvailable ? app.iconColor : Colors.grey,
                               size: 24,
                             ),
-                          ),
-                  ),
-            const SizedBox(width: 16),
-            // App Name and Status
-            Expanded(
-              child: Row(
-                children: [
-                  Text(
-                    app.displayName,
-                    style: TextStyle(
-                      color: isAvailable ? Colors.white : Colors.grey,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  // Connected chip
-                  if (isConnected) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          );
+                        },
+                      ),
+                    )
+                  : Container(
                       decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(10),
+                        color: isAvailable
+                            ? app.iconColor.withOpacity(0.2)
+                            : Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Text(
-                        'Linked',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      child: Icon(
+                        app.icon,
+                        color: isAvailable ? app.iconColor : Colors.grey,
+                        size: 24,
                       ),
                     ),
-                  ],
-                ],
+            ),
+            const SizedBox(width: 16),
+            // App Name
+            Expanded(
+              child: Text(
+                app.displayName,
+                style: TextStyle(
+                  color: isAvailable ? Colors.white : Colors.grey,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
-            // Action Button
-            if (!isConnected)
+            // Action Button - Show shimmer while loading
+            if (isLoading)
+              _buildShimmerButton()
+            else if (!isConnected)
               // Connect button
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -566,10 +536,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             ),
             const SizedBox(width: 16),
             // App Name
-            Expanded(
+            const Expanded(
               child: Text(
                 'Create Your Own App',
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w400,
@@ -598,7 +568,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   @override
   Widget build(BuildContext context) {
     // Watch provider to rebuild when it changes
-    context.watch<IntegrationProvider>();
+    final provider = context.watch<IntegrationProvider>();
+    final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
@@ -629,7 +600,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               Expanded(
                 child: ListView(
                   children: [
-                    ...IntegrationApp.values.map(_buildAppTile).toList(),
+                    ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)).toList(),
                     _buildCreateYourOwnAppTile(),
                   ],
                 ),

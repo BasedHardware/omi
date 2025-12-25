@@ -1,6 +1,5 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -15,37 +14,13 @@ class LanguageSettingsPage extends StatefulWidget {
 }
 
 class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
-  final TextEditingController _vocabularyController = TextEditingController();
   bool _isUpdatingLanguage = false;
 
-  // Debounced deletion
-  final Set<String> _pendingDeletions = {};
-  Timer? _deletionDebounceTimer;
-  bool _isDeletingBatch = false;
-
-  @override
-  void dispose() {
-    _vocabularyController.dispose();
-    _deletionDebounceTimer?.cancel();
-    super.dispose();
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title.toUpperCase(),
-        style: const TextStyle(
-          color: Color(0xFF6B6B6B),
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLanguageSelector(HomeProvider homeProvider, CaptureProvider captureProvider) {
+  Widget _buildLanguageCard(
+    HomeProvider homeProvider,
+    UserProvider userProvider,
+    CaptureProvider captureProvider,
+  ) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
             .firstWhere(
@@ -55,39 +30,151 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
             .key
         : 'Not set';
 
-    return GestureDetector(
-      onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                languageName,
-                style: TextStyle(
-                  color: _isUpdatingLanguage ? const Color(0xFF6B6B6B) : Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
+    final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
+    final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          // Primary Language Row
+          GestureDetector(
+            onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A2E),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: FaIcon(
+                      FontAwesomeIcons.globe,
+                      color: Colors.grey.shade400,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Primary Language',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        languageName,
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isUpdatingLanguage)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                else
+                  FaIcon(
+                    FontAwesomeIcons.chevronRight,
+                    color: Colors.grey.shade600,
+                    size: 14,
+                  ),
+              ],
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, color: Colors.grey.shade800),
+          ),
+
+          // Automatic Translation Row
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A2E),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: FaIcon(
+                    FontAwesomeIcons.language,
+                    color: Colors.grey.shade400,
+                    size: 16,
+                  ),
                 ),
               ),
-            ),
-            if (_isUpdatingLanguage)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B6B6B)),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Automatic Translation',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Detect 10+ languages',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
-              )
-            else
-              const Icon(Icons.chevron_right, color: Color(0xFF6B6B6B), size: 20),
-          ],
-        ),
+              ),
+              const SizedBox(width: 12),
+              if (isUpdatingTranslation)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              else
+                Switch(
+                  value: isAutoTranslationEnabled,
+                  onChanged: (value) async {
+                    final success = await userProvider.setSingleLanguageMode(!value);
+                    if (success && context.mounted) {
+                      context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+                    }
+                  },
+                  activeColor: const Color(0xFF22C55E),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -185,325 +272,38 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     );
   }
 
-  Widget _buildMultiLanguageToggle(UserProvider userProvider) {
-    final isUpdating = userProvider.isUpdatingSingleLanguageMode;
-    final isMultiLanguageEnabled = !userProvider.singleLanguageMode;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Language Detection & Translation',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Detect 10+ languages and translate to your primary language',
-                  style: TextStyle(
-                    color: Color(0xFF6B6B6B),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (isUpdating)
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            )
-          else
-            GestureDetector(
-              onTap: () async {
-                final success = await userProvider.setSingleLanguageMode(isMultiLanguageEnabled);
-                if (success && context.mounted) {
-                  context.read<CaptureProvider>().onTranscriptionSettingsChanged();
-                }
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: isMultiLanguageEnabled ? const Color(0xFF007AFF) : Colors.transparent,
-                  border: Border.all(
-                    color: isMultiLanguageEnabled ? const Color(0xFF007AFF) : const Color(0xFF8E8E93),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                width: 24,
-                height: 24,
-                child: isMultiLanguageEnabled
-                    ? const Icon(
-                        Icons.check,
-                        color: Colors.white,
-                        size: 16,
-                      )
-                    : null,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVocabularySection(UserProvider userProvider) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Custom Vocabulary',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${userProvider.transcriptionVocabulary.length}',
-                      style: const TextStyle(
-                        color: Color(0xFF6B6B6B),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Add names, jargon, or uncommon words for better recognition',
-                  style: TextStyle(
-                    color: Color(0xFF6B6B6B),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _vocabularyController,
-                        enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
-                        style: const TextStyle(color: Colors.white, fontSize: 15),
-                        decoration: InputDecoration(
-                          hintText: 'Omi, Callie, OpenAI',
-                          hintStyle: const TextStyle(color: Color(0xFF6B6B6B)),
-                          filled: true,
-                          fillColor: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                              ? const Color(0xFF1A1A1A)
-                              : const Color(0xFF2A2A2A),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        ),
-                        onSubmitted: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                            ? null
-                            : (value) => _addWord(userProvider),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: userProvider.isUpdatingVocabulary ? null : () => _addWord(userProvider),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                              ? const Color(0xFF1A1A1A)
-                              : const Color(0xFF2A2A2A),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B6B6B)),
-                                ),
-                              )
-                            : const Icon(Icons.add, color: Colors.white, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (userProvider.transcriptionVocabulary.isNotEmpty) ...[
-            const Divider(height: 1, color: Color(0xFF2A2A2A)),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: userProvider.transcriptionVocabulary.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF2A2A2A)),
-              itemBuilder: (context, index) {
-                final word = userProvider.transcriptionVocabulary[index];
-                final isPendingDelete = _pendingDeletions.contains(word);
-                final isDisabled = _isDeletingBatch || userProvider.isUpdatingVocabulary;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          word,
-                          style: TextStyle(
-                            color: isPendingDelete ? const Color(0xFF6B6B6B) : Colors.white,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ),
-                      if (isPendingDelete)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B6B6B)),
-                          ),
-                        )
-                      else
-                        GestureDetector(
-                          onTap: isDisabled ? null : () => _queueWordDeletion(userProvider, word),
-                          child: Icon(
-                            Icons.close_sharp,
-                            color: isDisabled ? const Color(0xFF3C3C3C) : const Color(0xFFFFFFFF),
-                            size: 20,
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Future<void> _addWord(UserProvider userProvider) async {
-    final input = _vocabularyController.text;
-    if (input.trim().isEmpty) return;
-
-    // Parse comma-separated words
-    final words = input.split(',').map((w) => w.trim()).where((w) => w.isNotEmpty).toList();
-
-    if (words.isEmpty) return;
-
-    _vocabularyController.clear();
-
-    final success = await userProvider.addVocabularyWords(words);
-    if (success && context.mounted) {
-      context.read<CaptureProvider>().onTranscriptionSettingsChanged();
-    }
-  }
-
-  void _queueWordDeletion(UserProvider userProvider, String word) {
-    setState(() {
-      _pendingDeletions.add(word);
-    });
-
-    // Cancel existing timer and start new one (debounce)
-    _deletionDebounceTimer?.cancel();
-    _deletionDebounceTimer = Timer(const Duration(seconds: 1), () {
-      _executeBatchDeletion(userProvider);
-    });
-  }
-
-  Future<void> _executeBatchDeletion(UserProvider userProvider) async {
-    if (_pendingDeletions.isEmpty) return;
-
-    setState(() {
-      _isDeletingBatch = true;
-    });
-
-    final wordsToDelete = List<String>.from(_pendingDeletions);
-    bool anySuccess = false;
-
-    for (final word in wordsToDelete) {
-      final success = await userProvider.removeVocabularyWord(word);
-      if (success) anySuccess = true;
-    }
-
-    if (mounted) {
-      setState(() {
-        _pendingDeletions.clear();
-        _isDeletingBatch = false;
-      });
-
-      if (anySuccess) {
-        context.read<CaptureProvider>().onTranscriptionSettingsChanged();
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     MixpanelManager().pageOpened('Language Settings');
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF0D0D0D),
+        elevation: 0,
+        leading: IconButton(
+          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text(
           'Language',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.black,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Consumer3<HomeProvider, UserProvider, CaptureProvider>(
         builder: (context, homeProvider, userProvider, captureProvider, _) {
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 24),
-                _buildSectionHeader('Primary Language'),
-                _buildLanguageSelector(homeProvider, captureProvider),
-                const SizedBox(height: 24),
-                _buildSectionHeader('Transcription'),
-                _buildMultiLanguageToggle(userProvider),
-                const SizedBox(height: 24),
-                _buildSectionHeader('Vocabulary'),
-                _buildVocabularySection(userProvider),
+                const SizedBox(height: 16),
+                _buildLanguageCard(homeProvider, userProvider, captureProvider),
                 const SizedBox(height: 32),
               ],
             ),

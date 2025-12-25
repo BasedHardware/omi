@@ -14,6 +14,11 @@ class ActionItemNotificationHandler {
     required String channelKey,
   }) async {
     try {
+      final allowed = await _awesomeNotifications.isNotificationAllowed();
+      if (!allowed) {
+        return;
+      }
+
       final dueAt = DateTime.parse(dueAtIso).toLocal();
       // Schedule notification 1 hour before due time
       final reminderTime = dueAt.subtract(const Duration(hours: 1));

@@ -233,6 +233,26 @@ class SchemaBasedSttProvider implements ISttProvider {
     );
   }
 
+  /// OpenAI GPT-4o Transcribe with speaker diarization
+  /// ref: https://platform.openai.com/docs/models/gpt-4o-transcribe-diarize
+  factory SchemaBasedSttProvider.openAIDiarize({
+    required String apiKey,
+    String language = 'en',
+  }) {
+    return SchemaBasedSttProvider(
+      apiUrl: 'https://api.openai.com/v1/audio/transcriptions',
+      schema: SttResponseSchema.openAIDiarize,
+      defaultHeaders: {'Authorization': 'Bearer $apiKey'},
+      defaultFields: {
+        'model': 'gpt-4o-transcribe-diarize',
+        'language': language,
+        'response_format': 'diarized_json',
+        'chunking_strategy': 'auto',
+      },
+      audioFieldName: 'file',
+    );
+  }
+
   Future<String?> _uploadAudio(Uint8List audioBytes) async {
     if (fileUploadConfig == null) return null;
 

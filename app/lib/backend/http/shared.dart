@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/auth_service.dart';
@@ -15,10 +16,8 @@ class ApiClient {
   static const Duration requestTimeoutRead = Duration(seconds: 30);
   static const Duration requestTimeoutWrite = Duration(seconds: 300);
 
-  static final _client = http.Client();
-
   static void dispose() {
-    _client.close();
+    HttpPoolManager.instance.dispose();
   }
 }
 
@@ -78,13 +77,13 @@ Future<http.StreamedResponse> makeRawApiCall({
   required String method,
   Map<String, String> headers = const {},
 }) async {
-  var request = http.Request(method, Uri.parse(url));
   final builtHeaders = await buildHeaders(
     requireAuthCheck: _isRequiredAuthCheck(url),
     fromHeaders: headers,
   );
+  var request = http.Request(method, Uri.parse(url));
   request.headers.addAll(builtHeaders);
-  return ApiClient._client.send(request);
+  return HttpPoolManager.instance.sendStreaming(request);
 }
 
 Future<http.Response?> makeApiCall({
@@ -95,30 +94,36 @@ Future<http.Response?> makeApiCall({
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
-    final builtHeaders = await buildHeaders(
+    Map<String, String> builtHeaders = await buildHeaders(
       requireAuthCheck: requireAuthCheck,
       fromHeaders: headers,
     );
 
-    http.Response? response = await _performRequest(url, builtHeaders, body, method);
+    http.Response response = await HttpPoolManager.instance.send(
+      () => _buildRequest(url, builtHeaders, body, method),
+      timeout: method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite,
+    );
+
     if (requireAuthCheck && response.statusCode == 401) {
       Logger.log('Token expired on 1st attempt');
       SharedPreferencesUtil().authToken = await AuthService.instance.getIdToken() ?? '';
       if (SharedPreferencesUtil().authToken.isNotEmpty) {
-        final refreshedHeaders = await buildHeaders(
+        builtHeaders = await buildHeaders(
           requireAuthCheck: requireAuthCheck,
           fromHeaders: headers,
         );
-        response = await _performRequest(url, refreshedHeaders, body, method);
+        response = await HttpPoolManager.instance.send(
+          () => _buildRequest(url, builtHeaders, body, method),
+          timeout: method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite,
+          retries: 0,
+        );
         Logger.log('Token refreshed and request retried');
         if (response.statusCode == 401) {
-          // Force user to sign in again
           await AuthService.instance.signOut();
           Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
               message: 'Authentication failed. Please sign in again.');
         }
       } else {
-        // Force user to sign in again
         await AuthService.instance.signOut();
         Logger.handle(Exception('Authentication failed. Please sign in again.'), StackTrace.current,
             message: 'Authentication failed. Please sign in again.');
@@ -130,50 +135,22 @@ Future<http.Response?> makeApiCall({
     debugPrint('HTTP request failed: $e, $stackTrace');
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     return null;
-  } finally {}
+  }
 }
 
-Future<http.Response> _performRequest(
+http.Request _buildRequest(
   String url,
   Map<String, String> headers,
   String body,
   String method,
-) async {
-  final client = ApiClient._client;
-
-  switch (method) {
-    case 'POST':
-      headers['Content-Type'] = 'application/json';
-      return await client.post(Uri.parse(url), headers: headers, body: body).timeout(
-            ApiClient.requestTimeoutWrite,
-            onTimeout: () => throw TimeoutException('Request timeout'),
-          );
-    case 'GET':
-      return await client.get(Uri.parse(url), headers: headers).timeout(
-            ApiClient.requestTimeoutRead,
-            onTimeout: () => throw TimeoutException('Request timeout'),
-          );
-    case 'DELETE':
-      headers['Content-Type'] = 'application/json';
-      return await client.delete(Uri.parse(url), headers: headers, body: body).timeout(
-            ApiClient.requestTimeoutWrite,
-            onTimeout: () => throw TimeoutException('Request timeout'),
-          );
-    case 'PATCH':
-      headers['Content-Type'] = 'application/json';
-      return await client.patch(Uri.parse(url), headers: headers, body: body).timeout(
-            ApiClient.requestTimeoutWrite,
-            onTimeout: () => throw TimeoutException('Request timeout'),
-          );
-    case 'PUT':
-      headers['Content-Type'] = 'application/json';
-      return await client.put(Uri.parse(url), headers: headers, body: body).timeout(
-            ApiClient.requestTimeoutWrite,
-            onTimeout: () => throw TimeoutException('Request timeout'),
-          );
-    default:
-      throw Exception('Unsupported HTTP method: $method');
+) {
+  final request = http.Request(method, Uri.parse(url));
+  request.headers.addAll(headers);
+  if (method != 'GET' && body.isNotEmpty) {
+    request.headers['Content-Type'] = 'application/json';
+    request.body = body;
   }
+  return request;
 }
 
 Future<http.Response> makeMultipartApiCall({
@@ -185,12 +162,12 @@ Future<http.Response> makeMultipartApiCall({
   String method = 'POST',
 }) async {
   try {
-    var request = http.MultipartRequest(method, Uri.parse(url));
-
     final builtHeaders = await buildHeaders(
       requireAuthCheck: _isRequiredAuthCheck(url),
       fromHeaders: headers,
     );
+
+    var request = http.MultipartRequest(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
     request.fields.addAll(fields);
 
@@ -206,7 +183,7 @@ Future<http.Response> makeMultipartApiCall({
       request.files.add(multipartFile);
     }
 
-    var streamedResponse = await ApiClient._client.send(request);
+    var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
     return await http.Response.fromStream(streamedResponse);
   } catch (e, stackTrace) {
     debugPrint('Multipart HTTP request failed: $e, $stackTrace');
@@ -222,12 +199,12 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
 }) async* {
   try {
-    var request = http.Request(method, Uri.parse(url));
-
     final builtHeaders = await buildHeaders(
       requireAuthCheck: _isRequiredAuthCheck(url),
       fromHeaders: headers,
     );
+
+    var request = http.Request(method, Uri.parse(url));
     request.headers.addAll(builtHeaders);
 
     if (body.isNotEmpty) {
@@ -235,7 +212,7 @@ Stream<String> makeStreamingApiCall({
       request.body = body;
     }
 
-    var streamedResponse = await ApiClient._client.send(request);
+    var streamedResponse = await HttpPoolManager.instance.sendStreaming(request);
 
     if (streamedResponse.statusCode != 200) {
       Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
@@ -280,19 +257,19 @@ Stream<String> makeMultipartStreamingApiCall({
   String fileFieldName = 'files',
 }) async* {
   try {
-    var request = http.MultipartRequest('POST', Uri.parse(url));
-
     final builtHeaders = await buildHeaders(
       requireAuthCheck: _isRequiredAuthCheck(url),
       fromHeaders: headers,
     );
+
+    var request = http.MultipartRequest('POST', Uri.parse(url));
     request.headers.addAll(builtHeaders);
 
     for (var file in files) {
       request.files.add(await http.MultipartFile.fromPath(fileFieldName, file.path, filename: basename(file.path)));
     }
 
-    var response = await ApiClient._client.send(request);
+    var response = await HttpPoolManager.instance.sendStreaming(request);
 
     if (response.statusCode != 200) {
       Logger.error('Multipart streaming request failed: ${response.statusCode}');

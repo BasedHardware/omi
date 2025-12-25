@@ -74,15 +74,26 @@ class _AddAppPageState extends State<AddAppPage> {
                       launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
                     },
                     borderRadius: BorderRadius.circular(20),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        'Docs',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text(
+                            'Docs',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          FaIcon(
+                            FontAwesomeIcons.arrowUpRightFromSquare,
+                            color: Colors.black,
+                            size: 10,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -129,7 +140,7 @@ class _AddAppPageState extends State<AddAppPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const AiAppGeneratorBanner(),
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 4),
                           AppMetadataWidget(
                             pickImage: () async {
                               await provider.pickImage();
@@ -804,7 +815,7 @@ class _AddAppPageState extends State<AddAppPage> {
                     const SizedBox(height: 10),
                     GestureDetector(
                       onTap: () {
-                        launchUrl(Uri.parse('https://omi.me/privacy'));
+                        launchUrl(Uri.parse('https://omi.me/pages/privacy'));
                       },
                       child: Text.rich(
                         TextSpan(

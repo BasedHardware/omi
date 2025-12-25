@@ -3,6 +3,7 @@ import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,10 @@ class MemoriesProvider extends ChangeNotifier {
   bool _excludeInteresting = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
+  
+  // Connectivity handling for offline sync
+  ConnectivityProvider? _connectivityProvider;
+  bool _isSyncing = false;
 
   List<Memory> get memories => _memories;
   List<Memory> get unreviewed => _unreviewed;
@@ -25,6 +30,8 @@ class MemoriesProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   MemoryCategory? get categoryFilter => _categoryFilter;
   bool get excludeInteresting => _excludeInteresting;
+  bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
+  int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
@@ -81,6 +88,27 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> init() async {
     await loadMemories();
+    // Try to sync any pending memories on init
+    await syncPendingMemories();
+  }
+
+  /// Set the connectivity provider to listen for connection changes
+  void setConnectivityProvider(ConnectivityProvider provider) {
+    _connectivityProvider = provider;
+    _connectivityProvider?.addListener(_onConnectivityChanged);
+  }
+
+  void _onConnectivityChanged() {
+    if (_connectivityProvider?.isConnected == true) {
+      // Connection restored, try to sync pending memories
+      syncPendingMemories();
+    }
+  }
+
+  @override
+  void dispose() {
+    _connectivityProvider?.removeListener(_onConnectivityChanged);
+    super.dispose();
   }
 
   Future<void> loadMemories() async {
@@ -88,6 +116,16 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     _memories = await getMemories();
+    
+    // Also load any pending (offline-created) memories
+    final pendingMemories = SharedPreferencesUtil().pendingMemories;
+    for (var pending in pendingMemories) {
+      // Add pending memories if they're not already in the list
+      if (!_memories.any((m) => m.id == pending.id)) {
+        _memories.add(pending);
+      }
+    }
+    
     _unreviewed = _memories
         .where(
             (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
@@ -95,6 +133,38 @@ class MemoriesProvider extends ChangeNotifier {
 
     _loading = false;
     _setCategories();
+  }
+
+  /// Sync pending memories to server when online
+  Future<void> syncPendingMemories() async {
+    if (_isSyncing) return;
+    
+    final pendingMemories = SharedPreferencesUtil().pendingMemories;
+    if (pendingMemories.isEmpty) return;
+
+    _isSyncing = true;
+    debugPrint('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
+
+    for (var memory in List.from(pendingMemories)) {
+      try {
+        final success = await createMemoryServer(
+          memory.content,
+          memory.visibility.name,
+          memory.category.name,
+        );
+        
+        if (success) {
+          SharedPreferencesUtil().removePendingMemory(memory.id);
+          debugPrint('MemoriesProvider: Synced memory ${memory.id}');
+        }
+      } catch (e) {
+        debugPrint('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
+        // Keep in pending list for next sync attempt
+      }
+    }
+
+    _isSyncing = false;
+    notifyListeners();
   }
 
   Memory? _lastDeletedMemory;
@@ -170,29 +240,48 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
+  /// Create a memory - works offline by saving locally first, then syncing
   Future<bool> createMemory(String content,
       [MemoryVisibility visibility = MemoryVisibility.public,
       MemoryCategory category = MemoryCategory.interesting]) async {
-    final success = await createMemoryServer(content, visibility.name, category.name);
+    // Create the memory object first
+    final newMemory = Memory(
+      id: const Uuid().v4(),
+      uid: SharedPreferencesUtil().uid,
+      content: content,
+      category: category,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      conversationId: null,
+      reviewed: false,
+      manuallyAdded: true,
+      visibility: visibility,
+    );
 
-    if (success) {
-      final newMemory = Memory(
-        id: const Uuid().v4(),
-        uid: SharedPreferencesUtil().uid,
-        content: content,
-        category: category,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        conversationId: null,
-        reviewed: false,
-        manuallyAdded: true,
-        visibility: visibility,
-      );
-      _memories.add(newMemory);
-      _setCategories();
+    // Add to local list immediately (optimistic update)
+    _memories.add(newMemory);
+    _setCategories();
+    notifyListeners();
+
+    // Try to sync with server
+    try {
+      final success = await createMemoryServer(content, visibility.name, category.name);
+      
+      if (!success) {
+        // Server call failed, save to pending for later sync
+        SharedPreferencesUtil().addPendingMemory(newMemory);
+        debugPrint('MemoriesProvider: Memory saved locally, will sync when online');
+      } else {
+        debugPrint('MemoriesProvider: Memory synced to server');
+      }
+    } catch (e) {
+      // Network error, save to pending for later sync
+      SharedPreferencesUtil().addPendingMemory(newMemory);
+      debugPrint('MemoriesProvider: Network error, memory saved locally: $e');
     }
 
-    return success;
+    // Always return true since memory is saved locally
+    return true;
   }
 
   Future<void> updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {

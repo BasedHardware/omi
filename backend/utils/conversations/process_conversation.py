@@ -16,6 +16,8 @@ import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 import database.action_items as action_items_db
+import database.folders as folders_db
+import database.calendar_meetings as calendar_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -27,6 +29,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from models.conversation import CalendarMeetingContext
 from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
@@ -39,6 +42,7 @@ from utils.llm.conversation_processing import (
     select_best_app_for_conversation,
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
+    assign_conversation_to_folder,
 )
 from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
@@ -57,6 +61,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.other.storage import precache_conversation_audio
 
 
 def _get_structured(
@@ -77,6 +82,13 @@ def _get_structured(
         except Exception as e:
             print(f"Error fetching existing action items for deduplication: {e}")
 
+        # Extract calendar context from external_data
+        calendar_context = None
+        if hasattr(conversation, 'external_data') and conversation.external_data:
+            calendar_data = conversation.external_data.get('calendar_meeting_context')
+            if calendar_data:
+                calendar_context = CalendarMeetingContext(**calendar_data)
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
@@ -88,6 +100,7 @@ def _get_structured(
                     language_code,
                     tz,
                     existing_action_items=existing_action_items,
+                    calendar_meeting_context=calendar_context,
                 )
                 return structured, False
 
@@ -136,6 +149,7 @@ def _get_structured(
                 tz,
                 photos=conversation.photos,
                 existing_action_items=existing_action_items,
+                calendar_meeting_context=calendar_context,
             ),
             False,
         )
@@ -151,16 +165,27 @@ def _get_conversation_obj(
 ):
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
+        conversation_dict = conversation.dict()
+        # Store calendar context in external_data if available
+        calendar_context = conversation_dict.pop('calendar_meeting_context', None)
+
         # Use started_at as created_at for imported conversations to preserve original timestamp
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
             structured=structured,
-            **conversation.dict(),
             created_at=created_at,
             discarded=discarded,
+            **conversation_dict,
         )
+
+        # Add calendar metadata to external_data
+        if calendar_context:
+            if not conversation.external_data:
+                conversation.external_data = {}
+            conversation.external_data['calendar_meeting_context'] = calendar_context
+
         if conversation.photos:
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
@@ -222,18 +247,28 @@ def _trigger_apps(
     language_code: str = 'en',
     people: List[Person] = None,
 ):
+    # Get default apps for auto-selection
+    default_apps = get_default_conversation_summarized_apps()
+    default_apps_dict = {app.id: app for app in default_apps}
+
+    # Also get user's installed apps (only used for preferred app lookup and reprocessing)
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
 
-    # Create a unique list of apps by combining user's and default apps
+    # Combined dict for looking up preferred apps or specific app_id requests
     all_apps_dict = {app.id: app for app in conversation_apps}
-    for app in get_default_conversation_summarized_apps():
-        if app.id not in all_apps_dict:
-            all_apps_dict[app.id] = app
+    all_apps_dict.update(default_apps_dict)
 
-    all_available_apps = list(all_apps_dict.values())
+    # Combined list for suggestions: default apps + user's installed apps (no duplicates)
+    all_suggestion_apps = list(all_apps_dict.values())
 
     app_to_run = None
+
+    # Always generate/update suggestions if not already set (even during reprocessing)
+    if not conversation.suggested_summarization_apps:
+        suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
+        conversation.suggested_summarization_apps = suggested_apps
+        print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
 
     # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
@@ -244,20 +279,14 @@ def _trigger_apps(
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = all_apps_dict.get(preferred_app_id)
             print(f"Using user's preferred app: {app_to_run.name} (id: {preferred_app_id})")
-        else:
-            # Auto-selection logic - fall back to LLM-based suggestion
-            suggested_apps, reasoning = get_suggested_apps_for_conversation(conversation, all_available_apps)
-            conversation.suggested_summarization_apps = suggested_apps
-            print(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
-
+        elif conversation.suggested_summarization_apps:
             # Use the first suggested app if available
-            if conversation.suggested_summarization_apps:
-                first_suggested_app_id = conversation.suggested_summarization_apps[0]
-                app_to_run = all_apps_dict.get(first_suggested_app_id)
-                if app_to_run:
-                    print(f"Using first suggested app: {app_to_run.name}")
-                else:
-                    print(f"First suggested app '{first_suggested_app_id}' not found in available apps.")
+            first_suggested_app_id = conversation.suggested_summarization_apps[0]
+            app_to_run = all_apps_dict.get(first_suggested_app_id)
+            if app_to_run:
+                print(f"Using first suggested app: {app_to_run.name}")
+            else:
+                print(f"First suggested app '{first_suggested_app_id}' not found in apps.")
 
     filtered_apps = [app_to_run] if app_to_run else []
 
@@ -439,6 +468,21 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
+    # Fetch meeting context from Firestore if meeting_id is associated with this conversation
+    if hasattr(conversation, 'id') and conversation.id:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation.id)
+        if meeting_id:
+            try:
+                meeting_data = calendar_db.get_meeting(uid, meeting_id)
+                if meeting_data:
+                    # Add meeting context to conversation's external_data
+                    if not hasattr(conversation, 'external_data') or not conversation.external_data:
+                        conversation.external_data = {}
+                    conversation.external_data['calendar_meeting_context'] = meeting_data
+                    print(f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}")
+            except Exception as e:
+                print(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
+
     person_ids = conversation.get_person_ids()
     people = []
     if person_ids:
@@ -447,6 +491,36 @@ def process_conversation(
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
+
+    # AI-based folder assignment
+    assigned_folder_id = None
+    if not discarded and not is_reprocess and not conversation.folder_id:
+        try:
+            # Get user's folders
+            user_folders = folders_db.get_folders(uid)
+            if not user_folders:
+                user_folders = folders_db.initialize_system_folders(uid)
+
+            if user_folders and conversation.structured:
+                folder_id, confidence, reasoning = assign_conversation_to_folder(
+                    transcript=(
+                        conversation.get_transcript(False, people=people)
+                        if hasattr(conversation, 'get_transcript')
+                        else ''
+                    ),
+                    title=conversation.structured.title or '',
+                    overview=conversation.structured.overview or '',
+                    category=conversation.structured.category.value if conversation.structured.category else 'other',
+                    user_folders=user_folders,
+                )
+                if folder_id:
+                    conversation.folder_id = folder_id
+                    assigned_folder_id = folder_id
+                    print(
+                        f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
+                    )
+        except Exception as e:
+            print(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
     if not discarded:
         # Analytics tracking
@@ -502,11 +576,17 @@ def process_conversation(
                 conversations_db.update_conversation(
                     uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
                 )
+                # Pre-cache audio files in background
+                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
         except Exception as e:
             print(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
+
+    # Update folder conversation count after conversation is saved
+    if assigned_folder_id:
+        folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
     if not is_reprocess:
         threading.Thread(
