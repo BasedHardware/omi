@@ -630,7 +630,8 @@ Use `discarded: true` to hide a conversation from the main list without permanen
         "https://api.omi.me/v1/dev/user/conversations/conv_456",
         headers={"Authorization": f"Bearer {API_KEY}"}
     )
-    if response.status_code == 204:
+    result = response.json()
+    if result["success"]:
         print("Conversation deleted successfully")
     ```
   </Tab>
@@ -643,16 +644,19 @@ Use `discarded: true` to hide a conversation from the main list without permanen
         headers: { Authorization: `Bearer ${API_KEY}` }
       }
     );
-    if (response.status === 204) {
+    const result = await response.json();
+    if (result.success) {
       console.log("Conversation deleted successfully");
     }
     ```
   </Tab>
 </Tabs>
 
-<Accordion title="Response" icon="check" defaultOpen={true}>
-  ```
-  204 No Content
+<Accordion title="Response Example" icon="code" defaultOpen={true}>
+  ```json
+  {
+    "success": true
+  }
   ```
 </Accordion>
 
