@@ -129,8 +129,8 @@ class ForegroundUtil {
           // such as 1m + self-validation in each service.
           eventAction: ForegroundTaskEventAction.repeat(60 * 1000 * 5),
           autoRunOnBoot: false,
-          allowWakeLock: true,
-          allowWifiLock: true,
+          allowWakeLock: false,
+          allowWifiLock: false,
         ),
       );
       _isInitialized = true;
