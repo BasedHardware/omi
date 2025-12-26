@@ -58,7 +58,7 @@ def rebuild_graph(
     uid: str = Depends(auth.get_current_user_uid)
 ):
     user = users_db.get_user_profile(uid)
-    user_name = user.get('name', 'User') if user else 'User'
+    user_name = user.get('name', 'User') if isinstance(user, dict) else 'User'
     
     kg_db.delete_knowledge_graph(uid)
     
