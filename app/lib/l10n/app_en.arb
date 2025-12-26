@@ -1,0 +1,1437 @@
+{
+  "@@locale": "en",
+  "@@last_modified": "2024-12-26",
+  
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+
+  "conversationTab": "Conversation",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+
+  "transcriptTab": "Transcript",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+
+  "actionItemsTab": "Action Items",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+
+  "deleteConversationTitle": "Delete Conversation?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+
+  "deleteConversationMessage": "Are you sure you want to delete this conversation? This action cannot be undone.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+
+  "confirm": "Confirm",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button label"
+  },
+
+  "ok": "OK",
+  "@ok": {
+    "description": "OK button label"
+  },
+
+  "delete": "Delete",
+  "@delete": {
+    "description": "Delete button/action label"
+  },
+
+  "add": "Add",
+  "@add": {
+    "description": "Add button label"
+  },
+
+  "update": "Update",
+  "@update": {
+    "description": "Update button label"
+  },
+
+  "save": "Save",
+  "@save": {
+    "description": "Save button label"
+  },
+
+  "edit": "Edit",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+
+  "close": "Close",
+  "@close": {
+    "description": "Close button label"
+  },
+
+  "copyTranscript": "Copy Transcript",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+
+  "copySummary": "Copy Summary",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+
+  "testPrompt": "Test Prompt",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+
+  "reprocessConversation": "Reprocess Conversation",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+
+  "deleteConversation": "Delete Conversation",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+
+  "contentCopied": "Content copied to clipboard",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+
+  "failedToUpdateStarred": "Failed to update starred status.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+
+  "conversationUrlNotShared": "Conversation URL could not be shared.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+
+  "errorProcessingConversation": "Error while processing conversation. Please try again later.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+
+  "noInternetConnection": "Please check your internet connection and try again.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+
+  "unableToDeleteConversation": "Unable to Delete Conversation",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+
+  "somethingWentWrong": "Something went wrong! Please try again later.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+
+  "copyErrorMessage": "Copy error message",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+
+  "errorCopied": "Error message copied to clipboard",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+
+  "remaining": "Remaining",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+
+  "loading": "Loading...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+
+  "loadingDuration": "Loading duration...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+
+  "secondsCount": "{count} seconds",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+
+  "people": "People",
+  "@people": {
+    "description": "People section title"
+  },
+
+  "addNewPerson": "Add New Person",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+
+  "editPerson": "Edit Person",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+
+  "createPersonHint": "Create a new person and train Omi to recognize their speech too!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+
+  "speechProfile": "Speech Profile",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+
+  "sampleNumber": "Sample {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings page title"
+  },
+
+  "language": "Language",
+  "@language": {
+    "description": "Language setting label"
+  },
+
+  "selectLanguage": "Select Language",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+
+  "deleting": "Deleting...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+
+  "pleaseCompleteAuthentication": "Please complete authentication in your browser. Once done, return to the app.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+
+  "failedToStartAuthentication": "Failed to start authentication",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+
+  "importStarted": "Import started! You'll be notified when it's complete.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+
+  "failedToStartImport": "Failed to start import. Please try again.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+
+  "couldNotAccessFile": "Could not access the selected file",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+
+  "askOmi": "Ask Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+
+  "done": "Done",
+  "@done": {
+    "description": "Done button label"
+  },
+
+  "disconnected": "Disconnected",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+
+  "searching": "Searching",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+
+  "connectDevice": "Connect Device",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+
+  "monthlyLimitReached": "You've reached your monthly limit.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+
+  "checkUsage": "Check Usage",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+
+  "syncingRecordings": "Syncing recordings",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+
+  "recordingsToSync": "Recordings to sync",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+
+  "allCaughtUp": "All caught up",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+
+  "sync": "Sync",
+  "@sync": {
+    "description": "Sync button label"
+  },
+
+  "pendantUpToDate": "Pendant is up to date",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+
+  "allRecordingsSynced": "All recordings are synced",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+
+  "syncingInProgress": "Syncing in progress",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+
+  "readyToSync": "Ready to sync",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+
+  "tapSyncToStart": "Tap Sync to start",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+
+  "pendantNotConnected": "Pendant not connected. Connect to sync.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+
+  "everythingSynced": "Everything is already synced.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+
+  "recordingsNotSynced": "You have recordings that aren't synced yet.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+
+  "syncingBackground": "We'll keep syncing your recordings in the background.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+
+  "noConversationsYet": "No conversations yet.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+
+  "noStarredConversations": "No starred conversations yet.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+
+  "starConversationHint": "To star a conversation, open it and tap the star icon in the header.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+
+  "searchConversations": "Search Conversations",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+
+  "selectedCount": "{count} selected",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "merge": "Merge",
+  "@merge": {
+    "description": "Merge button label"
+  },
+
+  "mergeConversations": "Merge Conversations",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+
+  "mergeConversationsMessage": "This will combine {count} conversations into one. All content will be merged and regenerated.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "mergingInBackground": "Merging in background. This may take a moment.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+
+  "failedToStartMerge": "Failed to start merge",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+
+  "askAnything": "Ask anything",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+
+  "noMessagesYet": "No messages yet!\nWhy don't you start a conversation?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+
+  "deletingMessages": "Deleting your messages from Omi's memory...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+
+  "messageCopied": "Message copied to clipboard.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+
+  "cannotReportOwnMessage": "You cannot report your own messages.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+
+  "reportMessage": "Report Message",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+
+  "reportMessageConfirm": "Are you sure you want to report this message?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+
+  "messageReported": "Message reported successfully.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+
+  "thankYouFeedback": "Thank you for your feedback!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+
+  "clearChat": "Clear Chat?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+
+  "clearChatConfirm": "Are you sure you want to clear the chat? This action cannot be undone.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+
+  "maxFilesLimit": "You can only upload 4 files at a time",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+
+  "chatWithOmi": "Chat with Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+
+  "apps": "Apps",
+  "@apps": {
+    "description": "Apps page title"
+  },
+
+  "noAppsFound": "No apps found",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+
+  "tryAdjustingSearch": "Try adjusting your search or filters",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+
+  "createYourOwnApp": "Create Your Own App",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+
+  "buildAndShareApp": "Build and share your custom app",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+
+  "searchApps": "Search 1500+ Apps",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+
+  "myApps": "My Apps",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+
+  "installedApps": "Installed Apps",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+
+  "unableToFetchApps": "Unable to fetch apps :(\n\nPlease check your internet connection and try again.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+
+  "aboutOmi": "About Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+
+  "privacyPolicy": "Privacy Policy",
+  "@privacyPolicy": {
+    "description": "Privacy policy link"
+  },
+
+  "visitWebsite": "Visit Website",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+
+  "helpOrInquiries": "Help or Inquiries?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+
+  "joinCommunity": "Join the community!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+
+  "membersAndCounting": "8000+ members and counting.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+
+  "deleteAccountTitle": "Delete Account",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+
+  "deleteAccountConfirm": "Are you sure you want to delete your account?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+
+  "cannotBeUndone": "This cannot be undone.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+
+  "allDataErased": "All of your memories and conversations will be permanently erased.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+
+  "appsDisconnected": "Your Apps and Integrations will be disconnected effectively immediately.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+
+  "exportBeforeDelete": "You can export your data before deleting your account, but once deleted, it cannot be recovered.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+
+  "deleteAccountCheckbox": "I understand that deleting my account is permanent and all data, including memories and conversations, will be lost and cannot be recovered.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+
+  "areYouSure": "Are you sure?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+
+  "deleteAccountFinal": "This action is irreversible and will permanently delete your account and all associated data. Are you sure you want to proceed?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+
+  "deleteNow": "Delete Now",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+
+  "goBack": "Go Back",
+  "@goBack": {
+    "description": "Go back button"
+  },
+
+  "checkBoxToConfirm": "Check the box to confirm you understand that deleting your account is permanent and irreversible.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+
+  "profile": "Profile",
+  "@profile": {
+    "description": "Profile page title"
+  },
+
+  "name": "Name",
+  "@name": {
+    "description": "Name field label"
+  },
+
+  "email": "Email",
+  "@email": {
+    "description": "Email field label"
+  },
+
+  "language": "Language",
+  "@language": {
+    "description": "Language field label"
+  },
+
+  "customVocabulary": "Custom Vocabulary",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+
+  "speechProfile": "Speech Profile",
+  "@speechProfile": {
+    "description": "Speech profile setting"
+  },
+
+  "identifyingOthers": "Identifying Others",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+
+  "paymentMethods": "Payment Methods",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+
+  "conversationDisplay": "Conversation Display",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+
+  "dataPrivacy": "Data & Privacy",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+
+  "userId": "User ID",
+  "@userId": {
+    "description": "User ID label"
+  },
+
+  "notSet": "Not set",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+
+  "userIdCopied": "User ID copied to clipboard",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+
+  "selectLanguage": "Select Language",
+  "@selectLanguage": {
+    "description": "Language picker title"
+  },
+
+  "systemDefault": "System Default",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+
+  "planAndUsage": "Plan & Usage",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+
+  "offlineSync": "Offline Sync",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+
+  "deviceSettings": "Device Settings",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+
+  "chatTools": "Chat Tools",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+
+  "feedbackBug": "Feedback / Bug",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+
+  "helpCenter": "Help Center",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+
+  "developerSettings": "Developer Settings",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+
+  "getOmiForMac": "Get Omi for Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+
+  "referralProgram": "Referral Program",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+
+  "signOut": "Sign Out",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+
+  "appAndDeviceCopied": "App and device details copied",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+
+  "wrapped2025": "Wrapped 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+
+  "yourPrivacyYourControl": "Your Privacy, Your Control",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+
+  "privacyIntro": "At Omi, we are committed to protecting your privacy. This page allows you to control how your data is stored and used.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+
+  "learnMore": "Learn more...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+
+  "dataProtectionLevel": "Data Protection Level",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+
+  "dataProtectionDesc": "Your data is secured by default with strong encryption. Review your settings and future privacy options below.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+
+  "appAccess": "App Access",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+
+  "appAccessDesc": "The following apps can access your data. Tap on an app to manage its permissions.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+
+  "noAppsExternalAccess": "No installed apps have external access to your data.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+
+  "deviceName": "Device Name",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+
+  "deviceId": "Device ID",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+
+  "firmware": "Firmware",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+
+  "sdCardSync": "SD Card Sync",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+
+  "hardwareRevision": "Hardware Revision",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+
+  "modelNumber": "Model Number",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+
+  "manufacturer": "Manufacturer",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+
+  "doubleTap": "Double Tap",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+
+  "ledBrightness": "LED Brightness",
+  "@ledBrightness": {
+    "description": "LED brightness label"
+  },
+
+  "micGain": "Mic Gain",
+  "@micGain": {
+    "description": "Microphone gain label"
+  },
+
+  "disconnect": "Disconnect",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+
+  "forgetDevice": "Forget Device",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+
+  "chargingIssues": "Charging Issues",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+
+  "disconnectDevice": "Disconnect Device",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+
+  "unpairDevice": "Unpair Device",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+
+  "unpairAndForget": "Unpair and Forget Device",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+
+  "deviceDisconnectedMessage": "Your Omi has been disconnected 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+
+  "deviceUnpairedMessage": "Device unpaired. Go to Settings > Bluetooth and forget the device to complete unpairing.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+
+  "unpairDialogTitle": "Unpair Device",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+
+  "unpairDialogMessage": "This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+
+  "deviceNotConnected": "Device Not Connected",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+
+  "connectDeviceMessage": "Connect your Omi device to access\ndevice settings and customization",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+
+  "deviceInfoSection": "Device Information",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+
+  "customizationSection": "Customization",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+
+  "hardwareSection": "Hardware",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+
+  "v2Undetected": "V2 undetected",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+
+  "v2UndetectedMessage": "We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+
+  "endConversation": "End Conversation",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+
+  "pauseResume": "Pause/Resume",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+
+  "starConversation": "Star Conversation",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+
+  "doubleTapAction": "Double Tap Action",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+
+  "doubleTapActionDesc": "Choose what happens when you double tap",
+  "@doubleTapActionDesc": {
+    "description": "Double tap action description"
+  },
+
+  "endAndProcess": "End & Process Conversation",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+
+  "pauseResumeRecording": "Pause/Resume Recording",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+
+  "starOngoing": "Star Ongoing Conversation",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+
+  "starOngoingDesc": "Mark to star when conversation ends",
+  "@starOngoingDesc": {
+    "description": "Star ongoing conversation description"
+  },
+
+  "ledBrightness": "LED Brightness",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+
+  "off": "Off",
+  "@off": {
+    "description": "Off state"
+  },
+
+  "max": "Max",
+  "@max": {
+    "description": "Max state"
+  },
+
+  "micGain": "Mic Gain",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+
+  "mute": "Mute",
+  "@mute": {
+    "description": "Mute state"
+  },
+
+  "quiet": "Quiet",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+
+  "normal": "Normal",
+  "@normal": {
+    "description": "Normal preset"
+  },
+
+  "high": "High",
+  "@high": {
+    "description": "High preset"
+  },
+
+  "micGainDescMuted": "Microphone is muted",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Very quiet - for loud environments",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Quiet - for moderate noise",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neutral - balanced recording",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Slightly boosted - normal use",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Boosted - for quiet environments",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "High - for distant or soft voices",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Very high - for very quiet sources",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maximum - use with caution",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+
+  "developerSettingsTitle": "Developer Settings",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+
+  "save": "Save",
+  "@save": {
+    "description": "Save button"
+  },
+
+  "saving": "Saving...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+
+  "personaConfig": "Configure your AI persona",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+
+  "transcription": "Transcription",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+
+  "transcriptionConfig": "Configure STT provider",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+
+  "conversationTimeout": "Conversation Timeout",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+
+  "conversationTimeoutConfig": "Set when conversations auto-end",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+
+  "importData": "Import Data",
+  "@importData": {
+    "description": "Import data details title"
+  },
+
+  "importDataConfig": "Import data from other sources",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+
+  "debugDiagnostics": "Debug & Diagnostics",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+
+  "endpointUrl": "Endpoint URL",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+
+  "noApiKeys": "No API keys yet",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+
+  "createKeyToStart": "Create a key to get started",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+
+  "createKey": "Create Key",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+
+  "docs": "Docs",
+  "@docs": {
+    "description": "Documentation link"
+  },
+
+  "yourOmiInsights": "Your Omi Insights",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+
+  "today": "Today",
+  "@today": {
+    "description": "Time period: Today"
+  },
+
+  "thisMonth": "This Month",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+
+  "thisYear": "This Year",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+
+  "allTime": "All Time",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+
+  "noActivityYet": "No Activity Yet",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+
+  "startConversationToSeeInsights": "Start a conversation with Omi\nto see your usage insights here.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+
+  "listening": "Listening",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+
+  "listeningSubtitle": "Total time Omi has actively listened.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+
+  "understanding": "Understanding",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+
+  "understandingSubtitle": "Words understood from your conversations.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+
+  "providing": "Providing",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+
+  "providingSubtitle": "Action items, and notes automatically captured.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+
+  "remembering": "Remembering",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+
+  "rememberingSubtitle": "Facts and details remembered for you.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+
+  "unlimitedPlan": "Unlimited Plan",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+
+  "managePlan": "Manage Plan",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+
+  "cancelAtPeriodEnd": "Your plan will cancel on {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+
+  "renewsOn": "Your plan renews on {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+
+  "basicPlan": "Basic Plan",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+
+  "usageLimitMessage": "{used} of {limit} mins used",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+
+  "upgrade": "Upgrade",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+
+  "upgradeToUnlimited": "Upgrade to Unlimited",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+
+  "basicPlanDesc": "Your plan includes {limit} free minutes per month. Upgrade to go unlimited.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+
+  "shareStatsMessage": "Sharing my Omi stats! (omi.me - your always-on AI assistant)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+
+  "sharePeriodToday": "Today, omi has:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+
+  "sharePeriodMonth": "This month, omi has:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+
+  "sharePeriodYear": "This year, omi has:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+
+  "sharePeriodAllTime": "So far, omi has:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+
+  "shareStatsListened": "🎧 Listened for {minutes} minutes",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+
+  "shareStatsWords": "🧠 Understood {words} words",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+
+  "shareStatsInsights": "✨ Provided {count} insights",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+
+  "shareStatsMemories": "📚 Remembered {count} memories",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+
+  "debugLogs": "Debug Logs",
+  "debugLogsAutoDelete": "Auto-deletes after 3 days.",
+  "debugLogsDesc": "Helps diagnose issues",
+  "noLogFilesFound": "No log files found.",
+  "omiDebugLog": "Omi debug log",
+  "logShared": "Log shared",
+  "selectLogFile": "Select Log File",
+  "shareLogs": "Share Logs",
+  "debugLogCleared": "Debug log cleared",
+  "clear": "Clear",
+  "exportStarted": "Export started. This may take a few seconds...",
+  "exportAllData": "Export All Data",
+  "exportDataDesc": "Export conversations to a JSON file",
+  "exportedConversations": "Exported Conversations from Omi",
+  "exportShared": "Export shared",
+  "deleteKnowledgeGraphTitle": "Delete Knowledge Graph?",
+  "deleteKnowledgeGraphMessage": "This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "knowledgeGraphDeleted": "Knowledge Graph deleted successfully",
+  "deleteGraphFailed": "Failed to delete graph: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Delete Knowledge Graph",
+  "deleteKnowledgeGraphDesc": "Clear all nodes and connections",
+  "mcp": "MCP",
+  "mcpServer": "MCP Server",
+  "mcpServerDesc": "Connect AI assistants to your data",
+  "serverUrl": "Server URL",
+  "urlCopied": "URL copied",
+  "apiKeyAuth": "API Key Auth",
+  "header": "Header",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "Client ID",
+  "clientSecret": "Client Secret",
+  "useMcpApiKey": "Use your MCP API key",
+  "webhooks": "Webhooks",
+  "conversationEvents": "Conversation Events",
+  "newConversationCreated": "New conversation created",
+  "realtimeTranscript": "Real-time Transcript",
+  "transcriptReceived": "Transcript received",
+  "audioBytes": "Audio Bytes",
+  "audioDataReceived": "Audio data received",
+  "intervalSeconds": "Interval (seconds)",
+  "daySummary": "Day Summary",
+  "summaryGenerated": "Summary generated",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Add to claude_desktop_config.json",
+  "copyConfig": "Copy Config",
+  "configCopied": "Config copied to clipboard",
+
+  "listeningMins": "Listening (mins)",
+  "understandingWords": "Understanding (words)",
+  "insights": "Insights",
+  "memories": "Memories",
+  "minsUsedThisMonth": "{used} of {limit} min used this month",
+  "@minsUsedThisMonth": {
+     "placeholders": {
+        "used": {"type": "String"},
+        "limit": {"type": "int"}
+     }
+  },
+  "wordsUsedThisMonth": "{used} of {limit} words used this month",
+  "@wordsUsedThisMonth": {
+     "placeholders": {
+        "used": {"type": "String"},
+        "limit": {"type": "String"}
+     }
+  },
+  "insightsUsedThisMonth": "{used} of {limit} insights gained this month",
+  "@insightsUsedThisMonth": {
+     "placeholders": {
+        "used": {"type": "String"},
+        "limit": {"type": "String"}
+     }
+  },
+  "memoriesUsedThisMonth": "{used} of {limit} memories created this month",
+  "@memoriesUsedThisMonth": {
+     "placeholders": {
+        "used": {"type": "String"},
+        "limit": {"type": "String"}
+     }
+  }
+}
