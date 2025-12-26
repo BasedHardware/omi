@@ -256,10 +256,11 @@ class SDCardWalSync implements IWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
-    if (_device == null) {
+    final device = _device;
+    if (device == null) {
       return [];
     }
-    String deviceId = _device!.id;
+    String deviceId = device.id;
     List<Wal> wals = [];
     var storageFiles = await _getStorageList(deviceId);
     if (storageFiles.isEmpty) {
@@ -284,7 +285,11 @@ class SDCardWalSync implements IWalSync {
 
       // Device model
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      var pd = await _device!.getDeviceInfo(connection);
+      if (connection == null) {
+        debugPrint("SDCard: No connection for device info");
+        return [];
+      }
+      var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
       wals.add(Wal(
@@ -296,7 +301,7 @@ class SDCardWalSync implements IWalSync {
         storageOffset: storageOffset,
         storageTotalBytes: totalBytes,
         fileNum: 1,
-        device: _device!.id,
+        device: device.id,
         deviceModel: deviceModel,
         totalFrames: seconds * codec.getFramesPerSecond(),
         syncedFrameOffset: 0, // SD card WALs start unsynced
@@ -790,11 +795,12 @@ class FlashPageWalSync implements IWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
-    if (_device == null) return [];
+    final device = _device;
+    if (device == null) return [];
 
-    if (_device!.type != DeviceType.limitless) return [];
+    if (device.type != DeviceType.limitless) return [];
 
-    String deviceId = _device!.id;
+    String deviceId = device.id;
     List<Wal> wals = [];
 
     var storageStatus = await _getStorageStatus(deviceId);
@@ -816,7 +822,11 @@ class FlashPageWalSync implements IWalSync {
 
       // Device model
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      var pd = await _device!.getDeviceInfo(connection);
+      if (connection == null) {
+        debugPrint("FlashPage: No connection for device info");
+        return [];
+      }
+      var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
       wals.add(Wal(
@@ -828,7 +838,7 @@ class FlashPageWalSync implements IWalSync {
         storageOffset: _oldestPage,
         storageTotalBytes: _newestPage,
         fileNum: _currentSession,
-        device: _device!.id,
+        device: device.id,
         deviceModel: deviceModel,
         totalFrames: pageCount * framesPerFlashPage,
         syncedFrameOffset: 0,
