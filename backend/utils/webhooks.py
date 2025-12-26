@@ -134,7 +134,7 @@ async def send_audio_bytes_developer_webhook(
         return
 
     webhook_url = get_user_webhook_db(uid, WebhookType.audio_bytes)
-    webhook_url = webhook_url.split(',')[0]
+    webhook_url = (webhook_url or '').split(',')[0]
     if not webhook_url:
         return
 
