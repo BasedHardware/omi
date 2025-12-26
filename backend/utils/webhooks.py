@@ -125,7 +125,7 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 
 async def send_audio_bytes_developer_webhook(
-    uid: str, sample_rate: int, data: bytearray, timestamp: int | None = None
+    uid: str, sample_rate: int, data: bytes, timestamp: int | None = None
 ):
     print("send_audio_bytes_developer_webhook", uid)
     # TODO: add a lock, send shorter segments, validate regex.
