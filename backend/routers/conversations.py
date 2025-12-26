@@ -15,6 +15,7 @@ from models.conversation import (
     ConversationStatus,
     ConversationVisibility,
     CreateConversationResponse,
+    Geolocation,
     MergeConversationsRequest,
     MergeConversationsResponse,
     SetConversationEventsStateRequest,
@@ -34,6 +35,7 @@ from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
 
 router = APIRouter()
 
@@ -69,6 +71,12 @@ def process_in_progress_conversation(
         if not conversation.external_data:
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+
+    # Geolocation
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
