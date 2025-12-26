@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import re
@@ -31,6 +32,7 @@ from utils.other.storage import (
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
+from utils.webhooks import send_audio_bytes_developer_webhook
 
 router = APIRouter()
 
@@ -491,6 +493,30 @@ def get_wav_duration(wav_path: str) -> float:
         return 0.0
 
 
+def read_wav_as_pcm(wav_path: str) -> tuple[bytes, int]:
+    """Read WAV file and return raw PCM data and sample rate."""
+    try:
+        with wave.open(wav_path, 'rb') as wav_file:
+            sample_rate = wav_file.getframerate()
+            pcm_data = wav_file.readframes(wav_file.getnframes())
+            return pcm_data, sample_rate
+    except Exception as e:
+        print(f"Error reading WAV as PCM: {e}")
+        return b'', 16000
+
+
+def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
+    """Send audio bytes to developer webhook during offline sync."""
+    for wav_path in wav_paths:
+        try:
+            pcm_data, sample_rate = read_wav_as_pcm(wav_path)
+            if pcm_data:
+                asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, bytearray(pcm_data)))
+                print(f"Scheduled audio bytes webhook for synced file: {wav_path}")
+        except Exception as e:
+            print(f"Error scheduling audio bytes webhook for {wav_path}: {e}")
+
+
 def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
@@ -706,6 +732,11 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
     try:
         paths = retrieve_file_paths(files, uid)
         wav_paths = decode_files_to_wav(paths)
+
+        # Send audio bytes to developer webhook for offline sync
+        # This ensures webhooks are triggered even for offline-recorded audio
+        if wav_paths:
+            trigger_audio_bytes_webhook_for_sync(uid, wav_paths)
 
         def chunk_threads(threads):
             chunk_size = 5
