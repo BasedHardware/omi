@@ -512,7 +512,7 @@ async def _process_wav_for_webhook(uid: str, wav_path: str):
         pcm_data, sample_rate = await asyncio.to_thread(read_wav_as_pcm, wav_path)
         if pcm_data:
             timestamp = get_timestamp_from_path(wav_path)
-            await send_audio_bytes_developer_webhook(uid, sample_rate, bytearray(pcm_data), timestamp=timestamp)
+            await send_audio_bytes_developer_webhook(uid, sample_rate, pcm_data, timestamp=timestamp)
             print(f"Sent audio bytes webhook for synced file: {wav_path}")
     except FileNotFoundError:
         print(f"WAV file not found for webhook: {wav_path}")
