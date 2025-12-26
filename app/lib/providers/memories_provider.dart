@@ -303,40 +303,6 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> reviewMemory(Memory memory, bool approve, [String? source]) async {
-    // Optimistic update
-    final idx = _memories.indexWhere((m) => m.id == memory.id);
-    if (idx != -1) {
-      // If approved, keep it but mark reviewed? Or is discard deleting?
-      // Typically review flow: Approve = keep, Discard = delete.
-      // Assuming server handle "review" endpoint does the logic.
-      // If discard means delete, we should remove it locally.
-      // If approve means keep, we update 'reviewed' flag.
-      
-      // Checking previous logic from other files (implied):
-      // The calling code removes it from "remainingMemories" UI list.
-      // If discard, we probably want to delete it or mark as disregarded.
-      // The API `reviewMemoryServer` likely takes a boolean.
-      
-      if (!approve) {
-        _memories.removeAt(idx);
-      } else {
-        _memories[idx].reviewed = true;
-      }
-      notifyListeners();
-      _setCategories();
-
-      try {
-        await reviewMemoryServer(memory.id, approve);
-        // Optional: Track analytics with source
-      } catch (e) {
-        // Rollback on error? Or just log?
-        debugPrint('Failed to review memory: $e');
-        // Ideally we revert the optimistic update here if critical
-      }
-    }
-  }
-
   Future<bool> editMemory(Memory memory, String value, [MemoryCategory? category]) async {
     final success = await editMemoryServer(memory.id, value);
 
