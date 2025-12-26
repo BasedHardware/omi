@@ -330,40 +330,40 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       child: Column(
         children: [
           // Main card with gauge
-          GestureDetector(
-            onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingValue = true); },
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Column(
-                children: [
-                  // "Goal" label
-                  Text(
-                    'GOAL',
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              children: [
+                // "Goal" label
+                Text(
+                  'GOAL',
+                  style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 1.5,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Title
+                GestureDetector(
+                  onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingGoal = true); },
+                  child: _isEditingGoal ? _buildTitleEdit() : Text(
+                    _goal!.title,
                     style: TextStyle(
-                      fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 1.5,
-                      color: Colors.white.withOpacity(0.3),
+                      fontSize: 14, fontWeight: FontWeight.w400,
+                      color: Colors.white.withOpacity(0.7),
                     ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
                   ),
-                  const SizedBox(height: 8),
-                  // Title
-                  GestureDetector(
-                    onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingGoal = true); },
-                    child: _isEditingGoal ? _buildTitleEdit() : Text(
-                      _goal!.title,
-                      style: TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w400,
-                        color: Colors.white.withOpacity(0.7),
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
-                  // Gauge
-                  _isEditingValue ? _buildValueEdit(color) : SizedBox(
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Gauge
+                _isEditingValue ? _buildValueEdit(color) : GestureDetector(
+                  onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingValue = true); },
+                  child: SizedBox(
                     height: 160,
                     child: Stack(
                       alignment: Alignment.center,
@@ -386,8 +386,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                       ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -438,7 +438,11 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         ),
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: _saveTitle,
+          onTap: () {
+            HapticFeedback.lightImpact();
+            _saveTitle();
+          },
+          behavior: HitTestBehavior.opaque,
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(8)),
@@ -470,7 +474,11 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               GestureDetector(
-                onTap: _saveValues,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  _saveValues();
+                },
+                behavior: HitTestBehavior.opaque,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(20)),
@@ -480,10 +488,12 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
               const SizedBox(width: 10),
               GestureDetector(
                 onTap: () {
+                  HapticFeedback.lightImpact();
                   _currentValueController.text = _rawNum(_goal!.currentValue);
                   _targetValueController.text = _rawNum(_goal!.targetValue);
                   setState(() => _isEditingValue = false);
                 },
+                behavior: HitTestBehavior.opaque,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
