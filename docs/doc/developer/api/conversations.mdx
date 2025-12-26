@@ -103,6 +103,13 @@ description: "Create and retrieve conversations via the Developer API"
             }
           ],
           "events": []
+        },
+        "geolocation": {
+          "latitude": 37.7749295,
+          "longitude": -122.4194155,
+          "address": "1 Market St, San Francisco, CA 94105, USA",
+          "google_place_id": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+          "location_type": "street_address"
         }
       }
     ]
@@ -141,7 +148,14 @@ description: "Create and retrieve conversations via the Developer API"
             "start": 2.5,
             "end": 5.8
           }
-        ]
+        ],
+        "geolocation": {
+          "latitude": 37.7749295,
+          "longitude": -122.4194155,
+          "address": "1 Market St, San Francisco, CA 94105, USA",
+          "google_place_id": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+          "location_type": "street_address"
+        }
       }
     ]
     ```
@@ -157,6 +171,16 @@ description: "Create and retrieve conversations via the Developer API"
     | `source` | string | Source device/app |
     | `structured` | object | AI-generated structured data |
     | `transcript_segments` | array | Transcript segments (if `include_transcript=true`) |
+    | `geolocation` | object | Location where conversation occurred (if available) |
+  </Accordion>
+  <Accordion title="Geolocation Object Fields" icon="location-dot">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `latitude` | float | Latitude coordinate |
+    | `longitude` | float | Longitude coordinate |
+    | `address` | string | Human-readable address (optional) |
+    | `google_place_id` | string | Google Places API ID (optional) |
+    | `location_type` | string | Type of location, e.g., "premise", "street_address" (optional) |
   </Accordion>
   <Accordion title="Structured Object Fields" icon="sitemap">
     | Field | Type | Description |
@@ -499,6 +523,13 @@ Unlike text-based conversations, transcript segments ARE stored in the `transcri
         }
       ],
       "events": []
+    },
+    "geolocation": {
+      "latitude": 37.7749295,
+      "longitude": -122.4194155,
+      "address": "1 Market St, San Francisco, CA 94105, USA",
+      "google_place_id": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "location_type": "street_address"
     }
   }
   ```
@@ -590,6 +621,13 @@ Unlike text-based conversations, transcript segments ARE stored in the `transcri
       "category": "business",
       "action_items": [],
       "events": []
+    },
+    "geolocation": {
+      "latitude": 37.7749295,
+      "longitude": -122.4194155,
+      "address": "1 Market St, San Francisco, CA 94105, USA",
+      "google_place_id": "ChIJIQBpAG2ahYAR_6128GcTUEo",
+      "location_type": "street_address"
     }
   }
   ```
