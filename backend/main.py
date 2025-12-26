@@ -35,6 +35,7 @@ from routers import (
     updates,
     calendar_meetings,
     imports,
+    knowledge_graph,
     wrapped,
     folders,
 )
@@ -87,6 +88,8 @@ app.include_router(developer.router)
 app.include_router(imports.router)
 app.include_router(wrapped.router)
 app.include_router(folders.router)
+app.include_router(knowledge_graph.router)
+
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),

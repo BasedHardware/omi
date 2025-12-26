@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/backend/schema/memory.dart';
 
 class MemoryManagementSheet extends StatelessWidget {
   final MemoriesProvider provider;
@@ -12,22 +14,28 @@ class MemoryManagementSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppStyles.backgroundSecondary,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildHeader(context),
-            const Divider(height: 1, color: Colors.white10),
-            _buildMemoryCount(context),
-            _buildActionButtons(context),
-          ],
-        ),
-      ),
+    return Consumer<MemoriesProvider>(
+      builder: (context, provider, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppStyles.backgroundSecondary,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildHeader(context),
+                const Divider(height: 1, color: Colors.white10),
+                _buildFilterSection(context),
+                const Divider(height: 1, color: Colors.white10),
+                _buildMemoryCount(context),
+                _buildActionButtons(context),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -48,6 +56,63 @@ class MemoryManagementSheet extends StatelessWidget {
             constraints: const BoxConstraints(),
           ),
         ],
+      ),
+    );
+  }
+  
+  Widget _buildFilterSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 16, 16, 8),
+          child: Text('Filter Memories', style: AppStyles.title),
+        ),
+        _buildFilterOption(context, 'All', null),
+        _buildFilterOption(context, 'Interesting', MemoryCategory.interesting),
+        _buildFilterOption(context, 'Manual', MemoryCategory.manual),
+        _buildFilterOption(context, 'System', MemoryCategory.system),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildFilterOption(BuildContext context, String label, MemoryCategory? category) {
+    // If category is null, it represents "All"
+    // For "All", it is selected if the set is empty.
+    final bool isSelected;
+    if (category == null) {
+      isSelected = provider.selectedCategories.isEmpty;
+    } else {
+      isSelected = provider.selectedCategories.contains(category);
+    }
+
+    return InkWell(
+      onTap: () {
+        if (category == null) {
+          provider.clearCategoryFilter();
+        } else {
+          provider.toggleCategoryFilter(category);
+        }
+        // Do NOT pop here to allow multiple selections
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.purpleAccent : Colors.white,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 16,
+              ),
+            ),
+            const Spacer(),
+            if (isSelected)
+              const Icon(Icons.check, color: Colors.purpleAccent, size: 20),
+          ],
+        ),
       ),
     );
   }
