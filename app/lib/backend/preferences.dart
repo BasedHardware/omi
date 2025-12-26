@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -170,6 +171,16 @@ class SharedPreferencesUtil {
   set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
+
+  // Daily grade widget on homepage - default is false (experimental feature)
+  set showDailyGradeEnabled(bool value) => saveBool('showDailyGradeEnabled', value);
+
+  bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
+
+  // Wrapped 2025 - track if user has viewed their wrapped
+  set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
+
+  bool get hasViewedWrapped2025 => getBool('hasViewedWrapped2025', defaultValue: false);
 
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
@@ -377,6 +388,33 @@ class SharedPreferencesUtil {
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+  }
+
+  // Pending memories - memories created offline that need to be synced
+  List<Memory> get pendingMemories {
+    final memories = getStringList('pendingMemories');
+    return memories.map((e) => Memory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set pendingMemories(List<Memory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('pendingMemories', memories);
+  }
+
+  void addPendingMemory(Memory memory) {
+    final List<Memory> memories = pendingMemories;
+    memories.add(memory);
+    pendingMemories = memories;
+  }
+
+  void removePendingMemory(String memoryId) {
+    final List<Memory> memories = pendingMemories;
+    memories.removeWhere((m) => m.id == memoryId);
+    pendingMemories = memories;
+  }
+
+  void clearPendingMemories() {
+    saveStringList('pendingMemories', []);
   }
 
   List<Person> get cachedPeople {

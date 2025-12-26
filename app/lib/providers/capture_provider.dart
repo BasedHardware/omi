@@ -467,6 +467,7 @@ class CaptureProvider extends ChangeNotifier
           debugPrint("Double tap: toggling pause/mute");
           _isProcessingButtonEvent = true;
           if (_isPaused) {
+            MixpanelManager().omiDoubleTap(feature: 'unmute');
             resumeDeviceRecording().then((_) {
               _isProcessingButtonEvent = false;
             }).catchError((e) {
@@ -474,6 +475,7 @@ class CaptureProvider extends ChangeNotifier
               _isProcessingButtonEvent = false;
             });
           } else {
+            MixpanelManager().omiDoubleTap(feature: 'mute');
             pauseDeviceRecording().then((_) {
               _isProcessingButtonEvent = false;
             }).catchError((e) {
@@ -486,16 +488,19 @@ class CaptureProvider extends ChangeNotifier
           debugPrint("Double tap: marking conversation for starring");
           if (!_starOngoingConversation) {
             markConversationForStarring();
+            MixpanelManager().omiDoubleTap(feature: 'star_conversation');
             // Haptic feedback to confirm
             HapticFeedback.mediumImpact();
           } else {
             // Toggle off if already marked
             unmarkConversationForStarring();
+            MixpanelManager().omiDoubleTap(feature: 'unstar_conversation');
             HapticFeedback.lightImpact();
           }
         } else {
           // End conversation and process (default)
           debugPrint("Double tap: processing conversation");
+          MixpanelManager().omiDoubleTap(feature: 'process_conversation');
           forceProcessingCurrentConversation();
         }
         return;

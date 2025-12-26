@@ -38,6 +38,16 @@ llm_persona_medium_stream = ChatOpenAI(
     default_headers={"X-Title": "Omi Chat"},
     streaming=True,
 )
+
+# Gemini models for large context analysis
+llm_gemini_flash = ChatOpenAI(
+    temperature=0.7,
+    model="google/gemini-3-flash-preview",
+    api_key=os.environ.get('OPENROUTER_API_KEY'),
+    base_url="https://openrouter.ai/api/v1",
+    default_headers={"X-Title": "Omi Wrapped"},
+)
+
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
 parser = PydanticOutputParser(pydantic_object=Structured)
 

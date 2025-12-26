@@ -28,6 +28,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
+  bool showDailyGradeEnabled = false;
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -98,6 +99,7 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
+    showDailyGradeEnabled = SharedPreferencesUtil().showDailyGradeEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -192,6 +194,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
     prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
+    prefs.showDailyGradeEnabled = showDailyGradeEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -219,6 +222,11 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onAutoCreateSpeakersChanged(var value) {
     autoCreateSpeakersEnabled = value;
+    notifyListeners();
+  }
+
+  void onShowDailyGradeChanged(var value) {
+    showDailyGradeEnabled = value;
     notifyListeners();
   }
 }

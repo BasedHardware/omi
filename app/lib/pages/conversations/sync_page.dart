@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -11,10 +13,19 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
+import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+
+Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+  return Padding(
+    padding: const EdgeInsets.only(left: 2, top: 1),
+    child: FaIcon(icon, size: size, color: color),
+  );
+}
 
 class WalListItem extends StatelessWidget {
   final DateTime date;
@@ -32,17 +43,17 @@ class WalListItem extends StatelessWidget {
     if (startedAt == null) return 0.0;
     if (eta == 0) return 0.01;
 
-    final elapsed = DateTime.now().difference(startedAt!).inSeconds;
+    final elapsed = DateTime.now().difference(startedAt).inSeconds;
     final progress = elapsed / eta;
     return progress.clamp(0.0, 1.0);
   }
 
   Widget _buildStatusChip(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(100),
       ),
       child: Text(
         text,
@@ -55,45 +66,6 @@ class WalListItem extends StatelessWidget {
     );
   }
 
-  void _showSdCardInfoDialog(BuildContext context) {
-    final theme = Theme.of(context);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.amber, size: 24),
-            const SizedBox(width: 12),
-            Text('SD Card Audio', style: theme.textTheme.titleLarge),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'This audio file is stored on your device\'s SD card.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'You can process the file but cannot play or share it directly from the SD card.',
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white70),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text('Got it', style: TextStyle(color: theme.colorScheme.secondary, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<SyncProvider>(
@@ -102,9 +74,7 @@ class WalListItem extends StatelessWidget {
 
         return GestureDetector(
           onTap: wal.storage == WalStorage.sdcard
-              ? () {
-                  _showSdCardInfoDialog(context);
-                }
+              ? null
               : () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
@@ -112,170 +82,113 @@ class WalListItem extends StatelessWidget {
                     ),
                   );
                 },
-          child: Padding(
-            padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-            child: Container(
-              width: double.maxFinite,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1F1F25),
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              child: Stack(
-                children: [
-                  Opacity(
-                    opacity: wal.storage == WalStorage.sdcard ? 0.8 : 1.0,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16.0),
-                      child: Dismissible(
-                        key: Key(wal.id),
-                        direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
-                        confirmDismiss: (direction) {
-                          return OmiConfirmDialog.show(
-                            context,
-                            title: 'Confirm Deletion',
-                            message: 'Are you sure you want to delete this audio file? This action cannot be undone.',
-                            confirmLabel: 'Delete',
-                            confirmColor: Colors.red,
-                          );
-                        },
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20.0),
-                          color: Colors.red,
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        onDismissed: (direction) {
-                          ServiceManager.instance().wal.getSyncs().deleteWal(wal);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  // Device image
-                                  Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4.0),
-                                      child: Image.asset(
-                                        DeviceUtils.getDeviceImagePathByModel(wal.deviceModel),
-                                        width: 24,
-                                        height: 24,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Main content
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          dateTimeFormat('MMM dd, yyyy h:mm a',
-                                              DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          wal.storage == WalStorage.flashPage
-                                              ? '${wal.deviceModel ?? "Limitless"} • Offline Recording'
-                                              : '${secondsToHumanReadable(wal.seconds)} • ${wal.deviceModel ?? "Omi Device"}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade400,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Simplified status indicator
-                                  if (wal.isSyncing)
-                                    _buildStatusChip('Processing', Colors.orange)
-                                  else if (hasError)
-                                    _buildStatusChip('Failed', Colors.red)
-                                  else if (wal.status == WalStatus.miss)
-                                    _buildStatusChip('Not Processed', Colors.grey)
-                                ],
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Dismissible(
+                key: Key(wal.id),
+                direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
+                confirmDismiss: (direction) {
+                  return OmiConfirmDialog.show(
+                    context,
+                    title: 'Delete Recording',
+                    message: 'This cannot be undone.',
+                    confirmLabel: 'Delete',
+                    confirmColor: Colors.red,
+                  );
+                },
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20.0),
+                  color: Colors.red,
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) {
+                  ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(6),
+                              child: Image.asset(
+                                DeviceUtils.getDeviceImagePathByModel(wal.deviceModel),
+                                width: 24,
+                                height: 24,
                               ),
-                              // Progress bar for syncing - only show if actually syncing and not flash page
-                              if (wal.isSyncing &&
-                                  wal.status != WalStatus.synced &&
-                                  wal.syncStartedAt != null &&
-                                  wal.storage != WalStorage.flashPage) ...[
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  height: 2,
-                                  child: LinearProgressIndicator(
-                                    value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
-                                    backgroundColor: Colors.grey[800],
-                                    color: Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  dateTimeFormat(
+                                      'MMM d, h:mm a', DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000)),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${secondsToHumanReadable(wal.seconds)}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ],
-                              // Error message
-                              if (hasError && syncProvider.syncError != null) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  syncProvider.syncError!,
-                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ],
+                            ),
+                          ),
+                          if (wal.isSyncing)
+                            _buildStatusChip('Processing', Colors.orange)
+                          else if (hasError)
+                            _buildStatusChip('Failed', Colors.red)
+                          else if (wal.status == WalStatus.miss)
+                            _buildFaIcon(FontAwesomeIcons.circleExclamation, size: 16),
+                        ],
+                      ),
+                      if (wal.isSyncing &&
+                          wal.status != WalStatus.synced &&
+                          wal.syncStartedAt != null &&
+                          wal.storage != WalStorage.flashPage) ...[
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
+                            backgroundColor: const Color(0xFF3C3C43),
+                            color: Colors.white70,
+                            minHeight: 3,
                           ),
                         ),
-                      ),
-                    ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         );
       },
-    );
-  }
-}
-
-class DateTimeListItem extends StatelessWidget {
-  final bool isFirst;
-  final DateTime date;
-
-  const DateTimeListItem({super.key, required this.date, required this.isFirst});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, isFirst ? 0 : 20, 16, 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            dateTimeFormat('MMM dd hh:00 a', date),
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Container(
-              height: 1,
-              color: Color(0xFF35343B),
-            ),
-          )
-        ],
-      ),
     );
   }
 }
@@ -292,144 +205,129 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final syncProvider = context.read<SyncProvider>();
-      syncProvider.refreshWals();
-
-      // Don't clear sync state on page init - preserve existing state
-      // This ensures that if user navigates away and back, they see the current sync status
+      context.read<SyncProvider>().refreshWals();
     });
   }
 
-  Widget _buildStatItem(String label, String value) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildStorageControlCard() {
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String title,
+    Widget? trailing,
+    VoidCallback? onTap,
+    bool showChevron = false,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: _buildFaIcon(icon),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            if (trailing != null) trailing,
+            if (showChevron) ...[
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsCard() {
+    final isPhoneStorageOn = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Storage Settings',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Complete Archive',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      SharedPreferencesUtil().unlimitedLocalStorageEnabled
-                          ? 'Create a complete personal archive of all your recordings'
-                          : 'Save phone\'s storage space by only keeping failed uploads',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    ),
-                  ],
+          _buildSettingsItem(
+            icon: FontAwesomeIcons.mobile,
+            title: 'Store Audio on Phone',
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isPhoneStorageOn ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                borderRadius: BorderRadius.circular(100),
+              ),
+              child: Text(
+                isPhoneStorageOn ? 'On' : 'Off',
+                style: TextStyle(
+                  color: isPhoneStorageOn ? Colors.green : Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(width: 16),
-              CupertinoSwitch(
-                value: SharedPreferencesUtil().unlimitedLocalStorageEnabled,
-                onChanged: (value) {
-                  if (value) {
-                    _showConsentDialog(context, () {
-                      SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-                      context.read<SyncProvider>().refreshWals();
-                    });
-                  } else {
-                    SharedPreferencesUtil().unlimitedLocalStorageEnabled = value;
-                    context.read<SyncProvider>().refreshWals();
-                  }
-                },
-                activeColor: Colors.deepPurpleAccent,
-              ),
-            ],
+            ),
+            showChevron: true,
+            onTap: () {
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(builder: (context) => const LocalStoragePage()),
+                  )
+                  .then((_) => setState(() {}));
+            },
           ),
-          const SizedBox(height: 16),
-          Divider(color: Colors.grey.withOpacity(0.2)),
-          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
           Consumer<UserProvider>(
             builder: (context, userProvider, child) {
-              final isEnabled = userProvider.privateCloudSyncEnabled;
-              return InkWell(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const PrivateCloudSyncPage(),
+              final isCloudOn = userProvider.privateCloudSyncEnabled;
+              return _buildSettingsItem(
+                icon: FontAwesomeIcons.cloud,
+                title: 'Store Audio on Cloud',
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isCloudOn ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    isCloudOn ? 'On' : 'Off',
+                    style: TextStyle(
+                      color: isCloudOn ? Colors.green : Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Private Cloud Sync',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Store real-time recordings in the private cloud',
-                              style: TextStyle(
-                                color: Colors.grey.shade400,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        isEnabled ? 'On' : 'Off',
-                        style: TextStyle(
-                          color: Colors.grey.shade500,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.arrow_forward_ios, color: Colors.grey.shade400, size: 18),
-                    ],
                   ),
                 ),
+                showChevron: true,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const PrivateCloudSyncPage()),
+                  );
+                },
               );
             },
           ),
@@ -438,61 +336,36 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildStorageFilterChips() {
+  Widget _buildFilterChips(WalStats? stats) {
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        final phoneCount = stats?.phoneFiles ?? 0;
+        final sdCardCount = stats?.sdcardFiles ?? 0;
+        final limitlessCount = stats?.limitlessFiles ?? 0;
+        final totalCount = stats?.totalFiles ?? 0;
+
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Icon(Icons.filter_list, color: Colors.white70, size: 16),
-                  SizedBox(width: 8),
-                  Text(
-                    'Filter:',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                child: Row(
-                  children: [
-                    _buildFilterChip(
-                      label: 'All Recordings',
-                      isSelected: syncProvider.storageFilter == null,
-                      onTap: () => syncProvider.clearStorageFilter(),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      label: 'Phone Storage',
-                      isSelected:
-                          syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
-                      onTap: () => syncProvider.setStorageFilter(WalStorage.disk),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      label: 'SD Card',
-                      isSelected: syncProvider.storageFilter == WalStorage.sdcard,
-                      onTap: () => syncProvider.setStorageFilter(WalStorage.sdcard),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildFilterChip(
-                      label: 'Limitless',
-                      isSelected: syncProvider.storageFilter == WalStorage.flashPage,
-                      onTap: () => syncProvider.setStorageFilter(WalStorage.flashPage),
-                    ),
-                  ],
-                ),
-              ),
+              _buildChip(
+                  'All', totalCount, syncProvider.storageFilter == null, () => syncProvider.clearStorageFilter()),
+              const SizedBox(width: 8),
+              _buildChip(
+                  'Phone',
+                  phoneCount,
+                  syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
+                  () => syncProvider.setStorageFilter(WalStorage.disk)),
+              const SizedBox(width: 8),
+              if (sdCardCount > 0) ...[
+                _buildChip('SD Card', sdCardCount, syncProvider.storageFilter == WalStorage.sdcard,
+                    () => syncProvider.setStorageFilter(WalStorage.sdcard)),
+                const SizedBox(width: 8),
+              ],
+              if (limitlessCount > 0)
+                _buildChip('Limitless', limitlessCount, syncProvider.storageFilter == WalStorage.flashPage,
+                    () => syncProvider.setStorageFilter(WalStorage.flashPage)),
             ],
           ),
         );
@@ -500,130 +373,45 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildFilterChip({
-    required String label,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildChip(String label, int count, bool isSelected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? Colors.white.withOpacity(0.12) : const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(100),
+          border: isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 1) : null,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey.shade400,
-            fontSize: 12,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showConsentDialog(BuildContext context, VoidCallback onConfirm) {
-    bool consentConfirmed = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Icon(Icons.privacy_tip, color: Colors.orange, size: 24),
-                SizedBox(width: 12),
-                Text('Privacy & Consent', style: TextStyle(color: Colors.white)),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'You\'re switching to Complete Archive Mode, which will keep all your audio recordings on this device.',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.privacy_tip, color: Colors.grey.shade400, size: 16),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Privacy Notice',
-                            style: TextStyle(color: Colors.grey.shade300, fontWeight: FontWeight.w600, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Your recordings may capture other people\'s voices. Please ensure you have consent from all participants before recording.',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: consentConfirmed,
-                      onChanged: (value) {
-                        setState(() {
-                          consentConfirmed = value ?? false;
-                        });
-                      },
-                      activeColor: Colors.deepPurple,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'I have consent from all participants in my recordings',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey.shade400,
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
-              TextButton(
-                onPressed: consentConfirmed
-                    ? () {
-                        Navigator.of(context).pop();
-                        onConfirm();
-                      }
-                    : null,
-                child: Text(
-                  'Enable Storage',
-                  style: TextStyle(
-                    color: consentConfirmed ? Colors.deepPurple : Colors.grey,
-                    fontWeight: FontWeight.w600,
-                  ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.white.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey.shade500,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -631,30 +419,23 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) async {
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: 'Delete All Processed Files',
-      message: 'This will permanently delete all processed audio files from your phone. This action cannot be undone.',
+      title: 'Delete Processed Files',
+      message: 'This cannot be undone.',
       confirmLabel: 'Delete',
       confirmColor: Colors.red,
     );
-
     if (confirmed == true && context.mounted) {
       await provider.deleteAllSyncedWals();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All processed audio files have been deleted'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('Processed files deleted'), backgroundColor: Colors.green),
         );
       }
     }
   }
 
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) {
-    // Check if there are any SD card WALs in the missing list
-    final missingWals = syncProvider.missingWals;
-    final sdCardWals = missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
-
+    final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
     if (sdCardWals.isNotEmpty) {
       _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
     } else {
@@ -663,334 +444,254 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   }
 
   void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {
-    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            Icon(Icons.sd_card, color: theme.colorScheme.secondary, size: 24),
+            _buildFaIcon(FontAwesomeIcons.sdCard, size: 20, color: Colors.deepPurpleAccent),
             const SizedBox(width: 12),
-            Text('SD Card Processing', style: theme.textTheme.titleLarge),
+            const Text('SD Card Processing', style: TextStyle(color: Colors.white, fontSize: 18)),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Ready to process $sdCardCount recording${sdCardCount > 1 ? 's' : ''} from your SD card into conversations.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'After processing, the original files will be removed from your SD card to free up storage space.',
-                style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
-              ),
-            ),
-          ],
+        content: Text(
+          'Processing $sdCardCount recording${sdCardCount > 1 ? 's' : ''}. Files will be removed from SD card after.',
+          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500))),
+          TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               syncProvider.syncWals();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.secondary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Process'),
+            child: const Text('Process', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  Widget _buildSummaryCard(SyncProvider syncProvider) {
+  Widget _buildProcessCard(SyncProvider syncProvider) {
+    // Error state
     if (syncProvider.syncError != null && syncProvider.failedWal == null) {
       return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: Column(
-          children: [
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, color: Colors.red, size: 24),
-                SizedBox(width: 12),
-                Text(
-                  'Something Went Wrong',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              syncProvider.syncError!,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => syncProvider.retrySync(),
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text(
-                  'Try Again',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (syncProvider.isSyncing) {
-      return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
-                ),
-                SizedBox(width: 12),
-                Text(
-                  'Creating Your Conversations...',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            LinearProgressIndicator(
-              value:
-                  syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress,
-              backgroundColor: Colors.grey[800],
-              color: Colors.white70,
-              minHeight: 4,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              syncProvider.walBasedProgress > 0
-                  ? '${(syncProvider.walBasedProgress * 100).toInt()}% complete (${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount} recordings)'
-                  : 'Processing...',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Please keep the app open while we work on your recordings.',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) {
-      return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 24),
-                SizedBox(width: 12),
-                Text(
-                  'All Done!',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Successfully created ${syncProvider.syncedConversationsPointers.length} conversations from your recordings.',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  routeToPage(context, const SyncedConversationsPage());
-                },
-                icon: const Icon(Icons.visibility, size: 18),
-                label: const Text(
-                  'View Your New Conversations',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return FutureBuilder<WalStats>(
-      future: syncProvider.getWalStats(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const SizedBox(height: 24);
-        }
-        final stats = snapshot.data!;
-        final totalSecondsToProcess = syncProvider.missingWalsInSeconds;
-
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
             children: [
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.schedule, color: Colors.white70, size: 24),
-                  SizedBox(width: 8),
-                  Text(
-                    secondsToHumanReadable(totalSecondsToProcess),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                totalSecondsToProcess > 0
-                    ? '${stats.missedFiles} audio recording${stats.missedFiles != 1 ? 's' : ''} ready to convert into readable conversations'
-                    : 'All your audio recordings have been processed into conversations',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              Divider(color: Colors.grey.withOpacity(0.2)),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildStatItem('Total Files', '${stats.totalFiles}'),
-                  _buildStatItem('Total Size', stats.totalSizeFormatted),
-                  _buildStatItem('On Phone', '${stats.phoneFiles}'),
-                  if (stats.sdcardFiles > 0) _buildStatItem('On SD Card', '${stats.sdcardFiles}'),
-                  if (stats.limitlessFiles > 0) _buildStatItem('Limitless', '${stats.limitlessFiles}'),
-                ],
-              ),
-              const SizedBox(height: 24),
               SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: totalSecondsToProcess == 0
-                      ? null
-                      : () {
-                          if (context.read<ConnectivityProvider>().isConnected) {
-                            _handleSyncWals(context, syncProvider);
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Row(
-                                  children: [
-                                    Icon(Icons.wifi_off, color: Colors.white),
-                                    SizedBox(width: 8),
-                                    Text('Internet connection required for AI processing'),
-                                  ],
-                                ),
-                                backgroundColor: Colors.red.shade700,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                  icon: const Icon(Icons.cloud_upload, size: 20),
-                  label: Text(
-                    totalSecondsToProcess > 0 ? 'Process Audio' : 'All Audio Processed',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleExclamation, color: Colors.red)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Processing Failed',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    Text(syncProvider.syncError!,
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => syncProvider.retrySync(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A2E),
+                    borderRadius: BorderRadius.circular(100),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        totalSecondsToProcess > 0 ? Theme.of(context).colorScheme.secondary : Colors.grey.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
+                  child: const Text('Retry',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
                 ),
               ),
             ],
           ),
-        );
-      },
+        ),
+      );
+    }
+
+    // Syncing state
+    if (syncProvider.isSyncing) {
+      final progress =
+          syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress;
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  Text(
+                    '${(progress * 100).toInt()}%',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: const Color(0xFF3C3C43),
+                  color: Colors.white,
+                  minHeight: 4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Completed state
+    if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: GestureDetector(
+          onTap: () => routeToPage(context, const SyncedConversationsPage()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                SizedBox(width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleCheck, color: Colors.green)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    '${syncProvider.syncedConversationsPointers.length} conversations created',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Default state - show process button
+    final totalSecondsToProcess = syncProvider.missingWalsInSeconds;
+
+    if (totalSecondsToProcess == 0) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: GestureDetector(
+        onTap: () {
+          if (context.read<ConnectivityProvider>().isConnected) {
+            _handleSyncWals(context, syncProvider);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Internet required'),
+                backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Row(
+            children: [
+              SizedBox(
+                  width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.bolt, color: Colors.deepPurpleAccent)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Process Audio',
+                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 3),
+                    Text(
+                      secondsToHumanReadable(totalSecondsToProcess),
+                      style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: const Text('Start',
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      margin: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2E),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(child: _buildFaIcon(FontAwesomeIcons.microphone, size: 24)),
+          ),
+          const SizedBox(height: 20),
+          const Text('No Recordings', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text('Audio from your Omi device will appear here',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 14), textAlign: TextAlign.center),
+        ],
+      ),
     );
   }
 
@@ -999,189 +700,126 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) {
-        // Only clear sync result if sync is completed or has error
-        // Don't clear if sync is in progress to preserve state
         var provider = Provider.of<SyncProvider>(context, listen: false);
-        if (!provider.isSyncing) {
-          provider.clearSyncResult();
-        }
+        if (!provider.isSyncing) provider.clearSyncResult();
       },
       child: Consumer<SyncProvider>(builder: (context, syncProvider, child) {
         return Scaffold(
+          backgroundColor: const Color(0xFF0D0D0D),
           appBar: AppBar(
-            title: const Text('Storage'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: const Color(0xFF0D0D0D),
+            elevation: 0,
+            leading: IconButton(
+              icon: Padding(
+                padding: const EdgeInsets.only(left: 2, top: 1),
+                child: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: const Text('Offline Sync',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            centerTitle: true,
             actions: [
-              FutureBuilder<WalStats>(
-                future: syncProvider.getWalStats(),
-                builder: (context, snapshot) {
-                  return PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'delete_all') {
-                        _showDeleteProcessedDialog(context, syncProvider);
-                      }
-                    },
-                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'delete_all',
-                        child: ListTile(
-                          leading: Icon(Icons.delete_sweep),
-                          title: Text('Delete All Processed Files'),
-                        ),
-                      ),
-                    ],
-                  );
-                  return const SizedBox.shrink();
-                },
+              PullDownButton(
+                itemBuilder: (context) => [
+                  PullDownMenuItem(
+                    title: 'Delete Processed',
+                    iconWidget: _buildFaIcon(FontAwesomeIcons.trash, size: 16, color: Colors.red),
+                    isDestructive: true,
+                    onTap: () => _showDeleteProcessedDialog(context, syncProvider),
+                  ),
+                ],
+                buttonBuilder: (context, showMenu) => GestureDetector(
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    showMenu();
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: _buildFaIcon(FontAwesomeIcons.ellipsisVertical, size: 16, color: Colors.white),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          body: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  children: [
-                    _buildStorageControlCard(),
-                    _buildSummaryCard(syncProvider),
-                    _buildStorageFilterChips(),
-                    SizedBox(height: 16),
-                  ],
-                ),
-              ),
-              Consumer<SyncProvider>(
-                builder: (context, syncProvider, child) {
-                  if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
-                    return const SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(32.0),
-                          child: CircularProgressIndicator(color: Colors.white),
-                        ),
+          body: FutureBuilder<WalStats>(
+            future: syncProvider.getWalStats(),
+            builder: (context, statsSnapshot) {
+              return CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          _buildProcessCard(syncProvider),
+                          const SizedBox(height: 16),
+                          _buildSettingsCard(),
+                          const SizedBox(height: 20),
+                          _buildSectionHeader('Recordings'),
+                          _buildFilterChips(statsSnapshot.data),
+                          const SizedBox(height: 16),
+                        ],
                       ),
-                    );
-                  }
+                    ),
+                  ),
+                  Consumer<SyncProvider>(
+                    builder: (context, syncProvider, child) {
+                      if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
+                        return const SliverToBoxAdapter(
+                          child: Center(
+                              child: Padding(
+                                  padding: EdgeInsets.all(32), child: CircularProgressIndicator(color: Colors.white))),
+                        );
+                      }
 
-                  final allWals = syncProvider.allWals;
-                  final filteredWals = syncProvider.filteredWals;
+                      final filteredWals = syncProvider.filteredWals;
 
-                  if (allWals.isEmpty) {
-                    return SliverToBoxAdapter(
-                      child: Container(
-                        margin: const EdgeInsets.all(32.0),
-                        padding: const EdgeInsets.all(32.0),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.deepPurple.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.mic_none,
-                                color: Colors.deepPurple,
-                                size: 48,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No Audio Files Yet',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Your Omi device will automatically save audio recordings here. Once you have recordings, you can process them into readable conversations.',
-                              style: TextStyle(color: Colors.grey, fontSize: 14),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.info_outline, color: Colors.grey.shade400, size: 16),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Phone microphone recordings are processed instantly and don\'t appear here.',
-                                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
+                      if (syncProvider.allWals.isEmpty) {
+                        return SliverToBoxAdapter(child: _buildEmptyState());
+                      }
 
-                  if (filteredWals.isEmpty && syncProvider.storageFilter != null) {
-                    return SliverToBoxAdapter(
-                      child: Container(
-                        margin: const EdgeInsets.all(32.0),
-                        padding: const EdgeInsets.all(32.0),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.filter_list_off,
-                                color: Colors.grey,
-                                size: 48,
-                              ),
+                      if (filteredWals.isEmpty && syncProvider.storageFilter != null) {
+                        return SliverToBoxAdapter(
+                          child: Container(
+                            margin: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.all(32),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1C1C1E),
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              syncProvider.storageFilter == WalStorage.sdcard
-                                  ? 'No SD Card Recordings'
-                                  : 'No Phone Storage Recordings',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Column(
+                              children: [
+                                _buildFaIcon(FontAwesomeIcons.filter, size: 24),
+                                const SizedBox(height: 16),
+                                const Text('No Recordings',
+                                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                                const SizedBox(height: 4),
+                                Text('Try a different filter',
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              syncProvider.storageFilter == WalStorage.sdcard
-                                  ? 'No audio files found on your device\'s SD card. Make sure your Omi device has recorded audio to its SD card.'
-                                  : 'No audio files found in phone storage. Audio gets stored here when your Omi device transfers recordings to your phone.',
-                              style: const TextStyle(color: Colors.grey, fontSize: 14),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
+                          ),
+                        );
+                      }
 
-                  return OptimizedWalsListWidget(wals: filteredWals);
-                },
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
+                      return OptimizedWalsListWidget(wals: filteredWals);
+                    },
+                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                ],
+              );
+            },
           ),
         );
       }),
@@ -1195,9 +833,7 @@ Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> wals) {
   for (var wal in wals) {
     var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
     var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
-    if (!groupedWals.containsKey(date)) {
-      groupedWals[date] = [];
-    }
+    if (!groupedWals.containsKey(date)) groupedWals[date] = [];
     groupedWals[date]?.add(wal);
   }
   for (final date in groupedWals.keys) {
@@ -1212,7 +848,6 @@ class OptimizedWalsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Flatten the grouped structure for better performance
     final flattenedItems = _createFlattenedItems(wals);
 
     return SliverList.builder(
@@ -1222,36 +857,18 @@ class OptimizedWalsListWidget extends StatelessWidget {
 
         if (item is DateHeaderItem) {
           return Padding(
-            padding: EdgeInsets.fromLTRB(16, index == 0 ? 0 : 20, 16, 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  dateTimeFormat('MMM dd hh:00 a', item.date),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Container(
-                    height: 1,
-                    color: Color(0xFF35343B),
-                  ),
-                )
-              ],
+            padding: EdgeInsets.fromLTRB(20, index == 0 ? 0 : 24, 20, 8),
+            child: Text(
+              dateTimeFormat('MMM d, h a', item.date),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           );
         } else if (item is WalItem) {
           return Padding(
-            padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
-            child: WalListItem(
-              wal: item.wal,
-              walIdx: item.index,
-              date: item.date,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: WalListItem(wal: item.wal, walIdx: item.index, date: item.date),
           );
         }
-
         return const SizedBox.shrink();
       },
     );
@@ -1260,20 +877,16 @@ class OptimizedWalsListWidget extends StatelessWidget {
   List<ListItem> _createFlattenedItems(List<Wal> wals) {
     final groupedWals = _groupWalsByDate(wals);
     final List<ListItem> items = [];
-
     for (final entry in groupedWals.entries) {
       items.add(DateHeaderItem(entry.key));
-
       for (int i = 0; i < entry.value.length; i++) {
         items.add(WalItem(entry.value[i], i, entry.key));
       }
     }
-
     return items;
   }
 }
 
-// Helper classes for flattened list
 abstract class ListItem {}
 
 class DateHeaderItem extends ListItem {

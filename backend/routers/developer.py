@@ -91,9 +91,19 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 
 class CleanerMemory(BaseModel):
+    # Core fields (aligned with MemoryResponse)
     id: str
     content: str
     category: MemoryCategory
+    visibility: Optional[str] = 'private'
+    tags: List[str] = []
+    created_at: datetime
+    updated_at: datetime
+    manually_added: bool
+    scoring: Optional[str] = None
+    reviewed: bool
+    user_review: Optional[bool] = None
+    edited: bool
 
 
 class CreateMemoryRequest(BaseModel):
@@ -103,6 +113,11 @@ class CreateMemoryRequest(BaseModel):
     )
     visibility: str = Field(default='private', description="Visibility: public or private")
     tags: List[str] = Field(default=[], description="Tags associated with the memory")
+
+
+class UpdateMemoryRequest(BaseModel):
+    content: Optional[str] = Field(default=None, description="New content for the memory", min_length=1, max_length=500)
+    visibility: Optional[str] = Field(default=None, description="New visibility: public or private")
 
 
 class MemoryResponse(BaseModel):
@@ -271,6 +286,57 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
+@router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])
+def delete_memory(
+    memory_id: str,
+    uid: str = Depends(get_uid_with_memories_write),
+):
+    """
+    Delete a memory by ID.
+
+    - **memory_id**: The ID of the memory to delete
+    """
+    memory = memories_db.get_memory(uid, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    memories_db.delete_memory(uid, memory_id)
+    return {"success": True}
+
+
+@router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])
+def update_memory(
+    memory_id: str,
+    request: UpdateMemoryRequest,
+    uid: str = Depends(get_uid_with_memories_write),
+):
+    """
+    Update a memory's content or visibility.
+
+    - **memory_id**: The ID of the memory to update
+    - **content**: New content for the memory (optional)
+    - **visibility**: New visibility: public or private (optional)
+    """
+    memory = memories_db.get_memory(uid, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    if request.content is None and request.visibility is None:
+        raise HTTPException(status_code=422, detail="At least one field (content or visibility) must be provided")
+
+    old_visibility = memory.get('visibility')
+
+    if request.content is not None:
+        memories_db.edit_memory(uid, memory_id, request.content.strip())
+
+    if request.visibility is not None:
+        if request.visibility not in ['public', 'private']:
+            raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
+        memories_db.change_memory_visibility(uid, memory_id, request.visibility)
+
+    return memories_db.get_memory(uid, memory_id)
+
+
 # ******************************************************
 # ******************* ACTION ITEMS *********************
 # ******************************************************
@@ -293,6 +359,12 @@ class CreateActionItemRequest(BaseModel):
     due_at: Optional[datetime] = Field(
         default=None, description="When the action item is due (ISO format with timezone)"
     )
+
+
+class UpdateActionItemRequest(BaseModel):
+    description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
+    completed: Optional[bool] = Field(default=None, description="New completion status")
+    due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
 
 
 class BatchActionItemsRequest(BaseModel):
@@ -432,6 +504,73 @@ def create_action_items_batch(
     return BatchActionItemsResponse(action_items=created_items, created_count=len(created_items))
 
 
+@router.delete("/v1/dev/user/action-items/{action_item_id}", tags=["developer"])
+def delete_action_item(
+    action_item_id: str,
+    uid: str = Depends(get_uid_with_action_items_write),
+):
+    """
+    Delete an action item by ID.
+
+    - **action_item_id**: The ID of the action item to delete
+    """
+    if not action_items_db.delete_action_item(uid, action_item_id):
+        raise HTTPException(status_code=404, detail="Action item not found")
+    return {"success": True}
+
+
+@router.patch("/v1/dev/user/action-items/{action_item_id}", response_model=ActionItemResponse, tags=["developer"])
+def update_action_item(
+    action_item_id: str,
+    request: UpdateActionItemRequest,
+    uid: str = Depends(get_uid_with_action_items_write),
+):
+    """
+    Update an action item.
+
+    - **action_item_id**: The ID of the action item to update
+    - **description**: New description (optional)
+    - **completed**: New completion status (optional)
+    - **due_at**: New due date (optional, set to null to remove)
+    """
+    # Check if action item exists
+    action_item = action_items_db.get_action_item(uid, action_item_id)
+    if not action_item:
+        raise HTTPException(status_code=404, detail="Action item not found")
+
+    # Build update data from non-None fields
+    update_data = {}
+    if request.description is not None:
+        update_data['description'] = request.description.strip()
+    if request.completed is not None:
+        update_data['completed'] = request.completed
+        # Set or clear completed_at based on completion status
+        if request.completed:
+            update_data['completed_at'] = datetime.now(timezone.utc)
+        else:
+            update_data['completed_at'] = None
+    if request.due_at is not None:
+        update_data['due_at'] = request.due_at
+
+    if not update_data:
+        raise HTTPException(status_code=422, detail="At least one field must be provided")
+
+    if not action_items_db.update_action_item(uid, action_item_id, update_data):
+        raise HTTPException(status_code=500, detail="Failed to update action item")
+
+    # Send FCM notification if due_at was updated
+    if request.due_at is not None:
+        description = request.description.strip() if request.description else action_item.get('description', '')
+        send_action_item_data_message(
+            user_id=uid,
+            action_item_id=action_item_id,
+            description=description,
+            due_at=request.due_at.isoformat(),
+        )
+
+    return action_items_db.get_action_item(uid, action_item_id)
+
+
 # ******************************************************
 # ******************* CONVERSATIONS ********************
 # ******************************************************
@@ -481,6 +620,7 @@ class Conversation(BaseModel):
     language: Optional[str] = None
     source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
+    geolocation: Optional[Geolocation] = None
 
 
 class CreateConversationRequest(BaseModel):
@@ -504,6 +644,11 @@ class ConversationResponse(BaseModel):
     id: str
     status: str
     discarded: bool
+
+
+class UpdateConversationRequest(BaseModel):
+    title: Optional[str] = Field(default=None, description="New title for the conversation", min_length=1, max_length=500)
+    discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
 
 
 class DevTranscriptSegment(BaseModel):
@@ -654,6 +799,33 @@ def create_conversation(
     )
 
 
+@router.get("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
+def get_conversation_endpoint(
+    conversation_id: str,
+    include_transcript: bool = False,
+    uid: str = Depends(get_uid_with_conversations_read),
+):
+    """
+    Get a single conversation by ID.
+
+    - **conversation_id**: The ID of the conversation to retrieve
+    - **include_transcript**: If True, includes full transcript_segments in the response
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Filter out locked conversations
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Remove transcript_segments if not requested
+    if not include_transcript:
+        conversation.pop('transcript_segments', None)
+
+    return conversation
+
+
 @router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
@@ -786,3 +958,55 @@ def create_conversation_from_segments(
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
     )
+
+
+@router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])
+def delete_conversation_endpoint(
+    conversation_id: str,
+    uid: str = Depends(get_uid_with_conversations_write),
+):
+    """
+    Delete a conversation by ID.
+
+    This also deletes any associated photos in the conversation's subcollection.
+
+    - **conversation_id**: The ID of the conversation to delete
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    conversations_db.delete_conversation(uid, conversation_id)
+    return {"success": True}
+
+
+@router.patch("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
+def update_conversation_endpoint(
+    conversation_id: str,
+    request: UpdateConversationRequest,
+    uid: str = Depends(get_uid_with_conversations_write),
+):
+    """
+    Update a conversation's title or discard status.
+
+    - **conversation_id**: The ID of the conversation to update
+    - **title**: New title for the conversation (optional)
+    - **discarded**: Whether the conversation is discarded (optional)
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if request.title is None and request.discarded is None:
+        raise HTTPException(status_code=422, detail="At least one field (title or discarded) must be provided")
+
+    if request.title is not None:
+        conversations_db.update_conversation_title(uid, conversation_id, request.title.strip())
+
+    if request.discarded is not None:
+        if request.discarded:
+            conversations_db.set_conversation_as_discarded(uid, conversation_id)
+        else:
+            conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
+
+    return conversations_db.get_conversation(uid, conversation_id)
