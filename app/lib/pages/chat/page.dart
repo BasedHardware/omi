@@ -48,10 +48,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
-  bool isScrollingDown = false;
+  bool _isScrollingDown = false;
+  double _keyboardInset = 0;
 
   bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
+  bool _hasInitialScrolled = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -67,7 +69,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   void initState() {
     apps = prefs.appsList;
-    scrollController = ScrollController();
+    scrollController = ScrollController(initialScrollOffset: 1e9);
     textFieldFocusNode = FocusNode();
     textController.addListener(() {
       setState(() {});
@@ -75,12 +77,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
-        if (!isScrollingDown) {
-          isScrollingDown = true;
+        if (!_isScrollingDown) {
+          _isScrollingDown = true;
           setState(() {});
           Future.delayed(const Duration(seconds: 5), () {
-            if (isScrollingDown) {
-              isScrollingDown = false;
+            if (_isScrollingDown) {
+              _isScrollingDown = false;
               if (mounted) {
                 setState(() {});
               }
@@ -90,8 +92,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       }
 
       if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
-        if (isScrollingDown) {
-          isScrollingDown = false;
+        if (_isScrollingDown) {
+          _isScrollingDown = false;
           setState(() {});
         }
       }
@@ -103,7 +105,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
-      scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
@@ -127,11 +128,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    _keyboardInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           key: scaffoldKey,
+          resizeToAvoidBottomInset: false,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
@@ -192,11 +195,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 )
                               : ListView.builder(
                                   shrinkWrap: false,
-                                  reverse: true,
+                                  reverse: false,
                                   controller: scrollController,
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                                  padding: EdgeInsets.fromLTRB(18, 16, 18, 30 + _keyboardInset),
                                   itemCount: provider.messages.length,
                                   itemBuilder: (context, chatIndex) {
+                                    if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                      _hasInitialScrolled = true;
+                                      SchedulerBinding.instance.addPostFrameCallback((_) {
+                                        if (scrollController.hasClients) {
+                                          scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                                        }
+                                      });
+                                    }
+
                                     final message = provider.messages[chatIndex];
                                     double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
 
@@ -319,7 +331,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                         padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
                                         child: message.sender == MessageSender.ai
                                             ? AIMessage(
-                                                showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+                                                showTypingIndicator: provider.showTypingIndicator &&
+                                                    chatIndex == provider.messages.length - 1,
                                                 message: message,
                                                 sendMessage: _sendMessageUtil,
                                                 displayOptions: provider.messages.length <= 1 &&
@@ -340,7 +353,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 ),
                 // Send message area - fixed at bottom
                 Container(
-                  margin: const EdgeInsets.only(top: 10),
+                  margin: EdgeInsets.only(top: 10, bottom: MediaQuery.of(context).viewInsets.bottom),
                   decoration: const BoxDecoration(
                     color: Colors.transparent,
                     borderRadius: BorderRadius.only(
@@ -618,17 +631,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   _sendMessageUtil(String text) {
-    // Remove focus from text field
-    textFieldFocusNode.unfocus();
-
     var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
+
     provider.addMessageLocally(text);
     textController.clear();
+    textFieldFocusNode.unfocus();
 
-    // Scroll to align user's message to top of screen
-    Future.delayed(const Duration(milliseconds: 100), () {
-      scrollToBottom();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted || !scrollController.hasClients) return;
+      scrollController.animateTo(
+        scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
 
     provider.sendMessageStreamToServer(text);
