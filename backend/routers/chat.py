@@ -40,6 +40,39 @@ from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_s
 router = APIRouter()
 
 
+def _check_goal_progress_in_chat(uid: str, text: str):
+    """Check if chat message contains goal progress update."""
+    try:
+        import database.goals as goals_db
+        from utils.llm.clients import llm_mini
+        import json
+        
+        goal = goals_db.get_user_goal(uid)
+        if not goal or not text or len(text) < 5:
+            return
+        
+        prompt = f"""Does this message mention progress for: "{goal.get('title', '')}"?
+Current: {goal.get('current_value', 0)} / {goal.get('target_value', 10)}
+
+Message: "{text[:300]}"
+
+Extract new value if mentioned. Reply JSON only: {{"found": true/false, "value": number_or_null}}"""
+
+        response = llm_mini.invoke(prompt).content
+        
+        import re
+        match = re.search(r'\{[^{}]*\}', response)
+        if match:
+            result = json.loads(match.group())
+            if result.get('found') and result.get('value') is not None:
+                new_value = float(result['value'])
+                if new_value != goal.get('current_value', 0):
+                    goals_db.update_goal_progress(uid, goal['id'], new_value)
+                    print(f"[GOAL-CHAT] Updated: {goal.get('current_value')} -> {new_value}")
+    except Exception as e:
+        print(f"[GOAL-CHAT] Error: {e}")
+
+
 def filter_messages(messages, app_id):
     print('filter_messages', len(messages), app_id)
     collected = []
@@ -100,6 +133,10 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
+    
+    # Check for goal progress in user message (background)
+    import threading
+    threading.Thread(target=_check_goal_progress_in_chat, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None

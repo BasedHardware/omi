@@ -314,6 +314,48 @@ def _trigger_apps(
     [t.join() for t in threads]
 
 
+def _update_goal_progress(uid: str, conversation: Conversation):
+    """Extract and update goal progress from conversation text."""
+    try:
+        import database.goals as goals_db
+        from utils.llm.clients import llm_mini
+        import json
+        
+        goal = goals_db.get_user_goal(uid)
+        if not goal:
+            return
+        
+        # Get conversation text
+        text = ""
+        if conversation.structured and conversation.structured.overview:
+            text = conversation.structured.overview
+        elif conversation.transcript_segments:
+            text = " ".join([s.text for s in conversation.transcript_segments[:20]])
+        
+        if not text or len(text) < 10:
+            return
+        
+        prompt = f"""Does this text mention progress toward: "{goal.get('title', '')}"?
+Current: {goal.get('current_value', 0)} / {goal.get('target_value', 10)}
+
+Text: "{text[:500]}"
+
+If yes, extract the new value. Reply JSON: {{"found": true/false, "value": number_or_null}}"""
+
+        response = llm_mini.invoke(prompt).content
+        
+        match = re.search(r'\{[^{}]*\}', response)
+        if match:
+            result = json.loads(match.group())
+            if result.get('found') and result.get('value') is not None:
+                new_value = float(result['value'])
+                if new_value != goal.get('current_value', 0):
+                    goals_db.update_goal_progress(uid, goal['id'], new_value)
+                    print(f"[GOAL] Updated progress for {uid}: {goal.get('current_value')} -> {new_value}")
+    except Exception as e:
+        print(f"[GOAL] Error updating progress: {e}")
+
+
 def _extract_memories(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     memories_db.delete_memories_for_conversation(uid, conversation.id)
@@ -584,6 +626,7 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
