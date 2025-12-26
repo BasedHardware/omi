@@ -20,6 +20,8 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/providers/locale_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'device_settings.dart';
@@ -280,10 +282,10 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   ),
                 ],
               ),
-              child: const Text(
-                'App and device details copied',
+              child: Text(
+                context.l10n.appAndDeviceCopied,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
           ),
@@ -298,6 +300,74 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     });
   }
 
+  void _showLanguagePicker(BuildContext context, LocaleProvider localeProvider) {
+    final supportedLocales = LocaleProvider.supportedLocales;
+    final currentLocale = localeProvider.locale;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F25),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  context.l10n.selectLanguage,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Divider(height: 1, color: Colors.grey),
+              // System Default option
+              ListTile(
+                leading: Icon(
+                  currentLocale == null ? Icons.check_circle : Icons.circle_outlined,
+                  color: currentLocale == null ? Colors.green : Colors.grey,
+                ),
+                title: Text(
+                  context.l10n.systemDefault,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  localeProvider.setLocale(null);
+                  Navigator.pop(context);
+                },
+              ),
+              // Supported locales
+              ...supportedLocales.map((locale) {
+                final isSelected = currentLocale?.languageCode == locale.languageCode;
+                return ListTile(
+                  leading: Icon(
+                    isSelected ? Icons.check_circle : Icons.circle_outlined,
+                    color: isSelected ? Colors.green : Colors.grey,
+                  ),
+                  title: Text(
+                    LocaleProvider.getDisplayName(locale),
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  onTap: () {
+                    localeProvider.setLocale(locale);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildOmiModeContent(BuildContext context) {
     return Consumer<UsageProvider>(builder: (context, usageProvider, child) {
       return Column(
@@ -306,7 +376,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
-                title: 'Wrapped 2025',
+                title: context.l10n.wrapped2025,
                 icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
                 showNewTag: true,
                 onTap: () {
@@ -320,7 +390,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Profile',
+                title: context.l10n.profile,
                 icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   routeToPage(context, const ProfilePage());
@@ -331,7 +401,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 builder: (context, usageProvider, child) {
                   final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
                   return _buildSettingsItem(
-                    title: 'Plan & Usage',
+                    title: context.l10n.planAndUsage,
                     icon: const FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
                     trailingChip: isUnlimited
                         ? Container(
@@ -375,7 +445,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Offline Sync',
+                title: context.l10n.offlineSync,
                 icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
                   Navigator.pop(context);
@@ -395,7 +465,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     children: [
                       const Divider(height: 1, color: Color(0xFF3C3C43)),
                       _buildSettingsItem(
-                        title: 'Device Settings',
+                        title: context.l10n.deviceSettings,
                         icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
                         onTap: () {
                           Navigator.pop(context);
@@ -412,7 +482,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Chat Tools',
+                title: context.l10n.chatTools,
                 icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
                 showBetaTag: true,
                 onTap: () {
@@ -433,7 +503,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             children: [
               if (PlatformService.isIntercomSupported) ...[
                 _buildSettingsItem(
-                  title: 'Feedback / Bug',
+                  title: context.l10n.feedbackBug,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     Navigator.pop(context);
@@ -445,7 +515,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildSettingsItem(
-                  title: 'Help Center',
+                  title: context.l10n.helpCenter,
                   icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     Navigator.pop(context);
@@ -458,11 +528,28 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
               ],
               _buildSettingsItem(
-                title: 'Developer Settings',
+                title: context.l10n.developerSettings,
                 icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
                   await routeToPage(context, const DeveloperSettingsPage());
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              Consumer<LocaleProvider>(
+                builder: (context, localeProvider, child) {
+                  final currentLocale = localeProvider.locale;
+                  final displayName =
+                      currentLocale != null ? LocaleProvider.getDisplayName(currentLocale) : context.l10n.systemDefault;
+                  return _buildSettingsItem(
+                    title: context.l10n.language,
+                    icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
+                    trailingChip: Text(
+                      displayName,
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    ),
+                    onTap: () => _showLanguagePicker(context, localeProvider),
+                  );
                 },
               ),
             ],
@@ -473,7 +560,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
-                title: 'Get Omi for Mac',
+                title: context.l10n.getOmiForMac,
                 icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   Navigator.pop(context);
@@ -483,7 +570,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43)),
               _buildSettingsItem(
-                title: 'Referral Program',
+                title: context.l10n.referralProgram,
                 icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
                 showNewTag: true,
                 onTap: () {
@@ -503,7 +590,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
-                title: 'Sign Out',
+                title: context.l10n.signOut,
                 icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
                   // Capture the provider reference before any navigation
