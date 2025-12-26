@@ -424,6 +424,41 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               const SizedBox(height: 16),
             ],
             if (shouldUpdate) ...[
+              // Show low battery warning if battery < 10%
+              Builder(
+                builder: (context) {
+                  final deviceProvider = Provider.of<DeviceProvider>(context);
+                  final batteryLevel = deviceProvider.batteryLevel;
+                  if (batteryLevel >= 0 && batteryLevel < 10) {
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.battery_alert_rounded, color: Colors.red, size: 24),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Battery too low ($batteryLevel%). Please charge your device to at least 10% before updating firmware to prevent bricking.',
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 14,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
               const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
@@ -443,42 +478,52 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                     color: Theme.of(context).colorScheme.primary,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: () async {
-                      // Set firmware update in progress when starting update
-                      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-                      deviceProvider.setFirmwareUpdateInProgress(true);
+                  child: Builder(
+                    builder: (context) {
+                      final deviceProvider = Provider.of<DeviceProvider>(context);
+                      final batteryLevel = deviceProvider.batteryLevel;
+                      final isBatteryTooLow = batteryLevel >= 0 && batteryLevel < 10;
 
-                      if (otaUpdateSteps.isEmpty) {
-                        await downloadFirmware();
-                        await startDfu(widget.device!);
-                      } else {
-                        showDialog(
-                          context: context,
-                          builder: (context) => FirmwareUpdateDialog(
-                            steps: otaUpdateSteps,
-                            onUpdateStart: () async {
-                              await downloadFirmware();
-                              await startDfu(widget.device!);
-                            },
+                      return TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                        );
-                      }
+                        ),
+                        onPressed: isBatteryTooLow
+                            ? null
+                            : () async {
+                                // Set firmware update in progress when starting update
+                                final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+                                deviceProvider.setFirmwareUpdateInProgress(true);
+
+                                if (otaUpdateSteps.isEmpty) {
+                                  await downloadFirmware();
+                                  await startDfu(widget.device!);
+                                } else {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => FirmwareUpdateDialog(
+                                      steps: otaUpdateSteps,
+                                      onUpdateStart: () async {
+                                        await downloadFirmware();
+                                        await startDfu(widget.device!);
+                                      },
+                                    ),
+                                  );
+                                }
+                              },
+                        child: Text(
+                          otaUpdateSteps.isEmpty ? "Start Update" : "Update",
+                          style: TextStyle(
+                            color: isBatteryTooLow ? Colors.white.withOpacity(0.4) : Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
                     },
-                    child: Text(
-                      otaUpdateSteps.isEmpty ? "Start Update" : "Update",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   ),
                 ),
               ),

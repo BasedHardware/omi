@@ -462,24 +462,24 @@ class AddAppProvider extends ChangeNotifier {
         return false;
       }
       for (var capability in selectedCapabilities) {
-        if (capability.title == 'chat') {
+        if (capability.id == 'chat') {
           if (chatPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError('Please enter a chat prompt for your app');
             return false;
           }
         }
-        if (capability.title == 'memories') {
+        if (capability.id == 'memories') {
           if (conversationPromptController.text.isEmpty) {
             AppSnackbar.showSnackbarError('Please enter a conversation prompt for your app');
             return false;
           }
         }
-        if (capability.title == 'external_integration') {
-          if (triggerEvent == null) {
+        if (capability.id == 'external_integration') {
+          if (triggerEvent == null && actions.isEmpty) {
             AppSnackbar.showSnackbarError('Please select a trigger event for your app');
             return false;
           }
-          if (webhookUrlController.text.isEmpty) {
+          if (triggerEvent != null && webhookUrlController.text.isEmpty) {
             AppSnackbar.showSnackbarError('Please enter a webhook URL for your app');
             return false;
           }
@@ -540,10 +540,10 @@ class AddAppProvider extends ChangeNotifier {
         }
       }
       if (capability.id == 'chat') {
-        data['chat_prompt'] = chatPromptController.text;
+        data['chat_prompt'] = chatPromptController.text.trim();
       }
       if (capability.id == 'memories') {
-        data['memory_prompt'] = conversationPromptController.text;
+        data['memory_prompt'] = conversationPromptController.text.trim();
       }
       if (capability.id == 'proactive_notification') {
         if (data['proactive_notification'] == null) {
