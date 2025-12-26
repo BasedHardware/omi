@@ -117,12 +117,13 @@ workflows:
         script: |
           xcode-project use-profiles
 
+          # Extract version name from pubspec.yaml (source of truth)
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+
           # Auto-increment build number based on latest TestFlight build
           LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number $APP_ID || echo "0")
           BUILD_NUMBER=$((LATEST_BUILD + 1))
-          
-          # Use a base version for auto builds
-          BUILD_NAME="1.0.${BUILD_NUMBER}"
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
@@ -301,10 +302,13 @@ workflows:
 
       - name: Build AAB with Flutter
         script: |
+          # Extract version name from pubspec.yaml (source of truth)
+          PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
+          BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
+
           # Get latest build number from Google Play and increment
           LATEST_BUILD=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal || echo "0")
           BUILD_NUMBER=$((LATEST_BUILD + 1))
-          BUILD_NAME="1.0.${BUILD_NUMBER}"
 
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
