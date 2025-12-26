@@ -749,7 +749,7 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
         # Send audio bytes to developer webhook for offline sync
         # This ensures webhooks are triggered even for offline-recorded audio
         if wav_paths:
-            await trigger_audio_bytes_webhook_for_sync(uid, wav_paths)
+            asyncio.create_task(trigger_audio_bytes_webhook_for_sync(uid, wav_paths))
 
         def chunk_threads(threads):
             chunk_size = 5
