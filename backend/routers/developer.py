@@ -620,6 +620,7 @@ class Conversation(BaseModel):
     language: Optional[str] = None
     source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
+    geolocation: Optional[Geolocation] = None
 
 
 class CreateConversationRequest(BaseModel):
