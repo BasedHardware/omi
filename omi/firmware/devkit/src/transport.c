@@ -28,6 +28,9 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 #define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
+
+// Task watchdog: atomic flag to track if pusher thread is alive
+static atomic_t pusher_alive = ATOMIC_INIT(0);
 extern uint8_t file_count;
 extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
@@ -694,6 +697,9 @@ void pusher(void)
 {
     k_msleep(500);
     while (1) {
+        // Mark pusher thread as alive for task watchdog
+        atomic_set(&pusher_alive, 1);
+
         //
         // Load current connection
         //
@@ -896,4 +902,10 @@ int broadcast_audio_packets(uint8_t *buffer, size_t size)
 void accel_off()
 {
     gpio_pin_set_dt(&accel_gpio_pin, 0);
+}
+
+bool pusher_check_and_reset_alive(void)
+{
+    // Returns true if pusher was alive since last check, then resets the flag
+    return atomic_cas(&pusher_alive, 1, 0);
 }
