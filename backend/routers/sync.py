@@ -494,18 +494,16 @@ def get_wav_duration(wav_path: str) -> float:
 
 
 def read_wav_as_pcm(wav_path: str) -> tuple[bytes, int]:
-    """Read WAV file and return raw PCM data and sample rate."""
-    try:
-        with wave.open(wav_path, 'rb') as wav_file:
-            sample_rate = wav_file.getframerate()
-            pcm_data = wav_file.readframes(wav_file.getnframes())
-            return pcm_data, sample_rate
-    except FileNotFoundError:
-        print(f"WAV file not found: {wav_path}")
-        return b'', 16000
-    except wave.Error as e:
-        print(f"Error reading WAV file {wav_path}: {e}")
-        return b'', 16000
+    """Read WAV file and return raw PCM data and sample rate.
+
+    Raises:
+        FileNotFoundError: If the WAV file does not exist.
+        wave.Error: If the file is not a valid WAV file.
+    """
+    with wave.open(wav_path, 'rb') as wav_file:
+        sample_rate = wav_file.getframerate()
+        pcm_data = wav_file.readframes(wav_file.getnframes())
+        return pcm_data, sample_rate
 
 
 async def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
@@ -516,7 +514,9 @@ async def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
             if pcm_data:
                 asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, bytearray(pcm_data)))
                 print(f"Scheduled audio bytes webhook for synced file: {wav_path}")
-        except (FileNotFoundError, wave.Error) as e:
+        except FileNotFoundError:
+            print(f"WAV file not found for webhook: {wav_path}")
+        except wave.Error as e:
             print(f"Error reading WAV for webhook {wav_path}: {e}")
 
 
