@@ -512,7 +512,11 @@ async def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
         try:
             pcm_data, sample_rate = await asyncio.to_thread(read_wav_as_pcm, wav_path)
             if pcm_data:
-                asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, bytearray(pcm_data)))
+                # Extract original recording timestamp from filename
+                timestamp = get_timestamp_from_path(wav_path)
+                asyncio.create_task(
+                    send_audio_bytes_developer_webhook(uid, sample_rate, bytearray(pcm_data), timestamp=timestamp)
+                )
                 print(f"Scheduled audio bytes webhook for synced file: {wav_path}")
         except FileNotFoundError:
             print(f"WAV file not found for webhook: {wav_path}")
