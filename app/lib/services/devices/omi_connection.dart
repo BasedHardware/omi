@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/notifications.dart';
 import 'package:version/version.dart';
 
 class OmiDeviceConnection extends DeviceConnection {
@@ -426,7 +426,7 @@ class OmiDeviceConnection extends DeviceConnection {
     try {
       final stream = transport.getCharacteristicStream(accelDataStreamServiceUuid, accelDataStreamCharacteristicUuid);
 
-      final subscription = stream.listen((value) {
+      final subscription = stream.listen((value) async {
         if (value.length > 4) {
           //for some reason, the very first reading is four bytes
 
@@ -463,16 +463,7 @@ class OmiDeviceConnection extends DeviceConnection {
             var fall_number =
                 sqrt(pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2));
             if (fall_number > 30.0) {
-              AwesomeNotifications().createNotification(
-                content: NotificationContent(
-                  id: 6,
-                  channelKey: 'channel',
-                  actionType: ActionType.Default,
-                  title: 'ouch',
-                  body: 'did you fall?',
-                  wakeUpScreen: true,
-                ),
-              );
+              await NotificationUtil.triggerFallNotification();
             }
           }
         }

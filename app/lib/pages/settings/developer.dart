@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
@@ -16,11 +17,15 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/pages/persona/persona_profile.dart';
+import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
+import 'package:omi/pages/settings/import_history_page.dart';
 
 class DeveloperSettingsPage extends StatefulWidget {
   const DeveloperSettingsPage({super.key});
@@ -260,6 +265,51 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
     );
   }
 
+  Widget _buildMcpConfigRow(String label, String value) {
+    return GestureDetector(
+      onTap: () {
+        Clipboard.setData(ClipboardData(text: value));
+        AppSnackbar.showSnackbar('$label copied');
+      },
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0D0D0D),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      value,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'Ubuntu Mono',
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade600, size: 11),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildApiKeysList(BuildContext context) {
     return Consumer<McpProvider>(
       builder: (context, provider, child) {
@@ -422,14 +472,109 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Transcription Section
+                  // Persona Section
                   GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
+                          builder: (context) => const PersonaProfilePage(),
+                          settings: const RouteSettings(
+                            arguments: 'from_settings',
+                          ),
+                        ),
+                      );
+                      MixpanelManager().pageOpened('Developer Persona Settings');
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.solidCircleUser,
+                                color: Colors.grey.shade400,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Persona',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Text(
+                                        'BETA',
+                                        style: TextStyle(
+                                          color: Colors.orange,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Configure your AI persona',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Transcription Section
+                  GestureDetector(
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
                           builder: (context) => const TranscriptionSettingsPage(),
                         ),
                       );
+                      if (mounted) {
+                        setState(() {});
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.all(16),
@@ -480,6 +625,136 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           ),
                           _buildSttChip(),
                           const SizedBox(width: 8),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Conversation Timeout Section
+                  GestureDetector(
+                    onTap: () {
+                      ConversationTimeoutDialog.show(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.clock,
+                                color: Colors.grey.shade400,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Conversation Timeout',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Set when conversations auto-end',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Import Data Section
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ImportHistoryPage(),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.fileImport,
+                                color: Colors.grey.shade400,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Import Data',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Import data from other sources',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           FaIcon(
                             FontAwesomeIcons.chevronRight,
                             color: Colors.grey.shade600,
@@ -796,6 +1071,99 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   const SizedBox(height: 32),
 
+                  // Knowledge Graph Section
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1C1C1E),
+                          title: const Text('Delete Knowledge Graph?', style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                            'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(ctx).pop();
+                                try {
+                                  // Call delete endpoint
+                                  await KnowledgeGraphApi.deleteKnowledgeGraph();
+                                  AppSnackbar.showSnackbar('Knowledge Graph deleted successfully');
+                                } catch (e) {
+                                  AppSnackbar.showSnackbarError('Failed to delete graph: $e');
+                                }
+                              },
+                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.trash,
+                                color: Colors.redAccent.shade100,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Delete Knowledge Graph',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Clear all nodes and connections',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
                   // Developer API Keys Section
                   const DeveloperApiKeysSection(),
 
@@ -973,6 +1341,177 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     ),
                   ),
 
+                  const SizedBox(height: 24),
+
+                  // MCP Server Section
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2E),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'MCP Server',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Connect AI assistants to your data',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Server URL
+                        Text(
+                          'Server URL',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Builder(
+                          builder: (context) {
+                            final mcpUrl = '${Env.apiBaseUrl}v1/mcp/sse';
+                            return GestureDetector(
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: mcpUrl));
+                                AppSnackbar.showSnackbar('URL copied');
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0D0D0D),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        mcpUrl,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontFamily: 'Ubuntu Mono',
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+                        Divider(color: Colors.grey.shade800, height: 1),
+                        const SizedBox(height: 20),
+
+                        // API Key Auth Section
+                        Text(
+                          'API Key Auth',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                'Header',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                'Authorization: Bearer <key>',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 12,
+                                  fontFamily: 'Ubuntu Mono',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+                        Divider(color: Colors.grey.shade800, height: 1),
+                        const SizedBox(height: 20),
+
+                        // OAuth Section
+                        Text(
+                          'OAuth',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Client ID
+                        _buildMcpConfigRow('Client ID', 'omi'),
+                        const SizedBox(height: 8),
+
+                        // Client Secret hint
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Text(
+                                'Client Secret',
+                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                'Use your MCP API key',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
                   const SizedBox(height: 32),
 
                   // Webhooks Section
@@ -1111,6 +1650,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           icon: FontAwesomeIcons.lightbulb,
                           value: provider.followUpQuestionEnabled,
                           onChanged: provider.onFollowUpQuestionChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Daily Grade
+                        _buildExperimentalItem(
+                          title: 'Daily Grade',
+                          description: 'Show daily grade card on homepage',
+                          icon: FontAwesomeIcons.chartLine,
+                          value: provider.showDailyGradeEnabled,
+                          onChanged: provider.onShowDailyGradeChanged,
                         ),
                       ],
                     ),

@@ -386,34 +386,28 @@ static void exchange_func(struct bt_conn *conn, uint8_t att_err, struct bt_gatt_
 #ifdef CONFIG_OMI_ENABLE_BATTERY
 #define BATTERY_REFRESH_INTERVAL        10000 // 10 seconds
 #define CONFIG_OMI_BATTERY_CRITICAL_MV  3500  // mV
-
+uint8_t battery_percentage = 0;
 void broadcast_battery_level(struct k_work *work_item);
 
 K_WORK_DELAYABLE_DEFINE(battery_work, broadcast_battery_level);
 
 void broadcast_battery_level(struct k_work *work_item)
 {
-    static uint8_t notify_counter = 6;
     uint16_t battery_millivolt;
-    uint8_t battery_percentage;
+
     if (battery_get_millivolt(&battery_millivolt) == 0 &&
         battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
+        // Use the Zephyr BAS function to set (and notify) the battery level
+        int err = bt_bas_set_battery_level(battery_percentage);
+        if (err) {
+            LOG_ERR("Error updating battery level: %d", err);
+        }
         if (battery_millivolt < CONFIG_OMI_BATTERY_CRITICAL_MV) {
             LOG_WRN("Battery critical level reached (%d mV). Initiating shutdown.", battery_millivolt);
             turnoff_all();
-        } else {
-            notify_counter++;
-            if (notify_counter >= 6) {
-                // Use the Zephyr BAS function to set (and notify) the battery level
-                int err = bt_bas_set_battery_level(battery_percentage);
-                if (err) {
-                    LOG_ERR("Error updating battery level: %d", err);
-                }
-                notify_counter = 0;
-            }
         }
     } else {
         LOG_ERR("Failed to read battery level");

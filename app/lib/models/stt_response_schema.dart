@@ -91,12 +91,23 @@ class SttResponseSchema {
     defaultSegmentDuration: 3.0,
   );
 
+  /// OpenAI GPT-4o Transcribe Diarize response format (diarized_json)
+  static const openAIDiarize = SttResponseSchema(
+    segmentsPath: 'segments',
+    segmentsTextField: 'text',
+    segmentsStartField: 'start',
+    segmentsEndField: 'end',
+    segmentsSpeakerField: 'speaker',
+    textPath: 'text',
+  );
+
   /// Template names that are live/streaming
   static const Set<String> liveTemplates = {'Deepgram', 'Google Gemini'};
 
   /// Available templates for custom STT configuration
   static const Map<String, SttResponseSchema> templates = {
     'OpenAI': openAI,
+    'OpenAI Diarize': openAIDiarize,
     'Deepgram': deepgramLive,
     'Fal.AI': falAI,
     'Google Gemini': geminiLive,

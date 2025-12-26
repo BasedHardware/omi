@@ -166,6 +166,112 @@ env:
         key: ENCRYPTION_SECRET
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-private-cloud-sync"
+  - name: BUCKET_PLUGINS_LOGOS
+    value: "omi_plugins"
+  - name: LANGCHAIN_TRACING_V2
+    value: "false"
+  - name: LANGCHAIN_ENDPOINT
+    value: "https://api.smith.langchain.com"
+  - name: LANGCHAIN_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: LANGCHAIN_API_KEY
+  - name: LANGCHAIN_PROJECT
+    value: "production"
+  - name: DD_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DD_API_KEY
+  - name: DD_SITE
+    value: "us5.datadoghq.com"
+  - name: DD_TRACE_ENABLED
+    value: "true"
+  - name: DD_TRACE_PROPAGATION_STYLE
+    value: "datadog"
+  - name: DD_TRACE_SAMPLE_RATE
+    value: "1"
+  - name: DD_LOGS_ENABLED
+    value: "false"
+  - name: DD_SERVICE
+    value: "pusher"
+  - name: DD_ENV
+    value: "prod"
+  - name: DD_VERSION
+    value: "1"
+  - name: STRIPE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: STRIPE_API_KEY
+  - name: STRIPE_WEBHOOK_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: STRIPE_WEBHOOK_SECRET
+  - name: MARKETPLACE_APP_REVIEWERS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MARKETPLACE_APP_REVIEWERS
+  - name: TYPESENSE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TYPESENSE_HOST
+  - name: TYPESENSE_HOST_PORT
+    value: "443"
+  - name: TYPESENSE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: TYPESENSE_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "true"
+  - name: DEEPGRAM_SELF_HOSTED_URL
+    value: "https://dg.omi.me"
+  - name: RAPID_API_HOST
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: RAPID_API_HOST
+  - name: RAPID_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: RAPID_API_KEY
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: OPENROUTER_API_KEY
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware"
+  - name: CONVERSATION_SUMMARIZED_APP_IDS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: CONVERSATION_SUMMARIZED_APP_IDS
+  - name: STT_SERVICE_MODELS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: STT_SERVICE_MODELS
+  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+    value: "1200"
+  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+    value: "0"
+  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+    value: "0"
+  - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
+    value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
+  - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
+    value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
+  - name: SUBSCRIPTION_LAUNCH_DATE
+    value: "2025-08-21"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -201,8 +307,8 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 50
-  maxReplicas: 100
+  minReplicas: 30
+  maxReplicas: 60
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 600

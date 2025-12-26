@@ -5,6 +5,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
@@ -33,6 +34,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     MixpanelManager().deleteUser();
     await deleteAccount();
     await FirebaseAuth.instance.signOut();
+    await WalFileManager.clearAll();
     SharedPreferencesUtil().clear();
     setState(() {
       isDeleteing = false;

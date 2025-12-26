@@ -114,8 +114,9 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
-                and (b.start - a.end < 30)
                 and a.speech_profile_processed == b.speech_profile_processed
+                and (b.start - a.end < 3)
+                and (len(a.text) < 125 or a.text[-1] not in [".", "?", "!"])
             ):
                 a.text += f' {b.text}'
                 a.end = b.end

@@ -127,16 +127,22 @@ STRICT EXCLUSION RULES - DO NOT extract if memory is:
 ❌ "Uses a computer for work" (if user is a software engineer)
 ❌ "Has meetings regularly" (if user is in a corporate job)
 
-CRITICAL DEDUPLICATION RULES:
-• DO NOT extract memories >90% similar to existing memories listed below
-• Check both the content AND the context
-• Consider semantic similarity, not just exact word matches
-• If unsure whether something is duplicate, treat it as duplicate (DON'T extract)
+CRITICAL DEDUPLICATION & UPDATES RULES:
+• You are provided with a large list of existing memories. SCAN IT COMPLETELY.
+• ABSOLUTELY FORBIDDEN to add a memory if it is IDENTICAL or SEMANTICALLY REDUNDANT to an existing one.
+  - Existing: "Likes coffee" -> New: "Enjoys drinking coffee" => REJECT (Redundant)
+
+• EXCEPTION FOR UPDATES / CHANGES:
+  - If a new memory CONTRADICTS or UPDATES an existing one, YOU MUST ADD IT.
+  - Existing: "Likes ice cream" -> New: "Hates ice cream" => ADD IT (Update/Change)
+  - Existing: "Works at Google" -> New: "Left Google and joined OpenAI" => ADD IT (Update)
+
+• PRIORITIZE capturing changes in state, preferences, or relationships.
+• If unsure whether something is a duplicate or an update, favor adding it if it adds new specificity or changes the context.
 
 Examples of DUPLICATES (DO NOT extract):
 - "Loves Italian food" (existing) vs "Enjoys pasta and pizza" → DUPLICATE
 - "Works at Google" (existing) vs "Employed by Google as engineer" → DUPLICATE
-- "Friend named John who is a designer" (existing) vs "Has a designer friend John" → DUPLICATE
 
 FORMAT REQUIREMENTS:
 • Maximum 15 words per memory (strict limit)

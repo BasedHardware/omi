@@ -173,21 +173,22 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Find the proper date and index for this conversation in the grouped conversations
       final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      if (result == null) {
+      if (result != null) {
+        final (date, index) = result;
+        provider.updateConversation(widget.conversation.id, date);
+      } else {
         final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
         provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-        provider.conversationIdx = 0;
-      } else {
-        final (date, index) = result;
-        provider.selectedDate = date;
-        provider.conversationIdx = index;
       }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
-        await conversationProvider.updateSearchedConvoDetails(
-            provider.conversation.id, provider.selectedDate, provider.conversationIdx);
-        provider.updateConversation(provider.conversationIdx, provider.selectedDate);
+        final date = provider.selectedDate;
+        final idx = conversationProvider.getConversationIndexById(provider.conversation.id, date);
+        if (idx != -1) {
+          await conversationProvider.updateSearchedConvoDetails(provider.conversation.id, date, idx);
+        }
+        provider.updateConversation(provider.conversation.id, provider.selectedDate);
       }
 
       // Check if this is the first conversation and show app review prompt
@@ -287,7 +288,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           context,
           () => Navigator.pop(context),
           () {
-            context.read<ConversationProvider>().deleteConversation(provider.conversation, provider.conversationIdx);
+            {
+              final convoProvider = context.read<ConversationProvider>();
+              final date = provider.selectedDate;
+              final idx = convoProvider.getConversationIndexById(provider.conversation.id, date);
+              convoProvider.deleteConversation(provider.conversation, idx);
+            }
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, {'deleted': true}); // Close detail page
           },
@@ -453,6 +459,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       context.read<ConversationProvider>().updateConversationInSortedList(
                                             provider.conversation,
                                           );
+                                      // Track star/unstar action
+                                      MixpanelManager().conversationStarToggled(
+                                        conversation: provider.conversation,
+                                        starred: newStarredState,
+                                        source: 'detail_page_button',
+                                      );
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text('Failed to update starred status.')),
@@ -731,6 +743,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     return ConversationBottomBar(
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
+                      conversation: conversation,
                       hasSegments: conversation.transcriptSegments.isNotEmpty ||
                           conversation.photos.isNotEmpty ||
                           conversation.externalIntegration != null,
@@ -1010,7 +1023,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   }
 }
 
-class SummaryTab extends StatelessWidget {
+class SummaryTab extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1023,12 +1036,21 @@ class SummaryTab extends StatelessWidget {
   });
 
   @override
+  State<SummaryTab> createState() => _SummaryTabState();
+}
+
+class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Listener(
         onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
-          if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-            onTapWhenSearchEmpty!();
+          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+            widget.onTapWhenSearchEmpty!();
           }
         },
         child: GestureDetector(
@@ -1036,8 +1058,8 @@ class SummaryTab extends StatelessWidget {
           onTap: () {
             FocusScope.of(context).unfocus();
             // If search is empty, call the callback to close search
-            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-              onTapWhenSearchEmpty!();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
             }
           },
           child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
@@ -1052,8 +1074,10 @@ class SummaryTab extends StatelessWidget {
                       const GetSummaryWidgets(),
                       data.item1
                           ? const ReprocessDiscardedWidget()
-                          : GetAppsWidgets(searchQuery: searchQuery, currentResultIndex: currentResultIndex),
-                      const SizedBox(height: 150)
+                          : GetAppsWidgets(
+                              searchQuery: widget.searchQuery, currentResultIndex: widget.currentResultIndex),
+                      const GetGeolocationWidgets(),
+                      const SizedBox(height: 150),
                     ],
                   ),
                 ],
@@ -1064,7 +1088,7 @@ class SummaryTab extends StatelessWidget {
   }
 }
 
-class TranscriptWidgets extends StatelessWidget {
+class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -1077,20 +1101,29 @@ class TranscriptWidgets extends StatelessWidget {
   });
 
   @override
+  State<TranscriptWidgets> createState() => _TranscriptWidgetsState();
+}
+
+class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Listener(
         onPointerDown: (PointerDownEvent event) {
           FocusScope.of(context).unfocus();
-          if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-            onTapWhenSearchEmpty!();
+          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+            widget.onTapWhenSearchEmpty!();
           }
         },
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () {
             FocusScope.of(context).unfocus();
-            if (searchQuery.isEmpty && onTapWhenSearchEmpty != null) {
-              onTapWhenSearchEmpty!();
+            if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
+              widget.onTapWhenSearchEmpty!();
             }
           },
           child: Consumer<ConversationDetailProvider>(
@@ -1125,9 +1158,9 @@ class TranscriptWidgets extends StatelessWidget {
                 canDisplaySeconds: provider.canDisplaySeconds,
                 isConversationDetail: true,
                 bottomMargin: 150,
-                searchQuery: searchQuery,
-                currentResultIndex: currentResultIndex,
-                onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+                searchQuery: widget.searchQuery,
+                currentResultIndex: widget.currentResultIndex,
+                onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {

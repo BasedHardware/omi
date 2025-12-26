@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/pages/settings/widgets/create_dev_api_key_dialog.dart';
+import 'package:omi/pages/settings/widgets/create_dev_api_key_sheet.dart';
 import 'package:omi/pages/settings/widgets/dev_api_key_list_item.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -39,13 +39,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
-        showDialog(
-          context: context,
-          builder: (dialogContext) => ChangeNotifierProvider.value(
-            value: provider,
-            child: const CreateDevApiKeyDialog(),
-          ),
-        );
+        CreateDevApiKeySheet.show(context, provider);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

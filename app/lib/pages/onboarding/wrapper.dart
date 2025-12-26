@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
@@ -18,8 +17,9 @@ import 'package:omi/pages/onboarding/welcome/page.dart';
 import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/auth_service.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -39,10 +39,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kNamePage = 1;
   static const int kPrimaryLanguagePage = 2;
   static const int kPermissionsPage = 3;
-  static const int kUserReviewPage = 4;
+  static const int kUserReviewPage = 4; // "Loving Omi?" screen
   static const int kWelcomePage = 5;
   static const int kFindDevicesPage = 6;
-  static const int kSpeechProfilePage = 7; // Now always the last index
+  static const int kSpeechProfilePage = 7; // Speech profile with questions (requires device)
 
   // Special index values used in comparisons
   static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7];
@@ -55,7 +55,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   @override
   void initState() {
-    _controller = TabController(length: 8, vsync: this);
+    _controller = TabController(length: 8, vsync: this); // Auth, Name, Lang, Permissions, Review, Welcome, FindDevices, SpeechProfile
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
@@ -182,15 +182,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
-  // TODO: use connection directly
-  Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return BleAudioCodec.pcm8;
-    }
-    return connection.getAudioCodec();
-  }
-
   @override
   Widget build(BuildContext context) {
     List<Widget> pages = [
@@ -229,57 +220,32 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       UserReviewPage(
         goNext: () {
-          _goNext(); // Go to Welcome page
+          // Go directly to Speech Profile (skip device steps - we use phone mic now)
+          _controller!.animateTo(kSpeechProfilePage);
           MixpanelManager().onboardingStepCompleted('User Review');
         },
       ),
-      WelcomePage(
-        goNext: () {
-          _goNext(); // Go to Find Devices page
-          MixpanelManager().onboardingStepCompleted('Welcome');
-        },
-        onSkip: () {
-          // Complete onboarding and go to homepage
-          SharedPreferencesUtil().onboardingCompleted = true;
-          MixpanelManager().onboardingStepCompleted('Welcome Skipped');
-          PaintingBinding.instance.imageCache.clear();
-          routeToPage(context, const HomePageWrapper(), replace: true);
-        },
-      ),
-      FindDevicesPage(
-        isFromOnboarding: true,
-        onSkip: () {
-          // Skipping device finding means skipping speech profile and device onboarding too
-          SharedPreferencesUtil().onboardingCompleted = true;
-          routeToPage(context, const HomePageWrapper(), replace: true);
-        },
-        goNext: () async {
-          var provider = context.read<OnboardingProvider>();
-          MixpanelManager().onboardingStepCompleted('Find Devices');
-
-          if (hasSpeechProfile) {
-            // Skip speech profile, go directly to device onboarding
-            routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
-          } else {
-            var codec = await _getAudioCodec(provider.deviceId);
-            if (codec.isOpusSupported()) {
-              _goNext(); // Go to Speech Profile page
-            } else {
-              // Device selected, but not Opus, skip speech profile and go to device onboarding
-              routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
-            }
-          }
-        },
-      ),
-      SpeechProfileWidget(
-        goNext: () {
-          routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
-          MixpanelManager().onboardingStepCompleted('Speech Profile');
-        },
-        onSkip: () {
-          routeToPage(context, const DeviceOnboardingWrapper(), replace: true);
-          MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
-        },
+      // Placeholder pages - not used in new flow but kept for index consistency
+      Container(), // WelcomePage placeholder
+      Container(), // FindDevicesPage placeholder
+      ChangeNotifierProvider(
+        create: (context) => SpeechProfileProvider(),
+        child: SpeechProfileWidget(
+          goNext: () {
+            // Speech profile complete, finish onboarding
+            SharedPreferencesUtil().onboardingCompleted = true;
+            MixpanelManager().onboardingStepCompleted('Speech Profile');
+            PaintingBinding.instance.imageCache.clear();
+            routeToPage(context, const HomePageWrapper(), replace: true);
+          },
+          onSkip: () {
+            // Skip speech profile, finish onboarding
+            SharedPreferencesUtil().onboardingCompleted = true;
+            MixpanelManager().onboardingStepCompleted('Speech Profile Skipped');
+            PaintingBinding.instance.imageCache.clear();
+            routeToPage(context, const HomePageWrapper(), replace: true);
+          },
+        ),
       ),
     ];
 
@@ -511,3 +477,4 @@ double maxHeightWithTextScale(BuildContext context, int index) {
     return 305;
   }
 }
+

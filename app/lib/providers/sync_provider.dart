@@ -54,6 +54,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   String? get syncError => _syncState.errorMessage;
   Wal? get failedWal => _syncState.failedWal;
 
+  // Flash page (Limitless) sync states - distinct phases
+  // isSyncingFromPendant: true when receiving data from pendant (pendant → phone)
+  // isUploadingToCloud: true when uploading files to cloud (phone → cloud)
+  bool get isSyncingFromPendant => _walService.getSyncs().flashPage.isSyncing;
+  bool get isUploadingToCloud => _walService.getSyncs().flashPage.isUploading;
+  bool get hasOrphanedFiles => _walService.getSyncs().flashPage.hasOrphanedFiles;
+  int get orphanedFilesCount => _walService.getSyncs().flashPage.orphanedFilesCount;
+
   // Audio playback delegates
   String? get currentPlayingWalId => _audioPlayerUtils.currentPlayingId;
   bool get isProcessingAudio => _audioPlayerUtils.isProcessingAudio;

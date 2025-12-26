@@ -7,7 +7,7 @@ import 'package:omi/utils/audio/audio_transcoder.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/models/stt_result.dart';
-import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 enum PurePollingStatus { notConnected, connecting, connected, disconnected }
 
@@ -35,9 +35,6 @@ abstract class ISttProvider {
 }
 
 class PurePollingSocket implements IPureSocket {
-  StreamSubscription<bool>? _connectionStateListener;
-  bool _isConnected = ConnectivityService().isConnected;
-  Timer? _internetLostDelayTimer;
   Timer? _bufferFlushTimer;
 
   final AudioPollingConfig config;
@@ -70,16 +67,11 @@ class PurePollingSocket implements IPureSocket {
   final List<Uint8List> _audioFrames = [];
   bool _isProcessing = false;
   double _audioOffsetSeconds = 0;
-  int _retries = 0;
 
   PurePollingSocket({
     required this.config,
     required this.sttProvider,
-  }) {
-    _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
-      onConnectionStateChanged(isConnected);
-    });
-  }
+  });
 
   @override
   Future<bool> connect() async {
@@ -93,14 +85,22 @@ class PurePollingSocket implements IPureSocket {
 
     try {
       _status = PurePollingStatus.connected;
-      _retries = 0;
       CustomSttLogService.instance.info(serviceId, 'Connected');
+      DebugLogManager.logEvent('polling_socket_connected', {
+        'service_id': serviceId,
+        'buffer_duration_ms': config.bufferDuration.inMilliseconds,
+        'min_buffer_bytes': config.minBufferSizeBytes,
+      });
       onConnected();
 
       _startBufferFlushTimer();
       return true;
     } catch (e) {
       CustomSttLogService.instance.error(serviceId, 'Connection error: $e');
+      DebugLogManager.logWarning('polling_socket_connect_error', {
+        'service_id': serviceId,
+        'error': e.toString(),
+      });
       _status = PurePollingStatus.notConnected;
       return false;
     }
@@ -183,6 +183,9 @@ class PurePollingSocket implements IPureSocket {
       }
     } catch (e, trace) {
       CustomSttLogService.instance.error(serviceId, 'Transcription error: $e');
+      DebugLogManager.logError(e, trace, 'polling_socket_transcription_error', {
+        'service_id': serviceId,
+      });
       onError(e, trace);
     } finally {
       _isProcessing = false;
@@ -202,18 +205,15 @@ class PurePollingSocket implements IPureSocket {
     onClosed();
   }
 
-  Future _cleanUp() async {
-    _internetLostDelayTimer?.cancel();
-    _connectionStateListener?.cancel();
+  @override
+  Future stop() async {
+    DebugLogManager.logEvent('polling_socket_stopping', {
+      'service_id': config.serviceId ?? 'Polling',
+    });
+    await disconnect();
     _bufferFlushTimer?.cancel();
     _audioFrames.clear();
     _audioOffsetSeconds = 0;
-  }
-
-  @override
-  Future stop() async {
-    await disconnect();
-    await _cleanUp();
     sttProvider.dispose();
   }
 
@@ -221,12 +221,19 @@ class PurePollingSocket implements IPureSocket {
   void onClosed([int? closeCode]) {
     _status = PurePollingStatus.disconnected;
     CustomSttLogService.instance.info(config.serviceId ?? 'Polling', 'Closed');
+    DebugLogManager.logEvent('polling_socket_closed', {
+      'service_id': config.serviceId ?? 'Polling',
+      'close_code': closeCode ?? -1,
+    });
     _listener?.onClosed(closeCode);
   }
 
   @override
   void onError(Object err, StackTrace trace) {
     CustomSttLogService.instance.error(config.serviceId ?? 'Polling', 'Error: $err');
+    DebugLogManager.logError(err, trace, 'polling_socket_error', {
+      'service_id': config.serviceId ?? 'Polling',
+    });
     debugPrintStack(stackTrace: trace);
     _listener?.onError(err, trace);
   }
@@ -254,51 +261,5 @@ class PurePollingSocket implements IPureSocket {
 
   Future<void> flushNow() async {
     await _flushBuffer();
-  }
-
-  void _reconnect() async {
-    CustomSttLogService.instance.info(config.serviceId ?? 'Polling', 'Reconnecting... attempt ${_retries + 1}');
-    const int initialBackoffTimeMs = 1000;
-    const double multiplier = 1.5;
-    const int maxRetries = 8;
-
-    if (_status == PurePollingStatus.connecting || _status == PurePollingStatus.connected) {
-      debugPrint("[Polling] Cannot reconnect, status is $_status");
-      return;
-    }
-
-    await _cleanUp();
-
-    var ok = await connect();
-    if (ok) return;
-
-    int waitInMilliseconds = (multiplier * _retries).toInt() * initialBackoffTimeMs;
-    await Future.delayed(Duration(milliseconds: waitInMilliseconds));
-    _retries++;
-    if (_retries > maxRetries) {
-      CustomSttLogService.instance.error(config.serviceId ?? 'Polling', 'Max retries reached: $maxRetries');
-      _listener?.onMaxRetriesReach();
-      return;
-    }
-    _reconnect();
-  }
-
-  @override
-  void onConnectionStateChanged(bool isConnected) {
-    CustomSttLogService.instance.info(config.serviceId ?? 'Polling', 'Internet: $isConnected, status: $_status');
-    _isConnected = isConnected;
-    if (isConnected) {
-      if (_status == PurePollingStatus.connected || _status == PurePollingStatus.connecting) {
-        return;
-      }
-      _reconnect();
-    } else {
-      _internetLostDelayTimer?.cancel();
-      _internetLostDelayTimer = Timer(const Duration(seconds: 60), () async {
-        if (_isConnected) return;
-        await disconnect();
-        _listener?.onInternetConnectionFailed();
-      });
-    }
   }
 }
