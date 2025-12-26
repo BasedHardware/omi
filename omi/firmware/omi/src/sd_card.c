@@ -81,7 +81,7 @@ static int sd_enable_power(bool enable)
 
         /* Zephyr didn't handle CS pin in suspend, we handle it manually */
         gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, GPIO_DISCONNECTED);
-        gpio_pin_set_dt(&sd_en, 0);
+        ret = gpio_pin_set_dt(&sd_en, 0);
         sd_enabled = false;
     }
     return ret;
