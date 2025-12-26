@@ -500,21 +500,24 @@ def read_wav_as_pcm(wav_path: str) -> tuple[bytes, int]:
             sample_rate = wav_file.getframerate()
             pcm_data = wav_file.readframes(wav_file.getnframes())
             return pcm_data, sample_rate
-    except Exception as e:
-        print(f"Error reading WAV as PCM: {e}")
+    except FileNotFoundError:
+        print(f"WAV file not found: {wav_path}")
+        return b'', 16000
+    except wave.Error as e:
+        print(f"Error reading WAV file {wav_path}: {e}")
         return b'', 16000
 
 
-def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
+async def trigger_audio_bytes_webhook_for_sync(uid: str, wav_paths: List[str]):
     """Send audio bytes to developer webhook during offline sync."""
     for wav_path in wav_paths:
         try:
-            pcm_data, sample_rate = read_wav_as_pcm(wav_path)
+            pcm_data, sample_rate = await asyncio.to_thread(read_wav_as_pcm, wav_path)
             if pcm_data:
                 asyncio.create_task(send_audio_bytes_developer_webhook(uid, sample_rate, bytearray(pcm_data)))
                 print(f"Scheduled audio bytes webhook for synced file: {wav_path}")
-        except Exception as e:
-            print(f"Error scheduling audio bytes webhook for {wav_path}: {e}")
+        except (FileNotFoundError, wave.Error) as e:
+            print(f"Error reading WAV for webhook {wav_path}: {e}")
 
 
 def decode_files_to_wav(files_path: List[str]):
