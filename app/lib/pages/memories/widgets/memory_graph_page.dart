@@ -246,7 +246,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   String? _error;
 
   final _repaintNotifier = ValueNotifier<int>(0);
-  Timer? _refreshTimer;
 
   String? _selectedNodeId;
   Set<String> _highlightedNodeIds = {};
@@ -266,12 +265,10 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     _loadGraph();
-    _startAutoRefresh();
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
     _repaintNotifier.dispose();
@@ -285,13 +282,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
   }
 
-  void _startAutoRefresh() {
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && !_isLoading && !_isRebuilding) {
-        _loadGraph(silent: true);
-      }
-    });
-  }
 
   void _runLayoutSync() {
     for (int i = 0; i < 200 && !simulation.isStable; i++) {
