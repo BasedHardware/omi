@@ -33,6 +33,7 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -664,18 +665,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           borderRadius: BorderRadius.circular(32),
                                           color: Colors.deepPurple,
                                         ),
-                                        child: const Row(
+                                        child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(
+                                            const Icon(
                                               FontAwesomeIcons.solidComment,
                                               size: 22,
                                               color: Colors.white,
                                             ),
-                                            SizedBox(width: 10),
+                                            const SizedBox(width: 10),
                                             Text(
-                                              'Ask Omi',
-                                              style: TextStyle(
+                                              context.l10n.askOmi,
+                                              style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 17,
                                                 fontWeight: FontWeight.w600,
@@ -890,9 +891,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () => Navigator.of(context).pop(),
-                                                  child: const Text(
-                                                    'Cancel',
-                                                    style: TextStyle(
+                                                  child: Text(
+                                                    context.l10n.cancel,
+                                                    style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 16,
                                                     ),
@@ -910,9 +911,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       MixpanelManager().calendarFilterApplied(selectedDate);
                                                     }
                                                   },
-                                                  child: const Text(
-                                                    'Done',
-                                                    style: TextStyle(
+                                                  child: Text(
+                                                    context.l10n.done,
+                                                    style: const TextStyle(
                                                       color: Colors.deepPurple,
                                                       fontSize: 16,
                                                       fontWeight: FontWeight.w600,
