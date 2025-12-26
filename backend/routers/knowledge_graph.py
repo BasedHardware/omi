@@ -57,7 +57,7 @@ def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid)
 ):
-    user = users_db.get_user_store_recording_permission(uid)
+    user = users_db.get_user_profile(uid)
     user_name = user.get('name', 'User') if user else 'User'
     
     kg_db.delete_knowledge_graph(uid)
