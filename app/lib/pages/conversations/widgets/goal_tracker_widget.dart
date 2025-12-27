@@ -132,46 +132,52 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     
     if (!mounted) return;
     
+    // Update local state immediately so user sees their change
+    final oldGoal = _goal!;
+    setState(() {
+      _goal = Goal(
+        id: oldGoal.id,
+        title: newTitle,
+        goalType: oldGoal.goalType,
+        currentValue: oldGoal.currentValue,
+        targetValue: oldGoal.targetValue,
+        minValue: oldGoal.minValue,
+        maxValue: oldGoal.maxValue,
+        unit: oldGoal.unit,
+        isActive: oldGoal.isActive,
+        createdAt: oldGoal.createdAt,
+        updatedAt: DateTime.now(),
+      );
+      _isEditingGoal = false;
+    });
+    
     try {
       Goal? updatedGoal;
-      if (_goal!.id.startsWith('temp_')) {
-        debugPrint('Creating new goal: $newTitle');
+      if (oldGoal.id.startsWith('temp_')) {
+        debugPrint('[GOAL] Creating new goal: $newTitle');
         updatedGoal = await createGoal(
           title: newTitle,
-          goalType: _goal!.goalType,
-          targetValue: _goal!.targetValue,
-          currentValue: _goal!.currentValue,
-          minValue: _goal!.minValue,
-          maxValue: _goal!.maxValue,
+          goalType: oldGoal.goalType,
+          targetValue: oldGoal.targetValue,
+          currentValue: oldGoal.currentValue,
+          minValue: oldGoal.minValue,
+          maxValue: oldGoal.maxValue,
         );
-        if (updatedGoal == null) {
-          debugPrint('createGoal returned null');
-        }
+        debugPrint('[GOAL] createGoal result: ${updatedGoal?.id ?? 'null'}');
       } else {
-        debugPrint('Updating goal ${_goal!.id} with title: $newTitle');
-        updatedGoal = await updateGoal(_goal!.id, title: newTitle);
-        if (updatedGoal == null) {
-          debugPrint('updateGoal returned null');
-        }
+        debugPrint('[GOAL] Updating goal ${oldGoal.id} with title: $newTitle');
+        updatedGoal = await updateGoal(oldGoal.id, title: newTitle);
+        debugPrint('[GOAL] updateGoal result: ${updatedGoal?.id ?? 'null'}');
       }
       
-      if (mounted) {
-        if (updatedGoal != null) {
-          setState(() { 
-            _goal = updatedGoal;
-            _isEditingGoal = false;
-          });
-          _loadAdvice();
-        } else {
-          // Save failed - close editor anyway but don't update goal
-          setState(() => _isEditingGoal = false);
-        }
+      // If API succeeded, update with server data (includes real ID)
+      if (mounted && updatedGoal != null) {
+        setState(() => _goal = updatedGoal);
+        _loadAdvice();
       }
     } catch (e) {
-      debugPrint('Error saving title: $e');
-      if (mounted) {
-        setState(() => _isEditingGoal = false);
-      }
+      debugPrint('[GOAL] Error saving title: $e');
+      // Keep local state - user still sees their change
     }
   }
 
@@ -181,29 +187,41 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     
     final currentVal = _parseNum(_currentValueController.text) ?? _goal!.currentValue;
     final targetVal = _parseNum(_targetValueController.text) ?? _goal!.targetValue;
+    
+    // Update local state immediately so user sees their change
+    final oldGoal = _goal!;
+    setState(() {
+      _goal = Goal(
+        id: oldGoal.id, 
+        title: oldGoal.title, 
+        goalType: oldGoal.goalType,
+        currentValue: currentVal, 
+        targetValue: targetVal,
+        minValue: oldGoal.minValue, 
+        maxValue: targetVal,
+        unit: oldGoal.unit,
+        isActive: true, 
+        createdAt: oldGoal.createdAt, 
+        updatedAt: DateTime.now(),
+      );
+      _isEditingValue = false;
+    });
 
-    try {
-      if (_goal!.id.startsWith('temp_')) {
-        setState(() {
-          _goal = Goal(
-            id: _goal!.id, title: _goal!.title, goalType: _goal!.goalType,
-            currentValue: currentVal, targetValue: targetVal,
-            minValue: _goal!.minValue, maxValue: targetVal,
-            isActive: true, createdAt: _goal!.createdAt, updatedAt: DateTime.now(),
-          );
-          _isEditingValue = false;
-        });
-      } else {
-        final updated = await updateGoal(_goal!.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
+    // If not a temp goal, also save to server
+    if (!oldGoal.id.startsWith('temp_')) {
+      try {
+        debugPrint('[GOAL] Updating values for ${oldGoal.id}: current=$currentVal, target=$targetVal');
+        final updated = await updateGoal(oldGoal.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
+        debugPrint('[GOAL] updateGoal result: ${updated?.id ?? 'null'}');
         if (updated != null && mounted) {
-          setState(() { _goal = updated; _isEditingValue = false; });
+          setState(() => _goal = updated);
           _loadAdvice();
         }
+      } catch (e) {
+        debugPrint('[GOAL] Error saving values: $e');
+        // Keep local state - user still sees their change
       }
-    } catch (e) {
-      debugPrint('Error: $e');
     }
-    setState(() => _isEditingValue = false);
   }
 
   void _createDefaultGoal() {
