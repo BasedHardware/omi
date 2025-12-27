@@ -31,9 +31,19 @@ class SpeechProfilePage extends StatefulWidget {
 }
 
 class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProviderStateMixin {
+  late AnimationController _questionAnimationController;
+  late Animation<double> _questionFadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    _questionAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
@@ -62,9 +72,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
 
   @override
   void dispose() {
-    // if (mounted) {
-    //   context.read<SpeechProfileProvider>().dispose();
-    // }
+    _questionAnimationController.dispose();
     super.dispose();
   }
 
@@ -123,6 +131,9 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
           showInfo: (info) {
             if (info == 'SCROLL_DOWN') {
               scrollDown();
+            } else if (info == 'NEXT_QUESTION') {
+              _questionAnimationController.reset();
+              _questionAnimationController.forward();
             }
           },
           showError: (error) {
@@ -132,7 +143,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                 builder: (c) => getDialog(
                   context,
                   () {
-                    provider.resetSegments();
+                    provider.close();
                     Navigator.pop(context);
                   },
                   () {},
@@ -170,10 +181,26 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                     Navigator.pop(context);
                   },
                   () {},
-                  // TODO: improve this
                   'Invalid recording detected',
                   'Please make sure you speak for at least 5 seconds and not more than 90.',
                   okButtonText: 'Ok',
+                  singleButton: true,
+                ),
+                barrierDismissible: false,
+              );
+            } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
+              showDialog(
+                context: context,
+                builder: (c) => getDialog(
+                  context,
+                  () {
+                    provider.close();
+                    Navigator.pop(context);
+                  },
+                  () {},
+                  'Connection Lost',
+                  'The connection was interrupted. Please check your internet connection and try again.',
+                  okButtonText: 'Try Again',
                   singleButton: true,
                 ),
                 barrierDismissible: false,
@@ -257,7 +284,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                             children: [
                               SizedBox(height: 10),
                               Text(
-                                'Omi needs to learn your voice to be able to recognise you.',
+                                'Omi needs to learn your goals and your voice. You\'ll be able to modify it later.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white,
@@ -267,18 +294,10 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 ),
                               ),
                               SizedBox(height: 20),
-                              //Text("Note: This only works in English",
-                              //    style: TextStyle(color: Colors.white, fontSize: 16)),
                             ],
                           )
                         : provider.text.isEmpty
-                            ? (provider.percentageCompleted > 0
-                                ? const SizedBox()
-                                : const Text(
-                                    "Introduce\nyourself",
-                                    style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
-                                    textAlign: TextAlign.center,
-                                  ))
+                            ? const SizedBox.shrink()
                             : Padding(
                                 padding: const EdgeInsets.only(top: 80.0),
                                 child: LayoutBuilder(
@@ -331,6 +350,15 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                         ? Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
+                              if (provider.device == null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Text(
+                                    'No device connected. Will use phone microphone.',
+                                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                               provider.isInitialising
                                   ? const CircularProgressIndicator(
                                       color: Colors.white,
@@ -342,54 +370,45 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                           await LanguageSelectionDialog.show(context);
                                         }
 
-                                        BleAudioCodec codec;
-                                        try {
-                                          codec = await _getAudioCodec(provider.device!.id);
-                                        } catch (e) {
-                                          showDialog(
-                                            context: context,
-                                            barrierDismissible: false,
-                                            builder: (c) => getDialog(
-                                              context,
-                                              () {
-                                                Navigator.of(context).pop();
-                                                Navigator.of(context).pop();
-                                              },
-                                              () => {},
-                                              'Device Disconnected',
-                                              'Please make sure your device is turned on and nearby, and try again.',
-                                              singleButton: true,
-                                            ),
-                                          );
-                                          return;
-                                        }
+                                        bool usePhoneMic = false;
 
-                                        if (!codec.isOpusSupported()) {
-                                          showDialog(
-                                            context: context,
-                                            builder: (c) => getDialog(
-                                              context,
-                                              () => Navigator.pop(context),
-                                              () async {
-                                                await IntercomManager.instance.displayFirmwareUpdateArticle();
-                                              },
-                                              'Device Update Required',
-                                              'Your current device has an old firmware version (1.0.2). Please check our guide on how to update it.',
-                                              okButtonText: 'View Guide',
-                                            ),
-                                            barrierDismissible: false,
-                                          );
-                                          return;
+                                        // Check if device is connected and supports opus
+                                        if (provider.device != null) {
+                                          try {
+                                            BleAudioCodec codec = await _getAudioCodec(provider.device!.id);
+                                            if (!codec.isOpusSupported()) {
+                                              // Device doesn't support opus, use phone mic
+                                              usePhoneMic = true;
+                                            }
+                                          } catch (e) {
+                                            // Device disconnected, use phone mic
+                                            usePhoneMic = true;
+                                          }
+                                        } else {
+                                          // No device connected, use phone mic
+                                          usePhoneMic = true;
                                         }
 
                                         await stopDeviceRecording();
-                                        await provider.initialise(finalizedCallback: restartDeviceRecording);
-                                        // 1.5 minutes seems reasonable
+                                        bool success = await provider.initialise(
+                                          finalizedCallback: restartDeviceRecording,
+                                          processConversationCallback: () {
+                                            Provider.of<CaptureProvider>(context, listen: false)
+                                                .forceProcessingCurrentConversation();
+                                          },
+                                          usePhoneMic: usePhoneMic,
+                                        );
+                                        if (!success) {
+                                          // Initialization failed, error dialog will be shown
+                                          await restartDeviceRecording();
+                                          return;
+                                        }
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {
                                           provider.finalize();
                                         });
                                         provider.updateStartedRecording(true);
+                                        _questionAnimationController.forward();
                                       },
                                       color: Colors.white,
                                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
@@ -437,6 +456,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 ),
                                 child: TextButton(
                                   onPressed: () {
+                                    // Conversation processing already triggered in finalize()
                                     Navigator.pop(context);
                                   },
                                   child: const Text(
@@ -452,18 +472,37 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 : Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const SizedBox(height: 24),
+                                      const SizedBox(height: 8),
+                                      FadeTransition(
+                                        opacity: _questionFadeAnimation,
+                                        child: Text(
+                                          provider.currentQuestion,
+                                          style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
                                       SizedBox(
                                         width: MediaQuery.sizeOf(context).width * 0.9,
-                                        child: ProgressBarWithPercentage(progressValue: provider.percentageCompleted),
+                                        child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
                                       ),
-                                      const SizedBox(height: 18),
+                                      const SizedBox(height: 8),
                                       Text(
-                                        provider.message,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
+                                        'Keep going, you are doing great',
+                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
                                         textAlign: TextAlign.center,
                                       ),
-                                      const SizedBox(height: 30),
+                                      const SizedBox(height: 8),
+                                      TextButton(
+                                        onPressed: () => provider.skipCurrentQuestion(),
+                                        child: const Text(
+                                          'Skip this question',
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
                                     ],
                                   ),
                   ),

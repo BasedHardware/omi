@@ -15,6 +15,7 @@ from models.conversation import (
     ConversationStatus,
     ConversationVisibility,
     CreateConversationResponse,
+    Geolocation,
     MergeConversationsRequest,
     MergeConversationsResponse,
     SetConversationEventsStateRequest,
@@ -34,6 +35,7 @@ from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.conversations.location import get_google_maps_location
 
 router = APIRouter()
 
@@ -69,6 +71,12 @@ def process_in_progress_conversation(
         if not conversation.external_data:
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+
+    # Geolocation
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
@@ -111,9 +119,10 @@ def get_conversations(
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    print('get_conversations', uid, limit, offset, statuses)
+    print('get_conversations', uid, limit, offset, statuses, folder_id)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
@@ -126,6 +135,7 @@ def get_conversations(
         statuses=statuses.split(",") if len(statuses) > 0 else [],
         start_date=start_date,
         end_date=end_date,
+        folder_id=folder_id,
     )
 
     for conv in conversations:
@@ -653,7 +663,8 @@ def test_prompt(conversation_id: str, request: TestPromptRequest, uid: str = Dep
     if not full_transcript:
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
-    summary = generate_summary_with_prompt(full_transcript, request.prompt)
+    # Pass language code from conversation to match app behavior
+    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
 
     return {"summary": summary}
 

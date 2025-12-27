@@ -1,0 +1,253 @@
+---
+title: "Quick Start"
+description: "Access your Omi data programmatically with the Developer API. Build custom integrations, analytics dashboards, and automation workflows using your memories, conversations, and action items."
+---
+
+## Overview
+
+The Omi Developer API provides programmatic access to your personal Omi data, allowing you to build custom applications and integrations. Use it to create analytics dashboards, export data to other services, build automation workflows, or contribute data back to your Omi account.
+
+<CardGroup cols={4}>
+  <Card title="Memories" icon="brain" color="#a855f7" href="/doc/developer/api/memories">
+    Read & write user memories
+  </Card>
+  <Card title="Conversations" icon="comments" color="#3b82f6" href="/doc/developer/api/conversations">
+    Access full transcripts
+  </Card>
+  <Card title="Action Items" icon="list-check" color="#22c55e" href="/doc/developer/api/action-items">
+    Manage tasks & to-dos
+  </Card>
+  <Card title="API Keys" icon="key" color="#f59e0b" href="/doc/developer/api/keys">
+    Manage API access
+  </Card>
+</CardGroup>
+
+---
+
+## Quick Start
+
+<Steps>
+  <Step title="Get Your API Key" icon="key">
+    Open the Omi app and navigate to **Settings → Developer → Create Key**
+
+    <Tip>Copy the key immediately - you won't be able to see it again!</Tip>
+  </Step>
+  <Step title="Make Your First Request" icon="terminal">
+    <Tabs>
+      <Tab title="cURL">
+        ```bash
+        curl -H "Authorization: Bearer omi_dev_your_key_here" \
+          https://api.omi.me/v1/dev/user/memories?limit=5
+        ```
+      </Tab>
+      <Tab title="Python">
+        ```python
+        import requests
+
+        response = requests.get(
+            "https://api.omi.me/v1/dev/user/memories",
+            headers={"Authorization": "Bearer omi_dev_your_key_here"},
+            params={"limit": 5}
+        )
+        print(response.json())
+        ```
+      </Tab>
+      <Tab title="JavaScript">
+        ```javascript
+        const response = await fetch(
+          "https://api.omi.me/v1/dev/user/memories?limit=5",
+          { headers: { Authorization: "Bearer omi_dev_your_key_here" } }
+        );
+        const memories = await response.json();
+        console.log(memories);
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Explore the Endpoints" icon="rocket">
+    Check out the endpoint pages for detailed documentation on each resource.
+  </Step>
+</Steps>
+
+---
+
+## Base URL
+
+```
+https://api.omi.me/v1/dev
+```
+
+<Note>
+For self-hosted instances, replace with your backend URL.
+</Note>
+
+---
+
+## Endpoints at a Glance
+
+<AccordionGroup>
+  <Accordion title="Memories" icon="brain" defaultOpen={true}>
+    | Method | Endpoint | Description |
+    |--------|----------|-------------|
+    | <code style={{color: '#22c55e'}}>GET</code> | `/v1/dev/user/memories` | Retrieve memories |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/memories` | Create a memory |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/memories/batch` | Create up to 25 memories |
+  </Accordion>
+  <Accordion title="Action Items" icon="list-check">
+    | Method | Endpoint | Description |
+    |--------|----------|-------------|
+    | <code style={{color: '#22c55e'}}>GET</code> | `/v1/dev/user/action-items` | Retrieve action items |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/action-items` | Create an action item |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/action-items/batch` | Create up to 50 action items |
+  </Accordion>
+  <Accordion title="Conversations" icon="comments">
+    | Method | Endpoint | Description |
+    |--------|----------|-------------|
+    | <code style={{color: '#22c55e'}}>GET</code> | `/v1/dev/user/conversations` | Retrieve conversations |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/conversations` | Create from text |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/user/conversations/from-segments` | Create from transcript segments |
+  </Accordion>
+  <Accordion title="API Keys" icon="key">
+    | Method | Endpoint | Description |
+    |--------|----------|-------------|
+    | <code style={{color: '#22c55e'}}>GET</code> | `/v1/dev/keys` | List all API keys |
+    | <code style={{color: '#3b82f6'}}>POST</code> | `/v1/dev/keys` | Create new API key |
+    | <code style={{color: '#ef4444'}}>DELETE</code> | `/v1/dev/keys/{key_id}` | Revoke API key |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Authentication
+
+All API requests require your Developer API key in the `Authorization` header:
+
+```http
+Authorization: Bearer omi_dev_your_api_key_here
+```
+
+<Warning>
+Never commit API keys to version control or share them publicly!
+</Warning>
+
+---
+
+## Rate Limits
+
+| Limit | Value |
+|-------|-------|
+| Per minute | 100 requests per API key |
+| Per day | 10,000 requests per user |
+
+Rate limit headers are included in responses:
+
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1642694400
+```
+
+---
+
+## Error Responses
+
+<AccordionGroup>
+  <Accordion title="HTTP Status Codes" icon="circle-exclamation" defaultOpen={true}>
+    | Code | Meaning |
+    |------|---------|
+    | `200 OK` | Request succeeded |
+    | `204 No Content` | Request succeeded with no response body |
+    | `400 Bad Request` | Invalid request parameters |
+    | `401 Unauthorized` | Invalid or missing API key |
+    | `403 Forbidden` | API key doesn't have required permissions |
+    | `404 Not Found` | Resource not found |
+    | `422 Unprocessable Entity` | Validation error |
+    | `429 Too Many Requests` | Rate limit exceeded |
+    | `500 Internal Server Error` | Server error |
+  </Accordion>
+  <Accordion title="Error Response Format" icon="code">
+    ```json
+    {
+      "detail": "Invalid API key"
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Store Keys Securely" icon="lock" color="#22c55e">
+    Use environment variables or secret management services
+  </Card>
+  <Card title="Rotate Keys Regularly" icon="rotate" color="#3b82f6">
+    Generate new keys and revoke old ones periodically
+  </Card>
+  <Card title="Use Specific Keys" icon="key" color="#f59e0b">
+    Create separate keys for different applications
+  </Card>
+  <Card title="Monitor Usage" icon="chart-line" color="#a855f7">
+    Check the "last used" timestamp in your key list
+  </Card>
+</CardGroup>
+
+<Tip>
+If a key is compromised, revoke it immediately from **Settings → Developer** in the Omi app.
+</Tip>
+
+---
+
+## Developer API vs MCP
+
+| Feature | Developer API | MCP |
+|---------|--------------|-----|
+| **Purpose** | Direct HTTP API access | AI assistant integration |
+| **Access** | Read & write user data | Read/write with AI context |
+| **Use Case** | Custom apps, dashboards, automation | Claude Desktop, AI agents |
+| **Authentication** | Bearer token | Environment variable |
+| **Best For** | Web apps, integrations, batch operations | AI-powered workflows |
+
+<CardGroup cols={2}>
+  <Card title="Use Developer API when you need" icon="code" color="#3b82f6">
+    - Programmatic access for custom applications
+    - Batch operations (multiple memories/action items)
+    - Integration with external services
+    - Custom automation workflows
+  </Card>
+  <Card title="Use MCP when you want" icon="robot" color="#a855f7">
+    - AI assistants like Claude to interact with your data
+    - Natural language queries and AI-powered insights
+    - Context-aware AI assistance
+  </Card>
+</CardGroup>
+
+<Info>
+Learn more about the Model Context Protocol in the [MCP documentation](/doc/developer/MCP).
+</Info>
+
+---
+
+## Other APIs
+
+Looking for different API capabilities? Omi offers several APIs for different use cases:
+
+<CardGroup cols={2}>
+  <Card title="Integration Import APIs" icon="file-import" href="/doc/developer/apps/Import">
+    **For App Developers** - Create conversations and memories on behalf of users who have enabled your app
+  </Card>
+  <Card title="Webhook Triggers" icon="bell" href="/doc/developer/apps/Integrations">
+    **For App Developers** - Receive real-time notifications when memories are created or transcripts are processed
+  </Card>
+  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+    **For App Developers** - Add custom tools that Omi's AI can invoke during conversations
+  </Card>
+  <Card title="Audio Streaming" icon="microphone" href="/doc/developer/apps/AudioStreaming">
+    **For App Developers** - Process raw audio bytes in real-time via WebSocket
+  </Card>
+</CardGroup>
+
+<Info>
+The **Developer API** (this section) is for accessing your own personal data. The APIs above are for building apps that interact with other users' data (with their permission).
+</Info>

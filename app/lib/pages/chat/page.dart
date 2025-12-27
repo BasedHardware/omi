@@ -5,18 +5,17 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
-import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -49,16 +48,19 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
-  bool isScrollingDown = false;
+  bool _isScrollingDown = false;
 
   bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
+  bool _hasInitialScrolled = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  final GlobalKey _appButtonKey = GlobalKey();
+
+  // Track which app is pending deletion confirmation
+  String? _pendingDeleteAppId;
 
   @override
   bool get wantKeepAlive => true;
@@ -66,7 +68,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   void initState() {
     apps = prefs.appsList;
-    scrollController = ScrollController();
+    scrollController = ScrollController(initialScrollOffset: 1e9);
     textFieldFocusNode = FocusNode();
     textController.addListener(() {
       setState(() {});
@@ -74,12 +76,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
-        if (!isScrollingDown) {
-          isScrollingDown = true;
+        if (!_isScrollingDown) {
+          _isScrollingDown = true;
           setState(() {});
           Future.delayed(const Duration(seconds: 5), () {
-            if (isScrollingDown) {
-              isScrollingDown = false;
+            if (_isScrollingDown) {
+              _isScrollingDown = false;
               if (mounted) {
                 setState(() {});
               }
@@ -89,8 +91,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       }
 
       if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
-        if (isScrollingDown) {
-          isScrollingDown = false;
+        if (_isScrollingDown) {
+          _isScrollingDown = false;
           setState(() {});
         }
       }
@@ -102,7 +104,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
-      scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
@@ -131,9 +132,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           key: scaffoldKey,
+          resizeToAvoidBottomInset: false,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          // endDrawer: _buildSessionsDrawer(context),
+          endDrawer: _buildChatAppsEndDrawer(context),
+          onEndDrawerChanged: (isOpened) {
+            if (isOpened) {
+              // Unfocus text field when drawer opens
+              textFieldFocusNode.unfocus();
+            }
+          },
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -185,11 +193,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 )
                               : ListView.builder(
                                   shrinkWrap: false,
-                                  reverse: true,
+                                  reverse: false,
                                   controller: scrollController,
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
                                   itemCount: provider.messages.length,
                                   itemBuilder: (context, chatIndex) {
+                                    if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                      _hasInitialScrolled = true;
+                                      SchedulerBinding.instance.addPostFrameCallback((_) {
+                                        if (scrollController.hasClients) {
+                                          scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                                        }
+                                      });
+                                    }
+
                                     final message = provider.messages[chatIndex];
                                     double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
 
@@ -312,7 +329,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                         padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
                                         child: message.sender == MessageSender.ai
                                             ? AIMessage(
-                                                showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+                                                showTypingIndicator: provider.showTypingIndicator &&
+                                                    chatIndex == provider.messages.length - 1,
                                                 message: message,
                                                 sendMessage: _sendMessageUtil,
                                                 displayOptions: provider.messages.length <= 1 &&
@@ -333,7 +351,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 ),
                 // Send message area - fixed at bottom
                 Container(
-                  margin: const EdgeInsets.only(top: 10),
+                  margin: EdgeInsets.only(top: 10, bottom: MediaQuery.of(context).viewInsets.bottom),
                   decoration: const BoxDecoration(
                     color: Colors.transparent,
                     borderRadius: BorderRadius.only(
@@ -611,17 +629,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   _sendMessageUtil(String text) {
-    // Remove focus from text field
-    textFieldFocusNode.unfocus();
-
     var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
+
     provider.addMessageLocally(text);
     textController.clear();
+    textFieldFocusNode.unfocus();
 
-    // Scroll to align user's message to top of screen
-    Future.delayed(const Duration(milliseconds: 100), () {
-      scrollToBottom();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted || !scrollController.hasClients) return;
+      scrollController.animateTo(
+        scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
 
     provider.sendMessageStreamToServer(text);
@@ -668,9 +689,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       return;
     }
 
-    // enable apps - navigate back to home and show apps page
+    // enable apps - navigate to chat capability apps page
     if (val == 'enable') {
-      _navigateToAppsPage();
+      _navigateToChatAppsPage();
       return;
     }
 
@@ -696,15 +717,47 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
   }
 
-  void _navigateToAppsPage() {
+  Future<void> _navigateToChatAppsPage() async {
     if (!mounted) return;
 
     MixpanelManager().pageOpened('Chat Apps');
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => const HomePageWrapper(navigateToRoute: '/apps'),
+    // Navigate to chat capability apps page
+    await routeToPage(
+      context,
+      CapabilityAppsPage(
+        capability: AppCapability(id: 'chat', title: 'Chat Assistants'),
+        apps: const [],
       ),
     );
+
+    // Refresh chat apps when returning from the page
+    if (mounted) {
+      _refreshChatAppsFromLocal();
+    }
+  }
+
+  void _refreshChatAppsFromLocal() {
+    // Get enabled chat apps from local AppProvider immediately
+    final appProvider = context.read<AppProvider>();
+    final messageProvider = context.read<MessageProvider>();
+
+    // Filter apps that are enabled and work with chat
+    final localChatApps = appProvider.apps.where((app) => app.enabled && app.worksWithChat()).toList();
+
+    // Update immediately with local data
+    messageProvider.chatApps = localChatApps;
+    messageProvider.notifyListeners();
+  }
+
+  Future<void> _handleAppUninstall(String appId, AppProvider appProvider, MessageProvider messageProvider) async {
+    if (!mounted) return;
+
+    // Immediately remove from local chat apps list for instant visual feedback
+    messageProvider.chatApps.removeWhere((app) => app.id == appId);
+    messageProvider.notifyListeners();
+
+    // Disable the app on server (runs in background)
+    appProvider.toggleApp(appId, false, null);
   }
 
   void _selectApp(String appId, AppProvider appProvider) async {
@@ -744,26 +797,52 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     return AppBar(
       backgroundColor: Theme.of(context).colorScheme.surface,
       elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => Navigator.of(context).pop(),
+      leading: Container(
+        width: 36,
+        height: 36,
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(0.3),
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            Navigator.of(context).pop();
+          },
+        ),
       ),
       title: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
-          return _buildAppSelection(context, appProvider);
+          return _buildSelectedAppDisplay(context, appProvider);
         },
       ),
       centerTitle: true,
-      actions: const [
-        // IconButton(
-        //   icon: const Icon(Icons.history, color: Colors.white),
-        //   onPressed: () {
-        //     HapticFeedback.mediumImpact();
-        //     // Dismiss keyboard before opening drawer
-        //     FocusScope.of(context).unfocus();
-        //     scaffoldKey.currentState?.openEndDrawer();
-        //   },
-        // ),
+      actions: [
+        Container(
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.3),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.extension, color: Colors.white, size: 18),
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              // Dismiss keyboard before opening drawer
+              FocusScope.of(context).unfocus();
+              // Use post-frame callback to ensure scaffold state is ready
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                scaffoldKey.currentState?.openEndDrawer();
+              });
+            },
+          ),
+        ),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -784,169 +863,275 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
   }
 
-  void _showAppsMenu(BuildContext ctx, AppProvider appProvider) {
-    final renderBox = _appButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+  Widget _buildSelectedAppDisplay(BuildContext context, AppProvider provider) {
+    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
 
-    final overlay = Overlay.of(ctx, rootOverlay: true);
-
-    final buttonOffset = renderBox.localToGlobal(Offset.zero);
-    final buttonSize = renderBox.size;
-    final screenSize = MediaQuery.of(ctx).size;
-
-    const double menuWidth = 260;
-    const double maxMenuHeight = 250;
-
-    double desiredTop = buttonOffset.dy + buttonSize.height + 8;
-    if ((desiredTop + maxMenuHeight) > screenSize.height) {
-      desiredTop = buttonOffset.dy - maxMenuHeight - 8;
-      if (desiredTop < 0) desiredTop = 8;
-    }
-
-    late OverlayEntry entry;
-
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
+        const SizedBox(width: 8),
+        Container(
+          constraints: const BoxConstraints(maxWidth: 140),
+          child: Text(
+            selectedApp != null ? selectedApp.getName() : "Omi",
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
-    final curved = CurvedAnimation(parent: controller, curve: Curves.easeOut);
+  }
 
-    entry = OverlayEntry(
-      builder: (context) {
-        return Consumer<MessageProvider>(
-          builder: (context, msgProvider, _) {
-            return Stack(
+  Widget _buildChatAppsEndDrawer(BuildContext context) {
+    return Drawer(
+      backgroundColor: const Color(0xFF1F1F25),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+        ),
+      ),
+      child: SafeArea(
+        child: Consumer2<MessageProvider, AppProvider>(
+          builder: (context, messageProvider, appProvider, child) {
+            final chatApps = messageProvider.chatApps;
+            final selectedAppId = appProvider.selectedChatAppId;
+            final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () {
-                      controller.reverse().then((_) => entry.remove());
-                    },
-                    child: Container(color: Colors.transparent),
-                  ),
-                ),
-                Positioned(
-                  left: buttonOffset.dx + (buttonSize.width - menuWidth) / 2,
-                  top: desiredTop,
-                  child: AnimatedBuilder(
-                    animation: curved,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: curved.value,
-                        alignment: Alignment.topCenter,
-                        child: Opacity(
-                          opacity: curved.value,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Material(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(12),
-                      elevation: 8,
-                      child: SizedBox(
-                        width: menuWidth,
-                        height: maxMenuHeight,
-                        child: PullDownMenu(
-                          items: [
-                            PullDownMenuItem(
-                              title: 'Clear Chat',
-                              iconWidget: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
-                              onTap: () {
-                                controller.reverse().then((_) {
-                                  entry.remove();
-                                  _handleAppSelection('clear_chat', appProvider);
-                                });
-                              },
-                            ),
-                            PullDownMenuItem(
-                              title: 'Enable Apps',
-                              iconWidget: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 16),
-                              onTap: () {
-                                controller.reverse().then((_) {
-                                  entry.remove();
-                                  _handleAppSelection('enable', appProvider);
-                                });
-                              },
-                            ),
-                            PullDownMenuItem(
-                              title: 'Omi',
-                              iconWidget: _getOmiAvatar(),
-                              onTap: () {
-                                controller.reverse().then((_) {
-                                  entry.remove();
-                                  _handleAppSelection('no_selected', appProvider);
-                                });
-                              },
-                              subtitle:
-                                  msgProvider.chatApps.firstWhereOrNull((a) => a.id == appProvider.selectedChatAppId) ==
-                                          null
-                                      ? 'Selected'
-                                      : null,
-                            ),
-                            ...msgProvider.chatApps.map(
-                              (app) => PullDownMenuItem(
-                                title: app.getName(),
-                                iconWidget: _getAppAvatar(app),
-                                onTap: () {
-                                  controller.reverse().then((_) {
-                                    entry.remove();
-                                    _handleAppSelection(app.id, appProvider);
-                                  });
-                                },
-                                subtitle: appProvider.selectedChatAppId == app.id ? 'Selected' : null,
-                              ),
-                            )
-                          ],
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Chat Apps',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
+                      IconButton(
+                        icon: const Padding(
+                          padding: EdgeInsets.only(left: 2, top: 1),
+                          child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                // Actions
+                ListTile(
+                  leading: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
+                  ),
+                  title: const Text(
+                    'Clear Chat',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 16),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _handleAppSelection('clear_chat', appProvider);
+                  },
+                ),
+                ListTile(
+                  leading: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
+                  ),
+                  title: const Text(
+                    'Enable Apps',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  trailing: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _navigateToChatAppsPage();
+                  },
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 20, 8),
+                  child: Text(
+                    'Select App',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
+                  ),
+                ),
+                // App list
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      // Omi option
+                      _buildDrawerAppItem(
+                        avatar: _getOmiAvatar(),
+                        name: 'Omi',
+                        isSelected: isOmiSelected,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _handleAppSelection('no_selected', appProvider);
+                        },
+                      ),
+                      // Enabled chat apps
+                      ...chatApps.map((app) => _buildDrawerAppItem(
+                            avatar: _getAppAvatar(app),
+                            name: app.getName(),
+                            isSelected: selectedAppId == app.id,
+                            appId: app.id,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              _handleAppSelection(app.id, appProvider);
+                            },
+                            onConfirmDelete: selectedAppId != app.id
+                                ? () => _handleAppUninstall(app.id, appProvider, messageProvider)
+                                : null,
+                          )),
+                      if (chatApps.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            'No chat apps enabled.\nTap "Enable Apps" to add some.',
+                            style: TextStyle(color: Colors.white38, fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
             );
           },
-        );
-      },
+        ),
+      ),
     );
-
-    overlay.insert(entry);
-    controller.forward();
   }
 
-  Widget _buildAppSelection(BuildContext context, AppProvider provider) {
-    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+  Widget _buildDrawerAppItem({
+    required Widget avatar,
+    required String name,
+    required bool isSelected,
+    required VoidCallback onTap,
+    String? appId,
+    VoidCallback? onConfirmDelete,
+  }) {
+    final bool isPendingDelete = appId != null && _pendingDeleteAppId == appId;
 
-    return GestureDetector(
-      key: _appButtonKey,
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        _showAppsMenu(context, provider);
-      },
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-          const SizedBox(width: 8),
-          Container(
-            constraints: const BoxConstraints(maxWidth: 100),
-            child: Text(
-              selectedApp != null ? selectedApp.getName() : "Omi",
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              overflow: TextOverflow.fade,
+    if (isPendingDelete) {
+      // Show inline confirmation buttons - match ListTile height (56px)
+      return Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            avatar,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                name,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          const SizedBox(
-            width: 16,
-            child: Icon(Icons.keyboard_arrow_down, color: Colors.white60, size: 16),
-          ),
-        ],
+            const SizedBox(width: 8),
+            // Cancel button (white)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = null;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Disable button (red)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = null;
+                });
+                onConfirmDelete?.call();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Disable',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListTile(
+      leading: avatar,
+      title: Text(
+        name,
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        overflow: TextOverflow.ellipsis,
       ),
+      trailing: isSelected
+          ? const Padding(
+              padding: EdgeInsets.only(left: 2, top: 1),
+              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
+            )
+          : appId != null && onConfirmDelete != null
+              ? GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _pendingDeleteAppId = appId;
+                    });
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+                  ),
+                )
+              : null,
+      selected: isSelected,
+      selectedTileColor: Colors.white.withOpacity(0.1),
+      onTap: onTap,
     );
   }
 

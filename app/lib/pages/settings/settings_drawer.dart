@@ -11,6 +11,7 @@ import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -22,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'device_settings.dart';
+import 'wrapped_2025_page.dart';
 import '../conversations/sync_page.dart';
 
 enum SettingsMode {
@@ -304,6 +306,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           _buildSectionContainer(
             children: [
               _buildSettingsItem(
+                title: 'Wrapped 2025',
+                icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
+                showNewTag: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const Wrapped2025Page(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildSettingsItem(
                 title: 'Profile',
                 icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
@@ -370,16 +386,27 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   );
                 },
               ),
-              const Divider(height: 1, color: Color(0xFF3C3C43)),
-              _buildSettingsItem(
-                title: 'Device Settings',
-                icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const DeviceSettings(),
-                    ),
+              Consumer<DeviceProvider>(
+                builder: (context, deviceProvider, child) {
+                  if (!deviceProvider.isConnected) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    children: [
+                      const Divider(height: 1, color: Color(0xFF3C3C43)),
+                      _buildSettingsItem(
+                        title: 'Device Settings',
+                        icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => const DeviceSettings(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   );
                 },
               ),

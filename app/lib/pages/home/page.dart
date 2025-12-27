@@ -19,6 +19,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -30,6 +31,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -39,8 +41,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
@@ -305,6 +309,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               builder: (context) => const MemoriesPage(),
             ),
           );
+          break;
+        case "wrapped":
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const Wrapped2025Page(),
+                ),
+              );
+            }
+          });
           break;
         default:
       }
@@ -643,9 +659,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         );
                                       },
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(28),
+                                          borderRadius: BorderRadius.circular(32),
                                           color: Colors.deepPurple,
                                         ),
                                         child: const Row(
@@ -653,15 +669,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           children: [
                                             Icon(
                                               FontAwesomeIcons.solidComment,
-                                              size: 20,
+                                              size: 22,
                                               color: Colors.white,
                                             ),
-                                            SizedBox(width: 8),
+                                            SizedBox(width: 10),
                                             Text(
                                               'Ask Omi',
                                               style: TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 16,
+                                                fontSize: 17,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -846,12 +862,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 context: context,
                                 builder: (BuildContext context) {
                                   return Container(
-                                    height: 300,
+                                    height: 420,
                                     padding: const EdgeInsets.only(top: 6.0),
                                     margin: EdgeInsets.only(
                                       bottom: MediaQuery.of(context).viewInsets.bottom,
                                     ),
-                                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                                    color: const Color(0xFF1F1F25),
                                     child: SafeArea(
                                       top: false,
                                       child: Column(
@@ -908,15 +924,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           ),
                                           // Date picker
                                           Expanded(
-                                            child: Container(
-                                              color: const Color(0xFF1F1F25),
-                                              child: CupertinoDatePicker(
-                                                mode: CupertinoDatePickerMode.date,
-                                                initialDateTime: DateTime.now(),
-                                                minimumDate: DateTime(2020),
-                                                maximumDate: DateTime.now(),
-                                                onDateTimeChanged: (DateTime newDate) {
-                                                  selectedDate = newDate;
+                                            child: Material(
+                                              color: ResponsiveHelper.backgroundSecondary,
+                                              child: CalendarDatePicker2(
+                                                config: getDefaultCalendarConfig(
+                                                  firstDate: DateTime(2020),
+                                                  lastDate: DateTime.now(),
+                                                  currentDate: DateTime.now(),
+                                                ),
+                                                value: [selectedDate],
+                                                onValueChanged: (dates) {
+                                                  if (dates.isNotEmpty && dates[0] != null) {
+                                                    selectedDate = dates[0]!;
+                                                  }
                                                 },
                                               ),
                                             ),
@@ -928,30 +948,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 },
                               );
                             }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Star filter button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: convoProvider.showStarredOnly
-                              ? Colors.amber.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(
-                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
-                            size: 16,
-                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            convoProvider.toggleStarredFilter();
                           },
                         ),
                       ),
