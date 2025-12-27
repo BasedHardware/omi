@@ -40,37 +40,165 @@ from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_s
 router = APIRouter()
 
 
+def _extract_tasks_from_chat(uid: str, text: str):
+    """Extract tasks/action items from chat message and create them automatically."""
+    try:
+        import database.action_items as action_items_db
+        from utils.llm.clients import llm_mini
+        from datetime import datetime, timezone
+        import json
+        import re
+        
+        if not text or len(text) < 10:
+            return
+        
+        # Get user's existing tasks to avoid duplicates
+        existing_tasks = action_items_db.get_action_items(uid, limit=50, offset=0, completed=False)
+        existing_descriptions = [t.get('description', '').lower() for t in existing_tasks]
+        
+        existing_context = ""
+        if existing_descriptions:
+            existing_context = f"\n\nExisting tasks (DO NOT duplicate):\n" + "\n".join([f"- {desc}" for desc in existing_descriptions[:10]])
+        
+        prompt = f"""Extract actionable tasks/todos from this user message. Only extract tasks the user commits to doing.
+
+User message: "{text[:800]}"
+
+CRITICAL EXTRACTION RULES:
+1. Extract ONLY tasks the user wants/needs/plans to do:
+   - "I need to X" → EXTRACT
+   - "I should X" → EXTRACT  
+   - "I will X" → EXTRACT
+   - "Remind me to X" → EXTRACT
+   - "I want to X" → EXTRACT
+   - "Have to X" → EXTRACT
+
+2. DO NOT extract:
+   - Casual mentions or updates ("I'm working on X")
+   - Questions ("Should I do X?")
+   - Things already done ("I did X")
+   - Hypothetical scenarios
+   - Duplicates{existing_context}
+
+3. Keep descriptions SHORT (max 15 words), start with verb when possible
+
+4. Extract due dates if mentioned:
+   - "by Friday" → calculate date
+   - "tomorrow" → calculate date  
+   - "next week" → calculate date
+   - Format: ISO 8601 UTC with Z suffix (e.g., "2025-01-20T23:59:59Z")
+   - If no date mentioned, use null
+
+Return JSON array:
+[
+  {{"description": "task text", "due_at": "ISO date or null"}},
+  ...
+]
+
+If no tasks, return [].
+
+Return JSON only."""
+
+        response = llm_mini.invoke(prompt).content
+        
+        # Extract JSON array from response
+        match = re.search(r'\[[^\]]*(?:\{[^\}]*\}[^\]]*)*\]', response, re.DOTALL)
+        if match:
+            tasks = json.loads(match.group())
+            if tasks and isinstance(tasks, list):
+                created_count = 0
+                for task in tasks:
+                    if not task.get('description'):
+                        continue
+                    
+                    description = task['description'].strip()
+                    if not description or len(description) < 3:
+                        continue
+                    
+                    # Check for duplicates
+                    if any(existing_desc in description.lower() or description.lower() in existing_desc 
+                           for existing_desc in existing_descriptions if len(existing_desc) > 10):
+                        print(f"[TASK-CHAT] Skipping duplicate: {description}")
+                        continue
+                    
+                    # Parse due date if provided (can be ISO string or None)
+                    due_at = task.get('due_at')  # Database function will handle conversion
+                    
+                    # Create the task
+                    task_data = {
+                        'description': description,
+                        'completed': False,
+                        'due_at': due_at,  # Can be ISO string or None
+                        'conversation_id': None,  # Chat messages don't have conversation_id
+                    }
+                    
+                    try:
+                        action_items_db.create_action_item(uid, task_data)
+                        created_count += 1
+                        print(f"[TASK-CHAT] Created task: {description}" + (f" (due: {due_at})" if due_at else ""))
+                    except Exception as e:
+                        print(f"[TASK-CHAT] Error creating task: {e}")
+                
+                if created_count > 0:
+                    print(f"[TASK-CHAT] Created {created_count} task(s) from chat message")
+    except Exception as e:
+        print(f"[TASK-CHAT] Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 def _check_goal_progress_in_chat(uid: str, text: str):
-    """Check if chat message contains goal progress update."""
+    """Check if chat message contains goal progress update and update if found."""
     try:
         import database.goals as goals_db
         from utils.llm.clients import llm_mini
         import json
+        import re
         
         goal = goals_db.get_user_goal(uid)
         if not goal or not text or len(text) < 5:
             return
         
-        prompt = f"""Does this message mention progress for: "{goal.get('title', '')}"?
-Current: {goal.get('current_value', 0)} / {goal.get('target_value', 10)}
+        goal_title = goal.get('title', '')
+        current_value = goal.get('current_value', 0)
+        target_value = goal.get('target_value', 10)
+        goal_type = goal.get('goal_type', 'numeric')
+        
+        prompt = f"""Analyze this message to see if it mentions progress toward this goal:
 
-Message: "{text[:300]}"
+Goal: "{goal_title}"
+Goal Type: {goal_type}
+Current Progress: {current_value} / {target_value}
 
-Extract new value if mentioned. Reply JSON only: {{"found": true/false, "value": number_or_null}}"""
+User Message: "{text[:500]}"
+
+If the message mentions a NEW progress value for this goal, extract it. 
+Handle formats like:
+- "1k users" → 1000
+- "500k" → 500000
+- "1.5 million" → 1500000
+- "1000" → 1000
+- Percentages relative to goal
+
+Return JSON only: {{"found": true/false, "value": number_or_null, "reasoning": "brief explanation"}}
+Only return found=true if you're confident this is about the SPECIFIC goal mentioned above."""
 
         response = llm_mini.invoke(prompt).content
         
-        import re
-        match = re.search(r'\{[^{}]*\}', response)
+        # Extract JSON from response
+        match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response, re.DOTALL)
         if match:
             result = json.loads(match.group())
             if result.get('found') and result.get('value') is not None:
                 new_value = float(result['value'])
-                if new_value != goal.get('current_value', 0):
+                old_value = current_value
+                if new_value != old_value:
                     goals_db.update_goal_progress(uid, goal['id'], new_value)
-                    print(f"[GOAL-CHAT] Updated: {goal.get('current_value')} -> {new_value}")
+                    print(f"[GOAL-CHAT] Updated '{goal_title}': {old_value} -> {new_value} (reasoning: {result.get('reasoning', 'N/A')})")
     except Exception as e:
         print(f"[GOAL-CHAT] Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def filter_messages(messages, app_id):
@@ -134,9 +262,10 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
     
-    # Check for goal progress in user message (background)
+    # Check for goal progress and extract tasks from user message (background)
     import threading
     threading.Thread(target=_check_goal_progress_in_chat, args=(uid, data.text)).start()
+    threading.Thread(target=_extract_tasks_from_chat, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
