@@ -19,7 +19,7 @@ const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8; // Average number of Opus frames per flash page
 
 abstract class IWalSyncProgressListener {
-  void onWalSyncedProgress(double percentage); // 0..1
+  void onWalSyncedProgress(double percentage, {double? speedKBps}); // 0..1, speed in KB/s
 }
 
 abstract class IWalServiceListener extends IWalSyncListener {
@@ -36,6 +36,7 @@ abstract class IWalSync {
   Future deleteWal(Wal wal);
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress});
+  void cancelSync(); // Optional: not all sync types need to do anything
 
   void start();
   Future stop();
@@ -74,7 +75,8 @@ enum WalStorage {
 class WalStats {
   final int totalFiles;
   final int phoneFiles;
-  final int sdcardFiles;
+  final int sdcardFiles; // Currently on SD card
+  final int fromSdcardFiles; // Transferred from SD card (now on phone)
   final int limitlessFiles;
   final int phoneSize; // in bytes
   final int sdcardSize; // in bytes
@@ -85,12 +87,16 @@ class WalStats {
     required this.totalFiles,
     required this.phoneFiles,
     required this.sdcardFiles,
+    required this.fromSdcardFiles,
     required this.limitlessFiles,
     required this.phoneSize,
     required this.sdcardSize,
     required this.syncedFiles,
     required this.missedFiles,
   });
+
+  /// Total SD card related files (on SD card + transferred from SD card)
+  int get sdcardRelatedFiles => sdcardFiles + fromSdcardFiles;
 
   String get totalSizeFormatted => _formatBytes(phoneSize + sdcardSize);
   String get phoneSizeFormatted => _formatBytes(phoneSize);
@@ -131,6 +137,8 @@ class Wal {
   int totalFrames = 0; // Total frames in this WAL
   int syncedFrameOffset = 0; // How many frames from start are synced (continuous)
 
+  WalStorage? originalStorage; // Track where it originally came from (e.g., sdcard -> disk)
+
   String get id => '${device}_$timerStart';
 
   Wal(
@@ -149,7 +157,8 @@ class Wal {
       this.fileNum = 1,
       this.data = const [],
       this.totalFrames = 0,
-      this.syncedFrameOffset = 0}) {
+      this.syncedFrameOffset = 0,
+      this.originalStorage}) {
     frameSize = codec.getFrameSize();
   }
 
@@ -170,6 +179,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
+      originalStorage: json['original_storage'] != null 
+          ? WalStorage.values.asNameMap()[json['original_storage']] 
+          : null,
     );
   }
 
@@ -190,6 +202,7 @@ class Wal {
       'file_num': fileNum,
       'total_frames': totalFrames,
       'synced_frame_offset': syncedFrameOffset,
+      'original_storage': originalStorage?.name,
     };
   }
 
@@ -225,8 +238,52 @@ class SDCardWalSync implements IWalSync {
   StreamSubscription? _storageStream;
 
   IWalSyncListener listener;
+  LocalWalSync? _localSync;
+
+  // Cancellation support
+  bool _isCancelled = false;
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+
+  // Progress tracking
+  int _totalBytesDownloaded = 0;
+  DateTime? _downloadStartTime;
+  double _currentSpeedKBps = 0.0;
+  double get currentSpeedKBps => _currentSpeedKBps;
 
   SDCardWalSync(this.listener);
+
+  /// Set reference to LocalWalSync for registering downloaded files
+  void setLocalSync(LocalWalSync localSync) {
+    _localSync = localSync;
+  }
+
+  /// Cancel the current sync operation
+  @override
+  void cancelSync() {
+    if (_isSyncing) {
+      _isCancelled = true;
+      debugPrint("SDCardWalSync: Cancel requested");
+    }
+  }
+
+  void _resetSyncState() {
+    _isCancelled = false;
+    _isSyncing = false;
+    _totalBytesDownloaded = 0;
+    _downloadStartTime = null;
+    _currentSpeedKBps = 0.0;
+  }
+
+  void _updateSpeed(int bytesDownloaded) {
+    _totalBytesDownloaded += bytesDownloaded;
+    if (_downloadStartTime != null) {
+      final elapsedSeconds = DateTime.now().difference(_downloadStartTime!).inMilliseconds / 1000.0;
+      if (elapsedSeconds > 0) {
+        _currentSpeedKBps = (_totalBytesDownloaded / 1024) / elapsedSeconds;
+      }
+    }
+  }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -363,7 +420,7 @@ class SDCardWalSync implements IWalSync {
     return file;
   }
 
-  Future _readStorageBytesToFile(Wal wal, Function(File f, int offset) callback) async {
+  Future _readStorageBytesToFile(Wal wal, Function(File f, int offset, int timerStart) callback) async {
     var deviceId = wal.device;
     int fileNum = wal.fileNum;
     int offset = wal.storageOffset;
@@ -446,7 +503,7 @@ class SDCardWalSync implements IWalSync {
         timerStart += sdcardChunkSizeSecs;
         try {
           var file = await _flushToDisk(wal, chunk, timerStart);
-          await callback(file, offset);
+          await callback(file, offset, timerStart);
         } catch (e) {
           debugPrint('Error in callback during chunking: $e');
           hasError = true;
@@ -485,106 +542,165 @@ class SDCardWalSync implements IWalSync {
       var chunk = bytesData.sublist(bytesLeft);
       timerStart += sdcardChunkSizeSecs;
       var file = await _flushToDisk(wal, chunk, timerStart);
-      await callback(file, offset);
+      await callback(file, offset, timerStart);
     }
 
     return;
   }
 
-  Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset)? updates) async {
-    debugPrint("sync wal: ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
+  Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset, double speedKBps)? updates) async {
+    debugPrint("SDCard sync (two-phase): ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
 
-    var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
-    List<File> files = [];
-    bool syncFailed = false;
+    // Safety check: Ensure LocalWalSync is available before starting
+    if (_localSync == null) {
+      debugPrint("SDCard: ERROR - LocalWalSync not available, aborting to preserve data safety");
+      throw Exception('Local sync service not available. Cannot safely download SD card data.');
+    }
 
-    var limit = 2;
+    // Two-phase sync:
+    // Phase 1: Download all data from SD card to phone storage
+    // Phase 2: Register files with LocalWalSync for later cloud upload
 
-    // Read with file chunking
-    int lastOffset = 0;
+    List<_SDCardDownloadedChunk> downloadedChunks = [];
+    bool downloadFailed = false;
+    String? failureReason;
+    int lastOffset = wal.storageOffset;
+    int totalBytesToDownload = wal.storageTotalBytes - wal.storageOffset;
+    
+    debugPrint("SDCard Phase 1: Downloading ~${(totalBytesToDownload / 1024).toStringAsFixed(1)} KB to phone storage");
+
+    // Initialize progress tracking
+    _downloadStartTime = DateTime.now();
+    _totalBytesDownloaded = 0;
+
+    // Phase 1: Download everything from SD card to phone
+    // Each chunk is registered immediately after download for data safety
     try {
-      await _readStorageBytesToFile(wal, (File file, int offset) async {
-        if (syncFailed) return; // Stop processing if sync already failed
+      await _readStorageBytesToFile(wal, (File file, int offset, int timerStart) async {
+        // Check for cancellation
+        if (_isCancelled) {
+          debugPrint("SDCard: Sync cancelled by user");
+          throw Exception('Sync cancelled by user');
+        }
+        
+        if (downloadFailed) return;
 
-        files.add(file);
+        // Track downloaded bytes for speed calculation
+        int bytesInChunk = offset - lastOffset;
+        _updateSpeed(bytesInChunk);
+
+        // Register this chunk immediately with LocalWalSync for data safety
+        // If app crashes, this chunk is already tracked and won't be lost
+        await _registerSingleChunk(wal, file, timerStart);
+
+        downloadedChunks.add(_SDCardDownloadedChunk(
+          file: file,
+          offset: offset,
+          timerStart: timerStart,
+        ));
         lastOffset = offset;
 
-        // Sync files with batch
-        if (files.isNotEmpty && files.length % limit == 0) {
-          var syncFiles = files.sublist(0, limit);
-          files = files.sublist(limit);
-          try {
-            var partialRes = await syncLocalFiles(syncFiles);
-            resp.newConversationIds
-                .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-            resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-                .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
-          } catch (e) {
-            debugPrint('SDCard sync batch failed: $e');
-            syncFailed = true;
+        // Notify listener so UI updates with new WAL
+        listener.onWalUpdated();
 
-            await _storageStream?.cancel();
-            throw Exception('SDCard sync batch failed: $e');
-          }
-
-          // Update progress without sending command (avoids restarting transfer)
-          if (!syncFailed && updates != null) {
-            updates(offset);
-          }
+        // Update progress during download with speed
+        if (updates != null) {
+          updates(offset, _currentSpeedKBps);
         }
+        
+        debugPrint("SDCard: Downloaded & registered chunk ${downloadedChunks.length} (ts: $timerStart, offset: $offset, speed: ${_currentSpeedKBps.toStringAsFixed(1)} KB/s)");
       });
     } catch (e) {
-      syncFailed = true;
+      downloadFailed = true;
+      failureReason = e.toString();
       await _storageStream?.cancel();
-      rethrow;
+      debugPrint('SDCard Phase 1 failed: $e');
+      
+      // Don't rethrow yet - we need to handle cleanup
     }
 
-    // Stop here if sync failed during chunking
-    if (syncFailed) {
-      throw Exception('SDCard sync failed during processing');
+    // Handle cancellation or failure
+    // Note: Chunks are already registered immediately after download, so no need to register again
+    if (_isCancelled) {
+      debugPrint("SDCard: Sync was cancelled. ${downloadedChunks.length} chunks already saved & registered to phone.");
+      throw Exception('Sync cancelled. Partial data (${downloadedChunks.length} chunks) saved to phone for later upload.');
     }
 
-    // Sync remaining files
-    if (files.isNotEmpty) {
-      var syncFiles = files;
-      try {
-        var partialRes = await syncLocalFiles(syncFiles);
-        resp.newConversationIds
-            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.updatedConversationIds.contains(id)));
-      } catch (e) {
-        debugPrint('SDCard sync remaining files failed: $e');
-        // Cancel the storage stream to stop further processing
-        await _storageStream?.cancel();
-        throw Exception('SDCard sync remaining files failed: $e');
-      }
-
-      // Update offset in memory only (don't restart transfer)
-      wal.storageOffset = lastOffset;
-
-      // Callback
-      if (updates != null) {
-        updates(lastOffset);
-      }
+    if (downloadFailed) {
+      debugPrint("SDCard: Download failed. ${downloadedChunks.length} chunks already saved & registered to phone.");
+      throw Exception('SD card download failed: $failureReason. ${downloadedChunks.length} chunks saved to phone.');
     }
 
-    // Clear file only if everything succeeded
+    if (downloadedChunks.isEmpty) {
+      debugPrint("SDCard: No chunks downloaded");
+      return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    }
+
+    debugPrint("SDCard Phase 1 complete: Downloaded & registered ${downloadedChunks.length} chunks (${(_totalBytesDownloaded / 1024).toStringAsFixed(1)} KB) to phone");
+
+    // Phase 2: All chunks already registered during download - skip batch registration
+    // This was done incrementally for data safety
+
+    // Phase 3: Clear SD card ONLY after successful local backup and registration
+    debugPrint("SDCard Phase 3: Clearing SD card storage");
     await _writeToStorage(wal.device, wal.fileNum, 1, 0);
 
-    return resp;
+    // Return empty response - cloud upload will happen via LocalWalSync.syncAll()
+    // This ensures data safety: SD card is only cleared after phone backup is complete
+    return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+  }
+
+  /// Register a single downloaded chunk with LocalWalSync immediately for data safety
+  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart) async {
+    if (_localSync == null) {
+      debugPrint("SDCard: WARNING - Cannot register chunk, LocalWalSync not available");
+      return;
+    }
+
+    // Calculate duration based on chunk size
+    int chunkSeconds = sdcardChunkSizeSecs;
+    
+    // Create WAL entry for LocalWalSync to handle upload
+    Wal localWal = Wal(
+      codec: wal.codec,
+      channel: wal.channel,
+      sampleRate: wal.sampleRate,
+      timerStart: timerStart,
+      filePath: file.path.split('/').last, // Store only filename
+      storage: WalStorage.disk,
+      status: WalStatus.miss, // Marked as needing sync to cloud
+      device: wal.device,
+      deviceModel: wal.deviceModel,
+      seconds: chunkSeconds,
+      totalFrames: chunkSeconds * wal.codec.getFramesPerSecond(),
+      syncedFrameOffset: 0,
+      originalStorage: WalStorage.sdcard, // Track that this came from SD card
+    );
+
+    await _localSync!.addExternalWal(localWal);
+    debugPrint("SDCard: Registered chunk (ts: $timerStart) with LocalWalSync");
   }
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
     if (wals.isEmpty) {
-      debugPrint("All synced!");
+      debugPrint("SDCardWalSync: All synced!");
       return null;
     }
+
+    _resetSyncState();
+    _isSyncing = true;
+    
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     for (var i = wals.length - 1; i >= 0; i--) {
+      // Check for cancellation before starting each WAL
+      if (_isCancelled) {
+        debugPrint("SDCardWalSync: Sync cancelled before processing WAL ${wals[i].id}");
+        break;
+      }
+
       var wal = wals[i];
 
       wal.isSyncing = true;
@@ -592,55 +708,108 @@ class SDCardWalSync implements IWalSync {
       listener.onWalUpdated();
 
       final storageOffsetStarts = wal.storageOffset;
+      final totalBytes = wal.storageTotalBytes - storageOffsetStarts;
 
-      var partialRes = await _syncWal(wal, (offset) {
-        wal.storageOffset = offset;
-        wal.syncEtaSeconds = DateTime.now().difference(wal.syncStartedAt!).inSeconds *
-            (wal.storageTotalBytes - wal.storageOffset) ~/
-            (wal.storageOffset - storageOffsetStarts);
+      try {
+        var partialRes = await _syncWal(wal, (offset, speedKBps) {
+          wal.storageOffset = offset;
+          
+          // Calculate ETA based on speed
+          final bytesRemaining = wal.storageTotalBytes - offset;
+          if (speedKBps > 0) {
+            wal.syncEtaSeconds = (bytesRemaining / 1024 / speedKBps).round();
+          }
+          
+          // Calculate progress percentage
+          final bytesDownloaded = offset - storageOffsetStarts;
+          final progressPercent = totalBytes > 0 ? bytesDownloaded / totalBytes : 0.0;
+          
+          progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 1.0), speedKBps: speedKBps);
+          listener.onWalUpdated();
+        });
+        
+        resp.newConversationIds
+            .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+        resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+            .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+        wal.status = WalStatus.synced;
+      } catch (e) {
+        debugPrint("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
+        // WAL stays in miss status for retry
+        // Rethrow to notify caller
+        wal.isSyncing = false;
+        wal.syncStartedAt = null;
+        wal.syncEtaSeconds = null;
         listener.onWalUpdated();
-      });
-      resp.newConversationIds
-          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+        _resetSyncState();
+        rethrow;
+      }
 
-      wal.status = WalStatus.synced;
       wal.isSyncing = false;
       wal.syncStartedAt = null;
       wal.syncEtaSeconds = null;
       listener.onWalUpdated();
     }
+
+    _resetSyncState();
     return resp;
   }
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     var walToSync = _wals.where((w) => w == wal).toList().first;
+    
+    _resetSyncState();
+    _isSyncing = true;
+    
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
     walToSync.isSyncing = true;
     walToSync.syncStartedAt = DateTime.now();
     listener.onWalUpdated();
 
     final storageOffsetStarts = wal.storageOffset;
+    final totalBytes = wal.storageTotalBytes - storageOffsetStarts;
 
-    var partialRes = await _syncWal(wal, (offset) {
-      walToSync.storageOffset = offset;
-      walToSync.syncEtaSeconds = DateTime.now().difference(walToSync.syncStartedAt!).inSeconds *
-          (walToSync.storageTotalBytes - wal.storageOffset) ~/
-          (walToSync.storageOffset - storageOffsetStarts);
+    try {
+      var partialRes = await _syncWal(wal, (offset, speedKBps) {
+        walToSync.storageOffset = offset;
+        
+        // Calculate ETA based on speed
+        final bytesRemaining = walToSync.storageTotalBytes - offset;
+        if (speedKBps > 0) {
+          walToSync.syncEtaSeconds = (bytesRemaining / 1024 / speedKBps).round();
+        }
+        
+        // Calculate progress percentage
+        final bytesDownloaded = offset - storageOffsetStarts;
+        final progressPercent = totalBytes > 0 ? bytesDownloaded / totalBytes : 0.0;
+        
+        progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 1.0), speedKBps: speedKBps);
+        listener.onWalUpdated();
+      });
+      
+      resp.newConversationIds.addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
+      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
+          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+
+      wal.status = WalStatus.synced;
+    } catch (e) {
+      debugPrint("SDCardWalSync: Error syncing WAL ${wal.id}: $e");
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
       listener.onWalUpdated();
-    });
-    resp.newConversationIds.addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-    resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-        .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
+      _resetSyncState();
+      rethrow;
+    }
 
-    wal.status = WalStatus.synced;
     wal.isSyncing = false;
     wal.syncStartedAt = null;
     wal.syncEtaSeconds = null;
 
     listener.onWalUpdated();
+    _resetSyncState();
     return resp;
   }
 
@@ -656,6 +825,19 @@ class SDCardWalSync implements IWalSync {
       await deleteWal(wal);
     }
   }
+}
+
+/// Helper class to track downloaded SD card chunks
+class _SDCardDownloadedChunk {
+  final File file;
+  final int offset;
+  final int timerStart;
+
+  _SDCardDownloadedChunk({
+    required this.file,
+    required this.offset,
+    required this.timerStart,
+  });
 }
 
 class FlashPageWalSync implements IWalSync {
@@ -685,6 +867,11 @@ class FlashPageWalSync implements IWalSync {
   IWalSyncListener listener;
 
   FlashPageWalSync(this.listener);
+
+  @override
+  void cancelSync() {
+    // Flash page sync doesn't support cancellation yet
+  }
 
   /// Get list of pending upload files from SharedPreferences
   List<String> _getPendingFiles() {
@@ -1335,6 +1522,26 @@ class LocalWalSync implements IWalSync {
   LocalWalSync(this.listener);
 
   @override
+  void cancelSync() {
+    // Local sync doesn't support cancellation yet
+  }
+
+  /// Add an externally created WAL (e.g., from SD card download)
+  /// This allows SD card sync to register files for later cloud upload
+  Future<void> addExternalWal(Wal wal) async {
+    // Check if WAL with same id already exists
+    final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
+    if (existingIndex >= 0) {
+      debugPrint("LocalWalSync: WAL ${wal.id} already exists, skipping");
+      return;
+    }
+    _wals.add(wal);
+    await _saveWalsToFile();
+    listener.onWalUpdated();
+    debugPrint("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
+  }
+
+  @override
   void start() {
     _initializeWals();
     _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
@@ -1774,6 +1981,9 @@ class WalSyncs implements IWalSync {
     _phoneSync = LocalWalSync(listener);
     _sdcardSync = SDCardWalSync(listener);
     _flashPageSync = FlashPageWalSync(listener);
+    
+    // Wire up LocalWalSync reference so SD card can register downloaded files
+    _sdcardSync.setLocalSync(_phoneSync);
   }
 
   @override
@@ -1804,6 +2014,7 @@ class WalSyncs implements IWalSync {
     final allWals = await getAllWals();
     int phoneFiles = 0;
     int sdcardFiles = 0;
+    int fromSdcardFiles = 0;
     int limitlessFiles = 0;
     int phoneSize = 0;
     int sdcardSize = 0;
@@ -1817,7 +2028,12 @@ class WalSyncs implements IWalSync {
       } else if (wal.storage == WalStorage.flashPage) {
         limitlessFiles++;
       } else {
-        phoneFiles++;
+        // Phone storage (disk or mem)
+        if (wal.originalStorage == WalStorage.sdcard) {
+          fromSdcardFiles++;
+        } else {
+          phoneFiles++;
+        }
         phoneSize += _estimateWalSize(wal);
       }
 
@@ -1832,6 +2048,7 @@ class WalSyncs implements IWalSync {
       totalFiles: allWals.length,
       phoneFiles: phoneFiles,
       sdcardFiles: sdcardFiles,
+      fromSdcardFiles: fromSdcardFiles,
       limitlessFiles: limitlessFiles,
       phoneSize: phoneSize,
       sdcardSize: sdcardSize,
@@ -1885,8 +2102,16 @@ class WalSyncs implements IWalSync {
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
-    // sdcard
-    var partialRes = await _sdcardSync.syncAll(progress: progress);
+    // Phase 1: SD card download to phone (no cloud upload yet)
+    // This moves data from SD card to phone storage safely
+    debugPrint("WalSyncs: Phase 1 - Downloading SD card data to phone");
+    await _sdcardSync.syncAll(progress: progress);
+    // Note: SD card sync now returns empty response, files are registered with _phoneSync
+
+    // Phase 2: Upload all phone files to cloud (includes SD card downloads)
+    // This handles both original phone recordings and newly downloaded SD card files
+    debugPrint("WalSyncs: Phase 2 - Uploading phone files to cloud");
+    var partialRes = await _phoneSync.syncAll(progress: progress);
     if (partialRes != null) {
       resp.newConversationIds
           .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
@@ -1894,16 +2119,7 @@ class WalSyncs implements IWalSync {
           .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
     }
 
-    // phone
-    partialRes = await _phoneSync.syncAll(progress: progress);
-    if (partialRes != null) {
-      resp.newConversationIds
-          .addAll(partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
-      resp.updatedConversationIds.addAll(partialRes.updatedConversationIds
-          .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
-    }
-
-    // flash pages (Limitless)
+    // Flash pages (Limitless) - handled separately
     partialRes = await _flashPageSync.syncAll(progress: progress);
     if (partialRes != null) {
       resp.newConversationIds
@@ -1925,6 +2141,18 @@ class WalSyncs implements IWalSync {
       return _phoneSync.syncWal(wal: wal, progress: progress);
     }
   }
+
+  @override
+  void cancelSync() {
+    _sdcardSync.cancelSync();
+    // Add other sync types if they support cancellation
+  }
+
+  /// Check if SD card sync is in progress
+  bool get isSdCardSyncing => _sdcardSync.isSyncing;
+
+  /// Get current SD card download speed
+  double get sdCardSpeedKBps => _sdcardSync.currentSpeedKBps;
 }
 
 class WalService implements IWalService, IWalSyncListener {

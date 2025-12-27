@@ -203,7 +203,8 @@ class SyncBottomSheet extends StatelessWidget {
                           Text(
                             isAnySyncInProgress
                                 ? _getSyncStatusText(
-                                    progress, isSyncingFromPendant, isUploadingToCloud, hasOrphanedFiles, orphanedCount)
+                                    progress, isSyncingFromPendant, isUploadingToCloud, hasOrphanedFiles, orphanedCount,
+                                    speedKBps: syncProvider.syncSpeedKBps)
                                 : (hasPendingData ? 'Tap Sync to start' : 'All recordings are synced'),
                             style: TextStyle(
                               color: Colors.grey.shade500,
@@ -291,16 +292,21 @@ class SyncBottomSheet extends StatelessWidget {
   }
 
   String _getSyncStatusText(
-      double progress, bool isSyncingFromPendant, bool isUploadingToCloud, bool hasOrphanedFiles, int orphanedCount) {
+      double progress, bool isSyncingFromPendant, bool isUploadingToCloud, bool hasOrphanedFiles, int orphanedCount, {double? speedKBps}) {
+    String speedSuffix = '';
+    if (speedKBps != null && speedKBps > 0) {
+      speedSuffix = ' (${speedKBps.toStringAsFixed(1)} KB/s)';
+    }
+    
     if (isSyncingFromPendant) {
-      return 'Downloading your recordings…';
+      return 'Downloading your recordings…$speedSuffix';
     } else if (isUploadingToCloud) {
       if (hasOrphanedFiles && orphanedCount > 0) {
         return 'Uploading to cloud… ($orphanedCount file${orphanedCount > 1 ? 's' : ''} remaining)';
       }
       return 'Uploading to cloud…';
     } else if (progress <= 0.4) {
-      return 'Downloading your recordings…';
+      return 'Downloading your recordings…$speedSuffix';
     } else {
       return 'Processing your audio…';
     }
