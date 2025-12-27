@@ -20,7 +20,6 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -415,12 +414,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
-            SizedBox(width: 6),
-            Text(
+            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+            const SizedBox(width: 6),
+            const Text(
               'Create Key',
               style: TextStyle(
                 color: Colors.white,
@@ -449,16 +448,16 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                 icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 onPressed: () => Navigator.of(context).pop(),
               ),
-              title: Text(
-                context.l10n.developerSettingsTitle,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+              title: const Text(
+                'Developer Settings',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
               ),
               centerTitle: true,
               actions: [
                 TextButton(
                   onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
                   child: Text(
-                    provider.savingSettingsLoading ? context.l10n.saving : context.l10n.save,
+                    provider.savingSettingsLoading ? 'Saving...' : 'Save',
                     style: TextStyle(
                       color: provider.savingSettingsLoading ? Colors.grey : Colors.white,
                       fontWeight: FontWeight.w500,
@@ -531,9 +530,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                         color: Colors.orange.withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
-                                      child: Text(
-                                        context.l10n.beta,
-                                        style: const TextStyle(
+                                      child: const Text(
+                                        'BETA',
+                                        style: TextStyle(
                                           color: Colors.orange,
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
@@ -545,7 +544,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  context.l10n.personaConfig,
+                                  'Configure your AI persona',
                                   style: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: 13,
@@ -605,9 +604,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  context.l10n.transcription,
-                                  style: const TextStyle(
+                                const Text(
+                                  'Transcription',
+                                  style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
@@ -615,7 +614,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  context.l10n.transcriptionConfig,
+                                  'Configure STT provider',
                                   style: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: 13,
@@ -670,9 +669,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  context.l10n.conversationTimeout,
-                                  style: const TextStyle(
+                                const Text(
+                                  'Conversation Timeout',
+                                  style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
@@ -680,7 +679,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  context.l10n.conversationTimeoutConfig,
+                                  'Set when conversations auto-end',
                                   style: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: 13,
@@ -737,9 +736,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  context.l10n.importData,
-                                  style: const TextStyle(
+                                const Text(
+                                  'Import Data',
+                                  style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
@@ -747,7 +746,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  context.l10n.importDataConfig,
+                                  'Import data from other sources',
                                   style: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: 13,
@@ -768,7 +767,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 32),
 
                   // Debug Logs Section
-                  _buildSectionHeader(context.l10n.debugDiagnostics),
+                  _buildSectionHeader('Debug & Diagnostics'),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -811,8 +810,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   const SizedBox(height: 2),
                                   Text(
                                     SharedPreferencesUtil().devLogsToFileEnabled
-                                        ? context.l10n.debugLogsAutoDelete
-                                        : context.l10n.debugLogsDesc,
+                                        ? 'Auto-deletes after 3 days.'
+                                        : 'Helps diagnose issues',
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 13,
@@ -842,12 +841,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   onTap: () async {
                                     final files = await DebugLogManager.listLogFiles();
                                     if (files.isEmpty) {
-                                      AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
+                                      AppSnackbar.showSnackbarError('No log files found.');
                                       return;
                                     }
                                     if (files.length == 1) {
-                                      final result = await Share.shareXFiles([XFile(files.first.path)],
-                                          text: context.l10n.omiDebugLog);
+                                      final result =
+                                          await Share.shareXFiles([XFile(files.first.path)], text: 'Omi debug log');
                                       if (result.status == ShareResultStatus.success) {
                                         debugPrint('Log shared');
                                       }
@@ -875,11 +874,11 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                                   borderRadius: BorderRadius.circular(2),
                                                 ),
                                               ),
-                                              Padding(
-                                                padding: const EdgeInsets.all(16),
+                                              const Padding(
+                                                padding: EdgeInsets.all(16),
                                                 child: Text(
-                                                  context.l10n.selectLogFile,
-                                                  style: const TextStyle(
+                                                  'Select Log File',
+                                                  style: TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 18,
                                                     fontWeight: FontWeight.w600,
@@ -911,8 +910,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     );
 
                                     if (selected != null) {
-                                      final result = await Share.shareXFiles([XFile(selected.path)],
-                                          text: context.l10n.omiDebugLog);
+                                      final result =
+                                          await Share.shareXFiles([XFile(selected.path)], text: 'Omi debug log');
                                       if (result.status == ShareResultStatus.success) {
                                         debugPrint('Log shared');
                                       }
@@ -930,7 +929,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                         FaIcon(FontAwesomeIcons.fileArrowUp, color: Colors.grey.shade300, size: 16),
                                         const SizedBox(width: 8),
                                         Text(
-                                          context.l10n.shareLogs,
+                                          'Share Logs',
                                           style: TextStyle(
                                             color: Colors.grey.shade300,
                                             fontSize: 14,
@@ -946,7 +945,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               GestureDetector(
                                 onTap: () async {
                                   await DebugLogManager.clear();
-                                  AppSnackbar.showSnackbar(context.l10n.debugLogCleared);
+                                  AppSnackbar.showSnackbar('Debug log cleared');
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -958,9 +957,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                     children: [
                                       const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
                                       const SizedBox(width: 6),
-                                      Text(
-                                        context.l10n.clear,
-                                        style: const TextStyle(
+                                      const Text(
+                                        'Clear',
+                                        style: TextStyle(
                                           color: Colors.redAccent,
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
@@ -984,9 +983,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             if (provider.loadingExportMemories) return;
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(context.l10n.exportStarted),
-                                duration: const Duration(seconds: 3),
+                              const SnackBar(
+                                content: Text('Export started. This may take a few seconds...'),
+                                duration: Duration(seconds: 3),
                               ),
                             );
                             List<ServerConversation> memories = await getConversations(limit: 10000, offset: 0);
@@ -996,7 +995,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             await file.writeAsString(json);
 
                             final result =
-                                await Share.shareXFiles([XFile(file.path)], text: context.l10n.exportedConversations);
+                                await Share.shareXFiles([XFile(file.path)], text: 'Exported Conversations from Omi');
                             if (result.status == ShareResultStatus.success) {
                               debugPrint('Export shared');
                             }
@@ -1031,9 +1030,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  context.l10n.exportAllData,
-                                  style: const TextStyle(
+                                const Text(
+                                  'Export All Data',
+                                  style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
@@ -1041,7 +1040,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  context.l10n.exportDataDesc,
+                                  'Export conversations to a JSON file',
                                   style: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: 13,
@@ -1079,16 +1078,15 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         context: context,
                         builder: (ctx) => AlertDialog(
                           backgroundColor: const Color(0xFF1C1C1E),
-                          title:
-                              Text(context.l10n.deleteKnowledgeGraphTitle, style: const TextStyle(color: Colors.white)),
-                          content: Text(
-                            context.l10n.deleteKnowledgeGraphMessage,
-                            style: const TextStyle(color: Colors.white70),
+                          title: const Text('Delete Knowledge Graph?', style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                            'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.',
+                            style: TextStyle(color: Colors.white70),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.of(ctx).pop(),
-                              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
+                              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
                             ),
                             TextButton(
                               onPressed: () async {
@@ -1096,12 +1094,12 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 try {
                                   // Call delete endpoint
                                   await KnowledgeGraphApi.deleteKnowledgeGraph();
-                                  AppSnackbar.showSnackbar(context.l10n.knowledgeGraphDeleted);
+                                  AppSnackbar.showSnackbar('Knowledge Graph deleted successfully');
                                 } catch (e) {
-                                  AppSnackbar.showSnackbarError(context.l10n.deleteGraphFailed(e.toString()));
+                                  AppSnackbar.showSnackbarError('Failed to delete graph: $e');
                                 }
                               },
-                              child: Text(context.l10n.delete, style: const TextStyle(color: Colors.redAccent)),
+                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
                             ),
                           ],
                         ),
@@ -1135,9 +1133,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  context.l10n.deleteKnowledgeGraph,
-                                  style: const TextStyle(
+                                const Text(
+                                  'Delete Knowledge Graph',
+                                  style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
@@ -1145,7 +1143,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  context.l10n.deleteKnowledgeGraphDesc,
+                                  'Clear all nodes and connections',
                                   style: TextStyle(
                                     color: Colors.grey.shade500,
                                     fontSize: 13,
@@ -1176,16 +1174,16 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                     padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
                     child: Row(
                       children: [
-                        Text(
-                          context.l10n.mcp,
-                          style: const TextStyle(
+                        const Text(
+                          'MCP',
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const Spacer(),
-                        _buildDocsButton('https://docs.omi.me/doc/developer/MCP', context.l10n.mcp),
+                        _buildDocsButton('https://docs.omi.me/doc/developer/MCP', 'MCP'),
                         const SizedBox(width: 8),
                         _buildCreateKeyButton(() => showDialog(
                               context: context,
@@ -1226,9 +1224,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    context.l10n.claudeDesktop,
-                                    style: const TextStyle(
+                                  const Text(
+                                    'Claude Desktop',
+                                    style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
@@ -1236,7 +1234,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    context.l10n.addToClaudeConfig,
+                                    'Add to claude_desktop_config.json',
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 13,
@@ -1313,7 +1311,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   }
 }''';
                             Clipboard.setData(const ClipboardData(text: config));
-                            AppSnackbar.showSnackbar(context.l10n.configCopied);
+                            AppSnackbar.showSnackbar('Config copied to clipboard');
                           },
                           child: Container(
                             width: double.infinity,
@@ -1328,7 +1326,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                 FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade300, size: 14),
                                 const SizedBox(width: 8),
                                 Text(
-                                  context.l10n.copyConfig,
+                                  'Copy Config',
                                   style: TextStyle(
                                     color: Colors.grey.shade300,
                                     fontSize: 14,
@@ -1373,9 +1371,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    context.l10n.mcpServer,
-                                    style: const TextStyle(
+                                  const Text(
+                                    'MCP Server',
+                                    style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w500,
@@ -1383,7 +1381,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    context.l10n.mcpServerDesc,
+                                    'Connect AI assistants to your data',
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 13,
@@ -1408,7 +1406,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             return GestureDetector(
                               onTap: () {
                                 Clipboard.setData(ClipboardData(text: mcpUrl));
-                                AppSnackbar.showSnackbar(context.l10n.urlCopied);
+                                AppSnackbar.showSnackbar('URL copied');
                               },
                               child: Container(
                                 width: double.infinity,
@@ -1445,7 +1443,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                         // API Key Auth Section
                         Text(
-                          context.l10n.apiKeyAuth,
+                          'API Key Auth',
                           style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 12),
@@ -1454,14 +1452,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             Expanded(
                               flex: 2,
                               child: Text(
-                                context.l10n.header,
+                                'Header',
                                 style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                               ),
                             ),
                             Expanded(
                               flex: 3,
                               child: Text(
-                                context.l10n.authorizationBearer,
+                                'Authorization: Bearer <key>',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 12,
@@ -1478,13 +1476,13 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                         // OAuth Section
                         Text(
-                          context.l10n.oauth,
+                          'OAuth',
                           style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 12),
 
                         // Client ID
-                        _buildMcpConfigRow(context.l10n.clientId, 'omi'),
+                        _buildMcpConfigRow('Client ID', 'omi'),
                         const SizedBox(height: 8),
 
                         // Client Secret hint
@@ -1493,14 +1491,14 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             Expanded(
                               flex: 2,
                               child: Text(
-                                context.l10n.clientSecret,
+                                'Client Secret',
                                 style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                               ),
                             ),
                             Expanded(
                               flex: 3,
                               child: Text(
-                                context.l10n.useMcpApiKey,
+                                'Use your MCP API key',
                                 style: TextStyle(
                                   color: Colors.grey.shade600,
                                   fontSize: 13,
@@ -1530,7 +1528,7 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        _buildDocsButton('https://docs.omi.me/doc/developer/apps/Introduction', context.l10n.webhooks),
+                        _buildDocsButton('https://docs.omi.me/doc/developer/apps/Introduction', 'Webhooks'),
                       ],
                     ),
                   ),
@@ -1544,8 +1542,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                       children: [
                         // Conversation Events
                         _buildWebhookItem(
-                          title: context.l10n.conversationEvents,
-                          description: context.l10n.newConversationCreated,
+                          title: 'Conversation Events',
+                          description: 'New conversation created',
                           icon: FontAwesomeIcons.message,
                           isEnabled: provider.conversationEventsToggled,
                           onToggle: provider.onConversationEventsToggled,
@@ -1557,8 +1555,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         ),
                         // Real-time Transcript
                         _buildWebhookItem(
-                          title: context.l10n.realtimeTranscript,
-                          description: context.l10n.transcriptReceived,
+                          title: 'Real-time Transcript',
+                          description: 'Transcript received',
                           icon: FontAwesomeIcons.closedCaptioning,
                           isEnabled: provider.transcriptsToggled,
                           onToggle: provider.onTranscriptsToggled,
@@ -1570,15 +1568,15 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         ),
                         // Realtime Audio Bytes
                         _buildWebhookItem(
-                          title: context.l10n.audioBytes,
-                          description: context.l10n.audioDataReceived,
+                          title: 'Audio Bytes',
+                          description: 'Audio data received',
                           icon: FontAwesomeIcons.waveSquare,
                           isEnabled: provider.audioBytesToggled,
                           onToggle: provider.onAudioBytesToggled,
                           controller: provider.webhookAudioBytes,
                           extraField: _buildTextField(
                             controller: provider.webhookAudioBytesDelay,
-                            label: context.l10n.intervalSeconds,
+                            label: 'Interval (seconds)',
                             keyboardType: TextInputType.number,
                           ),
                         ),
@@ -1588,8 +1586,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                         ),
                         // Day Summary
                         _buildWebhookItem(
-                          title: context.l10n.daySummary,
-                          description: context.l10n.summaryGenerated,
+                          title: 'Day Summary',
+                          description: 'Summary generated',
                           icon: FontAwesomeIcons.calendarDay,
                           isEnabled: provider.daySummaryToggled,
                           onToggle: provider.onDaySummaryToggled,
@@ -1602,9 +1600,9 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                   const SizedBox(height: 32),
 
                   // Experimental Section
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, right: 4, bottom: 12),
-                    child: Text(
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
+                    child: const Text(
                       'Experimental',
                       style: TextStyle(
                         color: Colors.white,
@@ -1664,6 +1662,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           icon: FontAwesomeIcons.bullseye,
                           value: provider.showDailyGradeEnabled,
                           onChanged: provider.onShowDailyGradeChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Daily Reflection
+                        _buildExperimentalItem(
+                          title: 'Daily Reflection',
+                          description: 'Get a 9 PM reminder to reflect on your day',
+                          icon: FontAwesomeIcons.moon,
+                          value: provider.dailyReflectionEnabled,
+                          onChanged: provider.onDailyReflectionChanged,
                         ),
                       ],
                     ),

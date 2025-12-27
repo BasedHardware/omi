@@ -28,6 +28,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -52,7 +53,8 @@ import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
-  const HomePageWrapper({super.key, this.navigateToRoute});
+  final String? autoMessage;
+  const HomePageWrapper({super.key, this.navigateToRoute, this.autoMessage});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
@@ -60,6 +62,7 @@ class HomePageWrapper extends StatefulWidget {
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
+  String? _autoMessage;
 
   @override
   void initState() {
@@ -70,21 +73,28 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
+        
+        // Schedule daily reflection notification if enabled
+        if (SharedPreferencesUtil().dailyReflectionEnabled) {
+          DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+        }
       }
     });
     _navigateToRoute = widget.navigateToRoute;
+    _autoMessage = widget.autoMessage;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    return HomePage(navigateToRoute: _navigateToRoute, autoMessage: _autoMessage);
   }
 }
 
 class HomePage extends StatefulWidget {
   final String? navigateToRoute;
-  const HomePage({super.key, this.navigateToRoute});
+  final String? autoMessage;
+  const HomePage({super.key, this.navigateToRoute, this.autoMessage});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -278,12 +288,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar
+          // If there's an auto-message (e.g., from daily reflection notification), send it
+          final autoMessageToSend = widget.autoMessage;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ChatPage(isPivotBottom: false),
+                  builder: (context) => ChatPage(
+                    isPivotBottom: false,
+                    autoMessage: autoMessageToSend,
+                  ),
                 ),
               );
             }
