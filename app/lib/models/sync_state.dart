@@ -15,6 +15,7 @@ class SyncState {
   final String? errorMessage;
   final Wal? failedWal;
   final List<SyncedConversationPointer> syncedConversations;
+  final double? speedKBps; // Download speed in KB/s
 
   const SyncState({
     this.status = SyncStatus.idle,
@@ -22,6 +23,7 @@ class SyncState {
     this.errorMessage,
     this.failedWal,
     this.syncedConversations = const [],
+    this.speedKBps,
   });
 
   SyncState copyWith({
@@ -30,6 +32,7 @@ class SyncState {
     String? errorMessage,
     Wal? failedWal,
     List<SyncedConversationPointer>? syncedConversations,
+    double? speedKBps,
   }) {
     return SyncState(
       status: status ?? this.status,
@@ -37,6 +40,7 @@ class SyncState {
       errorMessage: errorMessage,
       failedWal: failedWal,
       syncedConversations: syncedConversations ?? this.syncedConversations,
+      speedKBps: speedKBps,
     );
   }
 
@@ -55,10 +59,11 @@ class SyncState {
         syncedConversations: [],
       );
 
-  SyncState toSyncing({double progress = 0.0}) => copyWith(
+  SyncState toSyncing({double progress = 0.0, double? speedKBps}) => copyWith(
         status: SyncStatus.syncing,
         progress: progress,
         errorMessage: null,
+        speedKBps: speedKBps,
       );
 
   SyncState toFetchingConversations() => copyWith(
