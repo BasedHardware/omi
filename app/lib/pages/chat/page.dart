@@ -34,10 +34,12 @@ import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
+  final String? autoMessage;
 
   const ChatPage({
     super.key,
     this.isPivotBottom = false,
+    this.autoMessage,
   });
 
   @override
@@ -101,7 +103,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        await provider.refreshMessages();
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
@@ -110,6 +112,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted && !_showVoiceRecorder && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
+          }
+        });
+      }
+      // Handle auto-message from notification (e.g., daily reflection)
+      if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _sendMessageUtil(widget.autoMessage!);
           }
         });
       }
