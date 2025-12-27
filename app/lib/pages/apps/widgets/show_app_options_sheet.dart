@@ -29,7 +29,7 @@ class ShowAppOptionsSheet extends StatelessWidget {
                 app.name,
                 style: Theme.of(context).textTheme.labelLarge,
               ),
-              leading: const Icon(Icons.apps),
+              leading: const Icon(Icons.settings_outlined),
               trailing: IconButton(
                 icon: const Icon(Icons.cancel_outlined),
                 onPressed: () {

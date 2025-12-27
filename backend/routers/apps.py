@@ -702,7 +702,11 @@ def update_app(
         previous_price=app.get("price", 0),
     )
 
-    if app['approved'] and (app['private'] is None or app['private'] is False):
+    # Clear public apps cache if app was public/approved OR is becoming public/approved
+    # This ensures cache is invalidated when visibility changes in either direction
+    old_is_public = app['approved'] and (app['private'] is None or app['private'] is False)
+    new_is_public = app['approved'] and (data.get('private') is None or data.get('private') is False)
+    if old_is_public or new_is_public:
         delete_generic_cache('get_public_approved_apps_data')
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}

@@ -892,10 +892,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 appName: app.name,
                                               );
 
-                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty && Uri.tryParse(app.paymentLink!)?.hasScheme == true) {
                                                 _checkPaymentStatus(app.id);
                                                 await launchUrl(Uri.parse(app.paymentLink!));
-                                              } else {
+                                              } else if (app.paymentLink == null || app.paymentLink!.isEmpty || Uri.tryParse(app.paymentLink!)?.hasScheme != true) {
                                                 await _toggleApp(app.id, true);
                                               }
                                             },
@@ -1402,7 +1402,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               );
                             } else {
                               if (app.externalIntegration!.isInstructionsUrl == true) {
-                                await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+                                final instructionsUrl = app.externalIntegration!.setupInstructionsFilePath;
+                                if (instructionsUrl != null && instructionsUrl.isNotEmpty && Uri.tryParse(instructionsUrl)?.hasScheme == true) {
+                                  await launchUrl(Uri.parse(instructionsUrl));
+                                }
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
@@ -1682,7 +1685,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
         );
       } else {
         if (app.externalIntegration!.isInstructionsUrl == true) {
-          await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+          final instructionsUrl = app.externalIntegration!.setupInstructionsFilePath;
+          if (instructionsUrl != null && instructionsUrl.isNotEmpty && Uri.tryParse(instructionsUrl)?.hasScheme == true) {
+            await launchUrl(Uri.parse(instructionsUrl));
+          }
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));

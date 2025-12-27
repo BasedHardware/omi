@@ -133,9 +133,15 @@ def _get_structured(
             )
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
-        discarded = should_discard_conversation(transcript_text, conversation.photos)
-        if discarded:
-            return Structured(emoji=random.choice(['🧠', '🎉'])), True
+        # Skip discard check for conversations longer than 4 minutes - they're likely meaningful
+        conversation_duration_seconds = 0
+        if conversation.started_at and conversation.finished_at:
+            conversation_duration_seconds = (conversation.finished_at - conversation.started_at).total_seconds()
+
+        if conversation_duration_seconds <= 240:  # 4 minutes
+            discarded = should_discard_conversation(transcript_text, conversation.photos)
+            if discarded:
+                return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         return (

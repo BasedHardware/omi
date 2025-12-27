@@ -232,7 +232,12 @@ def get_syncing_file_temporal_signed_url(file_path: str):
 def delete_syncing_temporal_file(file_path: str):
     bucket = storage_client.bucket(syncing_local_bucket)
     blob = bucket.blob(file_path)
-    blob.delete()
+    try:
+        blob.delete()
+    except Exception as e:
+        # File may have already been deleted (race condition) or network retry caused duplicate deletion
+        # This is expected behavior - if the file is gone, the delete was successful
+        print(f"Note: Could not delete syncing file {file_path}: {e}")
 
 
 # ************************************************
