@@ -24,6 +24,12 @@ abstract class MessageEvent {
         return PhotoDescribedEvent.fromJson(json);
       case 'speaker_label_suggestion':
         return SpeakerLabelSuggestionEvent.fromJson(json);
+      case 'onboarding_question':
+        return OnboardingQuestionEvent.fromJson(json);
+      case 'question_answered':
+        return OnboardingQuestionAnsweredEvent.fromJson(json);
+      case 'onboarding_complete':
+        return OnboardingCompleteEvent.fromJson(json);
       default:
         // Return a generic event or throw an error if the type is unknown
         return UnknownEvent(eventType: json['type'] ?? 'unknown');
@@ -161,6 +167,63 @@ class SpeakerLabelSuggestionEvent extends MessageEvent {
       personId: '',
       personName: '',
       segmentId: '',
+    );
+  }
+}
+
+class OnboardingQuestionEvent extends MessageEvent {
+  final String question;
+  final int questionIndex;
+  final int totalQuestions;
+
+  OnboardingQuestionEvent({
+    required this.question,
+    required this.questionIndex,
+    required this.totalQuestions,
+  }) : super(eventType: 'onboarding_question');
+
+  factory OnboardingQuestionEvent.fromJson(Map<String, dynamic> json) {
+    return OnboardingQuestionEvent(
+      question: json['question'] ?? '',
+      questionIndex: json['question_index'] ?? 0,
+      totalQuestions: json['total_questions'] ?? 0,
+    );
+  }
+}
+
+class OnboardingQuestionAnsweredEvent extends MessageEvent {
+  final int questionIndex;
+  final bool answered;
+
+  OnboardingQuestionAnsweredEvent({
+    required this.questionIndex,
+    required this.answered,
+  }) : super(eventType: 'question_answered');
+
+  factory OnboardingQuestionAnsweredEvent.fromJson(Map<String, dynamic> json) {
+    return OnboardingQuestionAnsweredEvent(
+      questionIndex: json['question_index'] ?? 0,
+      answered: json['answered'] ?? false,
+    );
+  }
+}
+
+class OnboardingCompleteEvent extends MessageEvent {
+  final String? conversationId;
+  final int memoriesCreated;
+  final String? error;
+
+  OnboardingCompleteEvent({
+    this.conversationId,
+    this.memoriesCreated = 0,
+    this.error,
+  }) : super(eventType: 'onboarding_complete');
+
+  factory OnboardingCompleteEvent.fromJson(Map<String, dynamic> json) {
+    return OnboardingCompleteEvent(
+      conversationId: json['conversation_id'],
+      memoriesCreated: json['memories_created'] ?? 0,
+      error: json['error'],
     );
   }
 }

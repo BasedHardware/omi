@@ -91,6 +91,8 @@ Future<http.Response?> makeApiCall({
   required Map<String, String> headers,
   required String body,
   required String method,
+  Duration? timeout,
+  int? retries,
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -99,9 +101,13 @@ Future<http.Response?> makeApiCall({
       fromHeaders: headers,
     );
 
+    final effectiveTimeout = timeout ?? (method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite);
+    final effectiveRetries = retries ?? 1;
+
     http.Response response = await HttpPoolManager.instance.send(
       () => _buildRequest(url, builtHeaders, body, method),
-      timeout: method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite,
+      timeout: effectiveTimeout,
+      retries: effectiveRetries,
     );
 
     if (requireAuthCheck && response.statusCode == 401) {
@@ -114,7 +120,7 @@ Future<http.Response?> makeApiCall({
         );
         response = await HttpPoolManager.instance.send(
           () => _buildRequest(url, builtHeaders, body, method),
-          timeout: method == 'GET' ? ApiClient.requestTimeoutRead : ApiClient.requestTimeoutWrite,
+          timeout: effectiveTimeout,
           retries: 0,
         );
         Logger.log('Token refreshed and request retried');

@@ -24,8 +24,20 @@ class SpeechProfileWidget extends StatefulWidget {
 }
 
 class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerProviderStateMixin {
+  late AnimationController _questionAnimationController;
+  late Animation<double> _questionFadeAnimation;
+  
   @override
   void initState() {
+    super.initState();
+    _questionAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _questionFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _questionAnimationController, curve: Curves.easeInOut),
+    );
+    
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) async {
       // Check if user has set primary language
       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
@@ -33,11 +45,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       }
     });
     SharedPreferencesUtil().onboardingCompleted = true;
-    super.initState();
   }
 
   @override
   void dispose() {
+    _questionAnimationController.dispose();
     // if (mounted) {
     //   context.read<SpeechProfileProvider>().close();
     // }
@@ -65,25 +77,27 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
       // Restart device recording, clear transcripts
       if (mounted) {
         Provider.of<CaptureProvider>(context, listen: false).clearTranscripts();
-        Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(
-          device: Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice,
-        );
+        final device = Provider.of<SpeechProfileProvider>(context, listen: false).deviceProvider?.connectedDevice;
+        if (device != null) {
+          Provider.of<CaptureProvider>(context, listen: false).streamDeviceRecording(device: device);
+        }
       }
     }
 
-    Future stopDeviceRecording() async {
-      debugPrint("stopDeviceRecording $mounted");
-
-      // Restart device recording, clear transcripts
+    Future stopAllRecording() async {
+      debugPrint("stopAllRecording $mounted");
       if (mounted) {
-        await Provider.of<CaptureProvider>(context, listen: false).stopStreamDeviceRecording();
+        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        // Stop any active device recording
+        await captureProvider.stopStreamDeviceRecording();
       }
     }
 
     return PopScope(
       canPop: true,
       onPopInvoked: (didPop) async {
-        context.read<SpeechProfileProvider>().close();
+        final speechProvider = context.read<SpeechProfileProvider>();
+        speechProvider.close();
         restartDeviceRecording();
       },
       child: Consumer2<SpeechProfileProvider, CaptureProvider>(
@@ -92,16 +106,34 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
             showInfo: (info) {
               if (info == 'SCROLL_DOWN') {
                 scrollDown();
+              } else if (info == 'NEXT_QUESTION') {
+                // Animate question change
+                _questionAnimationController.reset();
+                _questionAnimationController.forward();
               }
             },
             showError: (error) {
-              if (error == 'MULTIPLE_SPEAKERS') {
+              if (error == 'SOCKET_INIT_FAILED') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.pop(context),
+                    () {},
+                    'Connection Error',
+                    'Failed to connect to the server. Please check your internet connection and try again.',
+                    okButtonText: 'Ok',
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
+              } else if (error == 'MULTIPLE_SPEAKERS') {
                 showDialog(
                   context: context,
                   builder: (c) => getDialog(
                     context,
                     () {
-                      provider.resetSegments();
+                      provider.close();
                       Navigator.pop(context);
                     },
                     () {},
@@ -154,7 +186,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                     context,
                     () {
                       Navigator.pop(context);
-                      //  Navigator.pop(context);
                     },
                     () {},
                     'Are you there?',
@@ -164,11 +195,29 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                   ),
                   barrierDismissible: false,
                 );
+              } else if (error == 'SOCKET_DISCONNECTED' || error == 'SOCKET_ERROR') {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () {
+                      provider.close();
+                      Navigator.pop(context);
+                    },
+                    () {},
+                    'Connection Lost',
+                    'The connection was interrupted. Please check your internet connection and try again.',
+                    okButtonText: 'Try Again',
+                    singleButton: true,
+                  ),
+                  barrierDismissible: false,
+                );
               }
             },
-            child: Container(
+            child: SafeArea(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(
                     height: 10,
@@ -179,7 +228,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                         ? Column(
                             children: [
                               Text(
-                                '${Env.appName} needs to learn your voice to recognize you',
+                                '${Env.appName} needs to learn your goals and your voice. You\'ll be able to modify it later.',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white,
@@ -262,13 +311,30 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                         await LanguageSelectionDialog.show(context);
                                       }
 
-                                      await stopDeviceRecording();
-                                      await provider.initialise(finalizedCallback: restartDeviceRecording);
+                                      await stopAllRecording();
+                                      
+                                      // Initialize speech profile with phone mic as input source
+                                      // Don't pass restartDeviceRecording - we don't want to restart device recording
+                                      bool success = await provider.initialise(
+                                        usePhoneMic: true,
+                                        processConversationCallback: () {
+                                          Provider.of<CaptureProvider>(context, listen: false)
+                                              .forceProcessingCurrentConversation();
+                                        },
+                                      );
+                                      
+                                      if (!success) {
+                                        // Initialization failed, error dialog will be shown
+                                        return;
+                                      }
+                                      
                                       provider.forceCompletionTimer =
                                           Timer(Duration(seconds: provider.maxDuration), () async {
                                         provider.finalize();
                                       });
-                                      provider.updateStartedRecording(true);
+                                      
+                                      // Start question animation
+                                      _questionAnimationController.forward();
                                     },
                                     child: const Text(
                                       'Get Started',
@@ -297,6 +363,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               ),
                               child: TextButton(
                                 onPressed: () {
+                                  // Conversation processing already triggered in finalize()
                                   widget.goNext();
                                 },
                                 child: const Text(
@@ -329,23 +396,36 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               : Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const SizedBox(height: 20),
-                                    provider.percentageCompleted > 0
-                                        ? const SizedBox()
-                                        : const Text(
-                                            "Introduce\nyourself",
-                                            style: TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: 8),
+                                    FadeTransition(
+                                      opacity: _questionFadeAnimation,
+                                      child: Text(
+                                        provider.currentQuestion,
+                                        style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
                                     SizedBox(
                                         width: MediaQuery.sizeOf(context).width * 0.9,
-                                        child: ProgressBarWithPercentage(progressValue: provider.percentageCompleted)),
-                                    const SizedBox(height: 12),
+                                        child: ProgressBarWithPercentage(
+                                            progressValue: provider.questionProgress)),
+                                    const SizedBox(height: 8),
                                     Text(
-                                      provider.message,
-                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
+                                      'Keep going, you are doing great',
+                                      style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
                                       textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextButton(
+                                      onPressed: () => provider.skipCurrentQuestion(),
+                                      child: const Text(
+                                        'Skip this question',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 14,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),

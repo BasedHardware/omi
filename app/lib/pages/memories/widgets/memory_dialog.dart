@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:provider/provider.dart';
 
 import 'delete_confirmation.dart';
 
@@ -230,12 +228,6 @@ class _MemoryDialogState extends State<MemoryDialog> {
 
 // Helper function to show the memory dialog
 Future<void> showMemoryDialog(BuildContext context, MemoriesProvider provider, {Memory? memory}) async {
-  final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
-  if (!connectivityProvider.isConnected) {
-    ConnectivityProvider.showNoInternetDialog(context);
-    return;
-  }
-
   return showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,

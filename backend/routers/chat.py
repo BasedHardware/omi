@@ -1,6 +1,7 @@
 import uuid
 import re
 import base64
+import threading
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
@@ -32,12 +33,16 @@ from utils.chat import (
 )
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
+from utils.llm.tasks import extract_tasks_from_chat, extract_tasks_from_conversation
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream, execute_persona_chat_stream
 from utils.retrieval.agentic import execute_agentic_chat, execute_agentic_chat_stream
 
 router = APIRouter()
+
+
 
 
 def filter_messages(messages, app_id):
@@ -100,6 +105,10 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
+    
+    # Check for goal progress and extract tasks from user message (background)
+    threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
+    threading.Thread(target=extract_tasks_from_chat, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
@@ -107,6 +116,9 @@ def send_message(
     app_id_from_app = app.id if app else None
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+
+    # Capture user message text for task extraction
+    user_message_text = data.text
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -146,6 +158,9 @@ def send_message(
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+
+        # Extract tasks from full conversation context (user message + AI response) in background
+        threading.Thread(target=extract_tasks_from_conversation, args=(uid, user_message_text, response)).start()
 
         return ai_message, ask_for_nps
 

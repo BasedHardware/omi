@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:path_provider/path_provider.dart';
@@ -273,61 +275,103 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                             setState(() => provider.loadingExportMemories = false);
                           },
                   ),
-                  // KEEP ME?
-                  // ListTile(
-                  //   title: const Text('Import Memories'),
-                  //   subtitle: const Text('Use with caution. All memories in the JSON file will be imported.'),
-                  //   contentPadding: EdgeInsets.zero,
-                  //   trailing: provider.loadingImportMemories
-                  //       ? const SizedBox(
-                  //           height: 16,
-                  //           width: 16,
-                  //           child: CircularProgressIndicator(
-                  //             color: Colors.white,
-                  //             strokeWidth: 2,
-                  //           ),
-                  //         )
-                  //       : const Icon(Icons.download),
-                  //   onTap: () async {
-                  //     if (provider.loadingImportMemories) return;
-                  //     setState(() => provider.loadingImportMemories = true);
-                  //     // open file picker
-                  //     var file = await FilePicker.platform.pickFiles(
-                  //       type: FileType.custom,
-                  //       allowedExtensions: ['json'],
-                  //     );
-                  //     MixpanelManager().importMemories();
-                  //     if (file == null) {
-                  //       setState(() => provider.loadingImportMemories = false);
-                  //       return;
-                  //     }
-                  //     var xFile = file.files.first.xFile;
-                  //     try {
-                  //       var content = (await xFile.readAsString());
-                  //       var decoded = jsonDecode(content);
-                  //       // Export uses [ServerMemory] structure
-                  //       List<ServerMemory> memories =
-                  //           decoded.map<ServerMemory>((e) => ServerMemory.fromJson(e)).toList();
-                  //       debugPrint('Memories: $memories');
-                  //       var memoriesJson = memories.map((m) => m.toJson()).toList();
-                  //       bool result = await migrateMemoriesToBackend(memoriesJson);
-                  //       if (!result) {
-                  //         SharedPreferencesUtil().scriptMigrateMemoriesToBack = false;
-                  //         _snackBar('Failed to import memories. Make sure the file is a valid JSON file.', seconds: 3);
-                  //       }
-                  //       _snackBar('Memories imported, restart the app to see the changes. 🎉', seconds: 3);
-                  //       MixpanelManager().importedMemories();
-                  //       SharedPreferencesUtil().scriptMigrateMemoriesToBack = true;
-                  //     } catch (e) {
-                  //       debugPrint(e.toString());
-                  //       _snackBar('Make sure the file is a valid JSON file.');
-                  //     }
-                  //     setState(() => provider.loadingImportMemories = false);
-                  //   },
-                  // ),
-                  const SizedBox(height: 16),
-                  Divider(color: Colors.grey.shade500),
-                  const SizedBox(height: 16),
+
+                  const SizedBox(height: 32),
+
+                  // Knowledge Graph Section
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1C1C1E),
+                          title: const Text('Delete Knowledge Graph?', style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                            'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(ctx).pop();
+                                try {
+                                  // Call delete endpoint
+                                  await KnowledgeGraphApi.deleteKnowledgeGraph();
+                                  AppSnackbar.showSnackbar('Knowledge Graph deleted successfully');
+                                } catch (e) {
+                                  AppSnackbar.showSnackbarError('Failed to delete graph: $e');
+                                }
+                              },
+                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.trash,
+                                color: Colors.redAccent.shade100,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Delete Knowledge Graph',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Clear all nodes and connections',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Developer API Keys Section
                   const DeveloperApiKeysSection(),
                   const SizedBox(height: 16),
                   Divider(color: Colors.grey.shade500),
@@ -502,7 +546,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           decoration: _getTextFieldDecoration('Endpoint URL'),
                           style: const TextStyle(color: Colors.white),
                         ),
-                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Goal Tracker
+                        _buildExperimentalItem(
+                          title: 'Goal Tracker',
+                          description: 'Track your personal goals on homepage',
+                          icon: FontAwesomeIcons.bullseye,
+                          value: provider.showDailyGradeEnabled,
+                          onChanged: provider.onShowDailyGradeChanged,
+                        ),
                       ],
                       onSectionEnabledChanged: provider.onTranscriptsToggled),
                   ToggleSectionWidget(
@@ -631,6 +686,37 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildExperimentalItem({
+    required String title,
+    required String description,
+    required IconData icon,
+    required bool value,
+    required Function(bool?) onChanged,
+  }) {
+    return CheckboxListTile(
+      contentPadding: const EdgeInsets.all(0),
+      title: Row(
+        children: [
+          FaIcon(icon, size: 16, color: Colors.white70),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+          ),
+        ],
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(left: 28),
+        child: Text(
+          description,
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+      ),
+      value: value,
+      onChanged: onChanged,
     );
   }
 

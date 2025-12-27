@@ -4,6 +4,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class OmiMessageInput extends AdaptiveWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String hint;
   final EdgeInsetsGeometry? margin;
   final double maxHeight;
@@ -11,6 +12,7 @@ class OmiMessageInput extends AdaptiveWidget {
   const OmiMessageInput({
     super.key,
     required this.controller,
+    this.focusNode,
     this.hint = '💬 Type your message...',
     this.margin,
     this.maxHeight = 120,
@@ -32,6 +34,7 @@ class OmiMessageInput extends AdaptiveWidget {
       ),
       child: TextField(
         controller: controller,
+        focusNode: focusNode,
         maxLines: null,
         keyboardType: TextInputType.multiline,
         style: const TextStyle(

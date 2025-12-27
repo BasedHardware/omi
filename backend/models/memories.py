@@ -119,6 +119,7 @@ class MemoryDB(Memory):
     app_id: Optional[str] = None
     data_protection_level: Optional[str] = None
     is_locked: bool = False
+    kg_extracted: bool = False
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -147,7 +148,7 @@ class MemoryDB(Memory):
             conversation_id=conversation_id,
             manually_added=manually_added,
             user_review=True if manually_added else None,
-            reviewed=True if manually_added else False,
+            reviewed=True,
             visibility=memory.visibility,
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)

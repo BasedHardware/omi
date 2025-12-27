@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -15,6 +16,8 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/constants.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class SpeechProfileProvider extends ChangeNotifier
     with MessageNotifierMixin
@@ -48,12 +51,25 @@ class SpeechProfileProvider extends ChangeNotifier
   String message = '';
 
   late Function? _finalizedCallback;
+  late Function? _processConversationCallback;
 
   /// only used during onboarding /////
   String loadingText = 'Uploading your voice profile....';
   ServerConversation? conversation;
 
-  /////////////////////////////////
+  // Onboarding state (questions from server)
+  bool usePhoneMic = false;
+  String currentQuestion = '';
+  int currentQuestionIndex = 0;
+  int totalQuestions = 0;
+
+  double get questionProgress => totalQuestions == 0 ? 0.0 : (currentQuestionIndex / totalQuestions).clamp(0.0, 1.0);
+
+  void skipCurrentQuestion() {
+    if (_socket?.state == SocketServiceState.connected) {
+      _socket?.sendText('{"type": "skip_question"}');
+    }
+  }
 
   void updateLoadingText(String text) {
     loadingText = text;
@@ -83,25 +99,50 @@ class SpeechProfileProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future<void> initialise({Function? finalizedCallback}) async {
+  Future<bool> initialise({
+    Function? finalizedCallback,
+    Function? processConversationCallback,
+    bool usePhoneMic = false,
+  }) async {
     _finalizedCallback = finalizedCallback;
+    _processConversationCallback = processConversationCallback;
     setInitialising(true);
-    device = deviceProvider?.connectedDevice;
+    this.usePhoneMic = usePhoneMic;
 
-    BleAudioCodec codec = await _getAudioCodec(device!.id);
-    audioStorage = WavBytesUtil(codec: codec, framesPerSecond: codec.getFramesPerSecond());
-    await _initiateWebsocket(codec: codec, force: true);
+    try {
+      if (usePhoneMic) {
+        // Phone microphone mode - use PCM16 at 16kHz
+        const codec = BleAudioCodec.pcm16;
+        audioStorage = WavBytesUtil(codec: codec, framesPerSecond: 100);
+        await _initiateWebsocket(codec: codec, sampleRate: 16000, force: true);
 
-    if (device != null) await initiateFriendAudioStreaming();
-    if (_socket?.state != SocketServiceState.connected) {
-      // wait for websocket to connect
-      await Future.delayed(const Duration(seconds: 2));
+        // Start phone mic streaming
+        await _initiatePhoneMicStreaming();
+      } else {
+        // Device mode - use device codec
+        device = deviceProvider?.connectedDevice;
+        BleAudioCodec codec = await _getAudioCodec(device!.id);
+        audioStorage = WavBytesUtil(codec: codec, framesPerSecond: codec.getFramesPerSecond());
+        await _initiateWebsocket(codec: codec, force: true);
+
+        if (device != null) await initiateFriendAudioStreaming();
+      }
+
+      if (_socket?.state != SocketServiceState.connected) {
+        // wait for websocket to connect
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      setInitialised(true);
+      return true;
+    } catch (e) {
+      debugPrint('Error during initialise: $e');
+      notifyError('SOCKET_INIT_FAILED');
+      return false;
+    } finally {
+      setInitialising(false);
+      notifyListeners();
     }
-
-    setInitialising(false);
-    setInitialised(true);
-    // initiateConnectionListener();
-    notifyListeners();
   }
 
   void updateStartedRecording(bool value) {
@@ -119,25 +160,66 @@ class SpeechProfileProvider extends ChangeNotifier
     ServiceManager.instance().device.subscribe(this, this);
   }
 
-  Future<void> _initiateWebsocket({required BleAudioCodec codec, bool force = false}) async {
-    // Connect to the transcript socket
+  Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
     String language =
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
-    int sampleRate = (codec.isOpusSupported() ? 16000 : 8000);
+    int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
     _socket = await ServiceManager.instance()
         .socket
-        .speechProfile(codec: codec, sampleRate: sampleRate, language: language, force: force);
+        .speechProfile(codec: codec, sampleRate: rate, language: language, force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
     _socket?.subscribe(this, this);
   }
 
+  /// Start phone microphone streaming (alternative to BLE device streaming)
+  Future<void> _initiatePhoneMicStreaming() async {
+    debugPrint('Starting phone mic streaming for speech profile...');
+
+    // Request mic permission
+    await Permission.microphone.request();
+
+    await ServiceManager.instance().mic.start(
+      onByteReceived: (Uint8List bytes) {
+        if (bytes.isEmpty) return;
+
+        // Store audio frames for speech profile upload
+        audioStorage.frames.add(bytes.toList());
+
+        // Send to transcription socket
+        if (_socket?.state == SocketServiceState.connected) {
+          _socket?.send(bytes);
+        }
+      },
+      onRecording: () {
+        debugPrint('Phone mic recording started');
+        updateStartedRecording(true);
+      },
+      onStop: () {
+        debugPrint('Phone mic recording stopped');
+      },
+    );
+  }
+
+  /// Stop phone microphone streaming
+  void _stopPhoneMicStreaming() {
+    if (usePhoneMic) {
+      debugPrint('Stopping phone mic streaming');
+      ServiceManager.instance().mic.stop();
+    }
+  }
+
   _handleCompletion() async {
     if (uploadingProfile || profileCompleted) return;
-    String text = segments.map((e) => e.text).join(' ').trim();
-    int wordsCount = text.split(' ').length;
+    // Only count words from user segments, not Omi questions
+    String userText = segments
+        .where((e) => e.speakerId != omiSpeakerId)
+        .map((e) => e.text)
+        .join(' ')
+        .trim();
+    int wordsCount = userText.split(' ').length;
     percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
     notifyListeners();
     if (percentageCompleted == 1) {
@@ -150,38 +232,60 @@ class SpeechProfileProvider extends ChangeNotifier
     try {
       if (uploadingProfile || profileCompleted) return;
 
-      int duration = segments.isEmpty ? 0 : segments.last.end.toInt();
-      if (duration < 10 || duration > 155) {
-        if (percentageCompleted < 80) {
-          notifyError('NO_SPEECH');
-          return;
-        }
-      }
-
-      String text = segments.map((e) => e.text).join(' ').trim();
-      if (text.split(' ').length < (targetWordsCount / 2)) {
-        // 25 words
-        notifyError('TOO_SHORT');
-        return;
-      }
       uploadingProfile = true;
       notifyListeners();
+
+      _stopPhoneMicStreaming();
+
       await _socket?.stop(reason: 'finalizing');
       forceCompletionTimer?.cancel();
       connectionStateListener?.cancel();
       _bleBytesStream?.cancel();
 
       updateLoadingText('Memorizing your voice...');
+      debugPrint('Creating WAV file...');
       var data = await audioStorage.createWavFile(filename: 'speaker_profile.wav');
+      debugPrint('WAV file created, uploading profile...');
+
+      bool uploadSuccess = false;
       try {
-        await uploadProfile(data.item1);
-      } catch (e) {}
+        uploadSuccess = await uploadProfile(data.item1).timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            debugPrint('Profile upload timed out after 30 seconds');
+            return false;
+          },
+        );
+        debugPrint('Profile upload completed: $uploadSuccess');
+      } catch (e) {
+        debugPrint('Error uploading profile: $e');
+        uploadSuccess = false;
+      }
+
+      if (!uploadSuccess) {
+        // Upload failed - notify user but still process conversation
+        uploadingProfile = false;
+        notifyError('TOO_SHORT');
+
+        // Still trigger conversation processing
+        if (_processConversationCallback != null) {
+          debugPrint('Triggering conversation processing despite upload failure...');
+          _processConversationCallback!();
+        }
+        return;
+      }
+
+      SharedPreferencesUtil().hasSpeakerProfile = true;
+      debugPrint('Speaker profile saved to preferences');
 
       updateLoadingText('Personalizing your experience...');
-      SharedPreferencesUtil().hasSpeakerProfile = true;
-      // if (_isFromOnboarding) {
-      //   await createMemory();
-      // }
+
+      // Trigger conversation processing before marking complete
+      if (_processConversationCallback != null) {
+        debugPrint('Triggering conversation processing...');
+        _processConversationCallback!();
+      }
+
       uploadingProfile = false;
       profileCompleted = true;
       text = '';
@@ -240,10 +344,13 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   _validateSingleSpeaker() {
-    int speakersCount = segments.map((e) => e.speaker).toSet().length;
+    // Filter out Omi question segments for speaker validation
+    final userSegments = segments.where((e) => e.speakerId != omiSpeakerId).toList();
+    
+    int speakersCount = userSegments.map((e) => e.speaker).toSet().length;
     debugPrint('_validateSingleSpeaker speakers count: $speakersCount');
     if (speakersCount > 1) {
-      var speakerToWords = segments.fold<Map<int, int>>(
+      var speakerToWords = userSegments.fold<Map<int, int>>(
         {},
         (previousValue, element) {
           previousValue[element.speakerId] = (previousValue[element.speakerId] ?? 0) + element.text.split(' ').length;
@@ -251,7 +358,7 @@ class SpeechProfileProvider extends ChangeNotifier
         },
       );
       debugPrint('speakerToWords: $speakerToWords');
-      if (speakerToWords.values.every((element) => element / segments.length > 0.08)) {
+      if (speakerToWords.values.every((element) => element / userSegments.length > 0.08)) {
         notifyError('MULTIPLE_SPEAKERS');
       }
     }
@@ -276,7 +383,12 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   void updateProgressMessage() {
-    text = segments.map((e) => e.text).join(' ').trim();
+    // Only show user's speech, not Omi questions
+    text = segments
+        .where((e) => e.speakerId != omiSpeakerId)
+        .map((e) => e.text)
+        .join(' ')
+        .trim();
     int wordsCount = text.split(' ').length;
     message = 'Keep speaking until you get 100%.';
     if (wordsCount > 10) {
@@ -293,19 +405,27 @@ class SpeechProfileProvider extends ChangeNotifier
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
+
+    _stopPhoneMicStreaming();
+
     segments.clear();
     text = '';
+    currentQuestion = '';
+    currentQuestionIndex = 0;
+    totalQuestions = 0;
     startedRecording = false;
     percentageCompleted = 0;
     uploadingProfile = false;
     profileCompleted = false;
+    usePhoneMic = false;
+    _processConversationCallback = null;
+
     await _socket?.stop(reason: 'closing');
     notifyListeners();
   }
 
   @override
   void dispose() {
-    // This won't be called unless the provider is removed from the widget tree. So we need to manually call this in the widget's dispose method.
     connectionStateListener?.cancel();
     _bleBytesStream?.cancel();
     forceCompletionTimer?.cancel();
@@ -346,38 +466,72 @@ class SpeechProfileProvider extends ChangeNotifier
 
   @override
   void onClosed([int? closeCode]) {
-    // TODO: implement onClosed
+    debugPrint('Speech profile socket closed with code: $closeCode');
+    // Only notify error if we're still recording and not completed
+    if (startedRecording && !profileCompleted && !uploadingProfile) {
+      notifyError('SOCKET_DISCONNECTED');
+    }
   }
 
   @override
   void onError(Object err) {
-    notifyError('WS_ERR');
+    debugPrint('Speech profile socket error: $err');
+    if (startedRecording && !profileCompleted && !uploadingProfile) {
+      notifyError('SOCKET_ERROR');
+    }
   }
 
   @override
   void onMessageEventReceived(MessageEvent event) {
-    // TODO: implement onMessageEventReceived
+    debugPrint('onMessageEventReceived: ${event.eventType}');
+
+    if (event is OnboardingQuestionEvent) {
+      currentQuestion = event.question;
+      currentQuestionIndex = event.questionIndex;
+      totalQuestions = event.totalQuestions;
+      debugPrint('Received question ${event.questionIndex + 1}/${event.totalQuestions}: ${event.question}');
+      notifyListeners();
+    } else if (event is OnboardingQuestionAnsweredEvent) {
+      debugPrint('Question ${event.questionIndex} answered');
+      notifyInfo('NEXT_QUESTION');
+    } else if (event is OnboardingCompleteEvent) {
+      debugPrint('Onboarding complete from backend: conversationId=${event.conversationId}');
+      finalize();
+    }
   }
 
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
     if (newSegments.isEmpty) return;
-    if (segments.isEmpty) {
-      audioStorage.removeFramesRange(fromSecond: 0, toSecond: newSegments[0].start.toInt());
-    }
-    streamStartedAtSecond ??= newSegments[0].start;
 
-    var remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    TranscriptSegment.combineSegments(
-      segments,
-      remainSegments,
-      toRemoveSeconds: streamStartedAtSecond ?? 0,
-    );
-    updateProgressMessage();
+    debugPrint('onSegmentReceived: ${newSegments.length} new segments, existing: ${segments.length}');
+
+    // Filter out Omi question segments for audio trimming calculation
+    final userSegments = newSegments.where((s) => s.speakerId != omiSpeakerId).toList();
+
+    if (segments.isEmpty && userSegments.isNotEmpty) {
+      audioStorage.removeFramesRange(fromSecond: 0, toSecond: userSegments[0].start.toInt());
+    }
+    if (userSegments.isNotEmpty) {
+      streamStartedAtSecond ??= userSegments[0].start;
+    }
+
+    final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
+    segments.addAll(remainSegments);
+
+    // Validate single speaker (exclude Omi segments)
     _validateSingleSpeaker();
-    _handleCompletion();
+
+    // Display only user's speech, not Omi's questions
+    text = segments
+        .where((e) => e.speakerId != omiSpeakerId)
+        .map((e) => e.text)
+        .join(' ')
+        .trim();
+    percentageCompleted = questionProgress;
+
     notifyInfo('SCROLL_DOWN');
-    debugPrint('Conversation creation timer restarted');
+    notifyListeners();
   }
 
   @override

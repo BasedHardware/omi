@@ -9,6 +9,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
+import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -65,6 +66,15 @@ class _AppShellState extends State<AppShell> {
           debugPrint('App not found: ${uri.pathSegments[1]}');
           AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
         }
+      }
+    } else if (uri.pathSegments.first == 'wrapped') {
+      if (mounted) {
+        PlatformManager.instance.mixpanel.track('Wrapped Opened From DeepLink');
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => const Wrapped2025Page(),
+          ),
+        );
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback

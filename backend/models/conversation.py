@@ -252,6 +252,7 @@ class ConversationSource(str, Enum):
     sdcard = 'sdcard'
     external_integration = 'external_integration'
     limitless = 'limitless'
+    onboarding = 'onboarding'
 
 
 class ConversationVisibility(str, Enum):
@@ -324,6 +325,7 @@ class Conversation(BaseModel):
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
     data_protection_level: Optional[str] = None
+    folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
 
     def __init__(self, **data):
         super().__init__(**data)

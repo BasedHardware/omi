@@ -5,10 +5,11 @@ import struct
 import threading
 import time
 import wave
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import StreamingResponse
 from opuslib import Decoder
 from pydub import AudioSegment
@@ -24,6 +25,8 @@ from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
     download_audio_chunks_and_merge,
+    get_or_create_merged_audio,
+    get_merged_audio_signed_url,
 )
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
@@ -48,6 +51,209 @@ def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> 
     return wav_buffer.getvalue()
 
 
+def parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | None:
+    """
+    Parse HTTP Range header and return (start, end) tuple.
+    Returns None if the range is invalid.
+
+    Example: "bytes=0-1023" -> (0, 1023)
+    """
+    if not range_header:
+        return None
+
+    try:
+        # Parse "bytes=start-end" format
+        if not range_header.startswith("bytes="):
+            return None
+
+        range_spec = range_header[6:]
+        parts = range_spec.split("-")
+
+        if len(parts) != 2:
+            return None
+
+        start_str, end_str = parts
+
+        # Handle "bytes=start-" (from start to end of file)
+        if start_str and not end_str:
+            start = int(start_str)
+            end = file_size - 1
+        # Handle "bytes=-suffix" (last N bytes)
+        elif not start_str and end_str:
+            suffix_length = int(end_str)
+            start = max(0, file_size - suffix_length)
+            end = file_size - 1
+        # Handle "bytes=start-end"
+        else:
+            start = int(start_str)
+            end = int(end_str)
+
+        # RFC 7233: start must be valid, end can exceed file size and gets clamped
+        if start < 0 or start >= file_size or start > end:
+            return None
+        end = min(end, file_size - 1)
+        return (start, end)
+    except (ValueError, IndexError):
+        return None
+
+
+# **********************************************
+# ********** AUDIO PRE-CACHING *****************
+# **********************************************
+
+
+def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict):
+    """Pre-cache a single audio file."""
+    try:
+        audio_file_id = audio_file.get('id')
+        timestamps = audio_file.get('chunk_timestamps')
+        if not audio_file_id or not timestamps:
+            return
+
+        get_or_create_merged_audio(
+            uid=uid,
+            conversation_id=conversation_id,
+            audio_file_id=audio_file_id,
+            timestamps=timestamps,
+            pcm_to_wav_func=pcm_to_wav,
+        )
+        print(f"Pre-cached audio file: {audio_file_id}")
+    except Exception as e:
+        print(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
+
+
+@router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
+def precache_conversation_audio_endpoint(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Warm the audio cache for a conversation.
+    Returns immediately - caching happens in background.
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    audio_files = conversation.get('audio_files', [])
+    if not audio_files:
+        return {"status": "no_audio", "message": "No audio files in conversation"}
+
+    # Start background parallel pre-caching for all audio files
+    def _precache_all_parallel():
+        print(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
+            # Wait for all to complete
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Error in parallel precache: {e}")
+        print(f"Completed pre-cache for conversation {conversation_id}")
+
+    thread = threading.Thread(target=_precache_all_parallel, daemon=True)
+    thread.start()
+
+    return {"status": "started", "audio_file_count": len(audio_files)}
+
+
+@router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
+def get_audio_signed_urls_endpoint(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Get signed URLs for all audio files in a conversation.
+    Synchronously caches the first uncached file for immediate playback.
+    Remaining files are cached in background.
+
+    Returns:
+        List of audio file info with signed_url (if cached) or status "pending"
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    audio_files = conversation.get('audio_files', [])
+    if not audio_files:
+        return {"audio_files": []}
+
+    result = []
+    uncached_files = []
+    first_uncached_handled = False
+
+    for af in audio_files:
+        audio_file_id = af.get('id')
+        if not audio_file_id:
+            continue
+
+        signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
+
+        if signed_url:
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "cached",
+                    "signed_url": signed_url,
+                    "duration": af.get('duration', 0),
+                }
+            )
+        else:
+            # First uncached file: cache synchronously for immediate playback
+            if not first_uncached_handled:
+                first_uncached_handled = True
+                _precache_audio_file(uid, conversation_id, af)
+                # Get signed URL after caching
+                signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
+                if signed_url:
+                    result.append(
+                        {
+                            "id": audio_file_id,
+                            "status": "cached",
+                            "signed_url": signed_url,
+                            "duration": af.get('duration', 0),
+                        }
+                    )
+                else:
+                    # Cache failed, return pending
+                    result.append(
+                        {
+                            "id": audio_file_id,
+                            "status": "pending",
+                            "signed_url": None,
+                            "duration": af.get('duration', 0),
+                        }
+                    )
+            else:
+                result.append(
+                    {
+                        "id": audio_file_id,
+                        "status": "pending",
+                        "signed_url": None,
+                        "duration": af.get('duration', 0),
+                    }
+                )
+                uncached_files.append(af)
+
+    # Cache remaining files in background
+    if uncached_files:
+
+        def _cache_uncached_parallel():
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(_precache_audio_file, uid, conversation_id, af) for af in uncached_files]
+                for future in futures:
+                    try:
+                        future.result()
+                    except Exception as e:
+                        print(f"Error in parallel cache: {e}")
+
+        thread = threading.Thread(target=_cache_uncached_parallel, daemon=True)
+        thread.start()
+
+    return {"audio_files": result}
+
+
 # **********************************************
 # ********** AUDIO DOWNLOAD ENDPOINT ***********
 # **********************************************
@@ -57,6 +263,7 @@ def pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) -> 
 def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
+    request: Request,
     format: str = Query(default="wav", regex="^(wav|pcm)$"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -67,11 +274,13 @@ def download_audio_file_endpoint(
     Args:
         conversation_id: ID of the conversation
         audio_file_id: ID of the audio file within the conversation
+        request: FastAPI Request object (for Range header)
         format: Output format - 'wav' or 'pcm' (raw) (default: wav)
         uid: User ID (from authentication)
 
     Returns:
-        StreamingResponse with the audio file in the requested format
+        StreamingResponse with the audio file in the requested format.
+        Returns 206 Partial Content for Range requests, 200 OK for full file.
     """
     # Verify user owns the conversation
     conversation = conversations_db.get_conversation(uid, conversation_id)
@@ -89,36 +298,79 @@ def download_audio_file_endpoint(
     if not audio_file:
         raise HTTPException(status_code=404, detail="Audio file not found in conversation")
 
-    # Get PCM data by merging chunks on-demand
+    # Get audio data - use cache if available, otherwise merge and cache
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
-        pcm_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+        if format == "wav":
+            audio_data, was_cached = get_or_create_merged_audio(
+                uid=uid,
+                conversation_id=conversation_id,
+                audio_file_id=audio_file_id,
+                timestamps=audio_file['chunk_timestamps'],
+                pcm_to_wav_func=pcm_to_wav,
+            )
+            content_type = "audio/wav"
+            extension = "wav"
+        else:
+            audio_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
+            content_type = "application/octet-stream"
+            extension = "pcm"
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Audio chunks not found in storage")
     except Exception as e:
         print(f"Error downloading audio file: {e}")
         raise HTTPException(status_code=500, detail="Failed to download audio file")
 
-    # Convert to requested format
-    if format == "wav":
-        audio_data = pcm_to_wav(pcm_data)
-        content_type = "audio/wav"
-        extension = "wav"
-    else:  # pcm (raw)
-        audio_data = pcm_data
-        content_type = "application/octet-stream"
-        extension = "pcm"
-
     # Create descriptive filename
     filename = f"conversation_{conversation_id}_audio_{audio_file_id}.{extension}"
+    file_size = len(audio_data)
 
-    # Return streaming response
+    base_headers = {
+        "Content-Disposition": f"attachment; filename={filename}",
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=3600",
+    }
+
+    range_header = request.headers.get("Range")
+
+    if range_header:
+        # Parse the range request
+        range_tuple = parse_range_header(range_header, file_size)
+
+        if range_tuple is None:
+            return Response(
+                status_code=416,
+                headers={
+                    "Content-Range": f"bytes */{file_size}",
+                    **base_headers,
+                },
+            )
+
+        start, end = range_tuple
+        content_length = end - start + 1
+
+        # Return partial content
+        return StreamingResponse(
+            io.BytesIO(audio_data[start : end + 1]),
+            status_code=206,
+            media_type=content_type,
+            headers={
+                "Content-Length": str(content_length),
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                **base_headers,
+            },
+        )
+
     return StreamingResponse(
         io.BytesIO(audio_data),
+        status_code=200,
         media_type=content_type,
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Length": str(file_size),
+            **base_headers,
+        },
     )
 
 
@@ -132,48 +384,60 @@ import wave
 
 
 def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, channels=1, frame_size: int = 160):
-    """Decode an Opus file with length-prefixed frames to WAV format."""
+    """Decode an Opus file with length-prefixed frames to WAV format.
+
+    Writes directly to WAV file to avoid accumulating all PCM data in memory.
+    """
     if not os.path.exists(opus_file_path):
         print(f"File not found: {opus_file_path}")
         return False
 
     decoder = Decoder(sample_rate, channels)
-    with open(opus_file_path, 'rb') as f:
-        pcm_data = []
-        frame_count = 0
-        while True:
-            length_bytes = f.read(4)
-            if not length_bytes:
-                print("End of file reached.")
-                break
-            if len(length_bytes) < 4:
-                print("Incomplete length prefix at the end of the file.")
-                break
+    frame_count = 0
 
-            frame_length = struct.unpack('<I', length_bytes)[0]
-            opus_data = f.read(frame_length)
-            if len(opus_data) < frame_length:
-                print(f"Unexpected end of file at frame {frame_count}.")
-                break
-            try:
-                pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
-                pcm_data.append(pcm_frame)
-                frame_count += 1
-            except Exception as e:
-                print(f"Error decoding frame {frame_count}: {e}")
-                break
-        if pcm_data:
-            pcm_bytes = b''.join(pcm_data)
-            with wave.open(wav_file_path, 'wb') as wav_file:
-                wav_file.setnchannels(channels)
-                wav_file.setsampwidth(2)  # 16-bit audio
-                wav_file.setframerate(sample_rate)
-                wav_file.writeframes(pcm_bytes)
+    try:
+        with open(opus_file_path, 'rb') as f, wave.open(wav_file_path, 'wb') as wav_file:
+            wav_file.setnchannels(channels)
+            wav_file.setsampwidth(2)  # 16-bit audio
+            wav_file.setframerate(sample_rate)
+
+            while True:
+                length_bytes = f.read(4)
+                if not length_bytes:
+                    print("End of file reached.")
+                    break
+                if len(length_bytes) < 4:
+                    print("Incomplete length prefix at the end of the file.")
+                    break
+
+                frame_length = struct.unpack('<I', length_bytes)[0]
+                opus_data = f.read(frame_length)
+                if len(opus_data) < frame_length:
+                    print(f"Unexpected end of file at frame {frame_count}.")
+                    break
+                try:
+                    pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
+                    wav_file.writeframes(pcm_frame)  # Write directly to file
+                    frame_count += 1
+                except Exception as e:
+                    print(f"Error decoding frame {frame_count}: {e}")
+                    break
+
+        if frame_count > 0:
             print(f"Decoded audio saved to {wav_file_path}")
             return True
         else:
             print("No PCM data was decoded.")
+            # Clean up empty/invalid wav file
+            if os.path.exists(wav_file_path):
+                os.remove(wav_file_path)
             return False
+    except Exception as e:
+        print(f"Error during decode: {e}")
+        # Clean up on error
+        if os.path.exists(wav_file_path):
+            os.remove(wav_file_path)
+        return False
 
 
 def get_timestamp_from_path(path: str):
@@ -215,6 +479,18 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
     return paths
 
 
+def get_wav_duration(wav_path: str) -> float:
+    """Get WAV file duration without loading entire file into memory."""
+    try:
+        with wave.open(wav_path, 'rb') as wav_file:
+            frames = wav_file.getnframes()
+            rate = wav_file.getframerate()
+            return frames / float(rate)
+    except Exception as e:
+        print(f"Error reading WAV duration: {e}")
+        return 0.0
+
+
 def decode_files_to_wav(files_path: List[str]):
     wav_files = []
     for path in files_path:
@@ -231,26 +507,40 @@ def decode_files_to_wav(files_path: List[str]):
 
         success = decode_opus_file_to_wav(path, wav_path, frame_size=frame_size)
         if not success:
+            # Clean up .bin file even on decode failure
+            if os.path.exists(path):
+                os.remove(path)
             continue
 
-        try:
-            aseg = AudioSegment.from_wav(wav_path)
-        except Exception as e:
-            print(e)
-            raise HTTPException(status_code=400, detail=f"Invalid file format {path}, {e}")
+        # Always remove .bin file after decode attempt
+        if os.path.exists(path):
+            os.remove(path)
 
-        if aseg.duration_seconds < 1:
+        # Check duration without loading entire file into memory
+        duration = get_wav_duration(wav_path)
+        if duration == 0:
+            # Invalid WAV file
+            if os.path.exists(wav_path):
+                os.remove(wav_path)
+            raise HTTPException(status_code=400, detail=f"Invalid file format {path}")
+
+        if duration < 1:
             os.remove(wav_path)
             continue
         wav_files.append(wav_path)
-        if os.path.exists(path):
-            os.remove(path)
     return wav_files
 
 
-def retrieve_vad_segments(path: str, segmented_paths: set):
-    start_timestamp = get_timestamp_from_path(path)
-    voice_segments = vad_is_empty(path, return_segments=True, cache=True)
+def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+    try:
+        start_timestamp = get_timestamp_from_path(path)
+        voice_segments = vad_is_empty(path, return_segments=True, cache=True)
+    except Exception as e:
+        error_msg = f"VAD failed for {path}: {str(e)}"
+        print(error_msg)
+        if errors is not None:
+            errors.append(error_msg)
+        raise  # Re-raise to ensure thread failure is visible
 
     segments = []
     # should we merge more aggressively, to avoid too many small segments? ~ not for now
@@ -272,14 +562,21 @@ def retrieve_vad_segments(path: str, segmented_paths: set):
 
     aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
-    for i, segment in enumerate(segments):
-        if (segment['end'] - segment['start']) < 1:
-            continue
-        segment_timestamp = start_timestamp + segment['start']
-        segment_path = f'{path_dir}/{segment_timestamp}.wav'
-        segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
-        segment_aseg.export(segment_path, format='wav')
-        segmented_paths.add(segment_path)
+
+    try:
+        for i, segment in enumerate(segments):
+            if (segment['end'] - segment['start']) < 1:
+                continue
+            segment_timestamp = start_timestamp + segment['start']
+            segment_path = f'{path_dir}/{segment_timestamp}.wav'
+            segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
+            segment_aseg.export(segment_path, format='wav')
+            segmented_paths.add(segment_path)
+            # Explicitly delete segment to free memory immediately
+            del segment_aseg
+    finally:
+        # Explicitly delete main audio to free memory
+        del aseg
 
 
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
@@ -382,6 +679,16 @@ def process_segment(path: str, uid: str, response: dict, source: ConversationSou
             _reprocess_conversation_after_update(uid, closest_memory['id'], language)
 
 
+def _cleanup_files(file_paths):
+    """Helper to clean up temporary files."""
+    for path in file_paths:
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception as e:
+            print(f"Failed to cleanup file {path}: {e}")
+
+
 @router.post("/v1/sync-local-files")
 async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depends(auth.get_current_user_uid)):
     # Improve a version without timestamp, to consider uploads from the stored in v2 device bytes.
@@ -392,35 +699,59 @@ async def sync_local_files(files: List[UploadFile] = File(...), uid: str = Depen
             source = ConversationSource.limitless
             break
 
-    paths = retrieve_file_paths(files, uid)
-    wav_paths = decode_files_to_wav(paths)
-
-    def chunk_threads(threads):
-        chunk_size = 5
-        for i in range(0, len(threads), chunk_size):
-            [t.start() for t in threads[i : i + chunk_size]]
-            [t.join() for t in threads[i : i + chunk_size]]
-
+    paths = []
+    wav_paths = []
     segmented_paths = set()
-    threads = [threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths)) for path in wav_paths]
-    chunk_threads(threads)
 
-    print('sync_local_files len(segmented_paths)', len(segmented_paths))
+    try:
+        paths = retrieve_file_paths(files, uid)
+        wav_paths = decode_files_to_wav(paths)
 
-    response = {'updated_memories': set(), 'new_memories': set()}
-    threads = [
-        threading.Thread(
-            target=process_segment,
-            args=(
-                path,
-                uid,
-                response,
-                source,
-            ),
-        )
-        for path in segmented_paths
-    ]
-    chunk_threads(threads)
+        def chunk_threads(threads):
+            chunk_size = 5
+            for i in range(0, len(threads), chunk_size):
+                [t.start() for t in threads[i : i + chunk_size]]
+                [t.join() for t in threads[i : i + chunk_size]]
 
-    # notify through FCM too ?
-    return response
+        vad_errors = []
+        threads = [
+            threading.Thread(target=retrieve_vad_segments, args=(path, segmented_paths, vad_errors))
+            for path in wav_paths
+        ]
+        chunk_threads(threads)
+
+        # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
+        _cleanup_files(wav_paths)
+        wav_paths = []  # Clear to avoid double cleanup in finally
+
+        # Check for VAD errors - if any failed, abort to prevent data loss
+        if vad_errors:
+            error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
+            if len(vad_errors) > 3:
+                error_detail += f" (and {len(vad_errors) - 3} more)"
+            raise HTTPException(status_code=500, detail=error_detail)
+
+        print('sync_local_files len(segmented_paths)', len(segmented_paths))
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        threads = [
+            threading.Thread(
+                target=process_segment,
+                args=(
+                    path,
+                    uid,
+                    response,
+                    source,
+                ),
+            )
+            for path in segmented_paths
+        ]
+        chunk_threads(threads)
+
+        # notify through FCM too ?
+        return response
+    finally:
+        # Clean up any remaining temporary files
+        _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
+        _cleanup_files(wav_paths)  # Original wav files (if VAD didn't complete)
+        _cleanup_files(segmented_paths)  # Segmented wav files after processing

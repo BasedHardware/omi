@@ -67,24 +67,17 @@ def vad_is_empty(file_path, return_segments: bool = False, cache: bool = False):
                 return exists
             return len(exists) == 0
 
-    try:
-        # file_duration = AudioSegment.from_wav(file_path).duration_seconds
-        # print('vad_is_empty file duration:', file_duration)
-        with open(file_path, 'rb') as file:
-            files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
-            response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)
-            segments = response.json()
-            if cache:
-                redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
-            if return_segments:
-                return segments
-            print('vad_is_empty', len(segments) == 0)  # compute % of empty files in someway
-            return len(segments) == 0  # but also check likelyhood of silence if only 1 segment?
-    except Exception as e:
-        print('vad_is_empty', e)
+    with open(file_path, 'rb') as file:
+        files = {'file': (file_path.split('/')[-1], file, 'audio/wav')}
+        response = requests.post(os.getenv('HOSTED_VAD_API_URL'), files=files)
+        response.raise_for_status()  # Raise exception for HTTP errors
+        segments = response.json()
+        if cache:
+            redis_db.set_generic_cache(caching_key, segments, ttl=60 * 60 * 24)
         if return_segments:
-            return []
-        return False
+            return segments
+        print('vad_is_empty', len(segments) == 0)
+        return len(segments) == 0
 
 
 def apply_vad_for_speech_profile(file_path: str):
@@ -99,14 +92,22 @@ def apply_vad_for_speech_profile(file_path: str):
         else:
             joined_segments.append(segment)
 
-    # trim silence out of file_path, but leave 1 sec of silence within chunks
-    trimmed_aseg = AudioSegment.empty()
-    for i, segment in enumerate(joined_segments):
-        start = segment['start'] * 1000
-        end = segment['end'] * 1000
-        trimmed_aseg += AudioSegment.from_wav(file_path)[start:end]
-        if i < len(joined_segments) - 1:
-            trimmed_aseg += AudioSegment.from_wav(file_path)[end : end + 1000]
+    # Load audio file once instead of repeatedly in the loop
+    full_audio = AudioSegment.from_wav(file_path)
 
-    # file_path.replace('.wav', '-cleaned.wav')
-    trimmed_aseg.export(file_path, format="wav")
+    try:
+        # trim silence out of file_path, but leave 1 sec of silence within chunks
+        trimmed_aseg = AudioSegment.empty()
+        for i, segment in enumerate(joined_segments):
+            start = segment['start'] * 1000
+            end = segment['end'] * 1000
+            trimmed_aseg += full_audio[start:end]
+            if i < len(joined_segments) - 1:
+                trimmed_aseg += full_audio[end : end + 1000]
+
+        # file_path.replace('.wav', '-cleaned.wav')
+        trimmed_aseg.export(file_path, format="wav")
+    finally:
+        # Explicitly free memory
+        del full_audio
+        del trimmed_aseg

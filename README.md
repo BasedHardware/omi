@@ -16,7 +16,8 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 [![Discord Follow](https://img.shields.io/discord/1192313062041067520?label=Discord)](http://discord.omi.me) &ensp;&ensp;&ensp;
 [![Twitter Follow](https://img.shields.io/twitter/follow/kodjima33)](https://x.com/kodjima33) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
-[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)
+[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)&ensp;&ensp;&ensp;
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BasedHardware/omi)
 
 <h3>
 

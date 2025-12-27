@@ -14,9 +14,9 @@ from utils.stt.soniox_util import *
 headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
 
 # Speech profile constants
-SPEECH_PROFILE_FIXED_DURATION = 30
+SPEECH_PROFILE_FIXED_DURATION = 10
 SPEECH_PROFILE_PADDING_DURATION = 5
-SPEECH_PROFILE_STABILIZE_DELAY = 35
+SPEECH_PROFILE_STABILIZE_DELAY = 15
 
 
 class STTService(str, Enum):

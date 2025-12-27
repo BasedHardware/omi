@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -27,14 +28,14 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              value ? 'Private Cloud Sync enabled' : 'Private Cloud Sync disabled',
+              value ? 'Cloud storage enabled' : 'Cloud storage disabled',
             ),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
-      print('Error toggling private cloud sync: $e');
+      print('Error toggling cloud storage: $e');
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -51,34 +52,32 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Enable Private Cloud Sync', style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Your real-time recordings will be stored in the private cloud storage as you speak. Audio is captured and saved securely during conversations.',
-              style: TextStyle(color: Colors.white70, fontSize: 16, height: 1.4),
-            ),
-          ],
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Enable Cloud Storage',
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        content: Text(
+          'Your real-time recordings will be stored in private cloud storage as you speak.',
+          style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade500)),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Enable'),
+            child: const Text('Enable', style: TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 2, top: 1),
+      child: FaIcon(icon, size: size, color: color),
     );
   }
 
@@ -90,75 +89,95 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
         final isLoading = userProvider.isLoading;
 
         return Scaffold(
+          backgroundColor: const Color(0xFF0D0D0D),
           appBar: AppBar(
-            title: const Text('Private Cloud Sync'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            backgroundColor: const Color(0xFF0D0D0D),
+            elevation: 0,
+            leading: IconButton(
+              icon: _buildFaIcon(FontAwesomeIcons.chevronLeft, size: 18, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: const Text('Store Audio on Cloud',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            centerTitle: true,
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
           body: isLoading
               ? const Center(child: CircularProgressIndicator(color: Colors.white))
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Main toggle card
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.circular(16),
+                          color: const Color(0xFF1C1C1E),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
                               children: [
-                                const Text(
-                                  'Private Cloud Sync',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
+                                _buildFaIcon(FontAwesomeIcons.cloud, size: 20, color: Colors.deepPurpleAccent),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Text(
+                                    'Store Audio on Cloud',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  isEnabled ? 'On' : 'Off',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isEnabled ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                                    borderRadius: BorderRadius.circular(100),
+                                  ),
+                                  child: Text(
+                                    isEnabled ? 'On' : 'Off',
+                                    style: TextStyle(
+                                      color: isEnabled ? Colors.green : Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 20),
                             Text(
-                              'Private Cloud Sync stores your real-time recordings in the cloud as you speak. Your audio is captured and securely saved to the private cloud storage in real-time.',
+                              'Store your real-time recordings in private cloud storage as you speak. Audio is captured and saved securely in real-time.',
                               style: TextStyle(
-                                color: Colors.grey.shade300,
-                                fontSize: 15,
-                                height: 1.4,
+                                color: Colors.grey.shade400,
+                                fontSize: 14,
+                                height: 1.5,
                               ),
                             ),
+                            const SizedBox(height: 24),
+                            const Divider(height: 1, color: Color(0xFF3C3C43)),
                             const SizedBox(height: 20),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 const Text(
-                                  'Enable Private Cloud Sync',
+                                  'Enable Cloud Storage',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                CupertinoSwitch(
-                                  value: isEnabled,
-                                  onChanged: _isSaving ? null : _togglePrivateCloudSync,
-                                  activeColor: Colors.deepPurpleAccent,
+                                Transform.scale(
+                                  scale: 0.85,
+                                  child: CupertinoSwitch(
+                                    value: isEnabled,
+                                    onChanged: _isSaving ? null : _togglePrivateCloudSync,
+                                    activeTrackColor: Colors.deepPurpleAccent,
+                                  ),
                                 ),
                               ],
                             ),

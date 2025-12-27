@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:provider/provider.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
@@ -636,40 +637,13 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   CalendarDatePicker2(
-                    config: CalendarDatePicker2Config(
-                      calendarType: CalendarDatePicker2Type.single,
+                    config: getDefaultCalendarConfig(
                       firstDate: now,
                       currentDate: now,
                       lastDate: (widget.initialDateTime ?? now).add(
                         const Duration(days: 365 * 5),
                       ),
-                      disableMonthPicker: true,
                       yearBuilder: yearBuilder,
-                      selectedDayHighlightColor: ResponsiveHelper.purplePrimary,
-                      // todayHighlightColor: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                      dayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                      ),
-                      selectedDayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      todayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.purplePrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      weekdayLabelTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textTertiary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      controlsTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      disabledDayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textQuaternary,
-                      ),
                     ),
                     value: [_selectedDateTime],
                     onValueChanged: (dates) => setState(() {

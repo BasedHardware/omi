@@ -182,7 +182,51 @@ def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
 ):
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if len(statuses) > 0:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    # Apply date range filters if provided
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+
+    # Sort
+    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+
+    # Limits
+    conversations_ref = conversations_ref.limit(limit).offset(offset)
+
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    return conversations
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_without_photos(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    include_discarded: bool = False,
+    statuses: List[str] = [],
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+):
+    """
+    Same as get_conversations but without loading photos.
+    Much faster for bulk operations like Wrapped where photos aren't needed.
+    """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))

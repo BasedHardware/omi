@@ -159,6 +159,8 @@ abstract class DeviceConnection {
     _transportStateSubscription = null;
   }
 
+  Future<void> unpair() async {}
+
   Future<bool> ping() async {
     try {
       final result = await transport.ping();

@@ -33,6 +33,7 @@ abstract interface class ISocketServiceSubsciption {}
 
 class SocketServicePool extends ISocketService {
   TranscriptSegmentSocketService? _socket;
+  TranscriptSegmentSocketService? _speechProfileSocket;
 
   @override
   void start() {}
@@ -40,6 +41,7 @@ class SocketServicePool extends ISocketService {
   @override
   void stop() async {
     await _socket?.stop();
+    await _speechProfileSocket?.stop();
   }
 
   // Warn: Should use a better solution to prevent race conditions
@@ -124,14 +126,28 @@ class SocketServicePool extends ISocketService {
     String? source,
   }) async {
     debugPrint("socket speech profile > $codec $sampleRate $force source: $source");
-    // Speech profile always uses default Omi service (no custom STT)
-    return await socket(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: null,
-    );
+    
+    await _mutex.acquire();
+    try {
+      // Use separate socket for speech profile to avoid conflicts with conversation socket
+      await _speechProfileSocket?.stop();
+      
+      _speechProfileSocket = SpeechProfileTranscriptSegmentSocketService.create(
+        sampleRate,
+        codec,
+        language,
+        source: source,
+        onboardingMode: true,
+      );
+      
+      await _speechProfileSocket?.start();
+      if (_speechProfileSocket?.state != SocketServiceState.connected) {
+        return null;
+      }
+      
+      return _speechProfileSocket;
+    } finally {
+      _mutex.release();
+    }
   }
 }
