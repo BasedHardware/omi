@@ -49,7 +49,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   late FocusNode textFieldFocusNode;
 
   bool _isScrollingDown = false;
-  double _keyboardInset = 0;
 
   bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
@@ -128,7 +127,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    _keyboardInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
@@ -197,7 +195,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                   shrinkWrap: false,
                                   reverse: false,
                                   controller: scrollController,
-                                  padding: EdgeInsets.fromLTRB(18, 16, 18, 30 + _keyboardInset),
+                                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
                                   itemCount: provider.messages.length,
                                   itemBuilder: (context, chatIndex) {
                                     if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
