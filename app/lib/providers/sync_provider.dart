@@ -81,31 +81,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool get hasOrphanedFiles => _walService.getSyncs().flashPage.hasOrphanedFiles;
   int get orphanedFilesCount => _walService.getSyncs().flashPage.orphanedFilesCount;
 
-  // SD Card transfer state (persists across navigation)
-  String? _transferringWalId;
-  double _transferProgress = 0.0;
-  double? _transferSpeedKBps;
-  int? _transferEtaSeconds;
-  int _transferTotalBytes = 0;
-  bool _isTransferring = false;
-
-  String? get transferringWalId => _transferringWalId;
-  double get transferProgress => _transferProgress;
-  double? get transferSpeedKBps => _transferSpeedKBps;
-  int? get transferEtaSeconds => _transferEtaSeconds;
-  bool get isTransferring => _isTransferring;
-
-  /// Check if a specific WAL is currently being transferred (via direct transfer or batch sync)
-  bool isWalTransferring(String walId) {
-    // Check direct transfer state
-    if (_isTransferring && _transferringWalId == walId) {
-      return true;
-    }
-    // Check if WAL is syncing via batch syncAll()
-    final wal = getWalById(walId);
-    return wal?.isSyncing ?? false;
-  }
-
   /// Get a WAL by ID from the current list
   Wal? getWalById(String walId) {
     try {
@@ -113,54 +88,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } catch (e) {
       return null;
     }
-  }
-
-  /// Get transfer progress for a specific WAL (returns null if not transferring)
-  double? getWalTransferProgress(String walId) {
-    // Check direct transfer state first
-    if (_transferringWalId == walId && _isTransferring) {
-      return _transferProgress;
-    }
-    // Check if WAL is syncing via batch syncAll() - use WAL's storage offset for progress
-    final wal = getWalById(walId);
-    if (wal != null && wal.isSyncing && wal.storage == WalStorage.sdcard) {
-      final total = wal.storageTotalBytes - wal.storageOffset;
-      if (total > 0 && wal.storageOffset > 0) {
-        // Calculate progress based on how much has been downloaded
-        // Note: storageOffset updates during download
-        return _syncState.progress;
-      }
-      return _syncState.progress > 0 ? _syncState.progress : null;
-    }
-    return null;
-  }
-
-  /// Get transfer speed for a specific WAL (returns null if not transferring)
-  double? getWalTransferSpeed(String walId) {
-    // Check direct transfer state first
-    if (_transferringWalId == walId && _isTransferring) {
-      return _transferSpeedKBps;
-    }
-    // Check if WAL is syncing via batch syncAll()
-    final wal = getWalById(walId);
-    if (wal != null && wal.isSyncing && wal.storage == WalStorage.sdcard) {
-      return _syncState.speedKBps;
-    }
-    return null;
-  }
-
-  /// Get transfer ETA for a specific WAL (returns null if not transferring)
-  int? getWalTransferEta(String walId) {
-    // Check direct transfer state first
-    if (_transferringWalId == walId && _isTransferring) {
-      return _transferEtaSeconds;
-    }
-    // Check if WAL is syncing via batch syncAll()
-    final wal = getWalById(walId);
-    if (wal != null && wal.isSyncing && wal.storage == WalStorage.sdcard) {
-      return wal.syncEtaSeconds;
-    }
-    return null;
   }
 
   // Audio playback delegates
@@ -388,59 +315,21 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// Cancel ongoing sync operation
   void cancelSync() {
     _walService.getSyncs().cancelSync();
-    _clearTransferState();
     _updateSyncState(_syncState.toIdle());
   }
 
-  void _clearTransferState() {
-    _transferringWalId = null;
-    _transferProgress = 0.0;
-    _transferSpeedKBps = null;
-    _transferEtaSeconds = null;
-    _transferTotalBytes = 0;
-    _isTransferring = false;
-    notifyListeners();
-  }
-
-  /// Transfer a single SD card WAL to phone storage (without cloud upload)
+  /// Transfer a single SD card WAL to phone storage
   Future<void> transferSdCardWalToPhone(Wal wal) async {
     if (wal.storage != WalStorage.sdcard) {
       throw Exception('This recording is not on SD card');
     }
 
-    // Set transfer state
-    _transferringWalId = wal.id;
-    _transferProgress = 0.0;
-    _transferSpeedKBps = null;
-    _transferEtaSeconds = null;
-    _transferTotalBytes = wal.storageTotalBytes - wal.storageOffset;
-    _isTransferring = true;
-    notifyListeners();
-
-    // Create a custom progress listener that updates provider state
-    final progressListener = _TransferProgressListener((progress, speedKBps) {
-      _transferProgress = progress;
-      _transferSpeedKBps = speedKBps;
-      
-      // Calculate ETA based on remaining bytes and speed
-      if (speedKBps != null && speedKBps > 0 && progress < 1.0) {
-        final remainingBytes = _transferTotalBytes * (1.0 - progress);
-        _transferEtaSeconds = (remainingBytes / 1024 / speedKBps).round();
-      } else {
-        _transferEtaSeconds = null;
-      }
-      
-      notifyListeners();
-    });
-
     try {
-      await _walService.getSyncs().syncWal(wal: wal, progress: progressListener);
+      await _walService.getSyncs().syncWal(wal: wal, progress: this);
       await refreshWals();
     } catch (e) {
       await refreshWals();
       rethrow;
-    } finally {
-      _clearTransferState();
     }
   }
 
@@ -472,17 +361,5 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);
     super.dispose();
-  }
-}
-
-/// Helper class for tracking transfer progress
-class _TransferProgressListener implements IWalSyncProgressListener {
-  final void Function(double progress, double? speedKBps)? onProgress;
-
-  _TransferProgressListener(this.onProgress);
-
-  @override
-  void onWalSyncedProgress(double percentage, {double? speedKBps}) {
-    onProgress?.call(percentage, speedKBps);
   }
 }

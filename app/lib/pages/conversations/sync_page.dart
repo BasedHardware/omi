@@ -249,10 +249,10 @@ class WalListItem extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            if (syncProvider.syncSpeedKBps != null && syncProvider.syncSpeedKBps! > 0) ...[
+                            if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
                               const SizedBox(width: 12),
                               Text(
-                                '${syncProvider.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                                '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
                                 style: TextStyle(
                                   color: Colors.grey.shade500,
                                   fontSize: 11,

@@ -132,14 +132,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   Widget _buildSDCardTransferUI() {
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
-        // Get fresh WAL state from provider (may have been updated during sync)
         final currentWal = syncProvider.getWalById(widget.wal.id) ?? widget.wal;
-        final isTransferring = syncProvider.isWalTransferring(widget.wal.id);
-        final transferProgress = syncProvider.getWalTransferProgress(widget.wal.id) ?? 0.0;
-        final transferSpeedKBps = syncProvider.getWalTransferSpeed(widget.wal.id);
-        final transferEtaSeconds = syncProvider.getWalTransferEta(widget.wal.id);
+        final isTransferring = currentWal.isSyncing;
+        final transferProgress = syncProvider.walsSyncedProgress;
+        final transferSpeedKBps = currentWal.syncSpeedKBps;
+        final transferEtaSeconds = currentWal.syncEtaSeconds;
         
-        // If WAL is no longer on SD card (transferred), show playback UI instead
         if (currentWal.storage != WalStorage.sdcard) {
           // WAL has been transferred, pop back to refresh
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -545,7 +543,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
   void _showOptionsMenu(BuildContext context) {
     final syncProvider = context.read<SyncProvider>();
-    final isTransferring = syncProvider.isWalTransferring(widget.wal.id);
+    final currentWal = syncProvider.getWalById(widget.wal.id) ?? widget.wal;
+    final isTransferring = currentWal.isSyncing;
 
     showModalBottomSheet(
       context: context,
