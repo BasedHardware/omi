@@ -8,6 +8,7 @@ import 'package:omi/services/whoop_service.dart';
 import 'package:omi/services/github_service.dart';
 import 'package:omi/pages/settings/github_settings_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -213,9 +214,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       if (success) {
         if (mounted) {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-              duration: Duration(seconds: 5),
+            SnackBar(
+              content: Text(context.l10n.completeAuthInBrowser),
+              duration: const Duration(seconds: 5),
             ),
           );
         }
@@ -225,7 +226,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(
-              content: Text('Failed to start ${app.displayName} authentication'),
+              content: Text(context.l10n.failedToStartAuth(app.displayName)),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -246,26 +247,26 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Disconnect ${app.displayName}?',
+            context.l10n.disconnectAppTitle(app.displayName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'Are you sure you want to disconnect from ${app.displayName}? You can reconnect anytime.',
+            context.l10n.disconnectAppMessage(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF8E8E93)),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Disconnect',
-                style: TextStyle(color: Colors.red),
+              child: Text(
+                context.l10n.disconnect,
+                style: const TextStyle(color: Colors.red),
               ),
             ),
           ],
@@ -301,7 +302,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       if (mounted) {
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Disconnected from ${app.displayName}'),
+            content: Text(context.l10n.disconnectedFrom(app.displayName)),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -309,10 +310,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     } else {
       if (mounted) {
         scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Failed to disconnect'),
+          SnackBar(
+            content: Text(context.l10n.failedToDisconnect),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -329,26 +330,26 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Connect to ${app.displayName}',
+            context.l10n.connectTo(app.displayName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'You\'ll need to authorize Omi to access your ${app.displayName} data. This will open your browser for authentication.',
+            context.l10n.authAccessMessage(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF8E8E93)),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Continue',
-                style: TextStyle(color: Colors.white),
+              child: Text(
+                context.l10n.continueAction,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -361,8 +362,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     // Use provider to get connection status so it updates reactively
     return context.read<IntegrationProvider>().isAppConnected(app);
   }
-
-
 
   Widget _buildShimmerButton() {
     return Shimmer.fromColors(
@@ -425,9 +424,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
                             decoration: BoxDecoration(
-                              color: isAvailable
-                                  ? app.iconColor.withOpacity(0.2)
-                                  : Colors.grey.withOpacity(0.1),
+                              color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
@@ -441,9 +438,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                     )
                   : Container(
                       decoration: BoxDecoration(
-                        color: isAvailable
-                            ? app.iconColor.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
+                        color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -477,7 +472,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
-                  !isAvailable ? 'Coming Soon' : 'Connect',
+                  !isAvailable ? context.l10n.comingSoon : context.l10n.connect,
                   style: TextStyle(
                     color: !isAvailable ? Colors.grey : Colors.black,
                     fontSize: 12,
@@ -493,9 +488,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                   color: Colors.red.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Text(
-                  'Disconnect',
-                  style: TextStyle(
+                child: Text(
+                  context.l10n.disconnect,
+                  style: const TextStyle(
                     color: Colors.red,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -536,10 +531,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             ),
             const SizedBox(width: 16),
             // App Name
-            const Expanded(
+            Expanded(
               child: Text(
-                'Create Your Own App',
-                style: TextStyle(
+                context.l10n.createYourOwnApp,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w400,
@@ -580,9 +575,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Chat Tools',
-          style: TextStyle(
+        title: Text(
+          context.l10n.chatTools,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -622,10 +617,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                       size: 20,
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Connect your apps to view data and metrics in chat.',
-                        style: TextStyle(
+                        context.l10n.chatToolsFooter,
+                        style: const TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

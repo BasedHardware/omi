@@ -4,6 +4,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class SyncBottomSheet extends StatelessWidget {
@@ -95,7 +96,9 @@ class SyncBottomSheet extends StatelessWidget {
 
               // Title
               Text(
-                isAnySyncInProgress ? 'Syncing recordings' : (hasPendingData ? 'Recordings to sync' : 'All caught up'),
+                isAnySyncInProgress
+                    ? context.l10n.syncingRecordings
+                    : (hasPendingData ? context.l10n.recordingsToSync : context.l10n.allCaughtUp),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -107,7 +110,7 @@ class SyncBottomSheet extends StatelessWidget {
               // Description
               if (isAnySyncInProgress) ...[
                 Text(
-                  'We\'ll keep syncing your recordings in the background.',
+                  context.l10n.syncingBackground,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey.shade400,
@@ -117,7 +120,7 @@ class SyncBottomSheet extends StatelessWidget {
                 ),
               ] else if (hasPendingData) ...[
                 Text(
-                  'You have recordings that aren\'t synced yet.',
+                  context.l10n.recordingsNotSynced,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey.shade400,
@@ -127,7 +130,7 @@ class SyncBottomSheet extends StatelessWidget {
                 ),
               ] else ...[
                 Text(
-                  'Everything is already synced.',
+                  context.l10n.everythingSynced,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey.shade400,
@@ -191,8 +194,8 @@ class SyncBottomSheet extends StatelessWidget {
                         children: [
                           Text(
                             isAnySyncInProgress
-                                ? 'Syncing in progress'
-                                : (hasPendingData ? 'Ready to sync' : 'Pendant is up to date'),
+                                ? context.l10n.syncingInProgress
+                                : (hasPendingData ? context.l10n.readyToSync : context.l10n.pendantUpToDate),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -204,7 +207,7 @@ class SyncBottomSheet extends StatelessWidget {
                             isAnySyncInProgress
                                 ? _getSyncStatusText(
                                     progress, isSyncingFromPendant, isUploadingToCloud, hasOrphanedFiles, orphanedCount)
-                                : (hasPendingData ? 'Tap Sync to start' : 'All recordings are synced'),
+                                : (hasPendingData ? context.l10n.tapSyncToStart : context.l10n.allRecordingsSynced),
                             style: TextStyle(
                               color: Colors.grey.shade500,
                               fontSize: 13,
@@ -235,9 +238,9 @@ class SyncBottomSheet extends StatelessWidget {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Sync',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                        child: Text(
+                          context.l10n.sync,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ] else ...[
@@ -275,7 +278,7 @@ class SyncBottomSheet extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Pendant not connected. Connect to sync.',
+                          context.l10n.pendantNotConnected,
                           style: TextStyle(color: Colors.orange.shade400, fontSize: 13),
                         ),
                       ),

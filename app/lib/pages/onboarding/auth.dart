@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/consent_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 
@@ -59,9 +60,9 @@ class _AuthComponentState extends State<AuthComponent> {
                     ),
 
                     // Title text
-                    const Text(
-                      'Speak. Transcribe. Summarize.',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.speakTranscribeSummarize,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
@@ -106,14 +107,14 @@ class _AuthComponentState extends State<AuthComponent> {
                               borderRadius: BorderRadius.circular(28),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(FontAwesomeIcons.apple, size: 24),
-                              SizedBox(width: 8),
+                              const Icon(FontAwesomeIcons.apple, size: 24),
+                              const SizedBox(width: 8),
                               Text(
-                                'Sign in with Apple',
-                                style: TextStyle(
+                                context.l10n.signInWithApple,
+                                style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w600,
                                   fontFamily: 'Manrope',
@@ -158,14 +159,14 @@ class _AuthComponentState extends State<AuthComponent> {
                             borderRadius: BorderRadius.circular(28),
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(FontAwesomeIcons.google, size: 20),
-                            SizedBox(width: 8),
+                            const Icon(FontAwesomeIcons.google, size: 20),
+                            const SizedBox(width: 8),
                             Text(
-                              'Sign in with Google',
-                              style: TextStyle(
+                              context.l10n.signInWithGoogle,
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w600,
                                 fontFamily: 'Manrope',
@@ -188,9 +189,9 @@ class _AuthComponentState extends State<AuthComponent> {
                           fontFamily: 'Manrope',
                         ),
                         children: [
-                          const TextSpan(text: 'By continuing, you agree to our '),
+                          TextSpan(text: context.l10n.byContinuingAgree),
                           TextSpan(
-                            text: 'Privacy Policy',
+                            text: context.l10n.privacyPolicy,
                             style: const TextStyle(
                               decoration: TextDecoration.underline,
                             ),
@@ -198,7 +199,7 @@ class _AuthComponentState extends State<AuthComponent> {
                           ),
                           const TextSpan(text: ' & '),
                           TextSpan(
-                            text: 'Terms of Use',
+                            text: context.l10n.termsOfUse,
                             style: const TextStyle(
                               decoration: TextDecoration.underline,
                             ),

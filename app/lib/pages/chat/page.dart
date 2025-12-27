@@ -28,6 +28,7 @@ import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 import 'widgets/message_action_menu.dart';
 
@@ -166,7 +167,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           ],
                         )
                       : provider.isClearingChat
-                          ? const Column(
+                          ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 CircularProgressIndicator(
@@ -174,7 +175,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 ),
                                 SizedBox(height: 16),
                                 Text(
-                                  "Deleting your messages from Omi's memory...",
+                                  context.l10n.deletingMessages,
                                   style: TextStyle(color: Colors.white),
                                 ),
                               ],
@@ -185,8 +186,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     padding: const EdgeInsets.only(bottom: 32.0),
                                     child: Text(
                                         connectivityProvider.isConnected
-                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                            : 'Please check your internet connection and try again',
+                                            ? context.l10n.noMessagesYet
+                                            : context.l10n.noInternetConnection,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(color: Colors.white)),
                                   ),
@@ -228,15 +229,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               await Clipboard.setData(ClipboardData(text: message.text.decodeString));
                                               if (context.mounted) {
                                                 ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
+                                                  SnackBar(
                                                     content: Text(
-                                                      'Message copied to clipboard.',
-                                                      style: TextStyle(
+                                                      context.l10n.messageCopied,
+                                                      style: const TextStyle(
                                                         color: Color.fromARGB(255, 255, 255, 255),
                                                         fontSize: 12.0,
                                                       ),
                                                     ),
-                                                    duration: Duration(milliseconds: 2000),
+                                                    duration: const Duration(milliseconds: 2000),
                                                   ),
                                                 );
                                                 Navigator.pop(context);
@@ -274,15 +275,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               if (message.sender == MessageSender.human) {
                                                 Navigator.pop(context);
                                                 ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
+                                                  SnackBar(
                                                     content: Text(
-                                                      'You cannot report your own messages.',
-                                                      style: TextStyle(
+                                                      context.l10n.cannotReportOwnMessage,
+                                                      style: const TextStyle(
                                                         color: Color.fromARGB(255, 255, 255, 255),
                                                         fontSize: 12.0,
                                                       ),
                                                     ),
-                                                    duration: Duration(milliseconds: 2000),
+                                                    duration: const Duration(milliseconds: 2000),
                                                   ),
                                                 );
                                                 return;
@@ -303,20 +304,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                       context.read<MessageProvider>().removeLocalMessage(message.id);
                                                       reportMessageServer(message.id);
                                                       ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(
+                                                        SnackBar(
                                                           content: Text(
-                                                            'Message reported successfully.',
-                                                            style: TextStyle(
+                                                            context.l10n.messageReported,
+                                                            style: const TextStyle(
                                                               color: Color.fromARGB(255, 255, 255, 255),
                                                               fontSize: 12.0,
                                                             ),
                                                           ),
-                                                          duration: Duration(milliseconds: 2000),
+                                                          duration: const Duration(milliseconds: 2000),
                                                         ),
                                                       );
                                                     },
-                                                    'Report Message',
-                                                    'Are you sure you want to report this message?',
+                                                    context.l10n.reportMessage,
+                                                    context.l10n.reportMessageConfirm,
                                                   );
                                                 },
                                               );
@@ -486,9 +487,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                       FocusScope.of(context).unfocus();
                                       if (provider.selectedFiles.length > 3) {
                                         ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('You can only upload 4 files at a time'),
-                                            duration: Duration(seconds: 2),
+                                          SnackBar(
+                                            content: Text(context.l10n.maxFilesLimit),
+                                            duration: const Duration(seconds: 2),
                                           ),
                                         );
                                         return;
@@ -536,9 +537,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                           obscureText: false,
                                           textAlign: TextAlign.start,
                                           textAlignVertical: TextAlignVertical.center,
-                                          decoration: const InputDecoration(
-                                            hintText: 'Ask anything',
-                                            hintStyle: TextStyle(fontSize: 16.0, color: Colors.grey),
+                                          decoration: InputDecoration(
+                                            hintText: context.l10n.askAnything,
+                                            hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
                                             focusedBorder: InputBorder.none,
                                             enabledBorder: InputBorder.none,
                                             contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
@@ -712,7 +713,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
             context.read<MessageProvider>().clearChat();
             Navigator.of(context).pop();
           }
-        }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
+        }, "Clear Chat?", context.l10n.clearChatConfirm);
       },
     );
   }
