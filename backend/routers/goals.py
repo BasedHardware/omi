@@ -2,9 +2,8 @@
 Goal tracking API endpoints.
 Handles user goals with AI-powered suggestions and advice.
 """
-import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
@@ -12,9 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from database import goals as goals_db
-from database import memories as memories_db
 from utils.other import endpoints as auth
-from utils.llm.clients import llm_mini
+from utils.llm.goals import suggest_goal as suggest_goal_llm, get_goal_advice as get_goal_advice_llm, extract_and_update_goal_progress
 
 router = APIRouter()
 
@@ -198,79 +196,7 @@ async def delete_goal(
 @router.get('/v1/goals/suggest', tags=['goals'])
 async def suggest_goal(uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Generate an AI-suggested goal based on user's memories and conversations."""
-    try:
-        # Get user's memories for context
-        memories = memories_db.get_memories(uid, limit=100, offset=0)
-        
-        if not memories:
-            # Default suggestion when no memories
-            return {
-                'suggested_title': 'Learn something new every day',
-                'suggested_type': 'scale',
-                'suggested_target': 10,
-                'suggested_min': 0,
-                'suggested_max': 10,
-                'reasoning': 'Start tracking your daily learning progress!'
-            }
-        
-        # Prepare memory context for AI
-        memory_texts = [m.get('content', '') for m in memories[:50] if m.get('content')]
-        memory_context = '\n'.join(memory_texts[:20])  # Limit context size
-        
-        prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
-
-User's recent memories/learnings:
-{memory_context}
-
-Generate a goal suggestion in this exact JSON format:
-{{
-    "suggested_title": "Brief, actionable goal title (e.g., 'Exercise 5 times a week', 'Read 20 books this year', 'Save $10,000')",
-    "suggested_type": "scale" or "numeric" or "boolean",
-    "suggested_target": <number>,
-    "suggested_min": <minimum value>,
-    "suggested_max": <maximum value or target>,
-    "reasoning": "One sentence explaining why this goal fits the user"
-}}
-
-Choose a goal type:
-- "boolean" for yes/no goals (0 or 1)
-- "scale" for rating goals (e.g., 0-10 satisfaction)
-- "numeric" for countable goals (e.g., books read, money saved, users acquired)
-
-Make the goal specific, measurable, and relevant to their interests."""
-
-        response = llm_mini.invoke(prompt).content
-        
-        # Parse JSON from response
-        import json
-        import re
-        
-        # Find JSON in response
-        json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
-        if json_match:
-            suggestion = json.loads(json_match.group())
-            return suggestion
-        
-        # Fallback if parsing fails
-        return {
-            'suggested_title': 'Track your daily progress',
-            'suggested_type': 'scale',
-            'suggested_target': 10,
-            'suggested_min': 0,
-            'suggested_max': 10,
-            'reasoning': 'A simple goal to get you started!'
-        }
-        
-    except Exception as e:
-        print(f"Error generating goal suggestion: {e}")
-        return {
-            'suggested_title': 'Make progress every day',
-            'suggested_type': 'scale', 
-            'suggested_target': 10,
-            'suggested_min': 0,
-            'suggested_max': 10,
-            'reasoning': 'Start with a simple daily progress goal!'
-        }
+    return suggest_goal_llm(uid)
 
 
 @router.get('/v1/goals/{goal_id}/advice', tags=['goals'])
@@ -280,51 +206,10 @@ async def get_goal_advice(
 ) -> dict:
     """Get AI-generated actionable advice for achieving a goal."""
     try:
-        # Get the goal
-        goal = goals_db.get_user_goal(uid)
-        if not goal or goal.get('id') != goal_id:
-            raise HTTPException(status_code=404, detail="Goal not found")
-        
-        # Get user context
-        memories = memories_db.get_memories(uid, limit=50, offset=0)
-        memory_context = '\n'.join([m.get('content', '')[:200] for m in memories[:10] if m.get('content')])
-        
-        # Get progress history
-        history = goals_db.get_goal_history(uid, goal_id, days=7)
-        
-        progress_pct = 0
-        if goal.get('max_value', 0) > goal.get('min_value', 0):
-            range_val = goal['max_value'] - goal['min_value']
-            progress_pct = ((goal.get('current_value', 0) - goal.get('min_value', 0)) / range_val) * 100
-        
-        prompt = f"""Give ONE short, actionable piece of advice (max 15 words) for this goal:
-
-Goal: {goal.get('title', 'Unknown')}
-Current progress: {goal.get('current_value', 0)} / {goal.get('target_value', 10)} ({progress_pct:.0f}%)
-Goal type: {goal.get('goal_type', 'scale')}
-
-Recent user context:
-{memory_context[:500]}
-
-Recent progress history (last 7 days): {len(history)} entries
-
-Provide a brief, specific, actionable tip. Be encouraging but practical. No fluff.
-Just return the advice text, nothing else."""
-
-        advice = llm_mini.invoke(prompt).content
-        
-        # Clean up the response
-        advice = advice.strip().strip('"').strip("'")
-        if len(advice) > 100:
-            advice = advice[:97] + "..."
-        
+        advice = get_goal_advice_llm(uid, goal_id)
         return {'advice': advice}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error generating advice: {e}")
-        return {'advice': 'Keep pushing forward, one step at a time!'}
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Goal not found")
 
 
 @router.get('/v1/goals/advice', tags=['goals'])
@@ -351,58 +236,17 @@ async def extract_and_update_progress(
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
-    goal = goals_db.get_user_goal(uid)
-    if not goal:
+    result = extract_and_update_goal_progress(uid, request.text)
+    if result is None:
         return {'updated': False, 'reason': 'No active goal'}
     
-    try:
-        prompt = f"""Analyze this text and determine if it mentions progress toward the user's goal.
-
-Goal: "{goal.get('title', '')}"
-Current progress: {goal.get('current_value', 0)} / {goal.get('target_value', 10)}
-
-Text to analyze:
-"{request.text}"
-
-If the text mentions a new progress value for this goal, extract it.
-Examples:
-- "We hit 500 in revenue" -> 500
-- "Now at 1000 users" -> 1000  
-- "Completed 3 more tasks" -> current + 3
-- "We're at 50%" -> calculate 50% of target
-
-Respond in JSON format:
-{{"found": true/false, "new_value": number or null, "reasoning": "brief explanation"}}
-
-Only return true if you're confident the text relates to this specific goal."""
-
-        response = llm_mini.invoke(prompt).content
-        
-        import json
-        import re
-        
-        # Parse response
-        json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
-        if json_match:
-            result = json.loads(json_match.group())
-            
-            if result.get('found') and result.get('new_value') is not None:
-                new_value = float(result['new_value'])
-                
-                # Update the goal
-                updated = goals_db.update_goal_progress(uid, goal['id'], new_value)
-                
-                if updated:
-                    return {
-                        'updated': True,
-                        'previous_value': goal.get('current_value', 0),
-                        'new_value': new_value,
-                        'reasoning': result.get('reasoning', '')
-                    }
-        
-        return {'updated': False, 'reason': 'No progress found in text'}
-        
-    except Exception as e:
-        print(f"Error extracting progress: {e}")
-        return {'updated': False, 'reason': str(e)}
+    if result.get('status') == 'updated':
+        return {
+            'updated': True,
+            'previous_value': result.get('old_value'),
+            'new_value': result.get('new_value'),
+            'reasoning': result.get('reasoning', '')
+        }
+    
+    return {'updated': False, 'reason': result.get('message', 'No progress found in text')}
 

@@ -49,6 +49,7 @@ from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -317,14 +318,6 @@ def _trigger_apps(
 def _update_goal_progress(uid: str, conversation: Conversation):
     """Extract and update goal progress from conversation text."""
     try:
-        import database.goals as goals_db
-        from utils.llm.clients import llm_mini
-        import json
-        
-        goal = goals_db.get_user_goal(uid)
-        if not goal:
-            return
-        
         # Get conversation text
         text = ""
         if conversation.structured and conversation.structured.overview:
@@ -335,23 +328,8 @@ def _update_goal_progress(uid: str, conversation: Conversation):
         if not text or len(text) < 10:
             return
         
-        prompt = f"""Does this text mention progress toward: "{goal.get('title', '')}"?
-Current: {goal.get('current_value', 0)} / {goal.get('target_value', 10)}
-
-Text: "{text[:500]}"
-
-If yes, extract the new value. Reply JSON: {{"found": true/false, "value": number_or_null}}"""
-
-        response = llm_mini.invoke(prompt).content
-        
-        match = re.search(r'\{[^{}]*\}', response)
-        if match:
-            result = json.loads(match.group())
-            if result.get('found') and result.get('value') is not None:
-                new_value = float(result['value'])
-                if new_value != goal.get('current_value', 0):
-                    goals_db.update_goal_progress(uid, goal['id'], new_value)
-                    print(f"[GOAL] Updated progress for {uid}: {goal.get('current_value')} -> {new_value}")
+        # Use utility function to extract and update goal progress
+        extract_and_update_goal_progress(uid, text)
     except Exception as e:
         print(f"[GOAL] Error updating progress: {e}")
 
