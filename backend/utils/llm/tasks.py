@@ -114,8 +114,11 @@ Return JSON only."""
 def extract_tasks_from_conversation(uid: str, user_message: str, ai_response: str) -> None:
     """Extract tasks from the full conversation context (user message + AI response) and create them."""
     try:
-        if not user_message or not ai_response or len(user_message) < 10:
+        if not ai_response or len(ai_response) < 50:
+            print(f"[TASK-CONV] Skipping - response too short: {len(ai_response) if ai_response else 0}")
             return
+        
+        print(f"[TASK-CONV] Extracting tasks from conversation ({len(user_message)} / {len(ai_response)} chars)")
         
         # Get user's existing tasks to avoid duplicates
         existing_tasks = action_items_db.get_action_items(uid, limit=100, offset=0, completed=False)
@@ -123,64 +126,69 @@ def extract_tasks_from_conversation(uid: str, user_message: str, ai_response: st
         
         existing_context = ""
         if existing_descriptions:
-            existing_context = f"\n\nExisting tasks (DO NOT duplicate):\n" + "\n".join([f"- {desc}" for desc in existing_descriptions[:15]])
+            existing_context = f"\n\nExisting tasks (DO NOT duplicate these):\n" + "\n".join([f"- {desc}" for desc in existing_descriptions[:15]])
         
         # Combine user message and AI response for context
         full_context = f"""User Message:
-{user_message[:1000]}
+{user_message[:1500] if user_message else '(voice/short message)'}
 
 AI Response:
-{ai_response[:1500]}"""
+{ai_response[:2500]}"""
         
-        prompt = f"""Based on this conversation, extract 3-5 actionable tasks/todos that the user should do.
+        prompt = f"""You are a task extractor. Analyze this conversation and extract 3-5 actionable tasks the user should do.
 
 {full_context}
 
 EXTRACTION RULES:
-1. Extract ONLY the most important, concrete tasks (3-5 maximum)
-2. Prioritize tasks that:
-   - User explicitly commits to: "I need to X", "I will X", "I should X", "I want to X"
-   - User's specific plans with timeframes: "I'll do X by Friday", "X until New Year"
-   - Concrete action items the AI suggests as next steps
-   - Have clear, specific actions (not vague goals)
+1. Extract concrete, actionable tasks (3-5 maximum) from:
+   - What the user commits to: "I need to", "I will", "I should", "I want to", "I'll", "going to"
+   - Plans with timeframes: "by Friday", "next week", "5 days", "until New Year"
+   - AI suggestions/recommendations: "You should", "Try to", "Focus on", "Consider", "I recommend"
+   - Experiments or challenges the user mentions: "lock in for 5 days", "do X daily"
+   - Reflection action items: "start my day with", "focus on", "prioritize"
+
+2. Make tasks SPECIFIC and ACTIONABLE:
+   - Good: "Focus on building features for 5 days straight"
+   - Good: "Start each day by reviewing tasks"
+   - Good: "Meet with advisors to discuss strategy"
+   - Bad: "Think about things" (too vague)
+   - Bad: "Be better" (not actionable)
 
 3. DO NOT extract:
-   - Casual mentions or updates
-   - Questions
-   - Things already done
-   - Vague goals without specific actions
-   - Duplicates{existing_context}
-   - More than 5 tasks (select the most important ones)
+   - Things already completed
+   - Pure questions without action
+   - Duplicates of existing tasks{existing_context}
 
-4. Keep descriptions SHORT (max 15 words), start with verb when possible
+4. Keep descriptions SHORT (max 15 words), start with verb
 
-5. Extract due dates if mentioned:
-   - "by Friday", "tomorrow", "next week", "until New Year", "Day 1", "Day 2", etc.
-   - Format: ISO 8601 UTC with Z suffix (e.g., "2025-01-20T23:59:59Z")
-   - If no date, use null
+5. Due dates (ISO 8601 UTC, e.g., "2025-01-01T23:59:59Z"):
+   - "5 days" / "until new year" → calculate from today
+   - "tomorrow" / "next week" → calculate
+   - No date mentioned → null
 
-Return JSON array (3-5 tasks max):
-[
-  {{"description": "task text", "due_at": "ISO date or null"}},
-  ...
-]
+Return ONLY a JSON array:
+[{{"description": "task text", "due_at": "ISO date or null"}}]
 
-If no actionable tasks, return [].
-
-Return JSON only."""
+If no tasks found, return []"""
 
         response = llm_mini.invoke(prompt).content
+        print(f"[TASK-CONV] LLM response: {response[:300]}...")
         
         # Extract JSON array from response
         match = re.search(r'\[[^\]]*(?:\{[^\}]*\}[^\]]*)*\]', response, re.DOTALL)
-        if match:
-            tasks = json.loads(match.group())
-            if tasks and isinstance(tasks, list):
-                # Limit to 5 tasks
-                tasks = tasks[:5]
-                
-                created_count = 0
-                for task in tasks:
+        if not match:
+            print(f"[TASK-CONV] No JSON array found in response")
+            return
+            
+        tasks = json.loads(match.group())
+        print(f"[TASK-CONV] Parsed {len(tasks) if tasks else 0} tasks from response")
+        
+        if tasks and isinstance(tasks, list):
+            # Limit to 5 tasks
+            tasks = tasks[:5]
+            
+            created_count = 0
+            for task in tasks:
                     if not task.get('description'):
                         continue
                     
