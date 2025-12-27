@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Goal tracker widget with semicircle gauge
 class GoalTrackerWidget extends StatefulWidget {
@@ -19,6 +21,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   bool _isLoading = true;
   bool _isEditingGoal = false;
   bool _isEditingValue = false;
+  
+  static const String _goalStorageKey = 'goal_tracker_local_goal';
 
   final TextEditingController _goalTitleController = TextEditingController();
   final TextEditingController _currentValueController = TextEditingController();
@@ -51,28 +55,102 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     setState(() => _isLoading = true);
 
     try {
-      // Try to get existing goal
-      final goal = await getCurrentGoal();
+      // First, try to load from local storage (for offline/temp goals)
+      final localGoal = await _loadLocalGoal();
+      
+      // Then try to get from backend
+      final backendGoal = await getCurrentGoal();
 
-      if (goal != null && mounted) {
+      if (backendGoal != null && mounted) {
+        // Backend has a goal - use it and save locally
         setState(() {
-          _goal = goal;
-          _goalTitleController.text = goal.title;
-          _currentValueController.text = _rawNum(goal.currentValue);
-          _targetValueController.text = _rawNum(goal.targetValue);
+          _goal = backendGoal;
+          _goalTitleController.text = backendGoal.title;
+          _currentValueController.text = _rawNum(backendGoal.currentValue);
+          _targetValueController.text = _rawNum(backendGoal.targetValue);
         });
+        await _saveLocalGoal(backendGoal);
         _loadAdvice();
+      } else if (localGoal != null && mounted) {
+        // No backend goal but have local - use local
+        debugPrint('[GOAL] Using local goal: ${localGoal.title}');
+        setState(() {
+          _goal = localGoal;
+          _goalTitleController.text = localGoal.title;
+          _currentValueController.text = _rawNum(localGoal.currentValue);
+          _targetValueController.text = _rawNum(localGoal.targetValue);
+        });
+        // Try to sync local goal to backend if it's a temp goal
+        if (localGoal.id.startsWith('temp_')) {
+          _syncLocalGoalToBackend(localGoal);
+        }
       } else {
-        // No goal - try to get suggestion for when user wants to create
+        // No goal anywhere - try to get suggestion for when user wants to create
         final suggestion = await suggestGoal();
         if (mounted) {
           setState(() => _suggestion = suggestion);
         }
       }
     } catch (e) {
-      debugPrint('Error loading goal: $e');
+      debugPrint('[GOAL] Error loading goal: $e');
+      // Try local storage as fallback
+      final localGoal = await _loadLocalGoal();
+      if (localGoal != null && mounted) {
+        setState(() {
+          _goal = localGoal;
+          _goalTitleController.text = localGoal.title;
+          _currentValueController.text = _rawNum(localGoal.currentValue);
+          _targetValueController.text = _rawNum(localGoal.targetValue);
+        });
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+  
+  Future<Goal?> _loadLocalGoal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final goalJson = prefs.getString(_goalStorageKey);
+      if (goalJson != null) {
+        final map = json.decode(goalJson) as Map<String, dynamic>;
+        return Goal.fromJson(map);
+      }
+    } catch (e) {
+      debugPrint('[GOAL] Error loading local goal: $e');
+    }
+    return null;
+  }
+  
+  Future<void> _saveLocalGoal(Goal goal) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_goalStorageKey, json.encode(goal.toJson()));
+      debugPrint('[GOAL] Saved goal locally: ${goal.title}');
+    } catch (e) {
+      debugPrint('[GOAL] Error saving local goal: $e');
+    }
+  }
+  
+  Future<void> _syncLocalGoalToBackend(Goal localGoal) async {
+    try {
+      debugPrint('[GOAL] Syncing local goal to backend...');
+      final created = await createGoal(
+        title: localGoal.title,
+        goalType: localGoal.goalType,
+        targetValue: localGoal.targetValue,
+        currentValue: localGoal.currentValue,
+        minValue: localGoal.minValue,
+        maxValue: localGoal.maxValue,
+      );
+      if (created != null && mounted) {
+        debugPrint('[GOAL] Synced to backend with ID: ${created.id}');
+        setState(() => _goal = created);
+        await _saveLocalGoal(created);
+        _loadAdvice();
+      }
+    } catch (e) {
+      debugPrint('[GOAL] Error syncing to backend: $e');
     }
   }
 
@@ -134,22 +212,27 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     
     // Update local state immediately so user sees their change
     final oldGoal = _goal!;
+    final updatedLocalGoal = Goal(
+      id: oldGoal.id,
+      title: newTitle,
+      goalType: oldGoal.goalType,
+      currentValue: oldGoal.currentValue,
+      targetValue: oldGoal.targetValue,
+      minValue: oldGoal.minValue,
+      maxValue: oldGoal.maxValue,
+      unit: oldGoal.unit,
+      isActive: oldGoal.isActive,
+      createdAt: oldGoal.createdAt,
+      updatedAt: DateTime.now(),
+    );
+    
     setState(() {
-      _goal = Goal(
-        id: oldGoal.id,
-        title: newTitle,
-        goalType: oldGoal.goalType,
-        currentValue: oldGoal.currentValue,
-        targetValue: oldGoal.targetValue,
-        minValue: oldGoal.minValue,
-        maxValue: oldGoal.maxValue,
-        unit: oldGoal.unit,
-        isActive: oldGoal.isActive,
-        createdAt: oldGoal.createdAt,
-        updatedAt: DateTime.now(),
-      );
+      _goal = updatedLocalGoal;
       _isEditingGoal = false;
     });
+    
+    // Save locally immediately
+    await _saveLocalGoal(updatedLocalGoal);
     
     try {
       Goal? updatedGoal;
@@ -173,6 +256,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       // If API succeeded, update with server data (includes real ID)
       if (mounted && updatedGoal != null) {
         setState(() => _goal = updatedGoal);
+        await _saveLocalGoal(updatedGoal);
         _loadAdvice();
       }
     } catch (e) {
@@ -190,22 +274,27 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     
     // Update local state immediately so user sees their change
     final oldGoal = _goal!;
+    final updatedLocalGoal = Goal(
+      id: oldGoal.id, 
+      title: oldGoal.title, 
+      goalType: oldGoal.goalType,
+      currentValue: currentVal, 
+      targetValue: targetVal,
+      minValue: oldGoal.minValue, 
+      maxValue: targetVal,
+      unit: oldGoal.unit,
+      isActive: true, 
+      createdAt: oldGoal.createdAt, 
+      updatedAt: DateTime.now(),
+    );
+    
     setState(() {
-      _goal = Goal(
-        id: oldGoal.id, 
-        title: oldGoal.title, 
-        goalType: oldGoal.goalType,
-        currentValue: currentVal, 
-        targetValue: targetVal,
-        minValue: oldGoal.minValue, 
-        maxValue: targetVal,
-        unit: oldGoal.unit,
-        isActive: true, 
-        createdAt: oldGoal.createdAt, 
-        updatedAt: DateTime.now(),
-      );
+      _goal = updatedLocalGoal;
       _isEditingValue = false;
     });
+    
+    // Save locally immediately
+    await _saveLocalGoal(updatedLocalGoal);
 
     // If not a temp goal, also save to server
     if (!oldGoal.id.startsWith('temp_')) {
@@ -215,6 +304,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         debugPrint('[GOAL] updateGoal result: ${updated?.id ?? 'null'}');
         if (updated != null && mounted) {
           setState(() => _goal = updated);
+          await _saveLocalGoal(updated);
           _loadAdvice();
         }
       } catch (e) {
@@ -226,19 +316,22 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
 
   void _createDefaultGoal() {
     HapticFeedback.lightImpact();
+    final newGoal = Goal(
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'My goal', goalType: 'numeric',
+      currentValue: 0, targetValue: 100, minValue: 0, maxValue: 100,
+      isActive: true, createdAt: DateTime.now(), updatedAt: DateTime.now(),
+    );
     setState(() {
-      _goal = Goal(
-        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-        title: 'My goal', goalType: 'numeric',
-        currentValue: 0, targetValue: 100, minValue: 0, maxValue: 100,
-        isActive: true, createdAt: DateTime.now(), updatedAt: DateTime.now(),
-      );
+      _goal = newGoal;
       _goalTitleController.text = 'My goal';
       _currentValueController.text = '0';
       _targetValueController.text = '100';
       _isEditingGoal = true;
       _isLoading = false;
     });
+    // Save locally so it persists across restarts
+    _saveLocalGoal(newGoal);
   }
 
   String _formatNum(double v) {
