@@ -189,47 +189,47 @@ If no tasks found, return []"""
             
             created_count = 0
             for task in tasks:
-                    if not task.get('description'):
-                        continue
-                    
-                    description = task['description'].strip()
-                    if not description or len(description) < 3:
-                        continue
-                    
-                    # Check for duplicates (case-insensitive, check if similar)
-                    description_lower = description.lower()
-                    is_duplicate = False
-                    for existing_desc in existing_descriptions:
-                        # Check for exact match or if one contains the other (for similar tasks)
-                        if (description_lower == existing_desc or 
-                            (len(existing_desc) > 15 and (description_lower in existing_desc or existing_desc in description_lower))):
-                            is_duplicate = True
-                            print(f"[TASK-CONV] Skipping duplicate: {description}")
-                            break
-                    
-                    if is_duplicate:
-                        continue
-                    
-                    # Parse due date if provided
-                    due_at = task.get('due_at')
-                    
-                    # Create the task
-                    task_data = {
-                        'description': description,
-                        'completed': False,
-                        'due_at': due_at,
-                        'conversation_id': None,
-                    }
-                    
-                    try:
-                        action_items_db.create_action_item(uid, task_data)
-                        created_count += 1
-                        print(f"[TASK-CONV] Created task: {description}" + (f" (due: {due_at})" if due_at else ""))
-                    except Exception as e:
-                        print(f"[TASK-CONV] Error creating task: {e}")
+                if not task.get('description'):
+                    continue
                 
-                if created_count > 0:
-                    print(f"[TASK-CONV] Created {created_count} task(s) from conversation")
+                description = task['description'].strip()
+                if not description or len(description) < 3:
+                    continue
+                
+                # Check for duplicates (case-insensitive, check if similar)
+                description_lower = description.lower()
+                is_duplicate = False
+                for existing_desc in existing_descriptions:
+                    # Check for exact match or if one contains the other (for similar tasks)
+                    if (description_lower == existing_desc or 
+                        (len(existing_desc) > 15 and (description_lower in existing_desc or existing_desc in description_lower))):
+                        is_duplicate = True
+                        print(f"[TASK-CONV] Skipping duplicate: {description}")
+                        break
+                
+                if is_duplicate:
+                    continue
+                
+                # Parse due date if provided
+                due_at = task.get('due_at')
+                
+                # Create the task
+                task_data = {
+                    'description': description,
+                    'completed': False,
+                    'due_at': due_at,
+                    'conversation_id': None,
+                }
+                
+                try:
+                    action_items_db.create_action_item(uid, task_data)
+                    created_count += 1
+                    print(f"[TASK-CONV] Created task: {description}" + (f" (due: {due_at})" if due_at else ""))
+                except Exception as e:
+                    print(f"[TASK-CONV] Error creating task: {e}")
+            
+            if created_count > 0:
+                print(f"[TASK-CONV] Created {created_count} task(s) from conversation")
     except Exception as e:
         print(f"[TASK-CONV] Error: {e}")
         traceback.print_exc()
