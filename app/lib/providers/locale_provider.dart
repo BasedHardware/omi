@@ -22,20 +22,26 @@ class LocaleProvider extends ChangeNotifier {
     final localeCode = prefs.getString(_localeKey);
     if (localeCode != null) {
       _locale = Locale(localeCode);
+    } else {
+      final deviceLocale = WidgetsBinding.instance.platformDispatcher.locale;
+      if (deviceLocale.languageCode == 'ja') {
+        _locale = const Locale('ja');
+      } else {
+        _locale = const Locale('en');
+      }
+      // Save the default choice so it persists as an explicit selection
+      await prefs.setString(_localeKey, _locale!.languageCode);
     }
     _initialized = true;
     notifyListeners();
   }
 
-  /// Set the app locale. Pass null to use the system locale.
+  /// Set the app locale.
   Future<void> setLocale(Locale? locale) async {
+    if (locale == null) return; // Do not allow setting to null (System Default)
     _locale = locale;
     final prefs = await SharedPreferences.getInstance();
-    if (locale != null) {
-      await prefs.setString(_localeKey, locale.languageCode);
-    } else {
-      await prefs.remove(_localeKey);
-    }
+    await prefs.setString(_localeKey, locale.languageCode);
     notifyListeners();
   }
 

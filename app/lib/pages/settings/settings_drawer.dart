@@ -306,60 +306,58 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1F1F25),
+      backgroundColor: const Color(0xFF1C1C1E),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  context.l10n.selectLanguage,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3C3C43),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const Divider(height: 1, color: Colors.grey),
-              // System Default option
-              ListTile(
-                leading: Icon(
-                  currentLocale == null ? Icons.check_circle : Icons.circle_outlined,
-                  color: currentLocale == null ? Colors.green : Colors.grey,
+              Text(
+                context.l10n.selectLanguage,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
                 ),
-                title: Text(
-                  context.l10n.systemDefault,
-                  style: const TextStyle(color: Colors.white),
-                ),
-                onTap: () {
-                  localeProvider.setLocale(null);
-                  Navigator.pop(context);
-                },
               ),
-              // Supported locales
-              ...supportedLocales.map((locale) {
-                final isSelected = currentLocale?.languageCode == locale.languageCode;
-                return ListTile(
-                  leading: Icon(
-                    isSelected ? Icons.check_circle : Icons.circle_outlined,
-                    color: isSelected ? Colors.green : Colors.grey,
-                  ),
-                  title: Text(
-                    LocaleProvider.getDisplayName(locale),
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  onTap: () {
-                    localeProvider.setLocale(locale);
-                    Navigator.pop(context);
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: supportedLocales.length,
+                  itemBuilder: (context, index) {
+                    final locale = supportedLocales[index];
+                    final isSelected = currentLocale?.languageCode == locale.languageCode;
+                    return ListTile(
+                      title: Text(
+                        LocaleProvider.getDisplayName(locale),
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : const Color(0xFF8E8E93),
+                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+                        ),
+                      ),
+                      trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        localeProvider.setLocale(locale);
+                        Navigator.pop(context);
+                      },
+                    );
                   },
-                );
-              }),
+                ),
+              ),
               const SizedBox(height: 16),
             ],
           ),

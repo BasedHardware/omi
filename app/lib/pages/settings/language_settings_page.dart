@@ -4,6 +4,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class LanguageSettingsPage extends StatefulWidget {
@@ -25,10 +26,10 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         ? homeProvider.availableLanguages.entries
             .firstWhere(
               (element) => element.value == homeProvider.userPrimaryLanguage,
-              orElse: () => const MapEntry('Not set', ''),
+              orElse: () => MapEntry(context.l10n.notSet, ''),
             )
             .key
-        : 'Not set';
+        : context.l10n.notSet;
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
     final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
@@ -66,9 +67,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Primary Language',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.primaryLanguage,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -132,9 +133,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Automatic Translation',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.automaticTranslation,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
@@ -142,7 +143,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Detect 10+ languages',
+                      context.l10n.detectLanguages,
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 13,
@@ -210,9 +211,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const Text(
-                      'Select Language',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.selectLanguage,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -285,9 +286,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
           icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Language',
-          style: TextStyle(
+        title: Text(
+          context.l10n.languageTitle,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
