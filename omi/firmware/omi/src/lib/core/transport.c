@@ -38,6 +38,7 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
 extern bool storage_is_on;
+static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
@@ -851,8 +852,14 @@ void pusher(void)
         if (!valid && !storage_is_on) {
             bool result = false;
             if (get_file_size() < MAX_STORAGE_BYTES) {
+                storage_full_warned = false;
                 if (is_sd_on()) {
                     result = write_to_storage();
+                }
+            } else {
+                if (!storage_full_warned) {
+                    LOG_WRN("Storage full, stopping offline storage");
+                    storage_full_warned = true;
                 }
             }
             if (result) {

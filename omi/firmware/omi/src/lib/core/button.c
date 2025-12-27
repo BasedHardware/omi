@@ -18,6 +18,7 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
+#include "wifi.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -413,6 +414,8 @@ void turnoff_all()
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
         return;
     }
+
+    wifi_turn_off();
 
     rc = watchdog_deinit();
     if (rc < 0) {

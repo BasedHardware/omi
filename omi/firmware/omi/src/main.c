@@ -322,6 +322,9 @@ int main(void)
         return ret;
     }
 
+    // Initialize wifi
+    wifi_init();
+
     LOG_INF("Device initialized successfully\n");
 
     while (1) {
