@@ -227,6 +227,7 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onShowDailyGradeChanged(var value) {
     showDailyGradeEnabled = value;
+    SharedPreferencesUtil().showDailyGradeEnabled = value; // Save immediately
     notifyListeners();
   }
 }

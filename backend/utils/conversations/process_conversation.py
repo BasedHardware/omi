@@ -49,6 +49,7 @@ from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -312,6 +313,25 @@ def _trigger_apps(
 
     [t.start() for t in threads]
     [t.join() for t in threads]
+
+
+def _update_goal_progress(uid: str, conversation: Conversation):
+    """Extract and update goal progress from conversation text."""
+    try:
+        # Get conversation text
+        text = ""
+        if conversation.structured and conversation.structured.overview:
+            text = conversation.structured.overview
+        elif conversation.transcript_segments:
+            text = " ".join([s.text for s in conversation.transcript_segments[:20]])
+        
+        if not text or len(text) < 10:
+            return
+        
+        # Use utility function to extract and update goal progress
+        extract_and_update_goal_progress(uid, text)
+    except Exception as e:
+        print(f"[GOAL] Error updating progress: {e}")
 
 
 def _extract_memories(uid: str, conversation: Conversation):
@@ -584,6 +604,7 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
