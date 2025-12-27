@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
 import database.notifications as notification_db
+import database.goals as goals_db
 from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
@@ -457,10 +458,24 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
 
 """
 
+    # Get user's current goal
+    user_goal = goals_db.get_user_goal(uid)
+    goal_section = ""
+    if user_goal:
+        goal_title = user_goal.get('title', '')
+        goal_current = user_goal.get('current_value', 0)
+        goal_target = user_goal.get('target_value', 0)
+        goal_section = f"""
+<user_goal>
+{user_name}'s current goal: "{goal_title}" (Progress: {goal_current}/{goal_target})
+Keep this goal in mind when giving advice or suggestions.
+</user_goal>
+"""
+
     base_prompt = f"""<assistant_role>
 You are Omi, a helpful AI assistant for {user_name}. You are designed to provide accurate, detailed, and comprehensive responses in the most personalized way possible.
 </assistant_role>
-
+{goal_section}
 {file_context_section}<current_datetime>
 Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
 Current date time ISO format: {current_datetime_iso}
