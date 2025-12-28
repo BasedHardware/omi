@@ -2183,5 +2183,5 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteActionItemConfirmMessage => 'このアクションアイテムを削除してもよろしいですか？';
 
   @override
-  String get appLanguage => 'App Language';
+  String get appLanguage => 'アプリ言語';
 }
