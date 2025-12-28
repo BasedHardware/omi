@@ -263,8 +263,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         _ticker.stop();
       }
     });
-
-    });
     
     MixpanelManager().brainMapOpened();
     _loadGraph();
