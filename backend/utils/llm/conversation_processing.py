@@ -363,13 +363,15 @@ CALENDAR MEETING CONTEXT:
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
-    2. SECOND: Identify all topics, people, places, or things being discussed
-    3. THIRD: Filter aggressively - is the user ALREADY doing this? If yes, SKIP IT
-    4. FOURTH: Ask - "Is this truly important enough to remind a busy person?" If no, SKIP IT
-    5. FIFTH: Extract ONLY action items that passed steps 3 & 4, using specific names/details
-    6. SIXTH: Extract timing information separately and put it in the due_at field
-    7. SEVENTH: Clean the description - remove ALL time references and vague words
-    8. EIGHTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+    2. SECOND: Check for EXPLICIT task requests (remind me, add task, don't forget, etc.) - ALWAYS extract these
+    3. THIRD: For IMPLICIT tasks - be extremely aggressive with filtering:
+       - Is the user ALREADY doing this? SKIP IT
+       - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
+       - Would missing this have real consequences? If not obvious, SKIP IT
+       - Better to extract 0 implicit tasks than flood the user with noise
+    4. FOURTH: Extract timing information separately and put it in the due_at field
+    5. FIFTH: Clean the description - remove ALL time references and vague words
+    6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
 
     CRITICAL CONTEXT:
     • These action items are primarily for the PRIMARY USER who is having/recording this conversation
