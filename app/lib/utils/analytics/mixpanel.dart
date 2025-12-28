@@ -715,6 +715,21 @@ class MixpanelManager {
     });
   }
 
+  // Brain Map Events
+  void brainMapOpened() => track('Brain Map Opened');
+
+  void brainMapNodeClicked(String nodeId, String label, String type) {
+    track('Brain Map Node Clicked', properties: {
+      'node_id': nodeId,
+      'label': label,
+      'type': type,
+    });
+  }
+
+  void brainMapShareClicked() => track('Brain Map Share Clicked');
+
+  void brainMapRebuilt() => track('Brain Map Rebuilt');
+  
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({
     required String conversationId,

@@ -264,6 +264,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       }
     });
 
+    });
+    
+    MixpanelManager().brainMapOpened();
     _loadGraph();
   }
 
@@ -352,6 +355,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
+      MixpanelManager().brainMapRebuilt();
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
@@ -460,6 +464,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   }
 
   Future<void> _shareGraph() async {
+    MixpanelManager().brainMapShareClicked();
     try {
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -753,6 +758,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (hitNodeId != null) {
         _highlightedNodeIds.add(hitNodeId!);
         
+        final node = simulation.nodeMap[hitNodeId];
+        if (node != null) {
+          MixpanelManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
+        }
+
         // Find neighbors
         final neighbors = <String>[];
         for (var edge in simulation.edges) {
