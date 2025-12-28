@@ -14,6 +14,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class GraphNode3D {
   final String id;
