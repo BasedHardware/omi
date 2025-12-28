@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -9,6 +6,7 @@ const flushIntervalInSeconds = 90;
 const sdcardChunkSizeSecs = 60;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
+const secondsPerFlashPage = 1.4;
 
 enum WalStatus {
   inProgress,
@@ -30,6 +28,7 @@ class WalStats {
   final int sdcardFiles;
   final int fromSdcardFiles;
   final int limitlessFiles;
+  final int fromFlashPageFiles;
   final int phoneSize;
   final int sdcardSize;
   final int syncedFiles;
@@ -41,6 +40,7 @@ class WalStats {
     required this.sdcardFiles,
     required this.fromSdcardFiles,
     required this.limitlessFiles,
+    required this.fromFlashPageFiles,
     required this.phoneSize,
     required this.sdcardSize,
     required this.syncedFiles,
@@ -48,6 +48,7 @@ class WalStats {
   });
 
   int get sdcardRelatedFiles => sdcardFiles + fromSdcardFiles;
+  int get flashPageRelatedFiles => limitlessFiles + fromFlashPageFiles;
 
   String get totalSizeFormatted => _formatBytes(phoneSize + sdcardSize);
   String get phoneSizeFormatted => _formatBytes(phoneSize);
@@ -132,9 +133,8 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage: json['original_storage'] != null
-          ? WalStorage.values.asNameMap()[json['original_storage']]
-          : null,
+      originalStorage:
+          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
     );
   }
 

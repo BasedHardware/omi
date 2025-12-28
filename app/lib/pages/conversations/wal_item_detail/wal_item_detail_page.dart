@@ -27,12 +27,13 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   bool _isSharing = false;
   SyncProvider? _syncProvider;
 
-  bool get _isSDCardWal => widget.wal.storage == WalStorage.sdcard;
+  /// Returns true if WAL is still on device storage (SD card or flash page) and needs transfer
+  bool get _needsTransfer => widget.wal.storage == WalStorage.sdcard || widget.wal.storage == WalStorage.flashPage;
 
   @override
   void initState() {
     super.initState();
-    if (!_isSDCardWal) {
+    if (!_needsTransfer) {
       _generateWaveform();
     }
   }
@@ -111,7 +112,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
         ],
       ),
       backgroundColor: Theme.of(context).colorScheme.primary,
-      body: _isSDCardWal ? _buildSDCardTransferUI() : _buildPlaybackUI(),
+      body: _needsTransfer ? _buildDeviceTransferUI() : _buildPlaybackUI(),
     );
   }
 
@@ -129,7 +130,25 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     }
   }
 
-  Widget _buildSDCardTransferUI() {
+  String _getStorageLocationLabel(WalStorage storage) {
+    switch (storage) {
+      case WalStorage.sdcard:
+        return 'SD Card';
+      case WalStorage.flashPage:
+        return 'Limitless Pendant';
+      case WalStorage.disk:
+        return 'Phone';
+      case WalStorage.mem:
+        return 'Phone (Memory)';
+    }
+  }
+
+  Widget _buildDeviceTransferUI() {
+    final isFlashPage = widget.wal.storage == WalStorage.flashPage;
+    final storageLabel = isFlashPage ? 'Limitless Pendant' : 'SD Card';
+    final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
+    final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
+
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
         final currentWal = syncProvider.getWalById(widget.wal.id) ?? widget.wal;
@@ -137,8 +156,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
         final transferProgress = syncProvider.walsSyncedProgress;
         final transferSpeedKBps = currentWal.syncSpeedKBps;
         final transferEtaSeconds = currentWal.syncEtaSeconds;
-        
-        if (currentWal.storage != WalStorage.sdcard) {
+
+        if (currentWal.storage != WalStorage.sdcard && currentWal.storage != WalStorage.flashPage) {
           // WAL has been transferred, pop back to refresh
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -172,22 +191,22 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         ),
                   ),
                   const SizedBox(height: 8),
-                  // SD Card notice
+                  // Storage notice
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurple.withOpacity(0.15),
+                      color: storageColor.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.sd_card, color: Colors.deepPurpleAccent, size: 14),
+                        Icon(storageIcon, color: storageColor, size: 14),
                         const SizedBox(width: 6),
                         Text(
-                          'Stored on SD Card',
+                          'Stored on $storageLabel',
                           style: TextStyle(
-                            color: Colors.deepPurpleAccent,
+                            color: storageColor,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -300,7 +319,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
             // Transfer button
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 42),
               child: SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -507,7 +526,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   Future<void> _handleTransferToPhone() async {
     try {
       final syncProvider = context.read<SyncProvider>();
-      await syncProvider.transferSdCardWalToPhone(widget.wal);
+      await syncProvider.transferWalToPhone(widget.wal);
 
       if (mounted) {
         _showSnackBar('Transfer complete! You can now play this recording.', Colors.green);
@@ -562,7 +581,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 _showFileDetailsDialog(context);
               },
             ),
-            if (_isSDCardWal) ...[
+            if (_needsTransfer) ...[
               ListTile(
                 leading: Icon(Icons.download, color: isTransferring ? Colors.grey : Colors.white),
                 title: Text(
@@ -663,7 +682,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               _buildDetailRow('Date & Time', dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
               _buildDetailRow('Duration', secondsToHumanReadable(widget.wal.seconds)),
               _buildDetailRow('Audio Format', widget.wal.codec.toFormattedString()),
-              _buildDetailRow('Storage Location', widget.wal.storage == WalStorage.sdcard ? 'SD Card' : 'Phone'),
+              _buildDetailRow('Storage Location', _getStorageLocationLabel(widget.wal.storage)),
               _buildDetailRow('Estimated Size', estimatedSize),
               _buildDetailRow('Device Model', widget.wal.deviceModel ?? 'Unknown'),
               if (widget.wal.device.isNotEmpty && widget.wal.device != "phone")

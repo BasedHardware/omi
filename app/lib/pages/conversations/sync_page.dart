@@ -177,11 +177,11 @@ class WalListItem extends StatelessWidget {
                                           color: Colors.deepPurple.withOpacity(0.2),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
-                                        child: Row(
+                                        child: const Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(Icons.sd_card, size: 10, color: Colors.deepPurpleAccent),
-                                            const SizedBox(width: 3),
+                                            SizedBox(width: 3),
                                             Text(
                                               'SD Card',
                                               style: TextStyle(
@@ -210,6 +210,30 @@ class WalListItem extends StatelessWidget {
                                               'From SD',
                                               style: TextStyle(
                                                 color: Colors.deepPurple.shade300,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else if (wal.originalStorage == WalStorage.flashPage) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.teal.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.memory, size: 10, color: Colors.teal.shade300),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'Limitless',
+                                              style: TextStyle(
+                                                color: Colors.teal.shade300,
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -432,7 +456,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
       builder: (context, syncProvider, child) {
         final phoneCount = stats?.phoneFiles ?? 0;
         final sdCardRelatedCount = stats?.sdcardRelatedFiles ?? 0; // On SD card + from SD card
-        final limitlessCount = stats?.limitlessFiles ?? 0;
+        final flashPageRelatedCount = stats?.flashPageRelatedFiles ?? 0; // On flash page + from flash page
         final totalCount = stats?.totalFiles ?? 0;
 
         return SingleChildScrollView(
@@ -454,8 +478,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                     () => syncProvider.setStorageFilter(WalStorage.sdcard)),
                 const SizedBox(width: 8),
               ],
-              if (limitlessCount > 0)
-                _buildChip('Limitless', limitlessCount, syncProvider.storageFilter == WalStorage.flashPage,
+              if (flashPageRelatedCount > 0)
+                _buildChip('Limitless', flashPageRelatedCount, syncProvider.storageFilter == WalStorage.flashPage,
                     () => syncProvider.setStorageFilter(WalStorage.flashPage)),
             ],
           ),
@@ -637,7 +661,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
           syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress;
       final speedKBps = syncProvider.syncSpeedKBps;
       final isSdCardSyncing = syncProvider.isSdCardSyncing;
-      
+
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
@@ -660,7 +684,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isSdCardSyncing ? 'Downloading from SD Card' : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
+                          isSdCardSyncing
+                              ? 'Downloading from SD Card'
+                              : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                         ),
                         if (speedKBps != null && speedKBps > 0) ...[
@@ -846,9 +872,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: Padding(
-                padding: const EdgeInsets.only(left: 2, top: 1),
-                child: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: const Padding(
+                padding: EdgeInsets.only(left: 2, top: 1),
+                child: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),

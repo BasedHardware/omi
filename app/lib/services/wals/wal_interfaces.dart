@@ -47,7 +47,6 @@ enum WalServiceStatus {
   stop,
 }
 
-
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
   Future<void> addExternalWal(Wal wal);
@@ -69,10 +68,7 @@ abstract class SDCardWalSync implements IWalSync {
 
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
+  void setLocalSync(LocalWalSync localSync);
   Future<void> deleteAllSyncedWals();
-  Future<SyncLocalFilesResponse> uploadOrphanedFiles();
   bool get isSyncing;
-  bool get isUploading;
-  bool get hasOrphanedFiles;
-  int get orphanedFilesCount;
 }
