@@ -712,5 +712,31 @@
   "failedToDeleteActionItem": "Aufgabe konnte nicht gelöscht werden",
   "deleteActionItemConfirmTitle": "Aufgabe löschen",
   "deleteActionItemConfirmMessage": "Sind Sie sicher, dass Sie diese Aufgabe löschen möchten?",
-  "appLanguage": "App-Sprache"
+  "appLanguage": "App-Sprache",
+  "completeAuthBrowser": "Bitte schließen Sie die Authentifizierung in Ihrem Browser ab. Kehren Sie danach zur App zurück.",
+  "failedToStartAppAuth": "Authentifizierung für {appName} konnte nicht gestartet werden",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Mit {appName} verbinden",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Sie müssen Omi autorisieren, Aufgaben in Ihrem {appName}-Konto zu erstellen. Dies öffnet Ihren Browser zur Authentifizierung.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Weiter"
 }

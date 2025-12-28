@@ -709,7 +709,28 @@
   "appLanguage": "应用语言",
   "completeAuthBrowser": "请在浏览器中完成身份验证。完成后，返回应用程序。",
   "failedToStartAppAuth": "无法启动 {appName} 身份验证",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
   "connectToAppTitle": "连接到 {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
   "authorizeOmiForTasks": "您需要授权 Omi 在您的 {appName} 帐户中创建任务。这将打开您的浏览器进行身份验证。",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
   "continueButton": "继续"
 }

@@ -1435,12 +1435,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String connectToAppTitle(String appName) {
-    return 'Verbinden mit $appName';
+    return 'Mit $appName verbinden';
   }
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'Sie müssen Omi autorisieren, Aufgaben in Ihrem $appName-Konto zu erstellen. Dies öffnet Ihren Browser für die Authentifizierung.';
+    return 'Sie müssen Omi autorisieren, Aufgaben in Ihrem $appName-Konto zu erstellen. Dies öffnet Ihren Browser zur Authentifizierung.';
   }
 
   @override

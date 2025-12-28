@@ -709,7 +709,28 @@
   "appLanguage": "Idioma de la App",
   "completeAuthBrowser": "Por favor completa la autenticación en tu navegador. Al terminar, vuelve a la app.",
   "failedToStartAppAuth": "Error al iniciar autenticación de {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
   "connectToAppTitle": "Conectar a {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
   "authorizeOmiForTasks": "Necesitas autorizar a Omi para crear tareas en tu cuenta de {appName}. Esto abrirá tu navegador para autenticación.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
   "continueButton": "Continuar"
 }
