@@ -706,5 +706,10 @@
   "failedToDeleteActionItem": "删除失败",
   "deleteActionItemConfirmTitle": "删除任务",
   "deleteActionItemConfirmMessage": "您确定要删除此任务吗？",
-  "appLanguage": "应用语言"
+  "appLanguage": "应用语言",
+  "completeAuthBrowser": "请在浏览器中完成身份验证。完成后，返回应用程序。",
+  "failedToStartAppAuth": "无法启动 {appName} 身份验证",
+  "connectToAppTitle": "连接到 {appName}",
+  "authorizeOmiForTasks": "您需要授权 Omi 在您的 {appName} 帐户中创建任务。这将打开您的浏览器进行身份验证。",
+  "continueButton": "继续"
 }

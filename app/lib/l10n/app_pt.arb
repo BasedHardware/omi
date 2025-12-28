@@ -706,5 +706,10 @@
   "failedToDeleteActionItem": "Falha ao apagar",
   "deleteActionItemConfirmTitle": "Apagar tarefa",
   "deleteActionItemConfirmMessage": "Tem certeza de que deseja apagar esta tarefa?",
-  "appLanguage": "Idioma do App"
+  "appLanguage": "Idioma do App",
+  "completeAuthBrowser": "Por favor, complete a autenticação no seu navegador. Quando terminar, volte para o app.",
+  "failedToStartAppAuth": "Falha ao iniciar autenticação do {appName}",
+  "connectToAppTitle": "Conectar ao {appName}",
+  "authorizeOmiForTasks": "Você precisará autorizar o Omi para criar tarefas na sua conta {appName}. Isso abrirá seu navegador para autenticação.",
+  "continueButton": "Continuar"
 }

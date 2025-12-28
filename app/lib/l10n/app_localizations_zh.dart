@@ -1391,25 +1391,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get configureSettings => '配置设置';
 
   @override
-  String get completeAuthBrowser => 'Please complete authentication in your browser. Once done, return to the app.';
+  String get completeAuthBrowser => '请在浏览器中完成身份验证。完成后，返回应用程序。';
 
   @override
   String failedToStartAppAuth(String appName) {
-    return 'Failed to start $appName authentication';
+    return '无法启动 $appName 身份验证';
   }
 
   @override
   String connectToAppTitle(String appName) {
-    return 'Connect to $appName';
+    return '连接到 $appName';
   }
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'You\'ll need to authorize Omi to create tasks in your $appName account. This will open your browser for authentication.';
+    return '您需要授权 Omi 在您的 $appName 帐户中创建任务。这将打开您的浏览器进行身份验证。';
   }
 
   @override
-  String get continueButton => 'Continue';
+  String get continueButton => '继续';
 
   @override
   String appIntegration(String appName) {

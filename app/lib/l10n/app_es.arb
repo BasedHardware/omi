@@ -706,5 +706,10 @@
   "failedToDeleteActionItem": "Error al borrar",
   "deleteActionItemConfirmTitle": "Borrar tarea",
   "deleteActionItemConfirmMessage": "¿Seguro que quieres borrar esta tarea?",
-  "appLanguage": "Idioma de la App"
+  "appLanguage": "Idioma de la App",
+  "completeAuthBrowser": "Por favor completa la autenticación en tu navegador. Al terminar, vuelve a la app.",
+  "failedToStartAppAuth": "Error al iniciar autenticación de {appName}",
+  "connectToAppTitle": "Conectar a {appName}",
+  "authorizeOmiForTasks": "Necesitas autorizar a Omi para crear tareas en tu cuenta de {appName}. Esto abrirá tu navegador para autenticación.",
+  "continueButton": "Continuar"
 }

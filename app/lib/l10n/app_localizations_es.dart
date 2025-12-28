@@ -1409,25 +1409,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get configureSettings => 'Configurar ajustes';
 
   @override
-  String get completeAuthBrowser => 'Please complete authentication in your browser. Once done, return to the app.';
+  String get completeAuthBrowser =>
+      'Por favor completa la autenticación en tu navegador. Al terminar, vuelve a la app.';
 
   @override
   String failedToStartAppAuth(String appName) {
-    return 'Failed to start $appName authentication';
+    return 'Error al iniciar autenticación de $appName';
   }
 
   @override
   String connectToAppTitle(String appName) {
-    return 'Connect to $appName';
+    return 'Conectar a $appName';
   }
 
   @override
   String authorizeOmiForTasks(String appName) {
-    return 'You\'ll need to authorize Omi to create tasks in your $appName account. This will open your browser for authentication.';
+    return 'Necesitas autorizar a Omi para crear tareas en tu cuenta de $appName. Esto abrirá tu navegador para autenticación.';
   }
 
   @override
-  String get continueButton => 'Continue';
+  String get continueButton => 'Continuar';
 
   @override
   String appIntegration(String appName) {

@@ -706,5 +706,10 @@
   "failedToDeleteActionItem": "हटाने में विफल",
   "deleteActionItemConfirmTitle": "कार्य हटाएं",
   "deleteActionItemConfirmMessage": "क्या आप वाकई इस कार्य को हटाना चाहते हैं?",
-  "appLanguage": "ऐप भाषा"
+  "appLanguage": "ऐप भाषा",
+  "completeAuthBrowser": "कृपया अपने ब्राउज़र में प्रमाणीकरण पूरा करें। हो जाने पर, ऐप पर वापस आएं।",
+  "failedToStartAppAuth": "{appName} प्रमाणीकरण शुरू करने में विफल",
+  "connectToAppTitle": "{appName} से कनेक्ट करें",
+  "authorizeOmiForTasks": "आपको अपने {appName} खाते में कार्य बनाने के लिए Omi को अधिकृत करना होगा। यह प्रमाणीकरण के लिए आपका ब्राउज़र खोलेगा।",
+  "continueButton": "जारी रखें"
 }
