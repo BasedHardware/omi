@@ -1272,6 +1272,28 @@ async def _listen(
             transcript_segments = []
             if segments_to_process:
                 last_transcript_time = time.time()
+
+                # Log segment times BEFORE any modification
+                if first_audio_byte_timestamp:
+                    for seg in segments_to_process:
+                        abs_start = first_audio_byte_timestamp + seg["start"]
+                        abs_end = first_audio_byte_timestamp + seg["end"]
+                        print(
+                            f"[SEGMENT_TIMING] raw_start={seg['start']:.3f}s raw_end={seg['end']:.3f}s | "
+                            f"abs_start={abs_start:.3f} abs_end={abs_end:.3f} | "
+                            f"abs_start_dt={datetime.fromtimestamp(abs_start, tz=timezone.utc).isoformat()} | "
+                            f"text={seg.get('text', '')[:50]}",
+                            uid, session_id
+                        )
+                else:
+                    for seg in segments_to_process:
+                        print(
+                            f"[SEGMENT_TIMING] raw_start={seg['start']:.3f}s raw_end={seg['end']:.3f}s | "
+                            f"first_audio_byte_timestamp=None | "
+                            f"text={seg.get('text', '')[:50]}",
+                            uid, session_id
+                        )
+
                 if seconds_to_trim is None:
                     seconds_to_trim = segments_to_process[0]["start"]
 
