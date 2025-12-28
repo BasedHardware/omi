@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:uuid/uuid.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/select_text_screen.dart';
@@ -116,10 +117,25 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         });
       }
       // Handle auto-message from notification (e.g., daily reflection)
+      // This sends a message FROM Omi AI, not from the user
       if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) {
-            _sendMessageUtil(widget.autoMessage!);
+            final aiMessage = ServerMessage(
+              const Uuid().v4(),
+              DateTime.now(),
+              widget.autoMessage!,
+              MessageSender.ai,
+              MessageType.text,
+              null,
+              false,
+              [],
+              [],
+              [],
+              askForNps: false,
+            );
+            context.read<MessageProvider>().addMessage(aiMessage);
+            scrollToBottom();
           }
         });
       }
