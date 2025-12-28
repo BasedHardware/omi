@@ -345,15 +345,20 @@ async def _websocket_util_trigger(
 
                 # Audio bytes
                 if header_type == 101:
-                    audiobuffer.extend(data[4:])
-                    trigger_audiobuffer.extend(data[4:])
+                    # Parse: header(4) | timestamp(8 bytes double) | audio_data
+                    buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
+                    audio_data = data[12:]
+                    
+                    audiobuffer.extend(audio_data)
+                    trigger_audiobuffer.extend(audio_data)
 
                     # Private cloud sync
                     if private_cloud_sync_enabled and current_conversation_id:
                         if private_cloud_chunk_start_time is None:
-                            private_cloud_chunk_start_time = time.time()
+                            # Use timestamp from first buffer of this 5-second chunk
+                            private_cloud_chunk_start_time = buffer_start_timestamp
 
-                        private_cloud_sync_buffer.extend(data[4:])
+                        private_cloud_sync_buffer.extend(audio_data)
                         # Save chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * private_cloud_sync_delay_seconds:
                             chunk_data = bytes(private_cloud_sync_buffer)

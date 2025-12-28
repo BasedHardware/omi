@@ -928,16 +928,19 @@ async def _listen(
 
         # Audio bytes
         audio_buffers = bytearray()
+        audio_buffer_last_received: float = None  # Track when last audio was received
         audio_bytes_enabled = (
             bool(get_audio_bytes_webhook_seconds(uid)) or is_audio_bytes_app_enabled(uid) or private_cloud_sync_enabled
         )
 
-        def audio_bytes_send(audio_bytes):
-            nonlocal audio_buffers
+        def audio_bytes_send(audio_bytes: bytes, received_at: float):
+            nonlocal audio_buffers, audio_buffer_last_received
             audio_buffers.extend(audio_bytes)
+            audio_buffer_last_received = received_at
 
         async def _audio_bytes_flush(auto_reconnect: bool = True):
             nonlocal audio_buffers
+            nonlocal audio_buffer_last_received
             nonlocal pusher_ws
             nonlocal pusher_connected
             nonlocal last_synced_conversation_id
@@ -964,9 +967,16 @@ async def _listen(
             # Send audio bytes
             if pusher_connected and pusher_ws and len(audio_buffers) > 0:
                 try:
-                    # 101|data
+                    # Calculate buffer start time:
+                    # buffer_start = last_received_time - buffer_duration
+                    # buffer_duration = buffer_length_bytes / (sample_rate * 2 bytes per sample)
+                    buffer_duration_seconds = len(audio_buffers) / (sample_rate * 2)
+                    buffer_start_time = (audio_buffer_last_received or time.time()) - buffer_duration_seconds
+                    
+                    # 101|timestamp(8 bytes double)|audio_data
                     data = bytearray()
                     data.extend(struct.pack("I", 101))
+                    data.extend(struct.pack("d", buffer_start_time))
                     data.extend(audio_buffers.copy())
                     audio_buffers = bytearray()  # reset
                     await pusher_ws.send(data)
@@ -1546,7 +1556,7 @@ async def _listen(
                         await flush_stt_buffer()
 
                     if audio_bytes_send is not None:
-                        audio_bytes_send(data)
+                        audio_bytes_send(data, last_audio_received_time)
 
                 elif message.get("text") is not None:
                     try:
