@@ -785,5 +785,6 @@
   "failedToDeleteActionItem": "アクションアイテムの削除に失敗しました",
   "delete": "削除",
   "deleteActionItemConfirmTitle": "アクションアイテムの削除",
-  "deleteActionItemConfirmMessage": "このアクションアイテムを削除してもよろしいですか？"
+  "deleteActionItemConfirmMessage": "このアクションアイテムを削除してもよろしいですか？",
+  "appLanguage": "アプリ言語"
 }
