@@ -312,9 +312,30 @@ CALENDAR MEETING CONTEXT:
             items_list
         )
 
-    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract high-quality, actionable tasks from the provided content.
+    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
 
     The content language is {language_code}. Use the same language {language_code} for your response.
+
+    EXPLICIT TASK/REMINDER REQUESTS (HIGHEST PRIORITY)
+
+    When the primary user OR someone speaking to them uses these patterns, ALWAYS extract the task:
+    - "Remind me to X" / "Remember to X" → EXTRACT "X"
+    - "Don't forget to X" / "Don't let me forget X" → EXTRACT "X"
+    - "Add task X" / "Create task X" / "Make a task for X" → EXTRACT "X"
+    - "Note to self: X" / "Mental note: X" → EXTRACT "X"
+    - "Task: X" / "Todo: X" / "To do: X" → EXTRACT "X"
+    - "I need to remember to X" → EXTRACT "X"
+    - "Put X on my list" / "Add X to my tasks" → EXTRACT "X"
+    - "Set a reminder for X" / "Can you remind me X" → EXTRACT "X"
+    - "You need to X" / "You should X" / "Make sure you X" (said TO the user) → EXTRACT "X"
+
+    These explicit requests bypass importance/timing filters. If someone explicitly asks for a reminder or task, extract it.
+
+    Examples:
+    - User says "Remind me to buy milk" → Extract "Buy milk"
+    - Someone tells user "Don't forget to call your mom" → Extract "Call mom"
+    - User says "Add task pick up dry cleaning" → Extract "Pick up dry cleaning"
+    - User says "Note to self, check tire pressure" → Extract "Check tire pressure"
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
@@ -342,13 +363,15 @@ CALENDAR MEETING CONTEXT:
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
-    2. SECOND: Identify all topics, people, places, or things being discussed
-    3. THIRD: Filter aggressively - is the user ALREADY doing this? If yes, SKIP IT
-    4. FOURTH: Ask - "Is this truly important enough to remind a busy person?" If no, SKIP IT
-    5. FIFTH: Extract ONLY action items that passed steps 3 & 4, using specific names/details
-    6. SIXTH: Extract timing information separately and put it in the due_at field
-    7. SEVENTH: Clean the description - remove ALL time references and vague words
-    8. EIGHTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+    2. SECOND: Check for EXPLICIT task requests (remind me, add task, don't forget, etc.) - ALWAYS extract these
+    3. THIRD: For IMPLICIT tasks - be extremely aggressive with filtering:
+       - Is the user ALREADY doing this? SKIP IT
+       - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
+       - Would missing this have real consequences? If not obvious, SKIP IT
+       - Better to extract 0 implicit tasks than flood the user with noise
+    4. FOURTH: Extract timing information separately and put it in the due_at field
+    5. FIFTH: Clean the description - remove ALL time references and vague words
+    6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
 
     CRITICAL CONTEXT:
     • These action items are primarily for the PRIMARY USER who is having/recording this conversation
@@ -359,11 +382,11 @@ CALENDAR MEETING CONTEXT:
       - It's super crucial for the primary user to track it
       - The primary user needs to follow up on it
 
-    QUALITY OVER QUANTITY:
-    • Better to have 0 action items than to flood the user with unnecessary ones
-    • Only extract action items that are truly important and need tracking
-    • When in doubt, DON'T extract - be conservative and selective
-    • Think: "Would a busy person want to be reminded of this?"
+    BALANCE QUALITY AND USER INTENT:
+    • For EXPLICIT requests (remind me, add task, don't forget, etc.) - ALWAYS extract
+    • For IMPLICIT tasks inferred from conversation - be very selective, better to extract 0 than flood the user
+    • Think: "Did the user ask for this reminder, or am I guessing they need it?"
+    • If the user explicitly asked for a task/reminder, respect their request even if it seems trivial
 
     STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
 
@@ -382,18 +405,20 @@ CALENDAR MEETING CONTEXT:
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
 
-    3. **Timing Signal**: The task includes a timing cue:
+    3. **Timing Signal** (NOT required for explicit task requests):
        - Explicit dates or times
        - Relative timing ("tomorrow", "next week", "by Friday", "this month")
        - Urgency markers ("urgent", "ASAP", "high priority")
+       - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
-    4. **Real Importance**: The task has genuine consequences if missed:
+    4. **Real Importance** (NOT required for explicit task requests):
        - Financial impact (bills, payments, purchases, invoices)
        - Health/safety concerns (appointments, medications, safety checks)
        - Hard deadlines (submissions, filings, registrations)
        - Explicit stress if missed (stated by speakers)
        - Critical dependencies (primary user blocked without it)
        - Commitments to other people (meetings, deliverables, promises)
+       - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
     5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
        - "I want to X" → EXTRACT (user stated intention, needs reminder)
