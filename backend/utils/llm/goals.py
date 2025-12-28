@@ -213,20 +213,18 @@ RECENT CHAT (what they're currently thinking about):
 USER FACTS:
 {context['memory_context'][:600] if context['memory_context'] else 'No facts available'}
 
-Give ONE specific, actionable step. Be concrete - mention specific tactics, channels, people, or actions based on their actual context. 
-No generic advice. No motivational fluff. Just the action.
-Keep it to 2-3 sentences max (around 30-40 words)."""
+Give ONE specific action in 1 sentence. Max 18 words. No fluff."""
 
         print(f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat")
         
         # Use the better model for high-quality advice
         advice = llm_medium.invoke(prompt).content
         
-        # Clean up the response - limit by words, not characters
+        # Clean up - strict 18 word limit for 2-3 lines max
         advice = advice.strip().strip('"').strip("'")
         words = advice.split()
-        if len(words) > 50:  # Limit to ~50 words (about 3-4 lines)
-            advice = ' '.join(words[:50]) + "..."
+        if len(words) > 18:
+            advice = ' '.join(words[:18]) + "..."
         
         return advice
         

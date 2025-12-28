@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Goal tracker widget with semicircle gauge
@@ -196,6 +197,22 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     } catch (e) {
       debugPrint('Error loading advice: $e');
     }
+  }
+
+  void _openChatWithAdvice() {
+    if (_advice == null || _advice!.isEmpty) return;
+    HapticFeedback.lightImpact();
+    
+    // Navigate to chat and send the advice as a message from Omi AI
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatPage(
+          isPivotBottom: false,
+          autoMessage: _advice,
+        ),
+      ),
+    );
   }
 
   Future<void> _createGoalFromSuggestion() async {
@@ -489,17 +506,27 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Title
+                // Title with edit hint
                 GestureDetector(
                   onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingGoal = true); },
-                  child: _isEditingGoal ? _buildTitleEdit() : Text(
-                    _goal!.title,
-                    style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w400,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
+                  child: _isEditingGoal ? _buildTitleEdit() : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _goal!.title,
+                          style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w400,
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                    ],
                   ),
                 ),
                 
@@ -528,35 +555,43 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                             ),
                           ),
                         ),
+                        // Edit hint for number - superscript position
+                        Positioned(
+                          bottom: 55,
+                          right: 90,
+                          child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                        ),
                       ],
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
+        ),
 
-          // Advice section - always show full text, never cut off
+          // Advice section - clickable, opens chat
           if (_advice != null && _advice!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('💡', style: TextStyle(fontSize: 16)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _advice!,
-                      style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.7), height: 1.4),
-                      softWrap: true,
-                      overflow: TextOverflow.visible, // Never clip
+            GestureDetector(
+              onTap: () => _openChatWithAdvice(),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _advice!,
+                        style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6), height: 1.4),
+                        softWrap: true,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right, size: 20, color: Colors.white.withOpacity(0.3)),
+                  ],
+                ),
               ),
             ),
           ],

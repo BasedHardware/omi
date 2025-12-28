@@ -116,10 +116,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           }
         });
       }
-      // Handle auto-message from notification (e.g., daily reflection)
+      // Handle auto-message from notification (e.g., daily reflection or goal advice)
       // This sends a message FROM Omi AI, not from the user
       if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
-        Future.delayed(const Duration(milliseconds: 500), () {
+        // Wait for messages to load first, then add auto-message
+        Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
             final aiMessage = ServerMessage(
               const Uuid().v4(),
@@ -135,7 +136,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
               askForNps: false,
             );
             context.read<MessageProvider>().addMessage(aiMessage);
-            scrollToBottom();
+            // Scroll after the message is added and rendered
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                scrollToBottom();
+              }
+            });
           }
         });
       }
@@ -692,7 +698,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (scrollController.hasClients) {
         scrollController.animateTo(
-          0.0,
+          scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
