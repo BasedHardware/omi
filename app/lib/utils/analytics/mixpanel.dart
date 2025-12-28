@@ -219,6 +219,11 @@ class MixpanelManager {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
 
+  void languageChanged(String language) {
+    track('App Language Changed', properties: {'language': language});
+    setUserProperty('App Primary Language', language);
+  }
+
   void recordingLanguageChanged(String language) {
     track('Recording Language Changed', properties: {'language': language});
     setUserProperty('Recordings Language', language);
