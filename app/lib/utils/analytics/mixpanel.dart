@@ -220,8 +220,8 @@ class MixpanelManager {
   }
 
   void languageChanged(String language) {
-    track('Language Changed', properties: {'language': language});
-    setUserProperty('Primary Language', language);
+    track('App Language Changed', properties: {'language': language});
+    setUserProperty('App Primary Language', language);
   }
 
   void recordingLanguageChanged(String language) {
