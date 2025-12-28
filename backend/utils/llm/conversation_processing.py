@@ -382,7 +382,7 @@ CALENDAR MEETING CONTEXT:
 
     BALANCE QUALITY AND USER INTENT:
     • For EXPLICIT requests (remind me, add task, don't forget, etc.) - ALWAYS extract
-    • For IMPLICIT tasks inferred from conversation - be more selective
+    • For IMPLICIT tasks inferred from conversation - be very selective, better to extract 0 than flood the user
     • Think: "Did the user ask for this reminder, or am I guessing they need it?"
     • If the user explicitly asked for a task/reminder, respect their request even if it seems trivial
 
