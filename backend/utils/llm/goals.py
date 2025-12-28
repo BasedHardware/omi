@@ -13,7 +13,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
-from utils.llm.clients import llm_mini
+from utils.llm.clients import llm_mini, llm_medium
 
 
 def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
@@ -215,16 +215,18 @@ USER FACTS:
 
 Give ONE specific, actionable step. Be concrete - mention specific tactics, channels, people, or actions based on their actual context. 
 No generic advice. No motivational fluff. Just the action.
-Max 35 words."""
+Keep it to 2-3 sentences max (around 30-40 words)."""
 
         print(f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat")
         
-        advice = llm_mini.invoke(prompt).content
+        # Use the better model for high-quality advice
+        advice = llm_medium.invoke(prompt).content
         
-        # Clean up the response
+        # Clean up the response - limit by words, not characters
         advice = advice.strip().strip('"').strip("'")
-        if len(advice) > 150:
-            advice = advice[:147] + "..."
+        words = advice.split()
+        if len(words) > 50:  # Limit to ~50 words (about 3-4 lines)
+            advice = ' '.join(words[:50]) + "..."
         
         return advice
         
