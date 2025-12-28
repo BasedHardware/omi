@@ -421,7 +421,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get systemDefault => 'Systemstandard';
 
   @override
-  String get planAndUsage => 'Plan & Nutzung';
+  String get planAndUsage => 'Abonnement & Nutzung';
 
   @override
   String get offlineSync => 'Offline-Sync';
@@ -2239,4 +2239,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmMessage => 'Sind Sie sicher, dass Sie diese Aufgabe löschen möchten?';
+
+  @override
+  String get appLanguage => 'App-Sprache';
 }

@@ -9,11 +9,11 @@ import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
-import 'package:omi/providers/home_provider.dart';
+
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
+
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -204,25 +204,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   showChevron: false,
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
-                Consumer<HomeProvider>(
-                  builder: (context, homeProvider, _) {
-                    final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
-                        ? homeProvider.availableLanguages.entries
-                            .firstWhere(
-                              (element) => element.value == homeProvider.userPrimaryLanguage,
-                              orElse: () => MapEntry(context.l10n.notSet, ''),
-                            )
-                            .key
-                        : context.l10n.notSet;
-
-                    return _buildProfileItem(
-                      title: context.l10n.language,
-                      chipValue: languageName,
-                      icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
-                      onTap: () {
-                        routeToPage(context, const LanguageSettingsPage());
-                      },
-                    );
+                _buildProfileItem(
+                  title: context.l10n.language,
+                  icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const LanguageSettingsPage());
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

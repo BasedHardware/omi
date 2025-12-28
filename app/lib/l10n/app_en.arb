@@ -2291,5 +2291,7 @@
   "deleteActionItemConfirmTitle": "Delete Action Item",
   "@deleteActionItemConfirmTitle": {"description": "Dialog title"},
   "deleteActionItemConfirmMessage": "Are you sure you want to delete this action item?",
-  "@deleteActionItemConfirmMessage": {"description": "Dialog message"}
+  "@deleteActionItemConfirmMessage": {"description": "Dialog message"},
+  "appLanguage": "App Language",
+  "@appLanguage": {"description": "Label for app language selector"}
 }

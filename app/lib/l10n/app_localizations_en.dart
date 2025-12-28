@@ -2218,4 +2218,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteActionItemConfirmMessage => 'Are you sure you want to delete this action item?';
+
+  @override
+  String get appLanguage => 'App Language';
 }

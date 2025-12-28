@@ -711,5 +711,6 @@
   "actionItemDeleted": "Aufgabe gelöscht",
   "failedToDeleteActionItem": "Aufgabe konnte nicht gelöscht werden",
   "deleteActionItemConfirmTitle": "Aufgabe löschen",
-  "deleteActionItemConfirmMessage": "Sind Sie sicher, dass Sie diese Aufgabe löschen möchten?"
+  "deleteActionItemConfirmMessage": "Sind Sie sicher, dass Sie diese Aufgabe löschen möchten?",
+  "appLanguage": "App-Sprache"
 }

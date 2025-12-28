@@ -4208,6 +4208,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Are you sure you want to delete this action item?'**
   String get deleteActionItemConfirmMessage;
+
+  /// Label for app language selector
+  ///
+  /// In en, this message translates to:
+  /// **'App Language'**
+  String get appLanguage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
