@@ -42,15 +42,13 @@ async def _extract_speaker_samples(
     uid: str,
     person_id: str,
     conversation_id: str,
-    started_at_ts: float,
-    segments: List[dict],
-    chunks: List[dict],
+    segment_ids: List[str],
     sample_rate: int = 16000,
 ):
     """
     Extract speech samples from segments and store as speaker profiles.
+    Fetches conversation from DB to get started_at and segment details.
     Processes each segment one by one, stops when sample limit reached.
-    Chunks are passed in from the caller (already verified to exist).
     """
     try:
         # Check current sample count once
@@ -61,12 +59,42 @@ async def _extract_speaker_samples(
             print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
             return
 
+        # Fetch conversation to get started_at and segment details
+        conversation = await asyncio.to_thread(
+            conversations_db.get_conversation, uid, conversation_id
+        )
+        if not conversation:
+            print(f"Conversation {conversation_id} not found", uid)
+            return
+
+        started_at = conversation.get('started_at')
+        if not started_at:
+            print(f"Conversation {conversation_id} has no started_at", uid)
+            return
+
+        started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
+
+        # Build segment lookup from conversation's transcript_segments
+        conv_segments = conversation.get('transcript_segments', [])
+        segment_map = {s.get('id'): s for s in conv_segments if s.get('id')}
+
+        # List chunks from storage
+        chunks = await asyncio.to_thread(list_audio_chunks, uid, conversation_id)
+        if not chunks:
+            print(f"No chunks found for {conversation_id}, skipping speaker sample extraction", uid)
+            return
+
         samples_added = 0
         max_samples_to_add = 5 - sample_count
 
-        for seg in segments:
+        for seg_id in segment_ids:
             if samples_added >= max_samples_to_add:
                 break
+
+            seg = segment_map.get(seg_id)
+            if not seg:
+                print(f"Segment {seg_id} not found in conversation", uid, conversation_id)
+                continue
 
             segment_start = seg.get('start')
             segment_end = seg.get('end')
@@ -258,22 +286,14 @@ async def _websocket_util_trigger(
             for request in ready_requests:
                 person_id = request['person_id']
                 conv_id = request['conversation_id']
-                started_at_ts = request['started_at']
-                segments = request['segments']
+                segment_ids = request['segment_ids']
 
                 try:
-                    chunks = await asyncio.to_thread(list_audio_chunks, uid, conv_id)
-                    if not chunks:
-                        print(f"No chunks found for {conv_id}, skipping speaker sample extraction", uid)
-                        continue
-
                     await _extract_speaker_samples(
                         uid=uid,
                         person_id=person_id,
                         conversation_id=conv_id,
-                        started_at_ts=started_at_ts,
-                        segments=segments,
-                        chunks=chunks,
+                        segment_ids=segment_ids,
                         sample_rate=sample_rate,
                     )
                 except Exception as e:
@@ -330,15 +350,13 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     person_id = res.get('person_id')
                     conv_id = res.get('conversation_id')
-                    started_at_ts = res.get('started_at')
-                    segments = res.get('segments', [])
-                    if person_id and conv_id and started_at_ts is not None and segments:
-                        print(f"Queued speaker sample request: person={person_id}, {len(segments)} segments", uid)
+                    segment_ids = res.get('segment_ids', [])
+                    if person_id and conv_id and segment_ids:
+                        print(f"Queued speaker sample request: person={person_id}, {len(segment_ids)} segments", uid)
                         speaker_sample_queue.append({
                             'person_id': person_id,
                             'conversation_id': conv_id,
-                            'started_at': started_at_ts,
-                            'segments': segments,
+                            'segment_ids': segment_ids,
                             'queued_at': time.time(),
                         })
                     continue

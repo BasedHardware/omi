@@ -1094,10 +1094,9 @@ async def _listen(
         async def send_speaker_sample_request(
             person_id: str,
             conv_id: str,
-            started_at_ts: float,
-            segments: List[dict],
+            segment_ids: List[str],
         ):
-            """Send speaker sample extraction request to pusher with list of segments."""
+            """Send speaker sample extraction request to pusher with segment IDs."""
             nonlocal pusher_ws, pusher_connected
             if not pusher_connected or not pusher_ws:
                 return
@@ -1107,11 +1106,10 @@ async def _listen(
                 data.extend(bytes(json.dumps({
                     "person_id": person_id,
                     "conversation_id": conv_id,
-                    "started_at": started_at_ts,
-                    "segments": segments,
+                    "segment_ids": segment_ids,
                 }), "utf-8"))
                 await pusher_ws.send(data)
-                print(f"Sent speaker sample request to pusher: person={person_id}, {len(segments)} segments", uid, session_id)
+                print(f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments", uid, session_id)
             except Exception as e:
                 print(f"Failed to send speaker sample request: {e}", uid, session_id)
 
@@ -1608,32 +1606,13 @@ async def _listen(
                                         and send_speaker_sample_request is not None
                                         and current_conversation_id
                                     ):
-                                        # Get conversation for started_at and segment info
-                                        conv_data = conversations_db.get_conversation(uid, current_conversation_id)
-                                        if conv_data and conv_data.get('started_at'):
-                                            started_at = conv_data['started_at']
-                                            started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else started_at
-                                            conv_segments = conv_data.get('transcript_segments', [])
-                                            
-                                            # Collect segments with valid start/end
-                                            segments_to_extract = []
-                                            for sid in segment_ids:
-                                                seg = next((s for s in conv_segments if s.get('id') == sid), None)
-                                                if seg and seg.get('start') is not None and seg.get('end') is not None:
-                                                    segments_to_extract.append({
-                                                        'start': seg['start'],
-                                                        'end': seg['end'],
-                                                    })
-                                            
-                                            if segments_to_extract:
-                                                asyncio.create_task(
-                                                    send_speaker_sample_request(
-                                                        person_id=person_id,
-                                                        conv_id=current_conversation_id,
-                                                        started_at_ts=started_at_ts,
-                                                        segments=segments_to_extract,
-                                                    )
-                                                )
+                                        asyncio.create_task(
+                                            send_speaker_sample_request(
+                                                person_id=person_id,
+                                                conv_id=current_conversation_id,
+                                                segment_ids=segment_ids,
+                                            )
+                                        )
                             else:
                                 print(
                                     "Speaker assignment ignored: no segment_ids or no speech-profile-processed segments.",
