@@ -14,9 +14,10 @@ import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_item.dart';
 import 'widgets/memory_dialog.dart';
 
+import 'package:omi/utils/l10n_extensions.dart';
+
 import 'widgets/memory_management_sheet.dart';
 import 'widgets/memory_graph_page.dart';
-
 
 class MemoriesPage extends StatefulWidget {
   const MemoriesPage({super.key});
@@ -24,8 +25,6 @@ class MemoriesPage extends StatefulWidget {
   @override
   State<MemoriesPage> createState() => MemoriesPageState();
 }
-
-
 
 class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClientMixin {
   @override
@@ -35,7 +34,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   final ScrollController _scrollController = ScrollController();
 
   OverlayEntry? _deleteNotificationOverlay;
-  
+
   bool _isInitialLoad = true;
 
   @override
@@ -81,10 +80,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               ),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Memory Deleted.',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
+                      context.l10n.memoryDeleted,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ),
                   TextButton(
@@ -98,9 +97,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: const Size(0, 36),
                     ),
-                    child: const Text(
-                      'Undo',
-                      style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
+                    child: Text(
+                      context.l10n.undo,
+                      style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w500),
                     ),
                   ),
                   IconButton(
@@ -139,16 +138,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
       if (!mounted) return;
 
-
       setState(() {
         _isInitialLoad = false;
       });
     }).withPostFrameCallback();
   }
-
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +162,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                   MixpanelManager().memoriesPageCreateMemoryBtn();
                 },
                 backgroundColor: Colors.deepPurpleAccent,
+                tooltip: context.l10n.createMemoryTooltip,
                 child: const Icon(
                   Icons.add,
                   color: Colors.white,
@@ -194,7 +189,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   child: SizedBox(
                                     height: 44,
                                     child: SearchBar(
-                                      hintText: 'Search ${provider.memories.length} Memories',
+                                      hintText: context.l10n.searchMemories(provider.memories.length),
                                       leading: const Padding(
                                         padding: EdgeInsets.only(left: 6.0),
                                         child: Icon(FontAwesomeIcons.magnifyingGlass, color: Colors.white70, size: 14),
@@ -259,7 +254,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     child: SizedBox(
                                       height: 44,
                                       child: SearchBar(
-                                        hintText: 'Search ${provider.memories.length} Memories',
+                                        hintText: context.l10n.searchMemories(provider.memories.length),
                                         leading: const Padding(
                                           padding: EdgeInsets.only(left: 6.0),
                                           child:
@@ -366,14 +361,16 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   const SizedBox(height: 16),
                                   Text(
                                     provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
-                                        ? 'No memories yet'
+                                        ? context.l10n.noMemoriesYet
                                         : provider.selectedCategories.isNotEmpty
-                                            ? provider.selectedCategories.contains(MemoryCategory.interesting) && provider.selectedCategories.length == 1
-                                                ? 'No interesting memories yet'
-                                                : provider.selectedCategories.contains(MemoryCategory.system) && provider.selectedCategories.length == 1
-                                                    ? 'No system memories yet'
-                                                    : 'No memories in these categories'
-                                            : 'No memories found',
+                                            ? provider.selectedCategories.contains(MemoryCategory.interesting) &&
+                                                    provider.selectedCategories.length == 1
+                                                ? context.l10n.noInterestingMemories
+                                                : provider.selectedCategories.contains(MemoryCategory.system) &&
+                                                        provider.selectedCategories.length == 1
+                                                    ? context.l10n.noSystemMemories
+                                                    : context.l10n.noMemoriesInCategories
+                                            : context.l10n.noMemoriesFound,
                                     style: TextStyle(
                                       color: Colors.grey.shade400,
                                       fontSize: 18,
@@ -383,7 +380,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     const SizedBox(height: 8),
                                     TextButton(
                                       onPressed: () => showMemoryDialog(context, provider),
-                                      child: const Text('Add your first memory'),
+                                      child: Text(context.l10n.addFirstMemory),
                                     ),
                                   ],
                                 ],
@@ -473,9 +470,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   void _showDeleteAllConfirmation(BuildContext context, MemoriesProvider provider) {
     if (provider.memories.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No memories to delete'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(context.l10n.noMemoriesToDelete),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -485,19 +482,19 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
-        title: const Text(
-          'Clear Omi\'s Memory',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          context.l10n.clearMemoryTitle,
+          style: const TextStyle(color: Colors.white),
         ),
         content: Text(
-          'Are you sure you want to clear Omi\'s memory? This action cannot be undone.',
+          context.l10n.clearMemoryMessage,
           style: TextStyle(color: Colors.grey.shade300),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              'Cancel',
+              MaterialLocalizations.of(context).cancelButtonLabel,
               style: TextStyle(color: Colors.grey.shade400),
             ),
           ),
@@ -506,15 +503,15 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               provider.deleteAllMemories();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Omi\'s memory about you has been cleared'),
-                  duration: Duration(seconds: 2),
+                SnackBar(
+                  content: Text(context.l10n.memoryClearedSuccess),
+                  duration: const Duration(seconds: 2),
                 ),
               );
             },
-            child: const Text(
-              'Clear Memory',
-              style: TextStyle(color: Colors.red),
+            child: Text(
+              context.l10n.clearMemoryButton,
+              style: const TextStyle(color: Colors.red),
             ),
           ),
         ],

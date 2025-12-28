@@ -170,6 +170,7 @@ flutter_launcher_icons:
   image_path: "assets/images/app_launcher_icon.png"
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     - assets/images/stars.png

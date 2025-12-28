@@ -4,11 +4,99 @@ Handles AI-powered goal suggestions, advice generation, and progress extraction.
 """
 import json
 import re
-from typing import Optional, Dict
+import traceback
+from datetime import datetime, timezone, timedelta
+from typing import Optional, Dict, List
 
 import database.goals as goals_db
 import database.memories as memories_db
+import database.conversations as conversations_db
+import database.chat as chat_db
+from database.vector_db import query_vectors as vector_search
 from utils.llm.clients import llm_mini
+
+
+def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
+    """
+    Get rich context for goal advice using hybrid retrieval:
+    1. Vector search for goal-relevant conversations
+    2. Recent conversations (last 7 days)
+    3. Recent chat messages
+    4. User memories/facts
+    
+    Returns dict with conversation_context, chat_context, memory_context
+    """
+    conv_summaries = []
+    seen_ids = set()
+    
+    # 1. Vector search: Find conversations semantically related to the goal
+    try:
+        relevant_ids = vector_search(query=goal_title, uid=uid, k=10)
+        if relevant_ids:
+            relevant_convs = conversations_db.get_conversations_by_id(uid, relevant_ids)
+            for conv in relevant_convs[:5]:  # Top 5 most relevant
+                conv_id = conv.get('id')
+                if conv_id and conv_id not in seen_ids:
+                    seen_ids.add(conv_id)
+                    overview = conv.get('structured', {}).get('overview', '')
+                    if overview:
+                        conv_summaries.append(f"[Relevant] {overview[:300]}")
+    except Exception as e:
+        print(f"[GOAL-ADVICE] Vector search error: {e}")
+    
+    # 2. Recent conversations (last 7 days) - for current context
+    try:
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        recent_convs = conversations_db.get_conversations(
+            uid=uid, 
+            limit=20, 
+            statuses=['completed'],
+            include_discarded=False
+        )
+        for conv in recent_convs:
+            conv_id = conv.get('id')
+            created = conv.get('created_at')
+            if conv_id and conv_id not in seen_ids:
+                # Check if within last 7 days
+                if created and isinstance(created, datetime) and created > week_ago:
+                    seen_ids.add(conv_id)
+                    overview = conv.get('structured', {}).get('overview', '')
+                    if overview:
+                        conv_summaries.append(f"[Recent] {overview[:250]}")
+                        if len(conv_summaries) >= 10:
+                            break
+    except Exception as e:
+        print(f"[GOAL-ADVICE] Recent conversations error: {e}")
+    
+    # 3. Recent chat messages
+    chat_context = ""
+    try:
+        recent_messages = chat_db.get_messages(uid, limit=15, app_id=None)
+        if recent_messages:
+            chat_lines = []
+            for msg in reversed(recent_messages):  # Chronological order
+                sender = "User" if msg.get('sender') == 'human' else "Omi"
+                text = msg.get('text', '')[:200]
+                if text:
+                    chat_lines.append(f"{sender}: {text}")
+            chat_context = '\n'.join(chat_lines[-10:])  # Last 10 messages
+    except Exception as e:
+        print(f"[GOAL-ADVICE] Chat messages error: {e}")
+    
+    # 4. User memories/facts
+    memory_context = ""
+    try:
+        memories = memories_db.get_memories(uid, limit=30, offset=0)
+        memory_texts = [m.get('content', '')[:150] for m in memories[:15] if m.get('content')]
+        memory_context = '\n'.join(memory_texts)
+    except Exception as e:
+        print(f"[GOAL-ADVICE] Memories error: {e}")
+    
+    return {
+        'conversation_context': '\n'.join(conv_summaries),
+        'chat_context': chat_context,
+        'memory_context': memory_context
+    }
 
 
 def suggest_goal(uid: str) -> Dict:
@@ -88,51 +176,62 @@ Make the goal specific, measurable, and relevant to their interests."""
 
 
 def get_goal_advice(uid: str, goal_id: str) -> str:
-    """Get AI-generated actionable advice for achieving a goal."""
+    """
+    Get AI-generated actionable advice for achieving a goal.
+    Uses hybrid retrieval: vector search + recent context + chat history.
+    """
     try:
         # Get the goal
         goal = goals_db.get_user_goal(uid)
         if not goal or goal.get('id') != goal_id:
             raise ValueError("Goal not found")
         
-        # Get user context
-        memories = memories_db.get_memories(uid, limit=50, offset=0)
-        memory_context = '\n'.join([m.get('content', '')[:200] for m in memories[:10] if m.get('content')])
+        goal_title = goal.get('title', 'Unknown')
+        current_value = goal.get('current_value', 0)
+        target_value = goal.get('target_value', 10)
         
-        # Get progress history
-        history = goals_db.get_goal_history(uid, goal_id, days=7)
-        
+        # Calculate progress
         progress_pct = 0
-        if goal.get('max_value', 0) > goal.get('min_value', 0):
-            range_val = goal['max_value'] - goal['min_value']
-            progress_pct = ((goal.get('current_value', 0) - goal.get('min_value', 0)) / range_val) * 100
+        if target_value > 0:
+            progress_pct = (current_value / target_value) * 100
         
-        prompt = f"""Give ONE short, actionable piece of advice (max 15 words) for this goal:
+        # Get rich context using hybrid retrieval
+        context = _get_goal_context(uid, goal_title)
+        
+        # Build the prompt with full context
+        prompt = f"""You are a strategic advisor. Based on the user's goal and their context, give ONE specific actionable step they should take THIS WEEK.
 
-Goal: {goal.get('title', 'Unknown')}
-Current progress: {goal.get('current_value', 0)} / {goal.get('target_value', 10)} ({progress_pct:.0f}%)
-Goal type: {goal.get('goal_type', 'scale')}
+GOAL: "{goal_title}"
+PROGRESS: {current_value:,.0f} / {target_value:,.0f} ({progress_pct:.1f}%)
 
-Recent user context:
-{memory_context[:500]}
+RECENT CONVERSATIONS (what they've been discussing/working on):
+{context['conversation_context'][:1500] if context['conversation_context'] else 'No recent conversations'}
 
-Recent progress history (last 7 days): {len(history)} entries
+RECENT CHAT (what they're currently thinking about):
+{context['chat_context'][:800] if context['chat_context'] else 'No recent chat'}
 
-Provide a brief, specific, actionable tip. Be encouraging but practical. No fluff.
-Just return the advice text, nothing else."""
+USER FACTS:
+{context['memory_context'][:600] if context['memory_context'] else 'No facts available'}
 
+Give ONE specific, actionable step. Be concrete - mention specific tactics, channels, people, or actions based on their actual context. 
+No generic advice. No motivational fluff. Just the action.
+Max 35 words."""
+
+        print(f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat")
+        
         advice = llm_mini.invoke(prompt).content
         
         # Clean up the response
         advice = advice.strip().strip('"').strip("'")
-        if len(advice) > 100:
-            advice = advice[:97] + "..."
+        if len(advice) > 150:
+            advice = advice[:147] + "..."
         
         return advice
         
     except Exception as e:
-        print(f"Error generating advice: {e}")
-        return 'Keep pushing forward, one step at a time!'
+        print(f"[GOAL-ADVICE] Error: {e}")
+        traceback.print_exc()
+        return 'Focus on the next small step toward your goal.'
 
 
 def extract_and_update_goal_progress(uid: str, text: str) -> Optional[Dict]:
