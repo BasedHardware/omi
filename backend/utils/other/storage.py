@@ -141,6 +141,31 @@ def delete_user_person_speech_samples(uid: str, person_id: str) -> None:
         blob.delete()
 
 
+def upload_person_speech_sample_from_bytes(
+    audio_bytes: bytes,
+    uid: str,
+    person_id: str,
+    sample_rate: int = 16000,
+) -> str:
+    """Upload PCM audio bytes as WAV speech sample. Returns GCS path."""
+    import uuid as uuid_module
+
+    wav_buffer = io.BytesIO()
+    with wave.open(wav_buffer, 'wb') as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)  # 16-bit audio
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_bytes)
+
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    filename = f"{uuid_module.uuid4()}.wav"
+    path = f'{uid}/people_profiles/{person_id}/{filename}'
+    blob = bucket.blob(path)
+    blob.upload_from_string(wav_buffer.getvalue(), content_type='audio/wav')
+
+    return path
+
+
 def get_user_people_ids(uid: str) -> List[str]:
     bucket = storage_client.bucket(speech_profiles_bucket)
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')

@@ -1081,6 +1081,30 @@ async def _listen(
             if pusher_ws:
                 await pusher_ws.close(code)
 
+        async def send_speaker_sample_request(
+            person_id: str,
+            conv_id: str,
+            started_at_ts: float,
+            segments: List[dict],
+        ):
+            """Send speaker sample extraction request to pusher with list of segments."""
+            nonlocal pusher_ws, pusher_connected
+            if not pusher_connected or not pusher_ws:
+                return
+            try:
+                data = bytearray()
+                data.extend(struct.pack("I", 105))
+                data.extend(bytes(json.dumps({
+                    "person_id": person_id,
+                    "conversation_id": conv_id,
+                    "started_at": started_at_ts,
+                    "segments": segments,
+                }), "utf-8"))
+                await pusher_ws.send(data)
+                print(f"Sent speaker sample request to pusher: person={person_id}, {len(segments)} segments", uid, session_id)
+            except Exception as e:
+                print(f"Failed to send speaker sample request: {e}", uid, session_id)
+
         def is_connected():
             return pusher_connected
 
@@ -1094,6 +1118,7 @@ async def _listen(
             request_conversation_processing,
             pusher_receive,
             is_connected,
+            send_speaker_sample_request,
         )
 
     transcript_send = None
@@ -1105,6 +1130,7 @@ async def _listen(
     request_conversation_processing = None
     pusher_receive = None
     pusher_is_connected = None
+    send_speaker_sample_request = None
 
     # Transcripts
     #
@@ -1562,6 +1588,42 @@ async def _listen(
                                     print(
                                         f"Speaker {speaker_id} assigned to {person_name} ({person_id})", uid, session_id
                                     )
+
+                                    # Forward to pusher for speech sample extraction (non-blocking)
+                                    # Only for real people (not 'user') and when private cloud sync is enabled
+                                    if (
+                                        person_id
+                                        and person_id != 'user'
+                                        and private_cloud_sync_enabled
+                                        and send_speaker_sample_request is not None
+                                        and current_conversation_id
+                                    ):
+                                        # Get conversation for started_at and segment info
+                                        conv_data = conversations_db.get_conversation(uid, current_conversation_id)
+                                        if conv_data and conv_data.get('started_at'):
+                                            started_at = conv_data['started_at']
+                                            started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else started_at
+                                            conv_segments = conv_data.get('transcript_segments', [])
+                                            
+                                            # Collect segments with valid start/end
+                                            segments_to_extract = []
+                                            for sid in segment_ids:
+                                                seg = next((s for s in conv_segments if s.get('id') == sid), None)
+                                                if seg and seg.get('start') is not None and seg.get('end') is not None:
+                                                    segments_to_extract.append({
+                                                        'start': seg['start'],
+                                                        'end': seg['end'],
+                                                    })
+                                            
+                                            if segments_to_extract:
+                                                asyncio.create_task(
+                                                    send_speaker_sample_request(
+                                                        person_id=person_id,
+                                                        conv_id=current_conversation_id,
+                                                        started_at_ts=started_at_ts,
+                                                        segments=segments_to_extract,
+                                                    )
+                                                )
                             else:
                                 print(
                                     "Speaker assignment ignored: no segment_ids or no speech-profile-processed segments.",
@@ -1602,6 +1664,7 @@ async def _listen(
                 request_conversation_processing,
                 pusher_receive,
                 pusher_is_connected,
+                send_speaker_sample_request,
             ) = create_pusher_task_handler()
 
             # Pusher connection
