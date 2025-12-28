@@ -4,8 +4,13 @@
 <dict>
 	<key>CFBundleLocalizations</key>
 	<array>
+		<string>zh</string>
+		<string>de</string>
+		<string>es</string>
+		<string>hi</string>
 		<string>en</string>
 		<string>ja</string>
+		<string>pt</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
