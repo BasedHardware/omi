@@ -24,8 +24,9 @@ class LocaleProvider extends ChangeNotifier {
       _locale = Locale(localeCode);
     } else {
       final deviceLocale = WidgetsBinding.instance.platformDispatcher.locale;
-      if (deviceLocale.languageCode == 'ja') {
-        _locale = const Locale('ja');
+      // Check if the device locale is supported
+      if (AppLocalizations.supportedLocales.any((locale) => locale.languageCode == deviceLocale.languageCode)) {
+        _locale = Locale(deviceLocale.languageCode);
       } else {
         _locale = const Locale('en');
       }
