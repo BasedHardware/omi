@@ -18,6 +18,7 @@ import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -54,7 +55,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   bool _isScrollingDown = false;
 
-  bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
 
@@ -111,7 +111,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_showVoiceRecorder && _isInitialLoad) {
+          final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
+          if (mounted && !voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
           }
         });
@@ -392,17 +393,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       topRight: Radius.circular(22),
                     ),
                   ),
-                  child: Consumer<HomeProvider>(builder: (context, home, child) {
+                  child: Consumer2<HomeProvider, VoiceRecorderProvider>(builder: (context, home, voiceRecorderProvider, child) {
                     bool shouldShowSendButton(MessageProvider p) {
-                      return !p.sendingMessage && !_showVoiceRecorder;
+                      return !p.sendingMessage && !voiceRecorderProvider.isActive;
                     }
 
                     bool shouldShowVoiceRecorderButton() {
-                      return !_showVoiceRecorder;
+                      return !voiceRecorderProvider.isActive;
                     }
 
                     bool shouldShowMenuButton() {
-                      return !_showVoiceRecorder;
+                      return !voiceRecorderProvider.isActive;
                     }
 
                     return Column(
@@ -547,19 +548,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 const SizedBox(width: 12),
                                 // Text field
                                 Expanded(
-                                  child: _showVoiceRecorder
+                                  child: voiceRecorderProvider.isActive
                                       ? VoiceRecorderWidget(
                                           onTranscriptReady: (transcript) {
-                                            setState(() {
-                                              textController.text = transcript;
-                                              _showVoiceRecorder = false;
-                                              context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                            });
+                                            textController.text = transcript;
+                                            context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
                                           },
                                           onClose: () {
-                                            setState(() {
-                                              _showVoiceRecorder = false;
-                                            });
+                                            // Provider handles the state change
                                           },
                                         )
                                       : TextField(
@@ -590,9 +586,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     onTap: () {
                                       HapticFeedback.lightImpact();
                                       FocusScope.of(context).unfocus();
-                                      setState(() {
-                                        _showVoiceRecorder = true;
-                                      });
+                                      voiceRecorderProvider.startRecording();
                                     },
                                     child: Container(
                                       height: 44,
