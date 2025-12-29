@@ -26,25 +26,38 @@ async def start_cron_job():
 
 async def send_daily_summary_notification():
     """
-    Send daily summary notifications to users based on their stored UTC hour preference.
+    Send daily summary notifications to users based on their local hour preference.
 
-    Simple and efficient: just query users where daily_summary_hour_utc == current UTC hour.
+    Groups timezones by their current local hour, then for each hour group,
+    queries users in those timezones who have that hour preference.
     """
     try:
-        current_utc_hour = datetime.now(pytz.utc).hour
+        # Group timezones by their current local hour
+        timezones_by_hour = _get_timezones_grouped_by_hour()
 
-        # Simple query: get all users with this UTC hour
-        users = await notification_db.get_users_for_daily_summary(current_utc_hour)
+        for target_hour, timezones in timezones_by_hour.items():
+            # Get users in those timezones who want notifications at this hour
+            users = await notification_db.get_users_for_daily_summary(timezones, target_hour)
 
-        if users:
-            print(f"Sending daily summary to {len(users)} users at UTC hour {current_utc_hour}")
-            await _send_bulk_summary_notification(users)
-        else:
-            print(f"No users to send daily summary at UTC hour {current_utc_hour}")
+            if users:
+                print(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
+                await _send_bulk_summary_notification(users)
 
     except Exception as e:
         print(f"Error sending daily summary: {e}")
         return None
+
+
+def _get_timezones_grouped_by_hour() -> dict[int, list[str]]:
+    """Group all timezones by their current local hour."""
+    timezones_by_hour = {}
+    for tz_name in pytz.all_timezones:
+        tz = pytz.timezone(tz_name)
+        current_hour = datetime.now(tz).hour
+        if current_hour not in timezones_by_hour:
+            timezones_by_hour[current_hour] = []
+        timezones_by_hour[current_hour].append(tz_name)
+    return timezones_by_hour
 
 
 def _send_summary_notification(user_data: tuple):

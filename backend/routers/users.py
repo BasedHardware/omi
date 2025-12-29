@@ -731,14 +731,10 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
         - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
     """
     enabled = notification_db.get_daily_summary_enabled(uid)
-    hour_utc = notification_db.get_daily_summary_hour_utc(uid)
+    local_hour = notification_db.get_daily_summary_hour_local(uid)
 
-    # Convert UTC hour back to local hour for display
-    user_tz = notification_db.get_user_time_zone(uid) or 'UTC'
-    if hour_utc is not None:
-        local_hour = notification_db.convert_utc_hour_to_local(hour_utc, user_tz)
-    else:
-        # Default to 22 (10 PM) local time if not set
+    # Default to 22 (10 PM) local time if not set
+    if local_hour is None:
         local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
 
     return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
@@ -754,8 +750,8 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         - hour: Preferred hour in local timezone (0-23).
                 Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
 
-    Note: Hour should be in the user's local timezone (0-23). The system converts
-    it to UTC for storage and will send the summary at that local time.
+    Note: Hour is stored as local time. The system determines when to send
+    based on the user's timezone and will send the summary at the correct local time
     """
     if data.enabled is not None:
         notification_db.set_daily_summary_enabled(uid, data.enabled)
@@ -764,12 +760,8 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         if not (0 <= data.hour <= 23):
             raise HTTPException(status_code=400, detail="Hour must be between 0 and 23")
 
-        # Get user's timezone and convert local hour to UTC
-        user_tz = notification_db.get_user_time_zone(uid) or 'UTC'
-        hour_utc = notification_db.convert_local_hour_to_utc(data.hour, user_tz)
-
         try:
-            notification_db.set_daily_summary_hour_utc(uid, hour_utc)
+            notification_db.set_daily_summary_hour_local(uid, data.hour)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
