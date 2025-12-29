@@ -1231,9 +1231,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 ),
                                                 value: [selectedDate],
                                                 onValueChanged: (dates) {
-                                                    if (dates.isNotEmpty) {
-                                                    selectedDate = dates[0];
-                                                  }
+                                                    if (dates.isNotEmpty && dates[0] != null) {
+                                                      selectedDate = dates[0]!;
+                                                    }
                                                 },
                                               ),
                                             ),
