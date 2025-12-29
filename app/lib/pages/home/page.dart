@@ -19,7 +19,9 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -964,6 +966,69 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 },
                               );
                             }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  );
+                },
+              ),
+              // Action items page buttons - export and completed toggle
+              Consumer2<HomeProvider, ActionItemsProvider>(
+                builder: (context, homeProvider, actionItemsProvider, _) {
+                  if (homeProvider.selectedIndex != 1) {
+                    return const SizedBox.shrink();
+                  }
+                  final showCompleted = actionItemsProvider.showCompletedView;
+                  return Row(
+                    children: [
+                      // Export button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            Icons.ios_share,
+                            size: 18,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const TaskIntegrationsPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Completed toggle
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: showCompleted
+                              ? Colors.deepPurple.withValues(alpha: 0.5)
+                              : const Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(
+                            showCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                            size: 18,
+                            color: showCompleted ? Colors.white : Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            actionItemsProvider.toggleShowCompletedView();
                           },
                         ),
                       ),
