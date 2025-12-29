@@ -548,3 +548,23 @@ Future<bool> deleteDailySummary(String summaryId) async {
   );
   return response?.statusCode == 200;
 }
+
+/// Generate a daily summary for a specific date (or today if not specified)
+/// Returns the summary_id on success, null on failure
+Future<String?> generateDailySummary({String? date}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
+    headers: {},
+    method: 'POST',
+    body: date != null ? jsonEncode({'date': date}) : '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+
+  try {
+    final data = jsonDecode(response.body);
+    return data['summary_id'] as String?;
+  } catch (e) {
+    debugPrint('Error parsing generate summary response: $e');
+    return null;
+  }
+}

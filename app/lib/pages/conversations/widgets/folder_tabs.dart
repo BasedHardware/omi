@@ -137,7 +137,7 @@ class _FolderTabsState extends State<FolderTabs> {
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: selected item comes first (after "All" and "Starred")
+    // Build ordered list of tabs: All, Recap (if available), Starred, folders
     final List<Widget> tabs = [];
 
     // "All" tab always first - clears all filters when clicked
@@ -159,7 +159,12 @@ class _FolderTabsState extends State<FolderTabs> {
     ));
     tabs.add(const SizedBox(width: 8));
 
-    // Starred always second (right after "All")
+    // Daily Summaries tab second (after All, before Starred) - only show if user has summaries
+    if (widget.hasDailySummaries) {
+      tabs.add(_buildDailySummariesTab());
+    }
+
+    // Starred tab
     tabs.add(_buildStarredTab());
 
     // If a folder is selected, show it first (after Starred)
@@ -175,11 +180,6 @@ class _FolderTabsState extends State<FolderTabs> {
       if (folder.id != widget.selectedFolderId) {
         tabs.add(_buildFolderTab(folder));
       }
-    }
-
-    // Daily Summaries tab at the end (extreme right) - only show if user has summaries
-    if (widget.hasDailySummaries) {
-      tabs.add(_buildDailySummariesTab());
     }
 
     // Extra padding at the end for scroll

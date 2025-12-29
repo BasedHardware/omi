@@ -43,6 +43,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
+      } else {
+        // Still check for daily summaries even if conversations are cached
+        conversationProvider.checkHasDailySummaries();
       }
 
       // Load folders for folder tabs
