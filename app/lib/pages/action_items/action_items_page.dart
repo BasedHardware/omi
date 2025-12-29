@@ -8,7 +8,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 
-enum TaskCategory { today, noDeadline, later }
+enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -84,12 +84,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items, bool showCompleted) {
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
     // Filter out old tasks without a future due date (older than 7 days)
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
       TaskCategory.today: [],
+      TaskCategory.tomorrow: [],
       TaskCategory.noDeadline: [],
       TaskCategory.later: [],
     };
@@ -114,6 +116,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final dueDate = item.dueAt!;
         if (dueDate.isBefore(startOfTomorrow)) {
           categorized[TaskCategory.today]!.add(item);
+        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+          categorized[TaskCategory.tomorrow]!.add(item);
         } else {
           categorized[TaskCategory.later]!.add(item);
         }
@@ -125,10 +129,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   String _getCategoryTitle(TaskCategory category) {
     switch (category) {
-      case TaskCategory.noDeadline:
-        return 'No Deadline';
       case TaskCategory.today:
         return 'Today';
+      case TaskCategory.tomorrow:
+        return 'Tomorrow';
+      case TaskCategory.noDeadline:
+        return 'No Deadline';
       case TaskCategory.later:
         return 'Later';
     }
@@ -137,13 +143,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
     final now = DateTime.now();
     switch (category) {
-      case TaskCategory.noDeadline:
-        return null;
       case TaskCategory.today:
         return DateTime(now.year, now.month, now.day, 23, 59);
-      case TaskCategory.later:
-        // Tomorrow
+      case TaskCategory.tomorrow:
         return DateTime(now.year, now.month, now.day + 1, 23, 59);
+      case TaskCategory.noDeadline:
+        return null;
+      case TaskCategory.later:
+        // Day after tomorrow
+        return DateTime(now.year, now.month, now.day + 2, 23, 59);
     }
   }
 
