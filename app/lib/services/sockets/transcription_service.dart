@@ -15,6 +15,7 @@ import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
 export 'package:omi/utils/audio/audio_transcoder.dart';
@@ -396,8 +397,25 @@ class TranscriptSocketServiceFactory {
     // Build URL with query params for raw_binary type
     final effectiveUrl = requestType == SttRequestType.rawBinary ? _buildUrlWithParams(url, params) : url;
 
+
+
     // Special handling for On-Device Whisper
     if (config.provider == SttProvider.onDeviceWhisper) {
+      // Use Native iOS Speech Recognition on iOS
+      if (Platform.isIOS) {
+        return PurePollingSocket(
+          config: AudioPollingConfig(
+            bufferDuration: const Duration(seconds: 5),
+            minBufferSizeBytes: sampleRate * 2,
+            serviceId: config.provider.name,
+            transcoder: transcoder,
+          ),
+          sttProvider: OnDeviceAppleProvider(
+            language: config.language ?? 'en',
+          ),
+        );
+      }
+
       if (config.url == null || config.url!.isEmpty) {
         throw ArgumentError("[STTFactory] OnDeviceWhisper selected but no model path provided.");
       }

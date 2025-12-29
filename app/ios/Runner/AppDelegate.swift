@@ -62,6 +62,13 @@ extension FlutterError: Error {}
       self?.handleAppleRemindersCall(call, result: result)
     }
 
+    // Create Speech Recognition method channel
+    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller!.binaryMessenger)
+    let speechHandler = SpeechRecognitionHandler()
+    speechChannel.setMethodCallHandler { (call, result) in
+        speechHandler.handle(call, result: result)
+    }
+
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)

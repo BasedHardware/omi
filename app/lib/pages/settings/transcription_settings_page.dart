@@ -517,7 +517,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
 
     // Validate On-Device model presence
-    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+    if (_selectedProvider == SttProvider.onDeviceWhisper && !Platform.isIOS) {
       final modelPath = _urlController.text;
       final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
@@ -831,58 +831,55 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _switchToOnDevice() async {
     bool isLowSpec = false;
     String specDetails = '';
+    bool isIOS = Platform.isIOS;
 
-      final deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
-        // Check RAM using /proc/meminfo as reliable fallback
-        try {
-            final memInfo = await File('/proc/meminfo').readAsString();
-            final totalMemLine = memInfo.split('\n').firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
-            if (totalMemLine.isNotEmpty) {
-                final parts = totalMemLine.split(RegExp(r'\s+'));
-                // MemTotal: 123456 kB
-                if (parts.length >= 2) {
-                    final kb = int.tryParse(parts[1]);
-                    if (kb != null) {
-                        final gb = kb / 1024 / 1024;
-                         // < 3.5 GB
-                         if (gb < 3.5) {
-                            isLowSpec = true;
-                            specDetails = 'Detected RAM: ${gb.toStringAsFixed(1)} GB. Minimum recommended: 4 GB.';
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            debugPrint('Error reading meminfo: $e');
-        }
-      } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        final machine = iosInfo.utsname.machine;
-        debugPrint('Device Model: $machine');
-        
-        // Logical check for older iPhones (iPhone X and older are < 11)
-        // iPhone11,x = XS/XR (3GB/4GB)
-        // iPhone10,x = X/8 (3GB/2GB) -> Block
-        if (machine.startsWith('iPhone')) {
-          final match = RegExp(r'iPhone(\d+),').firstMatch(machine);
-          if (match != null) {
-             final version = int.tryParse(match.group(1) ?? '0') ?? 0;
-             if (version < 11) {
-               isLowSpec = true;
-               specDetails = 'Detected Model: $machine (Older than iPhone XS). Minimum recommended: iPhone 11 or newer.';
-             }
+    final deviceInfo = DeviceInfoPlugin();
+    
+    if (Platform.isAndroid) {
+      // Check RAM using /proc/meminfo as reliable fallback
+      try {
+          final memInfo = await File('/proc/meminfo').readAsString();
+          final totalMemLine = memInfo.split('\n').firstWhere((l) => l.startsWith('MemTotal:'), orElse: () => '');
+          if (totalMemLine.isNotEmpty) {
+              final parts = totalMemLine.split(RegExp(r'\s+'));
+              if (parts.length >= 2) {
+                  final kb = int.tryParse(parts[1]);
+                  if (kb != null) {
+                      final gb = kb / 1024 / 1024;
+                       if (gb < 3.5) {
+                          isLowSpec = true;
+                          specDetails = 'Detected RAM: ${gb.toStringAsFixed(1)} GB. Minimum recommended: 4 GB.';
+                      }
+                  }
+              }
           }
+      } catch (e) {
+          debugPrint('Error reading meminfo: $e');
+      }
+    } else if (Platform.isIOS) {
+      final iosInfo = await deviceInfo.iosInfo;
+      final machine = iosInfo.utsname.machine;
+      debugPrint('Device Model: $machine');
+      
+      if (machine.startsWith('iPhone')) {
+        final match = RegExp(r'iPhone(\d+),').firstMatch(machine);
+        if (match != null) {
+           final version = int.tryParse(match.group(1) ?? '0') ?? 0;
+           if (version < 11) {
+             isLowSpec = true;
+             specDetails = 'Detected Model: $machine (Older than iPhone XS). On-device recognition may be slower.';
+           }
         }
       }
+    }
 
     if (!mounted) return;
 
     // 2. Show appropriate dialog
     bool proceed = false;
 
-    if (isLowSpec) {
-      // "Not Compatible" Dialog for low-end devices
+    if (isLowSpec && !isIOS) {
+      // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
       proceed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -920,18 +917,66 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ],
           ),
           actions: [
-             // Hidden "Proceed Anyway" button
              TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Available anyway', style: TextStyle(color: Colors.white12, fontSize: 10)),
+              child: const Text('Proceed anyway', style: TextStyle(color: Colors.white12, fontSize: 10)),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, false), // Close
+              onPressed: () => Navigator.pop(context, false),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               child: const Text('Close', style: TextStyle(color: Colors.white)),
             ),
           ],
           actionsAlignment: MainAxisAlignment.spaceBetween,
+        ),
+      ) ?? false;
+    } else if (isLowSpec && isIOS) {
+      // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
+      proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+              SizedBox(width: 8),
+              Expanded(child: Text('Older Device Detected', style: TextStyle(color: Colors.white, fontSize: 18))),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                specDetails,
+                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'On-device transcription may be slower on this device.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '• Battery usage will be higher than cloud transcription.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              const Text(
+                '• Consider using Omi Cloud for better performance.',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Continue', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
       ) ?? false;
     } else {
@@ -965,7 +1010,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                 style: TextStyle(color: Colors.white70),
               ),
               Text(
-                '• Speed and accuracy will be lower than Cloud models.',
+                '• Speed and accuracy may be lower than Cloud models.',
                 style: TextStyle(color: Colors.white70),
               ),
             ],
@@ -989,8 +1034,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     setState(() {
       _useCustomStt = true;
       _selectedProvider = SttProvider.onDeviceWhisper;
-      _checkLocalModel();
-      MixpanelManager().transcriptionSourceSelected(source: 'custom_on_device');
+      if (!isIOS) {
+        _checkLocalModel();
+      }
+      MixpanelManager().transcriptionSourceSelected(source: isIOS ? 'custom_on_device_ios' : 'custom_on_device');
     });
   }
 
@@ -1614,6 +1661,42 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   /// UI for On-Device Whisper Configuration
   Widget _buildOnDeviceWhisperConfig() {
+    // If iOS, show simplified Apple Speech UI
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+       return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.apple, color: Colors.white, size: 24),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Using Native iOS Speech Recognition',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+             'Your device\'s native speech engine will be used. No model download required.',
+             style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 20),
+          _buildLanguageSelector(),
+        ],
+       );
+    }
+
     final hasModel = _isModelFilePresent;
 
     return Column(
