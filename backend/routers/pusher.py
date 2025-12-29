@@ -108,39 +108,27 @@ async def _extract_speaker_samples(
             seg_duration = segment_end - segment_start
             speaker_id = seg.get('speaker_id')
 
-            # If segment is too short, try expanding to adjacent segments with same speaker
-            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
-                seg_idx = segment_index_map.get(seg_id)
-                if seg_idx is not None:
-                    # Expand backward
-                    i = seg_idx - 1
-                    while i >= 0:
-                        prev_seg = ordered_segments[i]
-                        if prev_seg.get('speaker_id') != speaker_id:
-                            break
-                        prev_start = prev_seg.get('start')
-                        if prev_start is not None:
-                            segment_start = min(segment_start, prev_start)
-                        i -= 1
-
-                    # Expand forward
-                    i = seg_idx + 1
-                    while i < len(ordered_segments):
-                        next_seg = ordered_segments[i]
-                        if next_seg.get('speaker_id') != speaker_id:
-                            break
-                        next_end = next_seg.get('end')
-                        if next_end is not None:
-                            segment_end = max(segment_end, next_end)
-                        i += 1
-
-                    seg_duration = segment_end - segment_start
-                    if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                        print(
-                            f"Expanded segment to {seg_duration:.1f}s by including adjacent segments",
-                            uid,
-                            conversation_id,
-                        )
+            # # If segment is too short, try expanding to adjacent segments with same speaker
+            # if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
+            #     seg_idx = segment_index_map.get(seg_id)
+            #     if seg_idx is not None:
+            #         i = seg_idx - 1
+            #         while i >= 0:
+            #             prev_seg = ordered_segments[i]
+            #             if prev_seg.get('speaker_id') != speaker_id:
+            #                 break
+            #             prev_start = prev_seg.get('start')
+            #             if prev_start is not None:
+            #                 segment_start = min(segment_start, prev_start)
+            #                 seg_duration = segment_end - segment_start
+            #             if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
+            #                 print(
+            #                     f"Expanded segment to {seg_duration:.1f}s by including adjacent segments",
+            #                     uid,
+            #                     conversation_id,
+            #                 )
+            #                 break
+            #             i -= 1
 
             if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
                 print(f"Segment too short ({seg_duration:.1f}s) even after expansion, skipping", uid, conversation_id)
@@ -150,12 +138,24 @@ async def _extract_speaker_samples(
             abs_start = started_at_ts + segment_start
             abs_end = started_at_ts + segment_end
 
-            # Find overlapping chunks
-            relevant_timestamps = [
-                c['timestamp']
-                for c in chunks
-                if (c['timestamp'] + PRIVATE_CLOUD_CHUNK_DURATION) >= abs_start and c['timestamp'] <= abs_end
-            ]
+            # Find relevant chunks
+            sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
+
+            # Find first chunk that starts at or before abs_start
+            first_idx = 0
+            for i, chunk in enumerate(sorted_chunks):
+                if chunk['timestamp'] <= abs_start:
+                    first_idx = i
+                else:
+                    break
+
+            # Collect from first_idx up to abs_end
+            relevant_timestamps = []
+            for chunk in sorted_chunks[first_idx:]:
+                if chunk['timestamp'] <= abs_end:
+                    relevant_timestamps.append(chunk['timestamp'])
+                else:
+                    break
 
             if not relevant_timestamps:
                 print(f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s", uid, conversation_id)
@@ -184,7 +184,8 @@ async def _extract_speaker_samples(
             success = await asyncio.to_thread(users_db.add_person_speech_sample, uid, person_id, path)
             if success:
                 samples_added += 1
-                print(f"Stored speech sample {samples_added} for person {person_id}: {path}", uid, conversation_id)
+                seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
+                print(f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text}", uid, conversation_id)
             else:
                 print(f"Failed to add speech sample for person {person_id}", uid, conversation_id)
                 break  # Likely hit limit
