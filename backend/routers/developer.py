@@ -9,6 +9,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
+import database.users as users_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -679,6 +680,29 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
 
 
+def _add_speaker_names_to_segments(uid, conversations: list):
+    """Add speaker_name to transcript segments based on person_id mappings."""
+    all_person_ids = set()
+    for conv in conversations:
+        for seg in conv.get('transcript_segments', []):
+            if seg.get('person_id'):
+                all_person_ids.add(seg['person_id'])
+
+    people_map = {}
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+        people_map = {p['id']: p['name'] for p in people_data}
+
+    for conv in conversations:
+        for seg in conv.get('transcript_segments', []):
+            if seg.get('is_user'):
+                seg['speaker_name'] = 'User'
+            elif seg.get('person_id') and seg['person_id'] in people_map:
+                seg['speaker_name'] = people_map[seg['person_id']]
+            else:
+                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
+
+
 @router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
 def get_conversations(
     start_date: Optional[datetime] = None,
@@ -717,6 +741,8 @@ def get_conversations(
     if not include_transcript:
         for conv in unlocked_conversations:
             conv.pop('transcript_segments', None)
+    else:
+        _add_speaker_names_to_segments(uid, unlocked_conversations)
 
     return unlocked_conversations
 
@@ -822,6 +848,8 @@ def get_conversation_endpoint(
     # Remove transcript_segments if not requested
     if not include_transcript:
         conversation.pop('transcript_segments', None)
+    else:
+        _add_speaker_names_to_segments(uid, [conversation])
 
     return conversation
 
