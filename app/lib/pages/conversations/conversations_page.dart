@@ -188,7 +188,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             // Goal tracker widget - before folders
-            const SliverToBoxAdapter(child: GoalTrackerWidget()),
+            Consumer2<HomeProvider, ConversationProvider>(
+              builder: (context, homeProvider, convoProvider, _) {
+                bool isSearching = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
+                if (isSearching) {
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+                }
+                return const SliverToBoxAdapter(child: GoalTrackerWidget());
+              },
+            ),
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {

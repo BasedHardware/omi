@@ -318,7 +318,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
                   mainAxisSize: MainAxisSize.max,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Enable Apps', style: TextStyle(color: Colors.white, fontSize: 16)),
+                    Text('Get More Chat Apps', style: TextStyle(color: Colors.white, fontSize: 16)),
                     SizedBox(
                       width: 24,
                       child: Icon(Icons.apps, color: Colors.white60, size: 16),

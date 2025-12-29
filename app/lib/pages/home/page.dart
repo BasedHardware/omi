@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -10,6 +12,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -110,9 +113,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool scriptsInProgress = false;
   StreamSubscription? _notificationStreamSubscription;
 
+  String? _pendingDeleteAppId;
+
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
-  final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
+  final GlobalKey<ChatPageState> _chatPageKey = GlobalKey<ChatPageState>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
 
@@ -136,10 +141,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         break;
       case 2:
-        final memoriesState = _memoriesPageKey.currentState;
-        if (memoriesState != null) {
-          (memoriesState as dynamic).scrollToTop();
-        }
         break;
       case 3:
         final appsState = _appsPageKey.currentState;
@@ -177,7 +178,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   ///Screens with respect to subpage
   final Map<String, Widget> screensWithRespectToPath = {
-    '/facts': const MemoriesPage(),
+    '/facts': const MemoriesPage(showAppBar: true),
   };
   bool? previousConnection;
 
@@ -200,7 +201,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _pages = [
       ConversationsPage(key: _conversationsPageKey),
       ActionItemsPage(key: _actionItemsPageKey),
-      MemoriesPage(key: _memoriesPageKey),
+      ChatPage(key: _chatPageKey, isEmbeddedInTab: true),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
@@ -224,6 +225,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       switch (pageAlias) {
         case "memories":
+          homePageIdx = 2; // This will now be Chat
+          break;
+        case "chat":
           homePageIdx = 2;
           break;
         case "apps":
@@ -289,22 +293,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
             }
           }
-          // Navigate to chat page directly since it's no longer in the tab bar
-          // If there's an auto-message (e.g., from daily reflection notification), send it
+          // The tab is already set to 2 in initState, but if there's an auto-message, we might need to handle it.
           final autoMessageToSend = widget.autoMessage;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatPage(
-                    isPivotBottom: false,
-                    autoMessage: autoMessageToSend,
-                  ),
-                ),
-              );
-            }
-          });
+          if (autoMessageToSend != null && mounted) {
+            // We can't pass autoMessage directly to the ChatPage widget in the IndexedStack easily
+            // unless we use a provider or the GlobalKey.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_chatPageKey.currentState != null) {
+                _chatPageKey.currentState!.addAutoMessage(autoMessageToSend);
+              }
+            });
+          }
           break;
         case "settings":
           // Use context from the current widget instead of navigator key for bottom sheet
@@ -322,9 +321,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "facts":
+        case "memories":
           MyApp.navigatorKey.currentState?.push(
             MaterialPageRoute(
-              builder: (context) => const MemoriesPage(),
+              builder: (context) => const MemoriesPage(showAppBar: true),
             ),
           );
           break;
@@ -454,6 +454,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Consumer<HomeProvider>(
           builder: (context, homeProvider, _) {
             return Scaffold(
+              resizeToAvoidBottomInset: false,
               backgroundColor: Theme.of(context).colorScheme.primary,
               appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
               body: DefaultTabController(
@@ -513,7 +514,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       children: [
                                         // Home tab
                                         Expanded(
-                                          child: InkWell(
+                                          child: GestureDetector(
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Home');
@@ -538,7 +539,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         ),
                                         // Action Items tab
                                         Expanded(
-                                          child: InkWell(
+                                          child: GestureDetector(
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Action Items');
@@ -563,15 +564,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         ),
                                         // Center space for record button - only when no OMI device is connected
                                         if (!isOmiDeviceConnected) const SizedBox(width: 80),
-                                        // Memories tab
+                                        // Chat tab
                                         Expanded(
-                                          child: InkWell(
+                                          child: GestureDetector(
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
-                                              MixpanelManager().bottomNavigationTabClicked('Memories');
+                                              MixpanelManager().bottomNavigationTabClicked('Chat');
                                               primaryFocus?.unfocus();
                                               if (home.selectedIndex == 2) {
-                                                _scrollToTop(2);
                                                 return;
                                               }
                                               home.setIndex(2);
@@ -580,7 +580,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                               height: 90,
                                               child: Center(
                                                 child: Icon(
-                                                  FontAwesomeIcons.brain,
+                                                  FontAwesomeIcons.solidComment,
                                                   color: home.selectedIndex == 2 ? Colors.white : Colors.grey,
                                                   size: 26,
                                                 ),
@@ -590,7 +590,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         ),
                                         // Apps tab
                                         Expanded(
-                                          child: InkWell(
+                                          child: GestureDetector(
                                             onTap: () {
                                               HapticFeedback.mediumImpact();
                                               MixpanelManager().bottomNavigationTabClicked('Apps');
@@ -659,51 +659,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       },
                                     ),
                                   ),
-                                // Floating Chat Button - Bottom Right (only on homepage)
-                                if (home.selectedIndex == 0)
-                                  Positioned(
-                                    right: 20,
-                                    bottom: 100, // Position above the bottom navigation bar
-                                    child: GestureDetector(
-                                      onTap: () {
-                                        HapticFeedback.mediumImpact();
-                                        MixpanelManager().bottomNavigationTabClicked('Chat');
-                                        // Navigate to chat page
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const ChatPage(isPivotBottom: false),
-                                          ),
-                                        );
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                                        decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(32),
-                                          color: Colors.deepPurple,
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              FontAwesomeIcons.solidComment,
-                                              size: 22,
-                                              color: Colors.white,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              context.l10n.askOmi,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                               ],
                             );
                           }
@@ -759,6 +714,286 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  void _showAppSelectorSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1F1F25),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: SafeArea(
+                child: Consumer2<MessageProvider, AppProvider>(
+                  builder: (context, messageProvider, appProvider, child) {
+                    final chatApps = messageProvider.chatApps;
+                    final selectedAppId = appProvider.selectedChatAppId;
+                    final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Select Chat App',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Padding(
+                                  padding: EdgeInsets.only(left: 2, top: 1),
+                                  child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
+                                ),
+                                onPressed: () => Navigator.of(context).pop(),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // App list
+                        Expanded(
+                          child: ListView(
+                            padding: EdgeInsets.zero,
+                            children: [
+                              // Omi option
+                              _buildAppSelectorItem(
+                                avatar: _getOmiAvatar(),
+                                name: 'Omi',
+                                isSelected: isOmiSelected,
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  _chatPageKey.currentState?.handleAppSelection('no_selected', appProvider);
+                                },
+                                setModalState: setModalState,
+                              ),
+                              // Enabled chat apps
+                              ...chatApps.map((app) => _buildAppSelectorItem(
+                                    avatar: _getAppAvatar(app),
+                                    name: app.getName(),
+                                    isSelected: selectedAppId == app.id,
+                                    appId: app.id,
+                                    onTap: () {
+                                      Navigator.of(context).pop();
+                                      _chatPageKey.currentState?.handleAppSelection(app.id, appProvider);
+                                    },
+                                    onConfirmDelete: selectedAppId != app.id
+                                        ? () => _chatPageKey.currentState?.handleAppUninstall(app.id, appProvider, messageProvider)
+                                        : null,
+                                    setModalState: setModalState,
+                                  )),
+                              const Divider(color: Colors.white12, height: 1),
+                              ListTile(
+                                leading: const Padding(
+                                  padding: EdgeInsets.only(left: 2, top: 1),
+                                  child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
+                                ),
+                                title: const Text(
+                                  'Get More Chat Apps',
+                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                ),
+                                trailing: const Padding(
+                                  padding: EdgeInsets.only(left: 2, top: 1),
+                                  child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
+                                ),
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  _chatPageKey.currentState?.navigateToChatAppsPage();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildAppSelectorItem({
+    required Widget avatar,
+    required String name,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required StateSetter setModalState,
+    String? appId,
+    VoidCallback? onConfirmDelete,
+  }) {
+    final bool isPendingDelete = appId != null && _pendingDeleteAppId == appId;
+
+    if (isPendingDelete) {
+      // Show inline confirmation buttons - match ListTile height (56px)
+      return Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            avatar,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                name,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Cancel button (white)
+            GestureDetector(
+              onTap: () {
+                setModalState(() {
+                  _pendingDeleteAppId = null;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Disable button (red)
+            GestureDetector(
+              onTap: () {
+                setModalState(() {
+                  _pendingDeleteAppId = null;
+                });
+                onConfirmDelete?.call();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Disable',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListTile(
+      leading: avatar,
+      title: Text(
+        name,
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: isSelected
+          ? const Padding(
+              padding: EdgeInsets.only(left: 2, top: 1),
+              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
+            )
+          : appId != null && onConfirmDelete != null
+              ? GestureDetector(
+                  onTap: () {
+                    setModalState(() {
+                      _pendingDeleteAppId = appId;
+                    });
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+                  ),
+                )
+              : null,
+      selected: isSelected,
+      selectedTileColor: Colors.white.withOpacity(0.1),
+      onTap: onTap,
+    );
+  }
+
+  Widget _getAppAvatar(App app) {
+    return CachedNetworkImage(
+      imageUrl: app.getImageUrl(),
+      imageBuilder: (context, imageProvider) {
+        return CircleAvatar(
+          backgroundColor: Colors.white,
+          radius: 12,
+          backgroundImage: imageProvider,
+        );
+      },
+      errorWidget: (context, url, error) {
+        return const CircleAvatar(
+          backgroundColor: Colors.white,
+          radius: 12,
+          child: Icon(Icons.error_outline_rounded),
+        );
+      },
+      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
+        backgroundColor: Colors.white,
+        radius: 12,
+        child: CircularProgressIndicator(
+          value: progress.progress,
+          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+        ),
+      ),
+    );
+  }
+
+  Widget _getOmiAvatar() {
+    return Container(
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(Assets.images.background.path),
+          fit: BoxFit.cover,
+        ),
+        borderRadius: const BorderRadius.all(Radius.circular(16.0)),
+      ),
+      height: 24,
+      width: 24,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Image.asset(
+            Assets.images.herologo.path,
+            height: 16,
+            width: 16,
+          ),
+        ],
+      ),
+    );
+  }
+
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
@@ -767,8 +1002,52 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const BatteryInfoWidget(),
-          const SizedBox.shrink(),
+          Row(
+            children: [
+              const BatteryInfoWidget(),
+              Consumer<HomeProvider>(
+                builder: (context, homeProvider, child) {
+                  if (homeProvider.selectedIndex == 2) {
+                    return Consumer2<AppProvider, MessageProvider>(
+                      builder: (context, appProvider, messageProvider, child) {
+                    var selectedApp = messageProvider.chatApps
+                        .firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        _showAppSelectorSheet(context);
+                      },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(width: 12),
+                          selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
+                          const SizedBox(width: 8),
+                          Container(
+                            constraints: const BoxConstraints(maxWidth: 120),
+                            child: Text(
+                              selectedApp != null ? selectedApp.getName() : "Omi",
+                              style: const TextStyle(color: Colors.white, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.white54,
+                            size: 12,
+                          ),
+                        ],
+                      ),
+                    );
+                      },
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
+          ),
           Row(
             children: [
               // Sync icon for Limitless devices
@@ -952,8 +1231,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 ),
                                                 value: [selectedDate],
                                                 onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty && dates[0] != null) {
-                                                    selectedDate = dates[0]!;
+                                                    if (dates.isNotEmpty) {
+                                                    selectedDate = dates[0];
                                                   }
                                                 },
                                               ),
@@ -1035,6 +1314,40 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       const SizedBox(width: 8),
                     ],
                   );
+                },
+              ),
+              // New Chat button - only on Chat tab
+              Consumer<HomeProvider>(
+                builder: (context, homeProvider, child) {
+                  if (homeProvider.selectedIndex == 2) {
+                    return Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF1F1F25),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(
+                              Icons.add_comment,
+                              size: 18,
+                              color: Colors.white70,
+                            ),
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              final appProvider = context.read<AppProvider>();
+                              _chatPageKey.currentState?.handleAppSelection('clear_chat', appProvider);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    );
+                  }
+                  return const SizedBox.shrink();
                 },
               ),
               // Settings button - always visible

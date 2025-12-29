@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -36,11 +38,13 @@ import 'widgets/message_action_menu.dart';
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
+  final bool isEmbeddedInTab;
 
   const ChatPage({
     super.key,
     this.isPivotBottom = false,
     this.autoMessage,
+    this.isEmbeddedInTab = false,
   });
 
   @override
@@ -61,13 +65,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
-  final scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Track which app is pending deletion confirmation
   String? _pendingDeleteAppId;
 
   @override
   bool get wantKeepAlive => true;
+
+  void openEndDrawer() {
+    scaffoldKey.currentState?.openEndDrawer();
+  }
 
   @override
   void initState() {
@@ -167,7 +175,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           key: scaffoldKey,
           resizeToAvoidBottomInset: false,
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: _buildAppBar(context, provider),
+          appBar: widget.isEmbeddedInTab ? null : _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
           onEndDrawerChanged: (isOpened) {
             if (isOpened) {
@@ -384,7 +392,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 ),
                 // Send message area - fixed at bottom
                 Container(
-                  margin: EdgeInsets.only(top: 10, bottom: MediaQuery.of(context).viewInsets.bottom),
+                  margin: EdgeInsets.only(
+                    top: 10,
+                    bottom: widget.isEmbeddedInTab ? 0 : MediaQuery.of(context).viewInsets.bottom,
+                  ),
                   decoration: const BoxDecoration(
                     color: Colors.transparent,
                     borderRadius: BorderRadius.only(
@@ -495,20 +506,32 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           }
                         }),
                         // Send bar
-                        Padding(
-                          padding: EdgeInsets.only(
-                            left: 8,
-                            right: 8,
-                            top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                            bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 10 : 40),
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2F),
-                              borderRadius: BorderRadius.circular(32),
-                            ),
-                            child: Row(
+                        Consumer<DeviceProvider>(
+                          builder: (context, deviceProvider, child) {
+                            final bool hasDevice = deviceProvider.isConnected && deviceProvider.connectedDevice != null;
+                            final double embeddedBottomPadding = hasDevice ? 100 : 130;
+                            final double keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+
+                            return AnimatedPadding(
+                              duration: widget.isEmbeddedInTab ? Duration.zero : const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                              padding: EdgeInsets.only(
+                                left: 8,
+                                right: 8,
+                                top: provider.selectedFiles.isNotEmpty ? 0 : 8,
+                                bottom: widget.isPivotBottom
+                                    ? 20
+                                    : (widget.isEmbeddedInTab
+                                        ? math.max(embeddedBottomPadding, 10 + keyboardHeight)
+                                        : (keyboardHeight > 0 ? 10 : 40)),
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2A2A2F),
+                                  borderRadius: BorderRadius.circular(32),
+                                ),
+                                child: Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 // Plus button
@@ -648,7 +671,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               ],
                             ),
                           ),
-                        ),
+                        );
+                      },
+                    ),
                       ],
                     );
                   }),
@@ -708,6 +733,40 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   scrollToBottom() => _moveListToBottom();
 
+  void addAutoMessage(String message) {
+    if (message.isEmpty || !mounted) return;
+
+    final aiMessage = ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      message,
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+      [],
+      [],
+      askForNps: false,
+    );
+    context.read<MessageProvider>().addMessage(aiMessage);
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) scrollToBottom();
+    });
+  }
+
+  void handleAppSelection(String? val, AppProvider provider) {
+    _handleAppSelection(val, provider);
+  }
+
+  void navigateToChatAppsPage() {
+    _navigateToChatAppsPage();
+  }
+
+  Future<void> handleAppUninstall(String appId, AppProvider appProvider, MessageProvider messageProvider) async {
+    await _handleAppUninstall(appId, appProvider, messageProvider);
+  }
+
   void _handleAppSelection(String? val, AppProvider provider) {
     if (val == null || val == provider.selectedChatAppId) {
       return;
@@ -758,7 +817,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     await routeToPage(
       context,
       CapabilityAppsPage(
-        capability: AppCapability(id: 'chat', title: 'Chat Assistants'),
+        capability: AppCapability(id: 'chat', title: 'Chat Apps'),
         apps: const [],
       ),
     );
@@ -984,7 +1043,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                     child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
                   ),
                   title: const Text(
-                    'Enable Apps',
+                    'Get More Chat Apps',
                     style: TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   trailing: const Padding(
@@ -1000,7 +1059,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 const Padding(
                   padding: EdgeInsets.fromLTRB(16, 16, 20, 8),
                   child: Text(
-                    'Select App',
+                    'Select Chat App',
                     style: TextStyle(
                       color: Colors.white60,
                       fontSize: 13,
@@ -1037,15 +1096,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 ? () => _handleAppUninstall(app.id, appProvider, messageProvider)
                                 : null,
                           )),
-                      if (chatApps.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Text(
-                            'No chat apps enabled.\nTap "Enable Apps" to add some.',
-                            style: TextStyle(color: Colors.white38, fontSize: 14),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
                     ],
                   ),
                 ),
