@@ -87,44 +87,94 @@ def get_user_time_zone(uid: str):
 # *** Daily Summary Time Preferences ***
 # **************************************
 
-DEFAULT_DAILY_SUMMARY_TIME = "22:00"
+# Default: 22:00 local time (10 PM)
+DEFAULT_DAILY_SUMMARY_HOUR_LOCAL = 22
 
 
-def get_daily_summary_time(uid: str) -> str:
-    """Get user's preferred daily summary time. Returns default (22:00) if not set."""
+def get_daily_summary_hour_utc(uid: str) -> int | None:
+    """Get user's preferred daily summary hour in UTC. Returns None if not set."""
     user_ref = db.collection('users').document(uid).get()
     if user_ref.exists:
         user_data = user_ref.to_dict()
-        return user_data.get('daily_summary_time', DEFAULT_DAILY_SUMMARY_TIME)
-    return DEFAULT_DAILY_SUMMARY_TIME
+        return user_data.get('daily_summary_hour_utc')
+    return None
 
 
-def set_daily_summary_time(uid: str, time_str: str) -> bool:
+def set_daily_summary_hour_utc(uid: str, hour_utc: int) -> bool:
     """
-    Set user's preferred daily summary time.
+    Set user's preferred daily summary hour in UTC.
 
     Args:
         uid: User ID
-        time_str: Time in HH:MM format (24-hour), e.g., "22:00", "08:30"
+        hour_utc: Hour in UTC (0-23)
 
     Returns:
         True if successful
     """
-    # Validate time format
-    try:
-        parts = time_str.split(':')
-        hour = int(parts[0])
-        minute = int(parts[1])
-        if not (0 <= hour <= 23 and 0 <= minute <= 59):
-            raise ValueError("Invalid time range")
-        # Normalize format
-        time_str = f"{hour:02d}:{minute:02d}"
-    except (ValueError, IndexError):
-        raise ValueError(f"Invalid time format: {time_str}. Expected HH:MM (24-hour format)")
+    if not (0 <= hour_utc <= 23):
+        raise ValueError(f"Invalid hour: {hour_utc}. Must be 0-23.")
 
     user_ref = db.collection('users').document(uid)
-    user_ref.set({'daily_summary_time': time_str}, merge=True)
+    user_ref.set({'daily_summary_hour_utc': hour_utc}, merge=True)
     return True
+
+
+def convert_local_hour_to_utc(local_hour: int, timezone_name: str) -> int:
+    """
+    Convert a local hour to UTC hour.
+
+    Args:
+        local_hour: Hour in local timezone (0-23)
+        timezone_name: IANA timezone name (e.g., 'America/New_York')
+
+    Returns:
+        Hour in UTC (0-23)
+    """
+    import pytz
+    from datetime import datetime, timedelta
+
+    try:
+        tz = pytz.timezone(timezone_name)
+    except Exception:
+        # If timezone is invalid, assume UTC
+        return local_hour
+
+    # Use today's date to account for DST
+    now = datetime.now(tz)
+    # Create a datetime with the target local hour
+    local_dt = tz.localize(datetime(now.year, now.month, now.day, local_hour, 0, 0))
+    # Convert to UTC
+    utc_dt = local_dt.astimezone(pytz.UTC)
+    return utc_dt.hour
+
+
+def convert_utc_hour_to_local(utc_hour: int, timezone_name: str) -> int:
+    """
+    Convert a UTC hour to local hour.
+
+    Args:
+        utc_hour: Hour in UTC (0-23)
+        timezone_name: IANA timezone name (e.g., 'America/New_York')
+
+    Returns:
+        Hour in local timezone (0-23)
+    """
+    import pytz
+    from datetime import datetime
+
+    try:
+        tz = pytz.timezone(timezone_name)
+    except Exception:
+        # If timezone is invalid, assume UTC
+        return utc_hour
+
+    # Use today's date to account for DST
+    now_utc = datetime.now(pytz.UTC)
+    # Create a datetime with the target UTC hour
+    utc_dt = pytz.UTC.localize(datetime(now_utc.year, now_utc.month, now_utc.day, utc_hour, 0, 0))
+    # Convert to local
+    local_dt = utc_dt.astimezone(tz)
+    return local_dt.hour
 
 
 def get_daily_summary_enabled(uid: str) -> bool:
@@ -215,75 +265,56 @@ async def get_users_id_in_timezones(timezones: list[str]):
     return await _get_users_in_timezones(timezones, 'id')
 
 
-async def get_users_for_daily_summary(timezones: list[str], target_time: str):
+async def get_users_for_daily_summary(utc_hour: int):
     """
-    Get users who should receive daily summary notifications.
+    Get users who should receive daily summary notifications at this UTC hour.
 
     Filters users by:
-    - Timezone is in the provided list (where current local time matches target_time)
-    - daily_summary_time matches target_time (or is default 22:00 if target_time is 22:00)
+    - daily_summary_hour_utc matches utc_hour
     - daily_summary_enabled is not explicitly set to False
 
     Returns list of (uid, [tokens], time_zone) tuples.
     """
-    users = []
 
-    # 'Where in' query only supports 30 or fewer items in list so we split in chunks
-    timezone_chunks = [timezones[i : i + 30] for i in range(0, len(timezones), 30)]
+    def sync_query():
+        users = []
+        try:
+            # Query users by UTC hour - simple and efficient!
+            query = db.collection('users').where(filter=FieldFilter('daily_summary_hour_utc', '==', utc_hour))
 
-    async def query_chunk(chunk):
-        def sync_query():
-            chunk_users = []
-            try:
-                # Query main user documents by time_zone
-                query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
+            for user_doc in query.stream():
+                uid = user_doc.id
+                user_data = user_doc.to_dict()
 
-                for user_doc in query.stream():
-                    uid = user_doc.id
-                    user_data = user_doc.to_dict()
+                # Check if daily summary is enabled (default: True)
+                if user_data.get('daily_summary_enabled') is False:
+                    continue
 
-                    # Check if daily summary is enabled (default: True)
-                    if user_data.get('daily_summary_enabled') is False:
-                        continue
+                # Collect tokens from subcollection
+                tokens = []
+                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+                for token_doc in token_docs:
+                    token_data = token_doc.to_dict()
+                    if token_data.get('token'):
+                        tokens.append(token_data['token'])
 
-                    # Check if user's preferred time matches target_time
-                    user_preferred_time = user_data.get('daily_summary_time', DEFAULT_DAILY_SUMMARY_TIME)
-                    if user_preferred_time != target_time:
-                        continue
+                # Add legacy token if exists and not already in list
+                legacy_token = user_data.get('fcm_token')
+                if legacy_token and legacy_token not in tokens:
+                    tokens.append(legacy_token)
 
-                    # Collect tokens from subcollection
-                    tokens = []
-                    token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
-                    for token_doc in token_docs:
-                        token_data = token_doc.to_dict()
-                        if token_data.get('token'):
-                            tokens.append(token_data['token'])
+                # Skip users with no tokens
+                if not tokens:
+                    continue
 
-                    # Add legacy token if exists and not already in list
-                    legacy_token = user_data.get('fcm_token')
-                    if legacy_token and legacy_token not in tokens:
-                        tokens.append(legacy_token)
+                time_zone = user_data.get('time_zone')
+                users.append((uid, tokens, time_zone))
 
-                    # Skip users with no tokens
-                    if not tokens:
-                        continue
+        except Exception as e:
+            print(f"Error querying users for daily summary at UTC hour {utc_hour}: {e}")
+        return users
 
-                    time_zone = user_data.get('time_zone')
-                    chunk_users.append((uid, tokens, time_zone))
-
-            except Exception as e:
-                print(f"Error querying chunk {chunk}: {e}")
-            return chunk_users
-
-        return await asyncio.to_thread(sync_query)
-
-    tasks = [query_chunk(chunk) for chunk in timezone_chunks]
-    results = await asyncio.gather(*tasks)
-
-    for chunk_users in results:
-        users.extend(chunk_users)
-
-    return users
+    return await asyncio.to_thread(sync_query)
 
 
 async def _get_users_in_timezones(timezones: list[str], filter: str):

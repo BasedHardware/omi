@@ -215,44 +215,42 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   const Spacer(),
+                  // Date above emoji and title
+                  Text(
+                    summary.formattedDate,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Emoji and title row
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         summary.dayEmoji,
-                        style: const TextStyle(fontSize: 36),
+                        style: const TextStyle(fontSize: 32),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              summary.formattedDate,
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              summary.headline,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                height: 1.2,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                        child: Text(
+                          summary.headline,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -332,14 +330,44 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return uniqueNames.length;
   }
 
-  // Merge adjacent same locations and return timeline data
+  // Parse time string to minutes for comparison (e.g., "14:42" -> 882)
+  int _parseTimeToMinutes(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return 0;
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return 0;
+    final hours = int.tryParse(parts[0]) ?? 0;
+    final minutes = int.tryParse(parts[1]) ?? 0;
+    return hours * 60 + minutes;
+  }
+
+  // Format time from "17:00" to "5PM" format
+  String _formatTimeTo12Hour(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return '';
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return timeStr;
+    final hours = int.tryParse(parts[0]) ?? 0;
+    final minutes = int.tryParse(parts[1]) ?? 0;
+    final period = hours >= 12 ? 'PM' : 'AM';
+    final hour12 = hours == 0 ? 12 : (hours > 12 ? hours - 12 : hours);
+    if (minutes == 0) {
+      return '$hour12$period';
+    } else {
+      return '$hour12:${minutes.toString().padLeft(2, '0')}$period';
+    }
+  }
+
+  // Merge adjacent same locations and return timeline data (chronologically sorted)
   List<_TimelineLocation> _buildTimelineLocations(List<LocationPin> locations) {
     if (locations.isEmpty) return [];
+
+    // Sort locations by time chronologically (earliest first)
+    final sortedLocations = List<LocationPin>.from(locations);
+    sortedLocations.sort((a, b) => _parseTimeToMinutes(a.time).compareTo(_parseTimeToMinutes(b.time)));
 
     final timeline = <_TimelineLocation>[];
     _TimelineLocation? current;
 
-    for (final loc in locations) {
+    for (final loc in sortedLocations) {
       final shortName = _getShortLocationName(loc.address);
 
       if (current == null || current.shortName != shortName) {
@@ -354,7 +382,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         );
         timeline.add(current);
       } else {
-        // Same location as previous, extend the time
+        // Same location as previous, extend the end time
         current.endTime = loc.time;
       }
     }
@@ -612,7 +640,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('Unresolved'),
+        _buildSectionTitle('Unresolved Questions'),
         const SizedBox(height: 12),
         ...summary.unresolvedQuestions.map((q) {
           return GestureDetector(
@@ -734,10 +762,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildTimelineItem(_TimelineLocation location, bool isFirst, bool isLast) {
-    final timeText = location.startTime != null
-        ? (location.endTime != null && location.startTime != location.endTime
-            ? '${location.startTime} - ${location.endTime}'
-            : location.startTime!)
+    final startFormatted = _formatTimeTo12Hour(location.startTime);
+    final endFormatted = _formatTimeTo12Hour(location.endTime);
+    final timeText = startFormatted.isNotEmpty
+        ? (endFormatted.isNotEmpty && startFormatted != endFormatted
+            ? '$startFormatted - $endFormatted'
+            : startFormatted)
         : '';
 
     return GestureDetector(

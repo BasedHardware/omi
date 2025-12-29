@@ -16,80 +16,35 @@ from utils.webhooks import day_summary_webhook
 
 
 async def start_cron_job():
-    if should_run_job():
-        print('start_cron_job')
-        await send_daily_notification()
-        await send_daily_summary_notification()
-
-
-def should_run_job():
-    """Check if the cron job should run. Returns True if it's the top of the hour in any timezone."""
-    current_utc = datetime.now(pytz.utc)
-
-    # For morning notification, check if it's 8:00 somewhere
-    # For daily summary, check if it's any hour (users can configure their preferred time)
-    for tz in pytz.all_timezones:
-        local_time = current_utc.astimezone(pytz.timezone(tz))
-        # Run at the top of every hour to support user-configurable daily summary times
-        if local_time.minute == 0:
-            return True
-
-    return False
+    """
+    Main cron job entry point. Runs at the top of every UTC hour.
+    """
+    print(f'start_cron_job at UTC hour {datetime.now(pytz.utc).hour}')
+    await send_daily_notification()
+    await send_daily_summary_notification()
 
 
 async def send_daily_summary_notification():
     """
-    Send daily summary notifications to users based on their preferred time.
+    Send daily summary notifications to users based on their stored UTC hour preference.
 
-    Users can configure their preferred daily summary time (default: 22:00).
-    This function finds all timezones where the current local time matches any
-    configured time, then sends summaries to users in those timezones.
+    Simple and efficient: just query users where daily_summary_hour_utc == current UTC hour.
     """
     try:
-        # Find all timezones at the top of the current hour
-        timezones_by_hour = _get_timezones_at_top_of_hour()
+        current_utc_hour = datetime.now(pytz.utc).hour
 
-        for hour, timezones in timezones_by_hour.items():
-            if not timezones:
-                continue
+        # Simple query: get all users with this UTC hour
+        users = await notification_db.get_users_for_daily_summary(current_utc_hour)
 
-            target_time = f"{hour:02d}:00"
-
-            # Get users who have this time as their preferred daily summary time
-            users_for_time = await notification_db.get_users_for_daily_summary(timezones, target_time)
-
-            if users_for_time:
-                print(f"Sending daily summary to {len(users_for_time)} users at {target_time}")
-                await _send_bulk_summary_notification(users_for_time)
+        if users:
+            print(f"Sending daily summary to {len(users)} users at UTC hour {current_utc_hour}")
+            await _send_bulk_summary_notification(users)
+        else:
+            print(f"No users to send daily summary at UTC hour {current_utc_hour}")
 
     except Exception as e:
-        print(e)
-        print("Error sending daily summary:", e)
+        print(f"Error sending daily summary: {e}")
         return None
-
-
-def _get_timezones_at_top_of_hour() -> dict:
-    """
-    Get all timezones grouped by their current hour (at minute 0).
-
-    Returns:
-        Dict mapping hour (0-23) to list of timezone names where that hour just started.
-    """
-    current_utc = datetime.now(pytz.utc)
-    timezones_by_hour = {}
-
-    for tz_name in pytz.all_timezones:
-        tz = pytz.timezone(tz_name)
-        local_time = current_utc.astimezone(tz)
-
-        # Only include timezones at the top of the hour
-        if local_time.minute == 0:
-            hour = local_time.hour
-            if hour not in timezones_by_hour:
-                timezones_by_hour[hour] = []
-            timezones_by_hour[hour].append(tz_name)
-
-    return timezones_by_hour
 
 
 def _send_summary_notification(user_data: tuple):

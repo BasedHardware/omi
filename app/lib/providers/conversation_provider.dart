@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -19,6 +20,8 @@ class ConversationProvider extends ChangeNotifier {
   bool showShortConversations = false;
   int shortConversationThreshold = 60; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
+  bool showDailySummaries = false; // filter to show daily summaries instead of conversations
+  bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedDate;
   String? selectedFolderId;
 
@@ -214,7 +217,28 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
+    // Clear daily summaries filter when toggling starred
+    if (showStarredOnly) {
+      showDailySummaries = false;
+    }
     groupConversationsByDate();
+    notifyListeners();
+  }
+
+  void toggleDailySummaries() {
+    showDailySummaries = !showDailySummaries;
+    // Clear other filters when showing daily summaries
+    if (showDailySummaries) {
+      showStarredOnly = false;
+      selectedFolderId = null;
+    }
+    notifyListeners();
+  }
+
+  /// Check if user has any daily summaries
+  Future<void> checkHasDailySummaries() async {
+    final summaries = await getDailySummaries(limit: 1, offset: 0);
+    hasDailySummaries = summaries.isNotEmpty;
     notifyListeners();
   }
 
@@ -222,6 +246,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<void> filterByFolder(String? folderId) async {
     if (selectedFolderId == folderId) return;
     selectedFolderId = folderId;
+
+    // Clear daily summaries filter when selecting a folder
+    showDailySummaries = false;
 
     // Clear search when applying folder filter
     previousQuery = "";
@@ -336,6 +363,7 @@ class ConversationProvider extends ChangeNotifier {
 
   Future getInitialConversations() async {
     await fetchConversations();
+    await checkHasDailySummaries();
   }
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {

@@ -713,12 +713,12 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
 
 class DailySummarySettingsResponse(BaseModel):
     enabled: bool
-    time: str  # HH:MM format (24-hour)
+    hour: int  # Local hour (0-23) in user's timezone
 
 
 class DailySummarySettingsUpdate(BaseModel):
     enabled: Optional[bool] = None
-    time: Optional[str] = None  # HH:MM format (24-hour), e.g., "22:00", "08:00"
+    hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
 
 
 @router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
@@ -728,11 +728,20 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
 
     Returns:
         - enabled: Whether daily summary notifications are enabled (default: True)
-        - time: Preferred time for daily summary in HH:MM format (default: "22:00")
+        - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
     """
     enabled = notification_db.get_daily_summary_enabled(uid)
-    time_str = notification_db.get_daily_summary_time(uid)
-    return DailySummarySettingsResponse(enabled=enabled, time=time_str)
+    hour_utc = notification_db.get_daily_summary_hour_utc(uid)
+
+    # Convert UTC hour back to local hour for display
+    user_tz = notification_db.get_user_time_zone(uid) or 'UTC'
+    if hour_utc is not None:
+        local_hour = notification_db.convert_utc_hour_to_local(hour_utc, user_tz)
+    else:
+        # Default to 22 (10 PM) local time if not set
+        local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
+
+    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
 
 
 @router.patch('/v1/users/daily-summary-settings', tags=['v1'])
@@ -742,18 +751,25 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
 
     Parameters:
         - enabled: Enable/disable daily summary notifications
-        - time: Preferred time in HH:MM format (24-hour).
-                Examples: "22:00" (10 PM), "08:00" (8 AM), "18:30" (6:30 PM)
+        - hour: Preferred hour in local timezone (0-23).
+                Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
 
-    Note: Time should be in the user's local timezone. The system will send
-    the summary when it's that time in the user's configured timezone.
+    Note: Hour should be in the user's local timezone (0-23). The system converts
+    it to UTC for storage and will send the summary at that local time.
     """
     if data.enabled is not None:
         notification_db.set_daily_summary_enabled(uid, data.enabled)
 
-    if data.time is not None:
+    if data.hour is not None:
+        if not (0 <= data.hour <= 23):
+            raise HTTPException(status_code=400, detail="Hour must be between 0 and 23")
+
+        # Get user's timezone and convert local hour to UTC
+        user_tz = notification_db.get_user_time_zone(uid) or 'UTC'
+        hour_utc = notification_db.convert_local_hour_to_utc(data.hour, user_tz)
+
         try:
-            notification_db.set_daily_summary_time(uid, data.time)
+            notification_db.set_daily_summary_hour_utc(uid, hour_utc)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 

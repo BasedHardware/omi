@@ -453,14 +453,14 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
 
 class DailySummarySettings {
   final bool enabled;
-  final String time; // HH:MM format
+  final int hour; // Local hour (0-23)
 
-  DailySummarySettings({required this.enabled, required this.time});
+  DailySummarySettings({required this.enabled, required this.hour});
 
   factory DailySummarySettings.fromJson(Map<String, dynamic> json) {
     return DailySummarySettings(
       enabled: json['enabled'] ?? true,
-      time: json['time'] ?? '22:00',
+      hour: json['hour'] ?? 22, // Default to 10 PM
     );
   }
 }
@@ -480,13 +480,13 @@ Future<DailySummarySettings?> getDailySummarySettings() async {
   return null;
 }
 
-Future<bool> setDailySummarySettings({bool? enabled, String? time}) async {
+Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
   Map<String, dynamic> body = {};
   if (enabled != null) {
     body['enabled'] = enabled;
   }
-  if (time != null) {
-    body['time'] = time;
+  if (hour != null) {
+    body['hour'] = hour;
   }
 
   var response = await makeApiCall(
@@ -497,23 +497,6 @@ Future<bool> setDailySummarySettings({bool? enabled, String? time}) async {
   );
   if (response == null) return false;
   debugPrint('setDailySummarySettings response: ${response.body}');
-  return response.statusCode == 200;
-}
-
-Future<bool> testDailySummary({String? date}) async {
-  Map<String, dynamic> body = {};
-  if (date != null) {
-    body['date'] = date;
-  }
-
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
-    headers: {},
-    method: 'POST',
-    body: jsonEncode(body),
-  );
-  if (response == null) return false;
-  debugPrint('testDailySummary response: ${response.body}');
   return response.statusCode == 200;
 }
 

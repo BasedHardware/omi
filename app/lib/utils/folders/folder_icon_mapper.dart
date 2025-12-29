@@ -32,6 +32,8 @@ const Map<String, IconData> _emojiToFaMap = {
   '🏆': FontAwesomeIcons.trophy,
   '🔒': FontAwesomeIcons.lock,
   '⭐': FontAwesomeIcons.solidStar,
+  '🕐': FontAwesomeIcons.solidClock,
+  '📊': FontAwesomeIcons.chartSimple,
 };
 
 /// List of all available folder icon strings (for use in icon picker UI).

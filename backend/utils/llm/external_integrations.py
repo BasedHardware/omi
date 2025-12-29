@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import List
+import pytz
 from langchain_core.prompts import ChatPromptTemplate
 import database.users as users_db
 from models.conversation import Structured, Conversation
@@ -124,8 +125,15 @@ def generate_comprehensive_daily_summary(
     """
     import json
     import uuid
-    from datetime import datetime
     import database.action_items as action_items_db
+
+    # Get user's timezone
+    user_profile = users_db.get_user_profile(uid)
+    user_tz_str = user_profile.get('time_zone', 'UTC')
+    try:
+        user_tz = pytz.timezone(user_tz_str)
+    except Exception:
+        user_tz = pytz.UTC
 
     user_name, memories_str = get_prompt_memories(uid)
 
@@ -153,13 +161,20 @@ def generate_comprehensive_daily_summary(
     locations = []
     for c in non_discarded:
         if c.geolocation and c.geolocation.latitude and c.geolocation.longitude:
+            # Convert UTC time to user's local timezone
+            local_time = None
+            if c.started_at:
+                utc_time = c.started_at
+                if utc_time.tzinfo is None:
+                    utc_time = pytz.UTC.localize(utc_time)
+                local_time = utc_time.astimezone(user_tz).strftime("%H:%M")
             locations.append(
                 {
                     "latitude": c.geolocation.latitude,
                     "longitude": c.geolocation.longitude,
                     "address": c.geolocation.address,
                     "conversation_id": c.id,
-                    "time": c.started_at.strftime("%H:%M") if c.started_at else None,
+                    "time": local_time,
                 }
             )
 
