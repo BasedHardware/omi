@@ -1899,7 +1899,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – Your AI Companion';
 
   @override
-  String get captureEveryMoment => 'Capture every moment. Get AI-powered\\nsummaries. Never take notes again.';
+  String get captureEveryMoment => 'Capture every moment. Get AI-powered\nsummaries. Never take notes again.';
 
   @override
   String get appleWatchSetup => 'Apple Watch Setup';

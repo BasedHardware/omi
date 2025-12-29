@@ -3624,7 +3624,7 @@ abstract class AppLocalizations {
   /// App value proposition or description
   ///
   /// In en, this message translates to:
-  /// **'Capture every moment. Get AI-powered\\nsummaries. Never take notes again.'**
+  /// **'Capture every moment. Get AI-powered\nsummaries. Never take notes again.'**
   String get captureEveryMoment;
 
   /// Title for Apple Watch setup page
