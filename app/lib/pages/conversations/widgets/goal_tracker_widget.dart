@@ -544,15 +544,25 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                           size: const Size(260, 160),
                           painter: _GaugePainter(progress: progress, color: color),
                         ),
-                        // Main number
+                        // Main number with edit hint
                         Positioned(
                           bottom: 10,
-                          child: Text(
-                            _formatNum(_goal!.currentValue),
-                            style: const TextStyle(
-                              fontSize: 64, fontWeight: FontWeight.w300,
-                              color: Colors.white, height: 1,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formatNum(_goal!.currentValue),
+                                style: const TextStyle(
+                                  fontSize: 48, fontWeight: FontWeight.w300,
+                                  color: Colors.white, height: 1,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4, top: 4),
+                                child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                              ),
+                            ],
                           ),
                         ),
                       ],
