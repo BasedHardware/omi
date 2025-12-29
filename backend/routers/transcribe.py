@@ -281,8 +281,6 @@ async def _listen(
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None
-    seconds_to_trim = None
-    seconds_to_add = None
     current_conversation_id = None
 
     async def _record_usage_periodically():
@@ -492,8 +490,6 @@ async def _listen(
 
     # Create new stub conversation for next batch
     async def _create_new_in_progress_conversation():
-        nonlocal seconds_to_trim
-        nonlocal seconds_to_add
         nonlocal current_conversation_id
 
         conversation_source = ConversationSource.omi
@@ -561,8 +557,6 @@ async def _listen(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         current_conversation_id = new_conversation_id
-        seconds_to_trim = None
-        seconds_to_add = None
 
         print(f"Created new stub conversation: {new_conversation_id}", uid, session_id)
 
@@ -583,7 +577,6 @@ async def _listen(
 
     # Process existing conversations
     async def _prepare_in_progess_conversations():
-        nonlocal seconds_to_add
         nonlocal current_conversation_id
 
         if existing_conversation := retrieve_in_progress_conversation(uid):
@@ -600,14 +593,8 @@ async def _listen(
 
             # Continue with the existing conversation
             current_conversation_id = existing_conversation['id']
-            started_at = datetime.fromisoformat(existing_conversation['started_at'].isoformat())
-            seconds_to_add = (
-                (datetime.now(timezone.utc) - started_at).total_seconds()
-                if existing_conversation['transcript_segments']
-                else None
-            )
             print(
-                f"Resuming conversation {current_conversation_id} with {(seconds_to_add if seconds_to_add else 0):.1f}s offset. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s",
+                f"Resuming conversation {current_conversation_id}. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s",
                 uid,
                 session_id,
             )
@@ -634,24 +621,11 @@ async def _listen(
                     segment.person_id = person_id
 
     def _update_in_progress_conversation(
-        conversation_id: str, segments: List[TranscriptSegment], photos: List[ConversationPhoto], finished_at: datetime
+        conversation: Conversation, segments: List[TranscriptSegment], photos: List[ConversationPhoto], finished_at: datetime
     ):
-        """Update the current in-progress conversation with new segments/photos."""
-        conversation_data = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation_data:
-            print(f"Warning: conversation {conversation_id} not found", uid, session_id)
-            return None, (0, 0)
-
-        conversation = Conversation(**conversation_data)
         starts, ends = (0, 0)
 
         if segments:
-            # If conversation has no segments yet but we're adding some, update started_at
-            if not conversation.transcript_segments:
-                started_at = finished_at - timedelta(seconds=max(0, segments[-1].end))
-                conversations_db.update_conversation(uid, conversation.id, {'started_at': started_at})
-                conversation.started_at = started_at
-
             conversation.transcript_segments, (starts, ends) = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
@@ -1252,7 +1226,7 @@ async def _listen(
                 await _create_new_in_progress_conversation()
 
     async def stream_transcript_process():
-        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket, seconds_to_trim
+        nonlocal websocket_active, realtime_segment_buffers, realtime_photo_buffers, websocket
         nonlocal current_conversation_id, translation_enabled, speaker_to_person_map, suggested_segments, words_transcribed_since_last_record, last_transcript_time
 
         while websocket_active or len(realtime_segment_buffers) > 0 or len(realtime_photo_buffers) > 0:
@@ -1269,44 +1243,40 @@ async def _listen(
 
             finished_at = datetime.now(timezone.utc)
 
+            # Get conversation
+            conversation_data = conversations_db.get_conversation(uid, current_conversation_id)
+            if not conversation_data:
+                print(f"Warning: conversation {current_conversation_id} not found during segment processing", uid, session_id)
+                continue
+
+            # Guard first_audio_byte_timestamp must be set
+            if not first_audio_byte_timestamp:
+                print(f"Warning: first_audio_byte_timestamp not set, skipping segment processing", uid,
+session_id)
+                continue
+
             transcript_segments = []
             if segments_to_process:
                 last_transcript_time = time.time()
 
-                # Log segment times BEFORE any modification
-                if first_audio_byte_timestamp:
-                    for seg in segments_to_process:
-                        abs_start = first_audio_byte_timestamp + seg["start"]
-                        abs_end = first_audio_byte_timestamp + seg["end"]
-                        print(
-                            f"[SEGMENT_TIMING] raw_start={seg['start']:.3f}s raw_end={seg['end']:.3f}s | "
-                            f"abs_start={abs_start:.3f} abs_end={abs_end:.3f} | "
-                            f"abs_start_dt={datetime.fromtimestamp(abs_start, tz=timezone.utc).isoformat()} | "
-                            f"text={seg.get('text', '')[:50]}",
-                            uid, session_id
-                        )
-                else:
-                    for seg in segments_to_process:
-                        print(
-                            f"[SEGMENT_TIMING] raw_start={seg['start']:.3f}s raw_end={seg['end']:.3f}s | "
-                            f"first_audio_byte_timestamp=None | "
-                            f"text={seg.get('text', '')[:50]}",
-                            uid, session_id
-                        )
+                # If conversation has no segments yet, set started_at based on when first speech occurred
+                if not conversation_data.get('transcript_segments'):
+                    first_speech_timestamp = first_audio_byte_timestamp + segments_to_process[0]["start"]
+                    new_started_at = datetime.fromtimestamp(first_speech_timestamp, tz=timezone.utc)
+                    conversations_db.update_conversation(uid, current_conversation_id, {'started_at': new_started_at})
+                    conversation_data['started_at'] = new_started_at
 
-                if seconds_to_trim is None:
-                    seconds_to_trim = segments_to_process[0]["start"]
+                # Calculate unified time offset: audio stream start relative to conversation start
+                conversation_started_at = conversation_data['started_at']
+                if isinstance(conversation_started_at, str):
+                    conversation_started_at = datetime.fromisoformat(conversation_started_at)
+                time_offset = first_audio_byte_timestamp - conversation_started_at.timestamp()
 
-                if seconds_to_add:
-                    for i, segment in enumerate(segments_to_process):
-                        segment["start"] += seconds_to_add
-                        segment["end"] += seconds_to_add
-                        segments_to_process[i] = segment
-                elif seconds_to_trim:
-                    for i, segment in enumerate(segments_to_process):
-                        segment["start"] -= seconds_to_trim
-                        segment["end"] -= seconds_to_trim
-                        segments_to_process[i] = segment
+                # Apply offset to all segments
+                for i, segment in enumerate(segments_to_process):
+                    segment["start"] += time_offset
+                    segment["end"] += time_offset
+                    segments_to_process[i] = segment
 
                 newly_processed_segments = []
                 for s in segments_to_process:
@@ -1323,12 +1293,10 @@ async def _listen(
                     current_session_segments[seg.id] = seg.speech_profile_processed
                 transcript_segments, _ = TranscriptSegment.combine_segments([], newly_processed_segments)
 
-            if not current_conversation_id:
-                print("Warning: No current conversation ID", uid, session_id)
-                continue
-
+            # Update transcript segments
+            conversation = Conversation(**conversation_data)
             result = _update_in_progress_conversation(
-                current_conversation_id, transcript_segments, photos_to_process, finished_at
+                conversation, transcript_segments, photos_to_process, finished_at
             )
             if not result or not result[0]:
                 continue
