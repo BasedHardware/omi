@@ -314,7 +314,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
                 showNewTag: true,
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const Wrapped2025Page(),
@@ -367,7 +366,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           )
                         : null,
                     onTap: () {
-                      Navigator.pop(context);
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (context) => const UsagePage(),
@@ -382,7 +380,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: context.l10n.offlineSync,
                 icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const SyncPage(),
@@ -402,7 +399,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                         title: context.l10n.deviceSettings,
                         icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
                         onTap: () {
-                          Navigator.pop(context);
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => const DeviceSettings(),
@@ -420,7 +416,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20),
                 showBetaTag: true,
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const IntegrationsPage(),
@@ -440,7 +435,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.feedbackBug,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    Navigator.pop(context);
                     final Uri url = Uri.parse('https://feedback.omi.me/');
                     if (await canLaunchUrl(url)) {
                       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -452,7 +446,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.helpCenter,
                   icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    Navigator.pop(context);
                     final Uri url = Uri.parse('https://help.omi.me/en/');
                     if (await canLaunchUrl(url)) {
                       await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -465,7 +458,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: context.l10n.developerSettings,
                 icon: const FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
-                  Navigator.pop(context);
                   await routeToPage(context, const DeveloperSettingsPage());
                 },
               ),
@@ -481,7 +473,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: context.l10n.getOmiForMac,
                 icon: const FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
                 onTap: () async {
-                  Navigator.pop(context);
                   final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
                   await launchUrl(url, mode: LaunchMode.externalApplication);
                 },
@@ -492,7 +483,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 icon: const FaIcon(FontAwesomeIcons.gift, color: Color(0xFF8E8E93), size: 20),
                 showNewTag: true,
                 onTap: () {
-                  Navigator.pop(context);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => const ReferralPage(),
@@ -561,7 +551,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               title: 'Need Help? Chat with us',
               icon: const FaIcon(FontAwesomeIcons.solidComments, color: Color(0xFF8E8E93), size: 20),
               onTap: () async {
-                Navigator.pop(context);
                 await Intercom.instance.displayMessenger();
               },
             ),
