@@ -40,10 +40,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
       }
+
+      if (!mounted) return;
 
       // Load folders for folder tabs
       final folderProvider = Provider.of<FolderProvider>(context, listen: false);
