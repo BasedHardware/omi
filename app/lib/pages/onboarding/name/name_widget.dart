@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class NameWidget extends StatefulWidget {
   final Function goNext;
@@ -57,7 +58,7 @@ class _NameWidgetState extends State<NameWidget> {
 
                 // Main title
                 Text(
-                  hasPrefilledName ? 'Want to go by something else?' : 'What\'s your name?',
+                  hasPrefilledName ? context.l10n.wantDifferentName : context.l10n.whatsYourName,
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: hasPrefilledName ? 22 : 28,
@@ -105,7 +106,7 @@ class _NameWidgetState extends State<NameWidget> {
                     ),
                     textAlign: TextAlign.center,
                     decoration: InputDecoration(
-                      hintText: 'Enter your name',
+                      hintText: context.l10n.enterYourName,
                       hintStyle: TextStyle(
                         color: Colors.grey[500],
                         fontSize: 18,
@@ -147,9 +148,9 @@ class _NameWidgetState extends State<NameWidget> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Continue',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.continueButton,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         fontFamily: 'Manrope',

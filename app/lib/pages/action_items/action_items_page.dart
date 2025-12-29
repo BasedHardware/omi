@@ -14,6 +14,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -136,6 +137,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     heroTag: 'action_items_fab',
                     onPressed: _showCreateActionItemSheet,
                     backgroundColor: Colors.deepPurpleAccent,
+                    tooltip: context.l10n.createActionItemTooltip,
                     child: const Icon(
                       Icons.add,
                       color: Colors.white,
@@ -165,9 +167,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'To-Do\'s',
-                                style: TextStyle(
+                              Text(
+                                context.l10n.actionItemsTitle,
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
                                   fontWeight: FontWeight.w600,
@@ -185,7 +187,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Tap to edit • Long press to select • Swipe for actions',
+                            context.l10n.actionItemsDescription,
                             style: TextStyle(
                               color: Colors.grey.shade500,
                               fontSize: 12,
@@ -246,21 +248,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                           child: GestureDetector(
                                             onTap: () => _onTabChanged(0),
                                             behavior: HitTestBehavior.opaque,
-                                            child: _buildTabLabel('To Do', todoItems.length),
+                                            child: _buildTabLabel(context.l10n.tabToDo, todoItems.length),
                                           ),
                                         ),
                                         Expanded(
                                           child: GestureDetector(
                                             onTap: () => _onTabChanged(1),
                                             behavior: HitTestBehavior.opaque,
-                                            child: _buildTabLabel('Done', doneItems.length),
+                                            child: _buildTabLabel(context.l10n.tabDone, doneItems.length),
                                           ),
                                         ),
                                         Expanded(
                                           child: GestureDetector(
                                             onTap: () => _onTabChanged(2),
                                             behavior: HitTestBehavior.opaque,
-                                            child: _buildTabLabel('Old', snoozedItems.length),
+                                            child: _buildTabLabel(context.l10n.tabOld, snoozedItems.length),
                                           ),
                                         ),
                                       ],
@@ -352,13 +354,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   String _getEmptyTabMessage() {
     switch (_selectedTabIndex) {
       case 0: // To Do
-        return '🎉 All caught up!\nNo pending action items';
+        return context.l10n.emptyTodoMessage;
       case 1: // Done
-        return 'No completed items yet';
+        return context.l10n.emptyDoneMessage;
       case 2: // Old
-        return '✅ No old tasks';
+        return context.l10n.emptyOldMessage;
       default:
-        return 'No items';
+        return context.l10n.noItems;
     }
   }
 
@@ -416,7 +418,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(item.completed ? 'Action item marked as incomplete' : 'Action item completed'),
+                content:
+                    Text(item.completed ? context.l10n.actionItemMarkedIncomplete : context.l10n.actionItemCompleted),
                 backgroundColor: item.completed ? Colors.orange : Colors.green,
                 duration: const Duration(seconds: 2),
               ),
@@ -485,14 +488,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (provider.selectedCount < currentTabItems.length)
           IconButton(
             icon: const FaIcon(FontAwesomeIcons.squareCheck, size: 18),
-            tooltip: 'Select all',
+            tooltip: context.l10n.selectAll,
             onPressed: () => provider.selectAllItemsFromTab(_selectedTabIndex),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
         if (provider.hasSelection)
           IconButton(
             icon: const FaIcon(FontAwesomeIcons.trash, size: 20),
-            tooltip: 'Delete selected',
+            tooltip: context.l10n.deleteSelected,
             onPressed: () => _deleteSelectedItems(provider),
             padding: const EdgeInsets.symmetric(horizontal: 8),
           ),
@@ -516,8 +519,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     // Show confirmation dialog for bulk delete
     final result = await OmiConfirmDialog.showWithSkipOption(
       context,
-      title: 'Delete Selected Items',
-      message: 'Are you sure you want to delete $selectedCount selected action item${selectedCount > 1 ? 's' : ''}?',
+      title: context.l10n.deleteSelectedItemsTitle,
+      message: context.l10n.deleteSelectedItemsMessage(selectedCount, selectedCount > 1 ? 's' : ''),
     );
 
     if (result != null && result.confirmed) {
@@ -539,15 +542,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (mounted && success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('$selectedCount action item${selectedCount > 1 ? 's' : ''} deleted'),
+            content: Text(context.l10n.itemsDeletedResult(selectedCount, selectedCount > 1 ? 's' : '')),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete some items'),
+          SnackBar(
+            content: Text(context.l10n.failedToDeleteSomeItems),
             backgroundColor: Colors.red,
           ),
         );
@@ -555,8 +558,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete items'),
+          SnackBar(
+            content: Text(context.l10n.failedToDeleteItems),
             backgroundColor: Colors.red,
           ),
         );
@@ -576,8 +579,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     final result = await OmiConfirmDialog.showWithSkipOption(
       context,
-      title: 'Delete Action Item',
-      message: 'Are you sure you want to delete this action item?',
+      title: context.l10n.deleteActionItemTitle,
+      message: context.l10n.deleteActionItemMessage,
     );
 
     if (result?.confirmed == true) {
@@ -597,15 +600,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Action item "${item.description}" deleted'),
+            content: Text(context.l10n.actionItemDeletedResult(item.description)),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete action item'),
+          SnackBar(
+            content: Text(context.l10n.failedToDeleteItem),
             backgroundColor: Colors.red,
           ),
         );
@@ -711,9 +714,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         const SizedBox(height: 28),
 
         // Welcome heading
-        const Text(
-          'Ready for Action Items',
-          style: TextStyle(
+        Text(
+          context.l10n.welcomeActionItemsTitle,
+          style: const TextStyle(
             color: Color(0xFFFFFFFF),
             fontSize: 28,
             fontWeight: FontWeight.w700,
@@ -725,8 +728,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         const SizedBox(height: 16),
 
         // Educational description
-        const Text(
-          'Your AI will automatically extract tasks and to-dos from your conversations. They\'ll appear here when created.',
+        Text(
+          context.l10n.welcomeActionItemsDescription,
           textAlign: TextAlign.center,
           style: TextStyle(
             color: Color(0xFFB0B0B0),
@@ -762,9 +765,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Automatically extracted from conversations',
+                      context.l10n.autoExtractionFeature,
                       style: TextStyle(
                         color: Color(0xFFE5E5E5),
                         fontSize: 14,
@@ -786,9 +789,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Tap to edit, swipe to complete or delete',
+                      context.l10n.editSwipeFeature,
                       style: TextStyle(
                         color: Color(0xFFE5E5E5),
                         fontSize: 14,

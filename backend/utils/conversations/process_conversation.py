@@ -3,6 +3,7 @@ import random
 import re
 import threading
 import uuid
+import logging
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -16,6 +17,8 @@ import database.users as users_db
 import database.tasks as tasks_db
 import database.trends as trends_db
 import database.action_items as action_items_db
+import database.folders as folders_db
+import database.calendar_meetings as calendar_db
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -27,6 +30,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from models.conversation import CalendarMeetingContext
 from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
@@ -39,11 +43,13 @@ from utils.llm.conversation_processing import (
     select_best_app_for_conversation,
     get_suggested_apps_for_conversation,
     get_reprocess_transcript_structure,
+    assign_conversation_to_folder,
 )
 from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -57,6 +63,7 @@ from utils.other.hume import get_hume, HumeJobCallbackModel, HumeJobModelPredict
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
+from utils.other.storage import precache_conversation_audio
 
 
 def _get_structured(
@@ -77,6 +84,13 @@ def _get_structured(
         except Exception as e:
             print(f"Error fetching existing action items for deduplication: {e}")
 
+        # Extract calendar context from external_data
+        calendar_context = None
+        if hasattr(conversation, 'external_data') and conversation.external_data:
+            calendar_data = conversation.external_data.get('calendar_meeting_context')
+            if calendar_data:
+                calendar_context = CalendarMeetingContext(**calendar_data)
+
         if (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
@@ -88,6 +102,7 @@ def _get_structured(
                     language_code,
                     tz,
                     existing_action_items=existing_action_items,
+                    calendar_meeting_context=calendar_context,
                 )
                 return structured, False
 
@@ -136,6 +151,7 @@ def _get_structured(
                 tz,
                 photos=conversation.photos,
                 existing_action_items=existing_action_items,
+                calendar_meeting_context=calendar_context,
             ),
             False,
         )
@@ -151,16 +167,27 @@ def _get_conversation_obj(
 ):
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
+        conversation_dict = conversation.dict()
+        # Store calendar context in external_data if available
+        calendar_context = conversation_dict.pop('calendar_meeting_context', None)
+
         # Use started_at as created_at for imported conversations to preserve original timestamp
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
             uid=uid,
             structured=structured,
-            **conversation.dict(),
             created_at=created_at,
             discarded=discarded,
+            **conversation_dict,
         )
+
+        # Add calendar metadata to external_data
+        if calendar_context:
+            if not conversation.external_data:
+                conversation.external_data = {}
+            conversation.external_data['calendar_meeting_context'] = calendar_context
+
         if conversation.photos:
             conversations_db.store_conversation_photos(uid, conversation.id, conversation.photos)
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
@@ -288,6 +315,25 @@ def _trigger_apps(
     [t.join() for t in threads]
 
 
+def _update_goal_progress(uid: str, conversation: Conversation):
+    """Extract and update goal progress from conversation text."""
+    try:
+        # Get conversation text
+        text = ""
+        if conversation.structured and conversation.structured.overview:
+            text = conversation.structured.overview
+        elif conversation.transcript_segments:
+            text = " ".join([s.text for s in conversation.transcript_segments[:20]])
+        
+        if not text or len(text) < 10:
+            return
+        
+        # Use utility function to extract and update goal progress
+        extract_and_update_goal_progress(uid, text)
+    except Exception as e:
+        print(f"[GOAL] Error updating progress: {e}")
+
+
 def _extract_memories(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     memories_db.delete_memories_for_conversation(uid, conversation.id)
@@ -321,6 +367,23 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
+        
+        try:
+            from utils.llm.knowledge_graph import extract_knowledge_from_memory
+            from database import users as users_db
+            
+            user = users_db.get_user_store_recording_permission(uid)
+            user_name = user.get('name', 'User') if user else 'User'
+            
+            from database.memories import set_memory_kg_extracted
+            
+            for memory_db_obj in parsed_memories:
+                if memory_db_obj.kg_extracted:
+                    continue
+                extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
+                set_memory_kg_extracted(uid, memory_db_obj.id)
+        except Exception:
+            logging.exception("Error extracting knowledge graph from memory.")
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
@@ -443,6 +506,21 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
 ) -> Conversation:
+    # Fetch meeting context from Firestore if meeting_id is associated with this conversation
+    if hasattr(conversation, 'id') and conversation.id:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation.id)
+        if meeting_id:
+            try:
+                meeting_data = calendar_db.get_meeting(uid, meeting_id)
+                if meeting_data:
+                    # Add meeting context to conversation's external_data
+                    if not hasattr(conversation, 'external_data') or not conversation.external_data:
+                        conversation.external_data = {}
+                    conversation.external_data['calendar_meeting_context'] = meeting_data
+                    print(f"Retrieved meeting context for conversation {conversation.id}: {meeting_data.get('title')}")
+            except Exception as e:
+                print(f"Error retrieving meeting context for conversation {conversation.id}: {e}")
+
     person_ids = conversation.get_person_ids()
     people = []
     if person_ids:
@@ -451,6 +529,36 @@ def process_conversation(
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
+
+    # AI-based folder assignment
+    assigned_folder_id = None
+    if not discarded and not is_reprocess and not conversation.folder_id:
+        try:
+            # Get user's folders
+            user_folders = folders_db.get_folders(uid)
+            if not user_folders:
+                user_folders = folders_db.initialize_system_folders(uid)
+
+            if user_folders and conversation.structured:
+                folder_id, confidence, reasoning = assign_conversation_to_folder(
+                    transcript=(
+                        conversation.get_transcript(False, people=people)
+                        if hasattr(conversation, 'get_transcript')
+                        else ''
+                    ),
+                    title=conversation.structured.title or '',
+                    overview=conversation.structured.overview or '',
+                    category=conversation.structured.category.value if conversation.structured.category else 'other',
+                    user_folders=user_folders,
+                )
+                if folder_id:
+                    conversation.folder_id = folder_id
+                    assigned_folder_id = folder_id
+                    print(
+                        f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
+                    )
+        except Exception as e:
+            print(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
     if not discarded:
         # Analytics tracking
@@ -496,6 +604,7 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:
@@ -506,11 +615,17 @@ def process_conversation(
                 conversations_db.update_conversation(
                     uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
                 )
+                # Pre-cache audio files in background
+                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
         except Exception as e:
             print(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
     conversations_db.upsert_conversation(uid, conversation.dict())
+
+    # Update folder conversation count after conversation is saved
+    if assigned_folder_id:
+        folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
     if not is_reprocess:
         threading.Thread(

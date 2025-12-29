@@ -68,6 +68,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   final GlobalKey _addButtonKey = GlobalKey();
 
   late FocusNode _focusNode;
+  late FocusNode _inputFocusNode;
 
   @override
   bool get wantKeepAlive => true;
@@ -75,8 +76,21 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   @override
   void initState() {
     apps = prefs.appsList;
-    scrollController = ScrollController();
+    scrollController = ScrollController(initialScrollOffset: 1e9);
     _focusNode = FocusNode();
+    _inputFocusNode = FocusNode(onKeyEvent: (node, event) {
+      if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+        if (HardwareKeyboard.instance.isShiftPressed) {
+          return KeyEventResult.ignored;
+        }
+        if (textController.text.trim().isEmpty) {
+          return KeyEventResult.handled;
+        }
+        _sendMessageUtil(textController.text.trim());
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    });
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -175,6 +189,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     _slideController.dispose();
     _pulseController.dispose();
     _focusNode.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -667,14 +682,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   Widget _buildMessagesList(MessageProvider provider) {
     return ListView.builder(
-      reverse: true,
+      reverse: false,
       controller: scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       itemCount: provider.messages.length,
       itemBuilder: (context, chatIndex) {
         final message = provider.messages[chatIndex];
         double topPadding = chatIndex == provider.messages.length - 1 ? 16 : 16;
-        if (chatIndex != 0) message.askForNps = false;
+        if (chatIndex != provider.messages.length - 1) message.askForNps = false;
 
         double bottomPadding = 0;
 
@@ -784,7 +799,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     // Custom AI message content without profile picture and timestamp
     if (message.memories.isNotEmpty) {
       return MemoriesMessageWidget(
-        showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+        showTypingIndicator: provider.showTypingIndicator && chatIndex == provider.messages.length - 1,
         messageMemories: message.memories.length > 3 ? message.memories.sublist(0, 3) : message.memories,
         messageText: message.isEmpty ? '...' : message.text.decodeString,
         updateConversation: (ServerConversation conversation) {
@@ -798,13 +813,13 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
       );
     } else if (message.type == MessageType.daySummary) {
       return DaySummaryWidget(
-        showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+        showTypingIndicator: provider.showTypingIndicator && chatIndex == provider.messages.length - 1,
         messageText: message.text.decodeString,
         date: message.createdAt,
       );
     } else if (provider.messages.length <= 1 && provider.messageSenderApp(message.appId)?.isNotPersona() == true) {
       return InitialMessageWidget(
-        showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
+        showTypingIndicator: provider.showTypingIndicator && chatIndex == provider.messages.length - 1,
         messageText: message.text.decodeString,
         sendMessage: _sendMessageUtil,
       );
@@ -822,7 +837,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             .decodeString
         : null;
     var thinkingText = message.thinkings.isNotEmpty ? message.thinkings.last.decodeString : null;
-    bool showTypingIndicator = provider.showTypingIndicator && chatIndex == 0;
+    bool showTypingIndicator = provider.showTypingIndicator && chatIndex == provider.messages.length - 1;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1177,7 +1192,10 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   }
 
   Widget _buildModernTextInput() {
-    return OmiMessageInput(controller: textController);
+    return OmiMessageInput(
+      controller: textController,
+      focusNode: _inputFocusNode,
+    );
   }
 
   Widget _buildModernVoiceButton() {
@@ -1475,10 +1493,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   void scrollToBottom() {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (scrollController.hasClients) {
-        scrollController.animateTo(
-          0.0,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOutCubic,
+        scrollController.jumpTo(
+          scrollController.position.maxScrollExtent,
         );
       }
     });

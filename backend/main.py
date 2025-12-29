@@ -33,7 +33,12 @@ from routers import (
     other,
     developer,
     updates,
+    calendar_meetings,
     imports,
+    knowledge_graph,
+    wrapped,
+    folders,
+    goals,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -72,6 +77,7 @@ app.include_router(sync.router)
 
 app.include_router(apps.router)
 app.include_router(custom_auth.router)
+app.include_router(calendar_meetings.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
 
@@ -81,6 +87,10 @@ app.include_router(mcp.router)
 app.include_router(mcp_sse.router)
 app.include_router(developer.router)
 app.include_router(imports.router)
+app.include_router(wrapped.router)
+app.include_router(folders.router)
+app.include_router(knowledge_graph.router)
+app.include_router(goals.router)
 
 
 methods_timeout = {

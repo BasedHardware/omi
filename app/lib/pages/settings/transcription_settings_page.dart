@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,11 +10,11 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class TranscriptionSettingsPage extends StatefulWidget {
@@ -27,8 +28,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
-  bool _showLogs = false;
+  bool _showLogs = true;
   bool _isSaving = false;
+  Timer? _logRefreshTimer;
   String? _validationError;
 
   // Device codec compatibility
@@ -48,6 +50,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   final Map<SttProvider, String> _schemaJsonPerProvider = {};
   final Map<SttProvider, bool> _requestJsonCustomized = {};
 
+  // Version counter to force autocomplete rebuild after JSON edits
+  int _configSyncVersion = 0;
+
   bool _showApiKey = false;
 
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
@@ -62,6 +67,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     super.initState();
     _loadConfig();
     _checkConnectedDevice();
+    _startLogRefreshTimer();
+  }
+
+  void _startLogRefreshTimer() {
+    _logRefreshTimer?.cancel();
+    _logRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_showLogs && mounted) {
+        setState(() {});
+      }
+    });
   }
 
   Future<void> _checkConnectedDevice() async {
@@ -109,6 +124,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Initialize JSON configs for all providers
       _initializeJsonConfigs();
+
+      // Auto-expand advanced if current provider has modified configs
+      if (_requestJsonCustomized[_selectedProvider] == true) {
+        _showAdvanced = true;
+      }
     });
   }
 
@@ -167,10 +187,17 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void _initializeJsonConfigs() {
     // Initialize JSON configs for all providers
     for (final config in SttProviderConfig.allProviders) {
-      _regenerateRequestJson(config.provider);
-      final template = CustomSttConfig.getFullTemplateJson(config.provider);
-      _schemaJsonPerProvider[config.provider] = const JsonEncoder.withIndent('  ').convert(template['response_schema']);
-      _requestJsonCustomized[config.provider] = false;
+      // Skip if already loaded as customized (from _populateUIFromConfig)
+      if (_requestJsonCustomized[config.provider] != true) {
+        _regenerateRequestJson(config.provider);
+        _requestJsonCustomized[config.provider] = false;
+      }
+      // Only set schema if not already set
+      if (_schemaJsonPerProvider[config.provider] == null) {
+        final template = CustomSttConfig.getFullTemplateJson(config.provider);
+        _schemaJsonPerProvider[config.provider] =
+            const JsonEncoder.withIndent('  ').convert(template['response_schema']);
+      }
     }
   }
 
@@ -301,26 +328,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       if (_selectedProvider == SttProvider.localWhisper) {
         if (_hostController.text.isEmpty) {
-          _validationError = 'Host is required';
+          _validationError = context.l10n.hostRequired;
           return;
         }
         if (_portController.text.isEmpty || int.tryParse(_portController.text) == null) {
-          _validationError = 'Valid port is required';
+          _validationError = context.l10n.validPortRequired;
           return;
         }
       } else if (_selectedProvider == SttProvider.customLive) {
         if (_urlController.text.isEmpty || !_urlController.text.startsWith('wss://')) {
-          _validationError = 'Valid WebSocket URL is required (wss://)';
+          _validationError = context.l10n.validWebsocketUrlRequired;
           return;
         }
       } else if (_selectedProvider == SttProvider.custom) {
         if (_urlController.text.isEmpty) {
-          _validationError = 'API URL is required';
+          _validationError = context.l10n.apiUrlRequired;
           return;
         }
       } else if (_selectedProvider != SttProvider.custom) {
         if (_currentConfig.requiresApiKey && _apiKeyController.text.isEmpty) {
-          _validationError = 'API key is required';
+          _validationError = context.l10n.apiKeyRequired;
           return;
         }
       }
@@ -334,7 +361,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             jsonDecode(_currentSchemaJson);
           }
         } catch (e) {
-          _validationError = 'Invalid JSON configuration';
+          _validationError = context.l10n.invalidJsonConfig;
           return;
         }
       }
@@ -384,10 +411,206 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving: $e'), backgroundColor: Colors.red.shade700),
+        SnackBar(content: Text(context.l10n.errorSaving(e.toString())), backgroundColor: Colors.red.shade700),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _exportConfig() async {
+    final config = _buildCurrentConfig();
+
+    // Build exportable config (exclude sensitive API key)
+    final exportableConfig = <String, dynamic>{
+      'provider': config.provider.name,
+      'language': config.language ?? _currentConfig.defaultLanguage,
+      'model': config.model ?? _currentConfig.defaultModel,
+      if (config.url != null) 'url': config.url,
+      if (config.host != null) 'host': config.host,
+      if (config.port != null) 'port': config.port,
+      if (config.requestType != null) 'request_type': config.requestType,
+      if (config.headers != null) 'headers': _sanitizeHeaders(config.headers!),
+      if (config.params != null) 'params': config.params,
+      if (config.audioFieldName != null) 'audio_field_name': config.audioFieldName,
+      if (config.schemaJson != null) 'schema': config.schemaJson,
+    };
+
+    final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
+
+    await Clipboard.setData(ClipboardData(text: jsonString));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.configCopiedToClipboard),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Map<String, String> _sanitizeHeaders(Map<String, String> headers) {
+    // Remove or mask sensitive header values
+    return headers.map((key, value) {
+      final lowerKey = key.toLowerCase();
+      if (lowerKey == 'authorization' || lowerKey.contains('api') || lowerKey.contains('key')) {
+        return MapEntry(key, '<YOUR_API_KEY>');
+      }
+      return MapEntry(key, value);
+    });
+  }
+
+  Future<void> _importConfig() async {
+    final controller = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        title: Text(
+          context.l10n.importConfiguration,
+          style: const TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.pasteJsonConfig,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0D0D),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade800),
+                ),
+                child: TextField(
+                  controller: controller,
+                  maxLines: null,
+                  expands: true,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '{\n  "provider": "deepgramLive",\n  ...\n}',
+                    hintStyle: TextStyle(color: Colors.grey.shade700),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      context.l10n.addApiKeyAfterImport,
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            onPressed: () async {
+              final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+              if (clipboardData?.text != null) {
+                controller.text = clipboardData!.text!;
+              }
+            },
+            child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: Text(context.l10n.import, style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      _parseAndApplyConfig(result);
+    }
+  }
+
+  void _parseAndApplyConfig(String jsonString) {
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      final config = CustomSttConfig.fromJson(json);
+
+      // Validate provider
+      if (config.provider == SttProvider.omi) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.l10n.invalidProviderInConfig),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _selectedProvider = config.provider;
+        _configsPerProvider[_selectedProvider] = config;
+
+        // Update UI fields
+        _apiKeyController.text = config.apiKey ?? '';
+        _urlController.text = config.url ?? '';
+        _hostController.text = config.host ?? '127.0.0.1';
+        _portController.text = (config.port ?? 8080).toString();
+
+        // Update JSON configs
+        if (config.requestType != null || config.headers != null || config.params != null) {
+          final requestConfig = <String, dynamic>{};
+          if (config.url != null) requestConfig['url'] = config.url;
+          if (config.requestType != null) requestConfig['request_type'] = config.requestType;
+          if (config.headers != null) requestConfig['headers'] = config.headers;
+          if (config.params != null) requestConfig['params'] = config.params;
+          if (config.audioFieldName != null) requestConfig['audio_field_name'] = config.audioFieldName;
+
+          _requestJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(requestConfig);
+          _requestJsonCustomized[_selectedProvider] = true;
+        } else {
+          _regenerateRequestJson(_selectedProvider);
+          _requestJsonCustomized[_selectedProvider] = false;
+        }
+
+        if (config.schemaJson != null) {
+          _schemaJsonPerProvider[_selectedProvider] = const JsonEncoder.withIndent('  ').convert(config.schemaJson);
+        }
+
+        _configSyncVersion++;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.importedConfig(SttProviderConfig.get(_selectedProvider).displayName)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(context.l10n.invalidJson(e.toString().split('\n').first)),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
     }
   }
 
@@ -396,13 +619,27 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        title: const Text('Transcription', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(context.l10n.transcription, style: const TextStyle(fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          if (_useCustomStt) ...[
+            IconButton(
+              icon: const Icon(Icons.file_download_outlined, size: 20),
+              tooltip: context.l10n.importConfiguration,
+              onPressed: _importConfig,
+            ),
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              tooltip: context.l10n.exportConfiguration,
+              onPressed: _exportConfig,
+            ),
+          ],
+        ],
       ),
       body: Column(
         children: [
@@ -444,13 +681,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           children: [
             Expanded(child: _buildSourceOption(false, 'Omi')),
             const SizedBox(width: 10),
-            Expanded(child: _buildSourceOption(true, 'Bring your own')),
+            Expanded(child: _buildSourceOption(true, context.l10n.bringYourOwn)),
           ],
         ),
         const SizedBox(height: 12),
         if (_useCustomStt)
           Text(
-            'Freely use omi. You only pay your STT provider directly.',
+            context.l10n.payYourSttProvider,
             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           )
         else
@@ -555,7 +792,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       children: [
         _buildCodecWarning(),
         Text(
-          'Provider',
+          context.l10n.provider,
           style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
         ),
         const SizedBox(height: 10),
@@ -588,9 +825,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                               color: Colors.green.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            child: const Text(
-                              'Live',
-                              style: TextStyle(
+                            child: Text(
+                              context.l10n.live,
+                              style: const TextStyle(
                                 color: Colors.green,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -606,7 +843,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   enabled: false,
                   child: Row(
                     children: [
-                      const Expanded(child: Text('On Device')),
+                      Expanded(child: Text(context.l10n.onDevice)),
                       Container(
                         margin: const EdgeInsets.only(left: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -639,7 +876,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                       _regenerateRequestJson(provider);
                     }
 
-                    if (provider == SttProvider.custom) {
+                    // Auto-expand advanced if provider has custom config or is custom type
+                    if (provider == SttProvider.custom || _requestJsonCustomized[provider] == true) {
                       _showAdvanced = true;
                     }
                   });
@@ -749,7 +987,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
         const SizedBox(height: 10),
         Autocomplete<String>(
-          key: ValueKey('${_selectedProvider.name}_$label'),
+          key: ValueKey('${_selectedProvider.name}_${label}_$_configSyncVersion'),
           initialValue: TextEditingValue(text: value),
           optionsBuilder: (TextEditingValue textEditingValue) {
             if (textEditingValue.text.isEmpty) {
@@ -823,12 +1061,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       children: [
         _buildTextField(
           controller: _urlController,
-          label: 'API URL',
+          label: context.l10n.apiUrl,
           hint: 'https://your-stt-api.com/transcribe',
         ),
         const SizedBox(height: 8),
         Text(
-          'Enter your STT HTTP endpoint',
+          context.l10n.enterSttHttpEndpoint,
           style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
         ),
       ],
@@ -841,12 +1079,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       children: [
         _buildTextField(
           controller: _urlController,
-          label: 'WebSocket URL',
+          label: context.l10n.websocketUrl,
           hint: 'wss://your-stt-api.com/live',
         ),
         const SizedBox(height: 8),
         Text(
-          'Enter your live STT WebSocket endpoint',
+          context.l10n.enterLiveSttWebsocket,
           style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
         ),
       ],
@@ -860,7 +1098,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         Row(
           children: [
             Text(
-              'API Key',
+              context.l10n.apiKey,
               style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
             ),
             const Spacer(),
@@ -878,7 +1116,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           style: const TextStyle(color: Colors.white, fontSize: 15),
           onChanged: (_) => _validateAndSetError(),
           decoration: InputDecoration(
-            hintText: 'Enter your API key',
+            hintText: context.l10n.enterApiKey,
             hintStyle: TextStyle(color: Colors.grey.shade700),
             filled: true,
             fillColor: const Color(0xFF1A1A1A),
@@ -907,7 +1145,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Stored locally, never shared',
+          context.l10n.storedLocallyNeverShared,
           style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
         ),
       ],
@@ -924,7 +1162,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               flex: 3,
               child: _buildTextField(
                 controller: _hostController,
-                label: 'Host',
+                label: context.l10n.host,
                 hint: '127.0.0.1',
               ),
             ),
@@ -933,7 +1171,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               flex: 2,
               child: _buildTextField(
                 controller: _portController,
-                label: 'Port',
+                label: context.l10n.port,
                 hint: '8080',
                 keyboardType: TextInputType.number,
               ),
@@ -1006,7 +1244,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: Row(
               children: [
                 Text(
-                  'Advanced',
+                  context.l10n.advanced,
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                 ),
                 const SizedBox(width: 8),
@@ -1041,26 +1279,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Configuration',
+          context.l10n.configuration,
           style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
         ),
         const SizedBox(height: 10),
         _buildJsonEditorButton(
-          title: 'Request Configuration',
+          title: context.l10n.requestConfiguration,
           jsonContent: _currentRequestJson,
           isCustomized: _requestJsonCustomized[_selectedProvider] == true,
           onTap: () => _openJsonEditor(
-            title: 'Request Configuration',
+            title: context.l10n.requestConfiguration,
             jsonContent: _currentRequestJson,
             isRequest: true,
           ),
         ),
         const SizedBox(height: 12),
         _buildJsonEditorButton(
-          title: 'Response Schema',
+          title: context.l10n.responseSchema,
           jsonContent: _currentSchemaJson,
           onTap: () => _openJsonEditor(
-            title: 'Response Schema',
+            title: context.l10n.responseSchema,
             jsonContent: _currentSchemaJson,
             isRequest: false,
           ),
@@ -1101,7 +1339,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Icon(Icons.refresh, color: Colors.grey.shade500, size: 16),
           const SizedBox(width: 6),
           Text(
-            'Reset request config to default',
+            context.l10n.resetRequestConfig,
             style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ],
@@ -1155,9 +1393,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                             color: Colors.white.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
-                            'Modified',
-                            style: TextStyle(color: Colors.white, fontSize: 10),
+                          child: Text(
+                            context.l10n.modified,
+                            style: const TextStyle(color: Colors.white, fontSize: 10),
                           ),
                         ),
                       ],
@@ -1226,9 +1464,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             }
           } catch (_) {}
 
-          // Update stored config with values from JSON
+          // Update stored config with values from JSON and force UI sync
           if (newLanguage != null || newModel != null) {
             _updateCurrentProviderConfig(language: newLanguage, model: newModel);
+            // Increment version to force autocomplete widgets to rebuild with new values
+            _configSyncVersion++;
           }
 
           // Mark as customized if it differs from auto-generated
@@ -1285,7 +1525,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             child: Row(
               children: [
                 Text(
-                  'Logs',
+                  context.l10n.logs,
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                 ),
                 const SizedBox(width: 8),
@@ -1295,54 +1535,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   size: 18,
                 ),
                 const Spacer(),
-                if (_showLogs) ...[
-                  if (logs.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: logService.logsAsText));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Logs copied'), duration: Duration(seconds: 1)),
-                        );
-                      },
-                      child: Row(
-                        children: [
-                          Icon(Icons.copy, color: Colors.grey.shade500, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Copy',
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                  ],
+                if (_showLogs && logs.isNotEmpty) ...[
                   GestureDetector(
-                    onTap: () => setState(() {}),
-                    child: Row(
-                      children: [
-                        Icon(Icons.refresh, color: Colors.grey.shade500, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Refresh',
-                          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                        ),
-                      ],
-                    ),
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: logService.logsAsText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(context.l10n.logsCopied), duration: const Duration(seconds: 1)),
+                      );
+                    },
+                    child: Icon(Icons.copy, color: Colors.grey.shade500, size: 16),
                   ),
-                  if (logs.isNotEmpty) ...[
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: () {
-                        logService.clear();
-                        setState(() {});
-                      },
-                      child: Text(
-                        'Clear',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                      ),
-                    ),
-                  ],
                 ],
               ],
             ),
@@ -1361,7 +1563,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     padding: const EdgeInsets.all(16),
                     child: Center(
                       child: Text(
-                        'No logs yet. Start recording to see custom STT activity.',
+                        context.l10n.noLogsYet,
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                         textAlign: TextAlign.center,
                       ),
@@ -1482,6 +1684,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   @override
   void dispose() {
+    _logRefreshTimer?.cancel();
     _apiKeyController.dispose();
     _hostController.dispose();
     _portController.dispose();

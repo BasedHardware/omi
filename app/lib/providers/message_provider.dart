@@ -317,6 +317,7 @@ class MessageProvider extends ChangeNotifier {
       SharedPreferencesUtil().cachedMessages = messages;
       setHasCachedMessages(true);
     }
+    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setLoadingMessages(false);
     notifyListeners();
   }
@@ -325,6 +326,7 @@ class MessageProvider extends ChangeNotifier {
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
       messages = SharedPreferencesUtil().cachedMessages;
+      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
     notifyListeners();
   }
@@ -344,6 +346,7 @@ class MessageProvider extends ChangeNotifier {
       notifyListeners();
     }
     messages = mes;
+    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setLoadingMessages(false);
     notifyListeners();
     return messages;
@@ -359,6 +362,7 @@ class MessageProvider extends ChangeNotifier {
     setClearingChat(true);
     var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
     messages = mes;
+    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setClearingChat(false);
     notifyListeners();
   }
@@ -384,7 +388,7 @@ class MessageProvider extends ChangeNotifier {
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
-    messages.insert(0, message);
+    messages.add(message);
     notifyListeners();
   }
 
@@ -392,7 +396,7 @@ class MessageProvider extends ChangeNotifier {
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
-    messages.insert(0, message);
+    messages.add(message);
     notifyListeners();
   }
 
@@ -419,7 +423,8 @@ class MessageProvider extends ChangeNotifier {
 
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
-    messages.insert(0, message);
+    messages.add(message);
+    final aiIndex = messages.length - 1;
     notifyListeners();
 
     try {
@@ -446,7 +451,7 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
-          messages[0] = message;
+          messages[aiIndex] = message;
           notifyListeners();
           continue;
         }
@@ -493,7 +498,8 @@ class MessageProvider extends ChangeNotifier {
     _isNextMessageFromVoice = false;
 
     var message = ServerMessage.empty(appId: currentAppId);
-    messages.insert(0, message);
+    messages.add(message);
+    final aiIndex = messages.length - 1;
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
@@ -533,7 +539,7 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
-          messages[0] = message;
+          messages[aiIndex] = message;
           notifyListeners();
           continue;
         }
