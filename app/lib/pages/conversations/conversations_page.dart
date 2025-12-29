@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -20,7 +19,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
-import 'widgets/score_widget.dart';
+import 'widgets/goal_tracker_widget.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -188,6 +187,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
+            // Goal tracker widget - before folders
+            const SliverToBoxAdapter(child: GoalTrackerWidget()),
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {
@@ -204,7 +205,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 );
               },
             ),
-            if (SharedPreferencesUtil().showDailyGradeEnabled) const SliverToBoxAdapter(child: ScoreWidget()),
             if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)

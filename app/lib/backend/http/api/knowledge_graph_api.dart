@@ -12,6 +12,8 @@ class KnowledgeGraphApi {
       headers: {},
       body: '',
       method: 'GET',
+      timeout: const Duration(seconds: 60),
+      retries: 2,
     );
 
     if (response != null && response.statusCode == 200) {

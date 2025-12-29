@@ -16,8 +16,6 @@ PODS:
     - Flutter
   - connectivity_plus (0.0.1):
     - Flutter
-  - cryptography_flutter_plus (0.2.0):
-    - Flutter
   - device_info_plus (0.0.1):
     - Flutter
   - DKImagePickerController/Core (4.3.9):
@@ -277,7 +275,6 @@ DEPENDENCIES:
   - awesome_notifications (from `.symlinks/plugins/awesome_notifications/ios`)
   - awesome_notifications_core (from `.symlinks/plugins/awesome_notifications_core/ios`)
   - connectivity_plus (from `.symlinks/plugins/connectivity_plus/ios`)
-  - cryptography_flutter_plus (from `.symlinks/plugins/cryptography_flutter_plus/ios`)
   - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
@@ -365,8 +362,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/awesome_notifications_core/ios"
   connectivity_plus:
     :path: ".symlinks/plugins/connectivity_plus/ios"
-  cryptography_flutter_plus:
-    :path: ".symlinks/plugins/cryptography_flutter_plus/ios"
   device_info_plus:
     :path: ".symlinks/plugins/device_info_plus/ios"
   file_picker:
@@ -449,7 +444,6 @@ SPEC CHECKSUMS:
   awesome_notifications: 0f432b28098d193920b11a44cfa9d2d9313a3888
   awesome_notifications_core: 429c28df8746780a474de177e5acde33af87da63
   connectivity_plus: cb623214f4e1f6ef8fe7403d580fdad517d2f7dd
-  cryptography_flutter_plus: 44f4e9e4079395fcbb3e7809c0ac2c6ae2d9576f
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60

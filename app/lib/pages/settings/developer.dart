@@ -1655,13 +1655,25 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
-                        // Daily Grade
+                        // Goal Tracker
                         _buildExperimentalItem(
-                          title: 'Daily Grade',
-                          description: 'Show daily grade card on homepage',
-                          icon: FontAwesomeIcons.chartLine,
+                          title: 'Goal Tracker',
+                          description: 'Track your personal goals on homepage',
+                          icon: FontAwesomeIcons.bullseye,
                           value: provider.showDailyGradeEnabled,
                           onChanged: provider.onShowDailyGradeChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Daily Reflection
+                        _buildExperimentalItem(
+                          title: 'Daily Reflection',
+                          description: 'Get a 9 PM reminder to reflect on your day',
+                          icon: FontAwesomeIcons.moon,
+                          value: provider.dailyReflectionEnabled,
+                          onChanged: provider.onDailyReflectionChanged,
                         ),
                       ],
                     ),
