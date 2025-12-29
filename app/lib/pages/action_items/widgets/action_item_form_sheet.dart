@@ -14,8 +14,9 @@ import 'package:omi/utils/l10n_extensions.dart';
 class ActionItemFormSheet extends StatefulWidget {
   final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
   final VoidCallback? onRefresh;
+  final DateTime? defaultDueDate; // Default due date for new items
 
-  const ActionItemFormSheet({super.key, this.actionItem, this.onRefresh});
+  const ActionItemFormSheet({super.key, this.actionItem, this.onRefresh, this.defaultDueDate});
 
   bool get isEditing => actionItem != null;
 
@@ -43,7 +44,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       _textController = TextEditingController();
       _isCompleted = false;
-      _selectedDueDate = null;
+      _selectedDueDate = widget.defaultDueDate;
     }
   }
 
