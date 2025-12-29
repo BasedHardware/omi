@@ -3,6 +3,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class SearchWidget extends StatefulWidget {
@@ -90,7 +91,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 setShowClearButton();
               },
               decoration: InputDecoration(
-                hintText: 'Search Conversations',
+                hintText: context.l10n.searchConversations,
                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                 filled: true,
                 fillColor: const Color(0xFF1F1F25),

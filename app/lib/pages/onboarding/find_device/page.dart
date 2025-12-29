@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -59,8 +60,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                 Navigator.of(context).pop();
               },
               () {},
-              'Enable Bluetooth',
-              'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.',
+              context.l10n.enableBluetooth,
+              context.l10n.bluetoothNeeded,
               singleButton: true,
             ),
           );
@@ -89,9 +90,9 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   width: double.infinity,
                   height: 45,
                   alignment: Alignment.center,
-                  child: const Text(
-                    'Contact Support?',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.contactSupport,
+                    style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 16,
                       color: Colors.white,
@@ -114,9 +115,9 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   width: double.infinity,
                   height: 45,
                   alignment: Alignment.center,
-                  child: const Text(
-                    'Connect Later',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.connectLater,
+                    style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 16,
                       color: Colors.white,

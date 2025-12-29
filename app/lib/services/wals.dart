@@ -256,7 +256,9 @@ class SDCardWalSync implements IWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
+
     // Capture device reference to avoid race condition where _device could become null during async operations
+
     final device = _device;
     if (device == null) {
       return [];
@@ -286,6 +288,13 @@ class SDCardWalSync implements IWalSync {
 
       // Device model
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+
+
+      if (connection == null) {
+        debugPrint("SDCard: No connection for device info");
+        return [];
+      }
+
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
 
@@ -792,7 +801,9 @@ class FlashPageWalSync implements IWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
+
     // Capture device reference to avoid race condition where _device could become null during async operations
+
     final device = _device;
     if (device == null) return [];
 
@@ -820,6 +831,13 @@ class FlashPageWalSync implements IWalSync {
 
       // Device model
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+
+
+      if (connection == null) {
+        debugPrint("FlashPage: No connection for device info");
+        return [];
+      }
+
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
