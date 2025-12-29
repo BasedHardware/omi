@@ -211,9 +211,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             // Show daily summaries list or conversations based on filter
             if (convoProvider.showDailySummaries)
-              const SliverToBoxAdapter(
-                child: DailySummariesList(),
-              )
+              const DailySummariesList()
             else if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)

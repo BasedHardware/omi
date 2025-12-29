@@ -69,41 +69,44 @@ class _DailySummariesListState extends State<DailySummariesList> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return _buildLoadingShimmer();
+      return SliverToBoxAdapter(child: _buildLoadingShimmer());
     }
 
     if (_summaries.isEmpty) {
-      return _buildEmptyState();
+      return SliverToBoxAdapter(child: _buildEmptyState());
     }
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollEndNotification && notification.metrics.extentAfter < 200) {
-          _loadMore();
-        }
-        return false;
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 10),
-          ..._summaries.map((summary) => _buildSummaryCard(summary)),
-          if (_isLoadingMore)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.grey.shade400,
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          // Extra tail item for spinner / bottom padding
+          if (index == _summaries.length) {
+            if (_isLoadingMore) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.grey.shade400,
+                    ),
                   ),
                 ),
-              ),
-            ),
-          const SizedBox(height: 100),
-        ],
+              );
+            }
+            return const SizedBox(height: 100);
+          }
+
+          // Prefetch more when approaching end
+          if (_hasMore && !_isLoadingMore && index >= _summaries.length - 3) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+          }
+
+          return _buildSummaryCard(_summaries[index]);
+        },
+        childCount: _summaries.length + 1,
       ),
     );
   }

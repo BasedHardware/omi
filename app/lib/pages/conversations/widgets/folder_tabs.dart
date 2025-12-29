@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -163,7 +164,7 @@ class _FolderTabsState extends State<FolderTabs> {
 
     // If a folder is selected, show it first (after Starred)
     final selectedFolder = widget.selectedFolderId != null
-        ? widget.folders.where((f) => f.id == widget.selectedFolderId).firstOrNull
+        ? widget.folders.firstWhereOrNull((f) => f.id == widget.selectedFolderId)
         : null;
     if (selectedFolder != null) {
       tabs.add(_buildFolderTab(selectedFolder));

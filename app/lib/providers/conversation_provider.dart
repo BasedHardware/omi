@@ -843,14 +843,10 @@ class ConversationProvider extends ChangeNotifier {
       return true;
     }
     // Check actual conversation status from server
-    final convo = conversations.firstWhere(
-      (c) => c.id == conversationId,
-      orElse: () => conversations.isNotEmpty ? conversations.first : conversations.first,
-    );
-    if (convo.id == conversationId && convo.status == ConversationStatus.merging) {
-      return true;
-    }
-    return false;
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return false;
+
+    return conversations[idx].status == ConversationStatus.merging;
   }
 
   /// Enter selection mode for merge
@@ -918,19 +914,12 @@ class ConversationProvider extends ChangeNotifier {
   /// No time gap restrictions - user can merge any conversations they want.
   bool isConversationEligibleForMerge(String conversationId) {
     // Find the conversation
-    final convo = conversations.firstWhere(
-      (c) => c.id == conversationId,
-      orElse: () => conversations.first,
-    );
-    if (convo.id != conversationId) return false;
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return false;
 
-    if (convo.isLocked) {
-      return false;
-    }
-
-    if (mergingConversationIds.contains(conversationId)) {
-      return false;
-    }
+    final convo = conversations[idx];
+    if (convo.isLocked) return false;
+    if (mergingConversationIds.contains(conversationId)) return false;
 
     return true;
   }
