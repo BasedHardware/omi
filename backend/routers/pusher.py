@@ -36,10 +36,14 @@ from utils.other.storage import (
 router = APIRouter()
 
 # Constants for speaker sample extraction
-SPEAKER_SAMPLE_MIN_SEGMENT_DURATION = 10.0  # Minimum segment duration in seconds
-SPEAKER_SAMPLE_PROCESS_INTERVAL = 5.0  # seconds between queue checks
-SPEAKER_SAMPLE_MIN_AGE = 10.0  # seconds to wait before processing a request
-PRIVATE_CLOUD_CHUNK_DURATION = 5.0  # Duration of each audio chunk in seconds
+SPEAKER_SAMPLE_PROCESS_INTERVAL = 5.0
+SPEAKER_SAMPLE_MIN_SEGMENT_DURATION = 10.0
+SPEAKER_SAMPLE_MIN_AGE = 15.0
+
+# Constants for private cloud sync
+PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL = 1.0
+PRIVATE_CLOUD_CHUNK_DURATION = 5.0
+PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
 
 
 async def _extract_speaker_samples(
@@ -56,13 +60,13 @@ async def _extract_speaker_samples(
     """
     try:
         # Check current sample count once
-        sample_count = await asyncio.to_thread(users_db.get_person_speech_samples_count, uid, person_id)
+        sample_count = users_db.get_person_speech_samples_count(uid, person_id)
         if sample_count >= 5:
             print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
             return
 
         # Fetch conversation to get started_at and segment details
-        conversation = await asyncio.to_thread(conversations_db.get_conversation, uid, conversation_id)
+        conversation = conversations_db.get_conversation(uid, conversation_id)
         if not conversation:
             print(f"Conversation {conversation_id} not found", uid)
             return
@@ -79,7 +83,7 @@ async def _extract_speaker_samples(
         segment_map = {s.get('id'): s for s in conv_segments if s.get('id')}
 
         # List chunks from storage
-        chunks = await asyncio.to_thread(list_audio_chunks, uid, conversation_id)
+        chunks = list_audio_chunks(uid, conversation_id)
         if not chunks:
             print(f"No chunks found for {conversation_id}, skipping speaker sample extraction", uid)
             return
@@ -108,27 +112,27 @@ async def _extract_speaker_samples(
             seg_duration = segment_end - segment_start
             speaker_id = seg.get('speaker_id')
 
-            # # If segment is too short, try expanding to adjacent segments with same speaker
-            # if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
-            #     seg_idx = segment_index_map.get(seg_id)
-            #     if seg_idx is not None:
-            #         i = seg_idx - 1
-            #         while i >= 0:
-            #             prev_seg = ordered_segments[i]
-            #             if prev_seg.get('speaker_id') != speaker_id:
-            #                 break
-            #             prev_start = prev_seg.get('start')
-            #             if prev_start is not None:
-            #                 segment_start = min(segment_start, prev_start)
-            #                 seg_duration = segment_end - segment_start
-            #             if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-            #                 print(
-            #                     f"Expanded segment to {seg_duration:.1f}s by including adjacent segments",
-            #                     uid,
-            #                     conversation_id,
-            #                 )
-            #                 break
-            #             i -= 1
+            # If segment is too short, try expanding to adjacent segments with same speaker
+            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
+                seg_idx = segment_index_map.get(seg_id)
+                if seg_idx is not None:
+                    i = seg_idx - 1
+                    while i >= 0:
+                        prev_seg = ordered_segments[i]
+                        if prev_seg.get('speaker_id') != speaker_id:
+                            break
+                        prev_start = prev_seg.get('start')
+                        if prev_start is not None:
+                            segment_start = min(segment_start, prev_start)
+                            seg_duration = segment_end - segment_start
+                        if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
+                            print(
+                                f"Expanded segment to {seg_duration:.1f}s by including adjacent segments",
+                                uid,
+                                conversation_id,
+                            )
+                            break
+                        i -= 1
 
             if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
                 print(f"Segment too short ({seg_duration:.1f}s) even after expansion, skipping", uid, conversation_id)
@@ -181,11 +185,15 @@ async def _extract_speaker_samples(
                 upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = await asyncio.to_thread(users_db.add_person_speech_sample, uid, person_id, path)
+            success = users_db.add_person_speech_sample(uid, person_id, path)
             if success:
                 samples_added += 1
                 seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
-                print(f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text}", uid, conversation_id)
+                print(
+                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text}",
+                    uid,
+                    conversation_id,
+                )
             else:
                 print(f"Failed to add speech sample for person {person_id}", uid, conversation_id)
                 break  # Likely hit limit
@@ -272,14 +280,47 @@ async def _websocket_util_trigger(
     audio_bytes_trigger_delay_seconds = 4
     has_audio_apps_enabled = is_audio_bytes_app_enabled(uid)
     private_cloud_sync_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
-    private_cloud_sync_delay_seconds = 5
 
-    async def save_audio_chunk(chunk_data: bytes, uid: str, conversation_id: str, timestamp: float):
-        upload_audio_chunk(chunk_data, uid, conversation_id, timestamp)
-
-    # task
     # Queue for pending speaker sample extraction requests
     speaker_sample_queue: List[dict] = []
+
+    # Queue for pending private cloud sync chunks
+    private_cloud_queue: List[dict] = []
+
+    async def process_private_cloud_queue():
+        """Background task that processes private cloud sync uploads with retry logic."""
+        nonlocal websocket_active, private_cloud_queue
+
+        while websocket_active or len(private_cloud_queue) > 0:
+            await asyncio.sleep(PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+
+            if not private_cloud_queue:
+                continue
+
+            # Process all pending chunks
+            chunks_to_process = private_cloud_queue.copy()
+            private_cloud_queue = []
+
+            for chunk_info in chunks_to_process:
+                chunk_data = chunk_info['data']
+                conv_id = chunk_info['conversation_id']
+                timestamp = chunk_info['timestamp']
+                retries = chunk_info.get('retries', 0)
+
+                try:
+                    await asyncio.to_thread(upload_audio_chunk, chunk_data, uid, conv_id, timestamp)
+                except Exception as e:
+                    if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
+                        # Re-queue with incremented retry count
+                        chunk_info['retries'] = retries + 1
+                        private_cloud_queue.append(chunk_info)
+                        print(f"Private cloud upload failed (retry {retries + 1}): {e}", uid, conv_id)
+                    else:
+                        print(
+                            f"Private cloud upload failed after {PRIVATE_CLOUD_SYNC_MAX_RETRIES} retries, dropping chunk: {e}",
+                            uid,
+                            conv_id,
+                        )
 
     async def process_speaker_sample_queue():
         """Background task that processes speaker sample extraction requests."""
@@ -396,20 +437,22 @@ async def _websocket_util_trigger(
                     audiobuffer.extend(audio_data)
                     trigger_audiobuffer.extend(audio_data)
 
-                    # Private cloud sync
+                    # Private cloud sync - queue chunks for background processing
                     if private_cloud_sync_enabled and current_conversation_id:
                         if private_cloud_chunk_start_time is None:
                             # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
 
                         private_cloud_sync_buffer.extend(audio_data)
-                        # Save chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
-                        if len(private_cloud_sync_buffer) >= sample_rate * 2 * private_cloud_sync_delay_seconds:
-                            chunk_data = bytes(private_cloud_sync_buffer)
-                            timestamp = private_cloud_chunk_start_time
-                            conv_id = current_conversation_id
-                            asyncio.run_coroutine_threadsafe(
-                                save_audio_chunk(chunk_data, uid, conv_id, timestamp), loop
+                        # Queue chunk every 5 seconds (sample_rate * 2 bytes per sample * 5 seconds)
+                        if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
+                            private_cloud_queue.append(
+                                {
+                                    'data': bytes(private_cloud_sync_buffer),
+                                    'conversation_id': current_conversation_id,
+                                    'timestamp': private_cloud_chunk_start_time,
+                                    'retries': 0,
+                                }
                             )
                             private_cloud_sync_buffer = bytearray()
                             private_cloud_chunk_start_time = None
@@ -438,12 +481,24 @@ async def _websocket_util_trigger(
             print(f'Could not process audio: error {e}')
             websocket_close_code = 1011
         finally:
+            # Flush any remaining private cloud sync buffer before shutdown
+            if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
+                private_cloud_queue.append(
+                    {
+                        'data': bytes(private_cloud_sync_buffer),
+                        'conversation_id': current_conversation_id,
+                        'timestamp': private_cloud_chunk_start_time or time.time(),
+                        'retries': 0,
+                    }
+                )
+                print(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes", uid)
             websocket_active = False
 
     try:
         receive_task = asyncio.create_task(receive_tasks())
         speaker_sample_task = asyncio.create_task(process_speaker_sample_queue())
-        await asyncio.gather(receive_task, speaker_sample_task)
+        private_cloud_task = asyncio.create_task(process_private_cloud_queue())
+        await asyncio.gather(receive_task, speaker_sample_task, private_cloud_task)
 
     except Exception as e:
         print(f"Error during WebSocket operation: {e}")
