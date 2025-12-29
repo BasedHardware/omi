@@ -213,18 +213,15 @@ RECENT CHAT (what they're currently thinking about):
 USER FACTS:
 {context['memory_context'][:600] if context['memory_context'] else 'No facts available'}
 
-Give ONE specific action in 1 sentence. Max 18 words. No fluff."""
+Give ONE specific action in 1-2 sentences. Be concise but complete. No generic advice."""
 
         print(f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat")
         
         # Use the better model for high-quality advice
         advice = llm_medium.invoke(prompt).content
         
-        # Clean up - strict 18 word limit for 2-3 lines max
+        # Clean up quotes but keep full text
         advice = advice.strip().strip('"').strip("'")
-        words = advice.split()
-        if len(words) > 18:
-            advice = ' '.join(words[:18]) + "..."
         
         return advice
         
