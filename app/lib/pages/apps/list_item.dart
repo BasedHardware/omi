@@ -76,7 +76,7 @@ class AppListItem extends StatelessWidget {
                         ),
                       ),
                       errorWidget: (context, url, error) => Icon(
-                        Icons.apps,
+                        Icons.image_not_supported_outlined,
                         size: 30,
                         color: Colors.grey.shade600,
                       ),
