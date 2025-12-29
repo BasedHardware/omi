@@ -17,7 +17,6 @@ dependencies:
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
 
-
   # Desktop
   window_manager: 0.3.7
   auto_updater: ^1.0.0
@@ -38,6 +37,9 @@ dependencies:
   skeletonizer: 2.0.1
   shimmer: ^3.0.0
   pull_down_button: ^0.10.2
+
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
   # Firebase
   firebase_core: 3.13.0
