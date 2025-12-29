@@ -147,6 +147,6 @@ def get_summaries_count(uid: str) -> int:
         Count of summaries
     """
     user_ref = db.collection('users').document(uid)
-    # Use a simple count aggregation
-    docs = user_ref.collection(DAILY_SUMMARIES_COLLECTION).select([]).stream()
-    return sum(1 for _ in docs)
+    count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
+    result = count_query.get()
+    return result[0][0].value
