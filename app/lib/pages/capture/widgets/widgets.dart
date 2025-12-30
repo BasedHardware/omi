@@ -189,8 +189,6 @@ getTranscriptWidget(
   String searchQuery = '',
   int currentResultIndex = -1,
   VoidCallback? onTapWhenSearchEmpty,
-  Function(double segmentStartSeconds)? onPlaySegment,
-  bool hasAudio = false,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -223,8 +221,6 @@ getTranscriptWidget(
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,
-      onPlaySegment: onPlaySegment,
-      hasAudio: hasAudio,
     );
   }
 

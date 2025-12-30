@@ -28,8 +28,6 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
-  final Function(double segmentStartSeconds)? onPlaySegment;
-  final bool hasAudio;
 
   const TranscriptWidget({
     super.key,
@@ -48,8 +46,6 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
-    this.onPlaySegment,
-    this.hasAudio = false,
   });
 
   @override
@@ -661,55 +657,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     const SizedBox(height: 4),
                                     _buildTranslationNotice(),
                                   ],
-                                  // Timestamp, provider, and play button (only shown when toggled)
-                                  if (_showSpeakerNames &&
-                                      (widget.canDisplaySeconds ||
-                                          data.sttProvider != null ||
-                                          (widget.hasAudio && widget.onPlaySegment != null))) ...[
+                                  // Timestamp and provider (only shown when toggled)
+                                  if (_showSpeakerNames && (widget.canDisplaySeconds || data.sttProvider != null)) ...[
                                     const SizedBox(height: 4),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        // Play button for audio playback
-                                        if (widget.hasAudio && widget.onPlaySegment != null) ...[
-                                          GestureDetector(
-                                            onTap: () {
-                                              widget.onPlaySegment?.call(data.start);
-                                            },
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  Icons.play_arrow_rounded,
-                                                  color: isUser
-                                                      ? Colors.white.withValues(alpha: 0.7)
-                                                      : Colors.grey.shade400,
-                                                  size: 14,
-                                                ),
-                                                const SizedBox(width: 2),
-                                                Text(
-                                                  'Play',
-                                                  style: TextStyle(
-                                                    color: isUser
-                                                        ? Colors.white.withValues(alpha: 0.7)
-                                                        : Colors.grey.shade400,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (widget.canDisplaySeconds || data.sttProvider != null)
-                                            Text(
-                                              ' · ',
-                                              style: TextStyle(
-                                                color: isUser
-                                                    ? Colors.white.withValues(alpha: 0.5)
-                                                    : Colors.grey.shade500,
-                                                fontSize: 10,
-                                              ),
-                                            ),
-                                        ],
                                         if (data.sttProvider != null) ...[
                                           Text(
                                             SttProviderConfig.getDisplayName(data.sttProvider),

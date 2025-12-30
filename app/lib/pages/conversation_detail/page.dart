@@ -49,7 +49,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
   final GlobalKey _shareButtonKey = GlobalKey();
-  final GlobalKey<ConversationBottomBarState> _audioBarKey = GlobalKey<ConversationBottomBarState>();
   TabController? _controller;
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
@@ -686,25 +685,17 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             controller: _controller,
                             physics: const NeverScrollableScrollPhysics(),
                             children: [
-                              Consumer<ConversationDetailProvider>(
-                                builder: (context, detailProvider, _) {
-                                  return TranscriptWidgets(
-                                    searchQuery: _searchQuery,
-                                    currentResultIndex: getCurrentResultIndexForHighlighting(),
-                                    onTapWhenSearchEmpty: () {
-                                      if (_isSearching && _searchQuery.isEmpty) {
-                                        setState(() {
-                                          _isSearching = false;
-                                          _searchController.clear();
-                                          _searchFocusNode.unfocus();
-                                        });
-                                      }
-                                    },
-                                    onPlaySegment: (double segmentStartSeconds) {
-                                      _audioBarKey.currentState?.seekAndPlay(segmentStartSeconds);
-                                    },
-                                    hasAudio: detailProvider.conversation.hasAudio(),
-                                  );
+                              TranscriptWidgets(
+                                searchQuery: _searchQuery,
+                                currentResultIndex: getCurrentResultIndexForHighlighting(),
+                                onTapWhenSearchEmpty: () {
+                                  if (_isSearching && _searchQuery.isEmpty) {
+                                    setState(() {
+                                      _isSearching = false;
+                                      _searchController.clear();
+                                      _searchFocusNode.unfocus();
+                                    });
+                                  }
                                 },
                               ),
                               SummaryTab(
@@ -741,7 +732,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     final hasActionItems =
                         conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
                     return ConversationBottomBar(
-                      key: _audioBarKey,
                       mode: ConversationBottomBarMode.detail,
                       selectedTab: selectedTab,
                       conversation: conversation,
@@ -1093,16 +1083,12 @@ class TranscriptWidgets extends StatefulWidget {
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
-  final Function(double segmentStartSeconds)? onPlaySegment;
-  final bool hasAudio;
 
   const TranscriptWidgets({
     super.key,
     this.searchQuery = '',
     this.currentResultIndex = -1,
     this.onTapWhenSearchEmpty,
-    this.onPlaySegment,
-    this.hasAudio = false,
   });
 
   @override
@@ -1166,8 +1152,6 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 searchQuery: widget.searchQuery,
                 currentResultIndex: widget.currentResultIndex,
                 onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-                onPlaySegment: widget.onPlaySegment,
-                hasAudio: widget.hasAudio,
                 editSegment: (segmentId, speakerId) {
                   final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
                   if (!connectivityProvider.isConnected) {
