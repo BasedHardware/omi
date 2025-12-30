@@ -11,7 +11,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
-import 'package:omi/pages/chat/page.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -677,12 +677,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                             // Navigate directly to chat page
                             if (mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const ChatPage(isPivotBottom: false),
-                                ),
-                              );
+                              Navigator.popUntil(context, (route) => route.isFirst);
+                              Provider.of<HomeProvider>(context, listen: false).setIndex(2);
                             }
                           } finally {
                             if (mounted) {

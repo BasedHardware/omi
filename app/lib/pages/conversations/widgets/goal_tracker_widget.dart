@@ -3,8 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/goals.dart';
-import 'package:omi/pages/chat/page.dart';
+import 'package:omi/backend/schema/message.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 /// Goal tracker widget with semicircle gauge
 class GoalTrackerWidget extends StatefulWidget {
@@ -22,7 +26,6 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   bool _isLoading = false; // Start as false - show cached data immediately
   bool _isEditingGoal = false;
   bool _isEditingValue = false;
-  bool _initialLoadDone = false;
   
   static const String _goalStorageKey = 'goal_tracker_local_goal';
   static const String _adviceStorageKey = 'goal_tracker_local_advice';
@@ -132,7 +135,6 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _initialLoadDone = true;
         });
       }
     }
@@ -202,17 +204,26 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   void _openChatWithAdvice() {
     if (_advice == null || _advice!.isEmpty) return;
     HapticFeedback.lightImpact();
-    
-    // Navigate to chat and send the advice as a message from Omi AI
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatPage(
-          isPivotBottom: false,
-          autoMessage: _advice,
-        ),
-      ),
+
+    // Add the AI message directly to MessageProvider
+    final aiMessage = ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      _advice!,
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+      [],
+      [],
+      askForNps: false,
     );
+    Provider.of<MessageProvider>(context, listen: false).addMessage(aiMessage);
+
+    // Navigate to chat tab
+    Navigator.popUntil(context, (route) => route.isFirst);
+    Provider.of<HomeProvider>(context, listen: false).setIndex(2);
   }
 
   Future<void> _createGoalFromSuggestion() async {

@@ -20,7 +20,8 @@ import 'widgets/memory_management_sheet.dart';
 import 'widgets/memory_graph_page.dart';
 
 class MemoriesPage extends StatefulWidget {
-  const MemoriesPage({super.key});
+  final bool showAppBar;
+  const MemoriesPage({super.key, this.showAppBar = false});
 
   @override
   State<MemoriesPage> createState() => MemoriesPageState();
@@ -153,6 +154,25 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
           canPop: true,
           child: Scaffold(
             backgroundColor: Theme.of(context).colorScheme.primary,
+            appBar: widget.showAppBar
+                ? AppBar(
+                    title: Text(
+                      context.l10n.memories,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    centerTitle: true,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    elevation: 0,
+                    leading: IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  )
+                : null,
             floatingActionButton: Padding(
               padding: const EdgeInsets.only(bottom: 60.0),
               child: FloatingActionButton(
