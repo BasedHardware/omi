@@ -1341,7 +1341,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildLanguageSelector() {
-    final languages = _currentConfig.supportedLanguages;
+    var languages = _currentConfig.supportedLanguages;
+    if (Platform.isIOS) {
+        languages = languages.where((lang) => lang != 'multi').toList();
+    }
+
     final suggestions = languages.map((lang) {
       final name = SttLanguages.common[lang];
       return name != null ? '$lang ($name)' : lang;

@@ -28,10 +28,15 @@ class OnDeviceAppleProvider implements ISttProvider {
       final tempFile = File('${tempDir.path}/temp_apple_audio_${DateTime.now().millisecondsSinceEpoch}.wav');
       await tempFile.writeAsBytes(audioData);
 
+      String effectiveLanguage = language ?? this.language;
+      if (effectiveLanguage == 'multi') {
+        effectiveLanguage = 'en';
+      }
+
       try {
         final String? result = await _channel.invokeMethod('transcribe', {
           'filePath': tempFile.path,
-          'language': language ?? this.language,
+          'language': effectiveLanguage,
         });
 
         if (result == null || result.isEmpty) {
