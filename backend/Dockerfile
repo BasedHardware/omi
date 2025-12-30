@@ -1,7 +1,9 @@
-# Builder stage - compile liblc3
-FROM tiangolo/uvicorn-gunicorn:python3.11 as builder
+FROM python:3.11 AS builder
 
-# Install build dependencies
+ENV PATH="/opt/venv/bin:$PATH"
+RUN python -m venv /opt/venv
+
+# Install build dependencies for liblc3
 RUN apt-get update && apt-get install -y \
     git \
     gcc \
@@ -22,18 +24,20 @@ RUN git clone https://github.com/google/liblc3.git && \
     cd /tmp/liblc3 && \
     python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
-# Runtime stage - minimal image
-FROM tiangolo/uvicorn-gunicorn:python3.11
+# Install Python requirements
+WORKDIR /opt/venv
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
 
-# Only install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    curl \
-    unzip \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+FROM python:3.11-slim
 
-# Copy compiled library and wheel from builder
+WORKDIR /app
+ENV PATH="/opt/venv/bin:$PATH"
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+RUN apt-get update && apt-get -y install ffmpeg curl unzip && rm -rf /var/lib/apt/lists/*
+
+# Copy compiled liblc3 library and wheel from builder
 COPY --from=builder /usr/local/lib/liblc3.so* /usr/local/lib/
 COPY --from=builder /tmp/wheels /tmp/wheels
 
@@ -42,34 +46,8 @@ RUN ldconfig && \
     pip install --no-cache-dir /tmp/wheels/*.whl && \
     rm -rf /tmp/wheels
 
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-
-# Install Python requirements
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-WORKDIR /app
-
-# COPY . .
-COPY ./routers ./routers
-COPY ./pretrained_models ./pretrained_models
-COPY ./database ./database
-COPY ./migrations ./migrations
-COPY ./memories-tuner ./tuner
-COPY ./pusher ./pusher
-COPY ./typesense ./typesense
-COPY ./charts ./charts
-COPY ./utils ./utils
-COPY ./models ./models
-COPY ./testing ./testing
-COPY ./scripts ./scripts
-COPY ./templates ./templates
-COPY ./modal ./modal
-COPY ./migration ./migration
-COPY google-credentials.json ./
+COPY --from=builder /opt/venv /opt/venv
+COPY backend/ .
 
 EXPOSE 8080
-
-CMD uvicorn main:app --host 0.0.0.0 --port 8080 #--limit-concurrency 10
-#CMD gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:8080
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
