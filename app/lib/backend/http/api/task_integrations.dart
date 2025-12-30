@@ -276,3 +276,44 @@ Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
     return null;
   }
 }
+
+/// Get all Omi-stored tasks for current user (not external service tasks)
+Future<List<Map<String, dynamic>>?> getOmiTasks({int limit = 50, int offset = 0}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/tasks?limit=$limit&offset=$offset',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+
+  if (response == null) return null;
+
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List?)?.cast<Map<String, dynamic>>() ?? [];
+  }
+  return null;
+}
+
+/// Update an Omi task
+Future<bool> updateOmiTask(String taskId, Map<String, dynamic> updates) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/tasks/$taskId',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(updates),
+  );
+  return response?.statusCode == 200;
+}
+
+/// Delete an Omi task
+Future<bool> deleteOmiTask(String taskId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/tasks/$taskId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  return response?.statusCode == 200 || response?.statusCode == 204;
+}
+

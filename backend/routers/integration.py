@@ -9,11 +9,12 @@ from fastapi.responses import JSONResponse
 import database.apps as apps_db
 import database.conversations as conversations_db
 import utils.apps as apps_utils
-from utils.apps import verify_api_key
+from utils.apps import verify_api_key, app_can_read_tasks, app_can_create_task
 import database.redis_db as redis_db
 import database.memories as memory_db
 from database.redis_db import get_enabled_apps, r as redis_client
 import database.notifications as notification_db
+import database.tasks as tasks_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.conversation import SearchRequest
@@ -549,3 +550,186 @@ async def send_notification_via_integration(
 
     send_app_notification(uid, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
+
+
+@router.post(
+    '/v2/integrations/{app_id}/user/tasks',
+    response_model=integration_models.TaskCreateResponse,
+    tags=['integration', 'tasks'],
+)
+async def create_task_via_integration(
+    request: Request,
+    app_id: str,
+    task_data: integration_models.CreateTaskRequest,
+    uid: str,
+    authorization: Optional[str] = Header(None),
+):
+    """Create a new task via integration API."""
+    # Verify API key
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    # Verify app exists and is enabled
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    
+    enabled_plugins = redis_db.get_enabled_apps(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+    
+    # Check capability
+    if not app_can_create_task(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to create tasks")
+    
+    # Create task
+    task_id = str(ULID())
+    task = {
+        'id': task_id,
+        'user_uid': uid,
+        'app_id': app_id,
+        'title': task_data.title,
+        'description': task_data.description,
+        'status': task_data.status or 'pending',
+        'created_at': datetime.now(timezone.utc),
+        'updated_at': datetime.now(timezone.utc),
+        'due_date': task_data.due_date,
+        'completed_at': None,      
+        'action': task_data.action, 
+        'request_id': task_data.request_id,
+    }
+    
+    tasks_db.create(task)
+    return {'task_id': task_id, 'status': 'created'}
+
+
+@router.get(
+    '/v2/integrations/{app_id}/user/tasks',
+    response_model=integration_models.TasksResponse,
+    tags=['integration', 'tasks'],
+)
+async def get_tasks_via_integration(
+    request: Request,
+    app_id: str,
+    uid: str,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    authorization: Optional[str] = Header(None),
+):
+    """Get all tasks for a user via integration API."""
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+    
+    enabled_plugins = redis_db.get_enabled_apps(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+    
+    if not app_can_read_tasks(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read tasks")
+    
+    tasks = tasks_db.get_tasks_by_user(uid, limit=limit, offset=offset)
+    task_items = [integration_models.TaskItem(**task) for task in tasks]
+    return {'tasks': task_items}
+
+
+# @router.patch(
+#     '/v2/integrations/{app_id}/user/tasks/{task_id}',
+#     response_model=integration_models.EmptyResponse,
+#     tags=['integration', 'tasks'],
+# )
+# async def update_task_via_integration(
+#     request: Request,
+#     app_id: str,
+#     task_id: str,
+#     task_data: integration_models.UpdateTaskRequest,
+#     uid: str,
+#     authorization: Optional[str] = Header(None),
+# ):
+#     """Update a task via integration API."""
+#     if not authorization or not authorization.startswith('Bearer '):
+#         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+#     api_key = authorization.replace('Bearer ', '')
+#     if not verify_api_key(app_id, api_key):
+#         raise HTTPException(status_code=403, detail="Invalid API key")
+    
+#     app = apps_db.get_app_by_id_db(app_id)
+#     if not app:
+#         raise HTTPException(status_code=404, detail="App not found")
+    
+#     enabled_plugins = redis_db.get_enabled_apps(uid)
+#     if app_id not in enabled_plugins:
+#         raise HTTPException(status_code=403, detail="App is not enabled for this user")
+    
+#     if not app_can_update_task(app):
+#         raise HTTPException(status_code=403, detail="App does not have the capability to update tasks")
+    
+#     # Verify task exists and belongs to user
+#     existing_task = tasks_db.get_task_by_id(task_id)
+#     if not existing_task:
+#         raise HTTPException(status_code=404, detail="Task not found")
+#     if existing_task['user_uid'] != uid:
+#         raise HTTPException(status_code=403, detail="Task does not belong to this user")
+    
+#     # Update task
+#     update_data = task_data.dict(exclude_unset=True)
+#     update_data['updated_at'] = datetime.now(timezone.utc)
+#     tasks_db.update(task_id, update_data)
+    
+#     return {}
+
+
+# @router.delete(
+#     '/v2/integrations/{app_id}/user/tasks/{task_id}',
+#     response_model=integration_models.EmptyResponse,
+#     tags=['integration', 'tasks'],
+# )
+# async def delete_task_via_integration(
+#     request: Request,
+#     app_id: str,
+#     task_id: str,
+#     uid: str,
+#     authorization: Optional[str] = Header(None),
+# ):
+#     """Delete a task via integration API."""
+#     # Auth checks...
+#     if not authorization or not authorization.startswith('Bearer '):
+#         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+#     api_key = authorization.replace('Bearer ', '')
+#     if not verify_api_key(app_id, api_key):
+#         raise HTTPException(status_code=403, detail="Invalid API key")
+    
+#     app = apps_db.get_app_by_id_db(app_id)
+#     if not app:
+#         raise HTTPException(status_code=404, detail="App not found")
+    
+#     enabled_plugins = redis_db.get_enabled_apps(uid)
+#     if app_id not in enabled_plugins:
+#         raise HTTPException(status_code=403, detail="App is not enabled for this user")
+    
+#     if not app_can_delete_task(app):
+#         raise HTTPException(status_code=403, detail="App does not have the capability to delete tasks")
+    
+#     # Verify task exists and belongs to user
+#     existing_task = tasks_db.get_task_by_id(task_id)
+#     if not existing_task:
+#         raise HTTPException(status_code=404, detail="Task not found")
+#     if existing_task['user_uid'] != uid:
+#         raise HTTPException(status_code=403, detail="Task does not belong to this user")
+    
+#     # Delete task
+#     tasks_db.delete(task_id)
+#     return {}

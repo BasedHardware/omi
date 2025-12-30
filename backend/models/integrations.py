@@ -149,3 +149,44 @@ class SearchConversationsResponse(BaseModel):
     total_pages: int = Field(description="Total number of pages")
     current_page: int = Field(description="Current page number")
     per_page: int = Field(description="Number of items per page")
+
+
+class CreateTaskRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: Optional[str] = 'pending'  # pending, in_progress, completed
+    due_date: Optional[datetime] = None
+    action: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class UpdateTaskRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    due_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class TaskItem(BaseModel):
+    id: str
+    user_uid: str
+    app_id: str
+    title: str
+    description: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    due_date: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    action: Optional[str] = None
+    request_id: Optional[str] = None
+
+
+class TasksResponse(BaseModel):
+    tasks: List[TaskItem]
+
+
+class TaskCreateResponse(BaseModel):
+    task_id: str
+    status: str
