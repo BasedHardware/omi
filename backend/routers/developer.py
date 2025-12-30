@@ -338,11 +338,14 @@ def update_memory(
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
         memories_db.change_memory_visibility(uid, memory_id, request.visibility)
 
+    update_data = {}
     if request.tags is not None:
-        memories_db.update_memory_tags(uid, memory_id, request.tags)
-
+        update_data['tags'] = request.tags
     if request.category is not None:
-        memories_db.update_memory_category(uid, memory_id, request.category.value)
+        update_data['category'] = request.category.value
+
+    if update_data:
+        memories_db.update_memory_fields(uid, memory_id, update_data)
 
     return memories_db.get_memory(uid, memory_id)
 
