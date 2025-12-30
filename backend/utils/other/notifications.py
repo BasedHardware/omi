@@ -15,6 +15,14 @@ from utils.notifications import send_bulk_notification, send_notification
 from utils.webhooks import day_summary_webhook
 
 
+def should_run_job():
+    """
+    Check if the notification cron job should run.
+    Always returns True since we now handle all hours dynamically.
+    """
+    return True
+
+
 async def start_cron_job():
     """
     Main cron job entry point. Runs at the top of every UTC hour.
