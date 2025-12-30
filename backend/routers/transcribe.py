@@ -1329,6 +1329,22 @@ async def _listen(
         nonlocal websocket_active, speaker_to_person_map
         nonlocal person_embeddings_cache, audio_ring_buffer
 
+        def _load_shared_people_into_cache(uid: str, cache: dict):
+            try:
+                shared = user_db.get_shared_people(uid)
+                for s in shared:
+                    sid = s.get('id')
+                    emb = s.get('speaker_embedding')
+                    name = s.get('name') or f"Shared-{sid}"
+                    if emb:
+                        ns_id = f"shared_{sid}"
+                        cache[ns_id] = {
+                            'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                            'name': name,
+                        }
+            except Exception as e:
+                print(f"Speaker ID: failed loading shared people: {e}", uid, session_id)
+
         if not speaker_id_enabled:
             return
 
@@ -1344,21 +1360,7 @@ async def _listen(
                     }
 
             # Also load shared people (profiles other users shared with this user)
-            try:
-                shared = user_db.get_shared_people(uid)
-                for s in shared:
-                    sid = s.get('id')
-                    emb = s.get('speaker_embedding')
-                    name = s.get('name') or f"Shared-{sid}"
-                    if emb:
-                        # Use a namespaced id to avoid collision with local people ids
-                        ns_id = f"shared_{sid}"
-                        person_embeddings_cache[ns_id] = {
-                            'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
-                            'name': name,
-                        }
-            except Exception as e:
-                print(f"Speaker ID: failed loading shared people: {e}", uid, session_id)
+            _load_shared_people_into_cache(uid, person_embeddings_cache)
 
             print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings (including shared)", uid, session_id)
         except Exception as e:
@@ -1388,23 +1390,25 @@ async def _listen(
                         action = payload.get('action')
                         source_uid = payload.get('source_uid')
                         if action == 'add':
-                            # reload shared people
-                            shared = user_db.get_shared_people(uid)
-                            for s in shared:
-                                sid = s.get('id')
-                                emb = s.get('speaker_embedding')
-                                name = s.get('name') or f"Shared-{sid}"
-                                if emb:
-                                    ns_id = f"shared_{sid}"
+                            # Use embedding from payload directly to avoid DB roundtrip
+                            emb = payload.get('speaker_embedding')
+                            source_uid = payload.get('source_uid')
+                            name = payload.get('name') or f"Shared-{source_uid}"
+                            if emb and source_uid:
+                                try:
+                                    ns_id = f"shared_{source_uid}"
                                     person_embeddings_cache[ns_id] = {
                                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                                         'name': name,
                                     }
+                                except Exception as e:
+                                    print(f"Failed to load embedding from payload for user {uid}, source {source_uid}: {e}")
                         elif action == 'remove':
                             ns_id = f"shared_{source_uid}"
                             if ns_id in person_embeddings_cache:
                                 del person_embeddings_cache[ns_id]
-                    except Exception:
+                    except Exception as e:
+                        print(f"Error processing shared profile message for user {uid}: {e}. Payload: {msg}")
                         continue
             except Exception as e:
                 print(f"Shared profiles listener error: {e}", uid, session_id)

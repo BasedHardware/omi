@@ -128,7 +128,8 @@ def share_speech_profile_with_user(target_uid: str, name: str = None, source_per
             all_people = get_people(uid)
             if all_people:
                 person_doc = all_people[0]
-        except Exception:
+        except Exception as e:
+            print(f"Failed to get people for user {uid} when sharing profile: {e}")
             person_doc = None
 
     if person_doc and person_doc.get('speaker_embedding'):
@@ -140,10 +141,15 @@ def share_speech_profile_with_user(target_uid: str, name: str = None, source_per
     # Notify target user's active sessions via Redis pubsub
     try:
         channel = f'users:{target_uid}:shared_profiles'
-        payload = {'action': 'add', 'source_uid': uid, 'name': person_name}
+        payload = {
+            'action': 'add',
+            'source_uid': uid,
+            'name': person_name,
+            'speaker_embedding': embedding or [],
+        }
         redis_db.r.publish(channel, json.dumps(payload))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Failed to publish 'add' shared profile notification to Redis for user {target_uid}: {e}")
 
     return {'status': 'ok'}
 
@@ -156,8 +162,8 @@ def revoke_speech_profile_from_user(target_uid: str, uid: str = Depends(auth.get
         channel = f'users:{target_uid}:shared_profiles'
         payload = {'action': 'remove', 'source_uid': uid}
         redis_db.r.publish(channel, json.dumps(payload))
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Failed to publish 'remove' shared profile notification to Redis for user {target_uid}: {e}")
     return {'status': 'ok' if success else 'not_found'}
 
 

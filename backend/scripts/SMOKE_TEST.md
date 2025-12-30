@@ -7,6 +7,8 @@ Prerequisites
 - A staging backend accessible via environment variable API_BASE.
 - User A (sharer) and user B (recipient) tokens (`A_TOKEN`, `B_TOKEN`) and the UID of user B (`B_UID`).
 - (Optional) Redis connection if you want to observe pubsub events.
+ - `aioredis` must be available in the runtime for `/v4/listen` sessions to subscribe to pubsub (add to requirements if needed).
+ - Note: share payload now includes `speaker_embedding` so listeners can update caches without a DB roundtrip.
 
 How to run
 
