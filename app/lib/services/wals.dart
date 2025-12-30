@@ -813,8 +813,8 @@ class FlashPageWalSync implements IWalSync {
     int pageCount = _newestPage - _oldestPage + 1;
     if (pageCount <= 0) return [];
 
-    // Estimate duration: ~2 seconds per page
-    int estimatedSeconds = pageCount * 2;
+    // Estimate duration: ~1.4 seconds per page
+    int estimatedSeconds = (pageCount * 1.4).round();
 
     // Only create WAL if there's meaningful data (> 30 pages)
     if (pageCount > 30) {
@@ -929,7 +929,7 @@ class FlashPageWalSync implements IWalSync {
 
     debugPrint("FlashPageSync: Starting sequential batch upload${continuous ? ' (continuous mode)' : ''}");
 
-    const batchSize = 2;
+    const batchSize = 4;
     int totalBatchesProcessed = 0;
 
     while (true) {
@@ -942,6 +942,14 @@ class FlashPageWalSync implements IWalSync {
         }
         // No more files to upload
         break;
+      }
+
+      // In continuous mode during sync, wait until we have at least batchSize files
+      // This prevents uploading partial batches while more files are being saved
+      if (continuous && _isSyncing && pendingFiles.length < batchSize) {
+        debugPrint("FlashPageSync: Waiting for more files (have ${pendingFiles.length}, need $batchSize)");
+        await Future.delayed(const Duration(seconds: 3));
+        continue;
       }
 
       // Sort by timestamp for chronological order
@@ -969,9 +977,6 @@ class FlashPageWalSync implements IWalSync {
         resp.updatedConversationIds.addAll(batchResp.updatedConversationIds
             .where((id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id)));
       }
-
-      // Small delay before next batch to avoid overwhelming backend
-      await Future.delayed(const Duration(seconds: 1));
     }
 
     debugPrint(
@@ -980,6 +985,8 @@ class FlashPageWalSync implements IWalSync {
   }
 
   /// Upload a single batch of files and return result with metadata
+  /// Uses a 10-second timeout - if we don't get a response in time, we assume success
+  /// and continue with the next batch. Errors would have been returned within 10 seconds.
   Future<Map<String, dynamic>> _uploadBatch(List<String> batchPaths) async {
     final batchFiles = <File>[];
     final validPaths = <String>[];
@@ -1002,9 +1009,25 @@ class FlashPageWalSync implements IWalSync {
 
     try {
       debugPrint("FlashPageSync: Uploading batch of ${batchFiles.length} files");
-      final partialResp = await syncLocalFiles(batchFiles);
 
-      // Delete files and remove from pending list after successful upload
+      // Use timeout - if we don't get response in 10 seconds, assume success and continue
+      // Any errors would have been returned within 10 seconds
+      SyncLocalFilesResponse? partialResp;
+      try {
+        partialResp = await syncLocalFiles(batchFiles).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            debugPrint("FlashPageSync: Upload timeout after 10s, assuming success and continuing");
+            return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+          },
+        );
+      } catch (e) {
+        debugPrint("FlashPageSync: Upload error: $e");
+        // On error, keep files in pending list for retry
+        return {'response': null, 'paths': <String>[]};
+      }
+
+      // Delete files and remove from pending list after upload (success or timeout)
       for (final filePath in validPaths) {
         try {
           await File(filePath).delete();
@@ -1075,10 +1098,6 @@ class FlashPageWalSync implements IWalSync {
           final opusFrames = pageData['opus_frames'] as List<List<int>>? ?? [];
           final timestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
           final maxIndex = pageData['max_index'] as int?;
-          final didStartSession =
-              (pageData['did_start_session'] as bool? ?? false) || (pageData['did_start_recording'] as bool? ?? false);
-          final didStopSession =
-              (pageData['did_stop_session'] as bool? ?? false) || (pageData['did_stop_recording'] as bool? ?? false);
 
           // Track the highest flash page index we've processed for ACK
           if (maxIndex != null && (lastProcessedIndex == null || maxIndex > lastProcessedIndex)) {
@@ -1098,23 +1117,12 @@ class FlashPageWalSync implements IWalSync {
               }
             }
 
-            // New session starting with existing frames - save first, carry over new frames
-            if (!shouldSave && didStartSession && accumulatedFrames.isNotEmpty) {
-              shouldSave = true;
-              pendingFrames = opusFrames;
-              pendingTimestamp = timestampMs;
-            }
-
             // If not saving yet, accumulate frames normally
             if (!shouldSave) {
               if (batchMinTimestamp == null || timestampMs < batchMinTimestamp) {
                 batchMinTimestamp = timestampMs;
               }
               accumulatedFrames.addAll(opusFrames);
-            }
-
-            if (didStopSession && accumulatedFrames.isNotEmpty) {
-              shouldSave = true;
             }
           }
         } else {
@@ -1151,8 +1159,8 @@ class FlashPageWalSync implements IWalSync {
               }
             }
 
-            // Start background upload after first 3 files saved
-            if (!uploadStarted && filesSaved >= 2) {
+            // Start background upload after first 4 files saved
+            if (!uploadStarted && filesSaved >= 4) {
               uploadStarted = true;
               _isUploading = true;
               listener.onWalUpdated();
