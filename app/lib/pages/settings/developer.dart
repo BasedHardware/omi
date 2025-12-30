@@ -1663,6 +1663,18 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           value: provider.showDailyGradeEnabled,
                           onChanged: provider.onShowDailyGradeChanged,
                         ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Daily Reflection
+                        _buildExperimentalItem(
+                          title: 'Daily Reflection',
+                          description: 'Get a 9 PM reminder to reflect on your day',
+                          icon: FontAwesomeIcons.moon,
+                          value: provider.dailyReflectionEnabled,
+                          onChanged: provider.onDailyReflectionChanged,
+                        ),
                       ],
                     ),
                   ),

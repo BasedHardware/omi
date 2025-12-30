@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/chat/page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Goal tracker widget with semicircle gauge
 class GoalTrackerWidget extends StatefulWidget {
@@ -16,9 +19,13 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   Goal? _goal;
   GoalSuggestion? _suggestion;
   String? _advice;
-  bool _isLoading = true;
+  bool _isLoading = false; // Start as false - show cached data immediately
   bool _isEditingGoal = false;
   bool _isEditingValue = false;
+  bool _initialLoadDone = false;
+  
+  static const String _goalStorageKey = 'goal_tracker_local_goal';
+  static const String _adviceStorageKey = 'goal_tracker_local_advice';
 
   final TextEditingController _goalTitleController = TextEditingController();
   final TextEditingController _currentValueController = TextEditingController();
@@ -28,7 +35,32 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Load cached data immediately (sync), then refresh in background
+    _loadCachedDataSync();
     _loadGoal();
+  }
+
+  /// Synchronously load cached data for instant display
+  void _loadCachedDataSync() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final goalJson = prefs.getString(_goalStorageKey);
+      final cachedAdvice = prefs.getString(_adviceStorageKey);
+      
+      if (goalJson != null && mounted) {
+        final map = json.decode(goalJson) as Map<String, dynamic>;
+        final cachedGoal = Goal.fromJson(map);
+        setState(() {
+          _goal = cachedGoal;
+          _goalTitleController.text = cachedGoal.title;
+          _currentValueController.text = _rawNum(cachedGoal.currentValue);
+          _targetValueController.text = _rawNum(cachedGoal.targetValue);
+          if (cachedAdvice != null) _advice = cachedAdvice;
+        });
+      }
+    } catch (e) {
+      debugPrint('[GOAL] Error loading cached data: $e');
+    }
   }
 
   @override
@@ -48,31 +80,107 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   }
 
   Future<void> _loadGoal() async {
-    setState(() => _isLoading = true);
+    // Only show loading if we don't have any cached data
+    if (_goal == null && mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
-      // Try to get existing goal
-      final goal = await getCurrentGoal();
+      // First, try to load from local storage (for offline/temp goals)
+      final localGoal = await _loadLocalGoal();
+      
+      // Then try to get from backend
+      final backendGoal = await getCurrentGoal();
 
-      if (goal != null && mounted) {
+      if (backendGoal != null && mounted) {
+        // Backend has a goal - use it and save locally
         setState(() {
-          _goal = goal;
-          _goalTitleController.text = goal.title;
-          _currentValueController.text = _rawNum(goal.currentValue);
-          _targetValueController.text = _rawNum(goal.targetValue);
+          _goal = backendGoal;
+          _goalTitleController.text = backendGoal.title;
+          _currentValueController.text = _rawNum(backendGoal.currentValue);
+          _targetValueController.text = _rawNum(backendGoal.targetValue);
         });
+        await _saveLocalGoal(backendGoal);
         _loadAdvice();
-      } else {
-        // No goal - try to get suggestion for when user wants to create
+      } else if (localGoal != null && mounted) {
+        // No backend goal but have local - use local (might already be set from cache)
+        if (_goal?.id != localGoal.id) {
+          debugPrint('[GOAL] Using local goal: ${localGoal.title}');
+          setState(() {
+            _goal = localGoal;
+            _goalTitleController.text = localGoal.title;
+            _currentValueController.text = _rawNum(localGoal.currentValue);
+            _targetValueController.text = _rawNum(localGoal.targetValue);
+          });
+        }
+        // Try to sync local goal to backend if it's a temp goal
+        if (localGoal.id.startsWith('temp_')) {
+          _syncLocalGoalToBackend(localGoal);
+        }
+        _loadAdvice();
+      } else if (_goal == null) {
+        // No goal anywhere - try to get suggestion for when user wants to create
         final suggestion = await suggestGoal();
         if (mounted) {
           setState(() => _suggestion = suggestion);
         }
       }
     } catch (e) {
-      debugPrint('Error loading goal: $e');
+      debugPrint('[GOAL] Error loading goal: $e');
+      // Keep whatever cached data we have
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _initialLoadDone = true;
+        });
+      }
+    }
+  }
+  
+  Future<Goal?> _loadLocalGoal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final goalJson = prefs.getString(_goalStorageKey);
+      if (goalJson != null) {
+        final map = json.decode(goalJson) as Map<String, dynamic>;
+        return Goal.fromJson(map);
+      }
+    } catch (e) {
+      debugPrint('[GOAL] Error loading local goal: $e');
+    }
+    return null;
+  }
+  
+  Future<void> _saveLocalGoal(Goal goal) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_goalStorageKey, json.encode(goal.toJson()));
+      debugPrint('[GOAL] Saved goal locally: ${goal.title}');
+    } catch (e) {
+      debugPrint('[GOAL] Error saving local goal: $e');
+    }
+  }
+  
+  Future<void> _syncLocalGoalToBackend(Goal localGoal) async {
+    try {
+      debugPrint('[GOAL] Syncing local goal to backend...');
+      final created = await createGoal(
+        title: localGoal.title,
+        goalType: localGoal.goalType,
+        targetValue: localGoal.targetValue,
+        currentValue: localGoal.currentValue,
+        minValue: localGoal.minValue,
+        maxValue: localGoal.maxValue,
+      );
+      if (created != null && mounted) {
+        debugPrint('[GOAL] Synced to backend with ID: ${created.id}');
+        setState(() => _goal = created);
+        await _saveLocalGoal(created);
+        _loadAdvice();
+      }
+    } catch (e) {
+      debugPrint('[GOAL] Error syncing to backend: $e');
     }
   }
 
@@ -80,10 +188,31 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     if (_goal == null) return;
     try {
       final advice = await getGoalAdvice();
-      if (mounted && advice != null) setState(() => _advice = advice);
+      if (mounted && advice != null) {
+        setState(() => _advice = advice);
+        // Cache the advice for instant display next time
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_adviceStorageKey, advice);
+      }
     } catch (e) {
       debugPrint('Error loading advice: $e');
     }
+  }
+
+  void _openChatWithAdvice() {
+    if (_advice == null || _advice!.isEmpty) return;
+    HapticFeedback.lightImpact();
+    
+    // Navigate to chat and send the advice as a message from Omi AI
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatPage(
+          isPivotBottom: false,
+          autoMessage: _advice,
+        ),
+      ),
+    );
   }
 
   Future<void> _createGoalFromSuggestion() async {
@@ -132,46 +261,58 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     
     if (!mounted) return;
     
+    // Update local state immediately so user sees their change
+    final oldGoal = _goal!;
+    final updatedLocalGoal = Goal(
+      id: oldGoal.id,
+      title: newTitle,
+      goalType: oldGoal.goalType,
+      currentValue: oldGoal.currentValue,
+      targetValue: oldGoal.targetValue,
+      minValue: oldGoal.minValue,
+      maxValue: oldGoal.maxValue,
+      unit: oldGoal.unit,
+      isActive: oldGoal.isActive,
+      createdAt: oldGoal.createdAt,
+      updatedAt: DateTime.now(),
+    );
+    
+    setState(() {
+      _goal = updatedLocalGoal;
+      _isEditingGoal = false;
+    });
+    
+    // Save locally immediately
+    await _saveLocalGoal(updatedLocalGoal);
+    
     try {
       Goal? updatedGoal;
-      if (_goal!.id.startsWith('temp_')) {
-        debugPrint('Creating new goal: $newTitle');
+      if (oldGoal.id.startsWith('temp_')) {
+        debugPrint('[GOAL] Creating new goal: $newTitle');
         updatedGoal = await createGoal(
           title: newTitle,
-          goalType: _goal!.goalType,
-          targetValue: _goal!.targetValue,
-          currentValue: _goal!.currentValue,
-          minValue: _goal!.minValue,
-          maxValue: _goal!.maxValue,
+          goalType: oldGoal.goalType,
+          targetValue: oldGoal.targetValue,
+          currentValue: oldGoal.currentValue,
+          minValue: oldGoal.minValue,
+          maxValue: oldGoal.maxValue,
         );
-        if (updatedGoal == null) {
-          debugPrint('createGoal returned null');
-        }
+        debugPrint('[GOAL] createGoal result: ${updatedGoal?.id ?? 'null'}');
       } else {
-        debugPrint('Updating goal ${_goal!.id} with title: $newTitle');
-        updatedGoal = await updateGoal(_goal!.id, title: newTitle);
-        if (updatedGoal == null) {
-          debugPrint('updateGoal returned null');
-        }
+        debugPrint('[GOAL] Updating goal ${oldGoal.id} with title: $newTitle');
+        updatedGoal = await updateGoal(oldGoal.id, title: newTitle);
+        debugPrint('[GOAL] updateGoal result: ${updatedGoal?.id ?? 'null'}');
       }
       
-      if (mounted) {
-        if (updatedGoal != null) {
-          setState(() { 
-            _goal = updatedGoal;
-            _isEditingGoal = false;
-          });
-          _loadAdvice();
-        } else {
-          // Save failed - close editor anyway but don't update goal
-          setState(() => _isEditingGoal = false);
-        }
+      // If API succeeded, update with server data (includes real ID)
+      if (mounted && updatedGoal != null) {
+        setState(() => _goal = updatedGoal);
+        await _saveLocalGoal(updatedGoal);
+        _loadAdvice();
       }
     } catch (e) {
-      debugPrint('Error saving title: $e');
-      if (mounted) {
-        setState(() => _isEditingGoal = false);
-      }
+      debugPrint('[GOAL] Error saving title: $e');
+      // Keep local state - user still sees their change
     }
   }
 
@@ -181,46 +322,67 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     
     final currentVal = _parseNum(_currentValueController.text) ?? _goal!.currentValue;
     final targetVal = _parseNum(_targetValueController.text) ?? _goal!.targetValue;
+    
+    // Update local state immediately so user sees their change
+    final oldGoal = _goal!;
+    final updatedLocalGoal = Goal(
+      id: oldGoal.id, 
+      title: oldGoal.title, 
+      goalType: oldGoal.goalType,
+      currentValue: currentVal, 
+      targetValue: targetVal,
+      minValue: oldGoal.minValue, 
+      maxValue: targetVal,
+      unit: oldGoal.unit,
+      isActive: true, 
+      createdAt: oldGoal.createdAt, 
+      updatedAt: DateTime.now(),
+    );
+    
+    setState(() {
+      _goal = updatedLocalGoal;
+      _isEditingValue = false;
+    });
+    
+    // Save locally immediately
+    await _saveLocalGoal(updatedLocalGoal);
 
-    try {
-      if (_goal!.id.startsWith('temp_')) {
-        setState(() {
-          _goal = Goal(
-            id: _goal!.id, title: _goal!.title, goalType: _goal!.goalType,
-            currentValue: currentVal, targetValue: targetVal,
-            minValue: _goal!.minValue, maxValue: targetVal,
-            isActive: true, createdAt: _goal!.createdAt, updatedAt: DateTime.now(),
-          );
-          _isEditingValue = false;
-        });
-      } else {
-        final updated = await updateGoal(_goal!.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
+    // If not a temp goal, also save to server
+    if (!oldGoal.id.startsWith('temp_')) {
+      try {
+        debugPrint('[GOAL] Updating values for ${oldGoal.id}: current=$currentVal, target=$targetVal');
+        final updated = await updateGoal(oldGoal.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
+        debugPrint('[GOAL] updateGoal result: ${updated?.id ?? 'null'}');
         if (updated != null && mounted) {
-          setState(() { _goal = updated; _isEditingValue = false; });
+          setState(() => _goal = updated);
+          await _saveLocalGoal(updated);
           _loadAdvice();
         }
+      } catch (e) {
+        debugPrint('[GOAL] Error saving values: $e');
+        // Keep local state - user still sees their change
       }
-    } catch (e) {
-      debugPrint('Error: $e');
     }
-    setState(() => _isEditingValue = false);
   }
 
   void _createDefaultGoal() {
     HapticFeedback.lightImpact();
+    final newGoal = Goal(
+      id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'My goal', goalType: 'numeric',
+      currentValue: 0, targetValue: 100, minValue: 0, maxValue: 100,
+      isActive: true, createdAt: DateTime.now(), updatedAt: DateTime.now(),
+    );
     setState(() {
-      _goal = Goal(
-        id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-        title: 'My goal', goalType: 'numeric',
-        currentValue: 0, targetValue: 100, minValue: 0, maxValue: 100,
-        isActive: true, createdAt: DateTime.now(), updatedAt: DateTime.now(),
-      );
+      _goal = newGoal;
       _goalTitleController.text = 'My goal';
       _currentValueController.text = '0';
       _targetValueController.text = '100';
       _isEditingGoal = true;
       _isLoading = false;
     });
+    // Save locally so it persists across restarts
+    _saveLocalGoal(newGoal);
   }
 
   String _formatNum(double v) {
@@ -344,17 +506,27 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Title
+                // Title with edit hint
                 GestureDetector(
                   onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingGoal = true); },
-                  child: _isEditingGoal ? _buildTitleEdit() : Text(
-                    _goal!.title,
-                    style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w400,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
+                  child: _isEditingGoal ? _buildTitleEdit() : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _goal!.title,
+                          style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w400,
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                    ],
                   ),
                 ),
                 
@@ -372,44 +544,59 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                           size: const Size(260, 160),
                           painter: _GaugePainter(progress: progress, color: color),
                         ),
-                        // Main number
+                        // Main number with edit hint
                         Positioned(
                           bottom: 10,
-                          child: Text(
-                            _formatNum(_goal!.currentValue),
-                            style: const TextStyle(
-                              fontSize: 64, fontWeight: FontWeight.w300,
-                              color: Colors.white, height: 1,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formatNum(_goal!.currentValue),
+                                style: const TextStyle(
+                                  fontSize: 48, fontWeight: FontWeight.w300,
+                                  color: Colors.white, height: 1,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4, top: 4),
+                                child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
+        ),
 
-          // Advice section
+          // Advice section - clickable, opens chat with FULL text
           if (_advice != null && _advice!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('💡', style: TextStyle(fontSize: 16)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _advice!,
-                      style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.7), height: 1.4),
+            GestureDetector(
+              onTap: () => _openChatWithAdvice(),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _advice!,
+                        style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6), height: 1.4),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right, size: 20, color: Colors.white.withOpacity(0.3)),
+                  ],
+                ),
               ),
             ),
           ],

@@ -7,6 +7,7 @@ import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/wrapped_banner.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -42,6 +43,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
+      } else {
+        // Still check for daily summaries even if conversations are cached
+        conversationProvider.checkHasDailySummaries();
       }
 
       // Load folders for folder tabs
@@ -201,11 +205,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     },
                     showStarredOnly: convoProvider.showStarredOnly,
                     onStarredToggle: convoProvider.toggleStarredFilter,
+                    showDailySummaries: convoProvider.showDailySummaries,
+                    onDailySummariesToggle: convoProvider.toggleDailySummaries,
+                    hasDailySummaries: convoProvider.hasDailySummaries,
                   ),
                 );
               },
             ),
-            if (convoProvider.groupedConversations.isEmpty &&
+            // Show daily summaries list or conversations based on filter
+            if (convoProvider.showDailySummaries)
+              const DailySummariesList()
+            else if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)
               SliverToBoxAdapter(
