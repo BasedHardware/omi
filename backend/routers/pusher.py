@@ -26,180 +26,19 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import (
-    upload_audio_chunk,
-    list_audio_chunks,
-    download_audio_chunks_and_merge,
-    upload_person_speech_sample_from_bytes,
-)
+from utils.other.storage import upload_audio_chunk
+from utils.speaker_identification import extract_speaker_samples
 
 router = APIRouter()
 
 # Constants for speaker sample extraction
-SPEAKER_SAMPLE_PROCESS_INTERVAL = 5.0
-SPEAKER_SAMPLE_MIN_SEGMENT_DURATION = 10.0
-SPEAKER_SAMPLE_MIN_AGE = 15.0
+SPEAKER_SAMPLE_PROCESS_INTERVAL = 15.0
+SPEAKER_SAMPLE_MIN_AGE = 120.0
 
 # Constants for private cloud sync
 PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL = 1.0
 PRIVATE_CLOUD_CHUNK_DURATION = 5.0
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
-
-
-async def _extract_speaker_samples(
-    uid: str,
-    person_id: str,
-    conversation_id: str,
-    segment_ids: List[str],
-    sample_rate: int = 16000,
-):
-    """
-    Extract speech samples from segments and store as speaker profiles.
-    Fetches conversation from DB to get started_at and segment details.
-    Processes each segment one by one, stops when sample limit reached.
-    """
-    try:
-        # Check current sample count once
-        sample_count = users_db.get_person_speech_samples_count(uid, person_id)
-        if sample_count >= 5:
-            print(f"Person {person_id} already has {sample_count} samples, skipping", uid, conversation_id)
-            return
-
-        # Fetch conversation to get started_at and segment details
-        conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation:
-            print(f"Conversation {conversation_id} not found", uid)
-            return
-
-        started_at = conversation.get('started_at')
-        if not started_at:
-            print(f"Conversation {conversation_id} has no started_at", uid)
-            return
-
-        started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
-
-        # Build segment lookup from conversation's transcript_segments
-        conv_segments = conversation.get('transcript_segments', [])
-        segment_map = {s.get('id'): s for s in conv_segments if s.get('id')}
-
-        # List chunks from storage
-        chunks = list_audio_chunks(uid, conversation_id)
-        if not chunks:
-            print(f"No chunks found for {conversation_id}, skipping speaker sample extraction", uid)
-            return
-
-        samples_added = 0
-        max_samples_to_add = 5 - sample_count
-
-        # Build ordered list with index lookup for expansion
-        ordered_segments = [s for s in conv_segments if s.get('id')]
-        segment_index_map = {s.get('id'): i for i, s in enumerate(ordered_segments)}
-
-        for seg_id in segment_ids:
-            if samples_added >= max_samples_to_add:
-                break
-
-            seg = segment_map.get(seg_id)
-            if not seg:
-                print(f"Segment {seg_id} not found in conversation", uid, conversation_id)
-                continue
-
-            segment_start = seg.get('start')
-            segment_end = seg.get('end')
-            if segment_start is None or segment_end is None:
-                continue
-
-            seg_duration = segment_end - segment_start
-            speaker_id = seg.get('speaker_id')
-
-            # If segment is too short, try expanding to adjacent segments with same speaker
-            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION and speaker_id is not None:
-                seg_idx = segment_index_map.get(seg_id)
-                if seg_idx is not None:
-                    i = seg_idx - 1
-                    while i >= 0:
-                        prev_seg = ordered_segments[i]
-                        if prev_seg.get('speaker_id') != speaker_id:
-                            break
-                        prev_start = prev_seg.get('start')
-                        if prev_start is not None:
-                            segment_start = min(segment_start, prev_start)
-                            seg_duration = segment_end - segment_start
-                        if seg_duration >= SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                            print(
-                                f"Expanded segment to {seg_duration:.1f}s by including adjacent segments",
-                                uid,
-                                conversation_id,
-                            )
-                            break
-                        i -= 1
-
-            if seg_duration < SPEAKER_SAMPLE_MIN_SEGMENT_DURATION:
-                print(f"Segment too short ({seg_duration:.1f}s) even after expansion, skipping", uid, conversation_id)
-                continue
-
-            # Calculate absolute timestamps
-            abs_start = started_at_ts + segment_start
-            abs_end = started_at_ts + segment_end
-
-            # Find relevant chunks
-            sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
-
-            # Find first chunk that starts at or before abs_start
-            first_idx = 0
-            for i, chunk in enumerate(sorted_chunks):
-                if chunk['timestamp'] <= abs_start:
-                    first_idx = i
-                else:
-                    break
-
-            # Collect from first_idx up to abs_end
-            relevant_timestamps = []
-            for chunk in sorted_chunks[first_idx:]:
-                if chunk['timestamp'] <= abs_end:
-                    relevant_timestamps.append(chunk['timestamp'])
-                else:
-                    break
-
-            if not relevant_timestamps:
-                print(f"No relevant chunks for segment {segment_start:.1f}-{segment_end:.1f}s", uid, conversation_id)
-                continue
-
-            # Download, merge, and extract
-            merged = await asyncio.to_thread(download_audio_chunks_and_merge, uid, conversation_id, relevant_timestamps)
-            buffer_start = min(relevant_timestamps)
-            bytes_per_second = sample_rate * 2  # 16-bit mono
-
-            start_byte = max(0, int((abs_start - buffer_start) * bytes_per_second))
-            end_byte = min(len(merged), int((abs_end - buffer_start) * bytes_per_second))
-            sample_audio = merged[start_byte:end_byte]
-
-            # Ensure minimum sample length (0.5 seconds)
-            min_sample_bytes = int(sample_rate * 0.5 * 2)
-            if len(sample_audio) < min_sample_bytes:
-                print(f"Sample too short ({len(sample_audio)} bytes), skipping", uid, conversation_id)
-                continue
-
-            # Upload and store
-            path = await asyncio.to_thread(
-                upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
-            )
-
-            success = users_db.add_person_speech_sample(uid, person_id, path)
-            if success:
-                samples_added += 1
-                seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
-                print(
-                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text}",
-                    uid,
-                    conversation_id,
-                )
-            else:
-                print(f"Failed to add speech sample for person {person_id}", uid, conversation_id)
-                break  # Likely hit limit
-
-    except Exception as e:
-        print(f"Error extracting speaker samples: {e}", uid, conversation_id)
 
 
 async def _process_conversation_task(uid: str, conversation_id: str, language: str, websocket: WebSocket):
@@ -301,6 +140,8 @@ async def _websocket_util_trigger(
             chunks_to_process = private_cloud_queue.copy()
             private_cloud_queue = []
 
+            successful_conversation_ids = set()  # Track conversations with successful uploads
+
             for chunk_info in chunks_to_process:
                 chunk_data = chunk_info['data']
                 conv_id = chunk_info['conversation_id']
@@ -309,6 +150,7 @@ async def _websocket_util_trigger(
 
                 try:
                     await asyncio.to_thread(upload_audio_chunk, chunk_data, uid, conv_id, timestamp)
+                    successful_conversation_ids.add(conv_id)
                 except Exception as e:
                     if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                         # Re-queue with incremented retry count
@@ -321,6 +163,20 @@ async def _websocket_util_trigger(
                             uid,
                             conv_id,
                         )
+
+            # Update audio_files for conversations with successful uploads
+            for conv_id in successful_conversation_ids:
+                try:
+                    audio_files = await asyncio.to_thread(conversations_db.create_audio_files_from_chunks, uid, conv_id)
+                    if audio_files:
+                        await asyncio.to_thread(
+                            conversations_db.update_conversation,
+                            uid,
+                            conv_id,
+                            {'audio_files': [af.dict() for af in audio_files]},
+                        )
+                except Exception as e:
+                    print(f"Error updating audio files: {e}", uid, conv_id)
 
     async def process_speaker_sample_queue():
         """Background task that processes speaker sample extraction requests."""
@@ -354,7 +210,7 @@ async def _websocket_util_trigger(
                 segment_ids = request['segment_ids']
 
                 try:
-                    await _extract_speaker_samples(
+                    await extract_speaker_samples(
                         uid=uid,
                         person_id=person_id,
                         conversation_id=conv_id,

@@ -127,10 +127,12 @@ def add_person_speech_sample(uid: str, person_id: str, sample_path: str, max_sam
     if len(current_samples) >= max_samples:
         return False
 
-    person_ref.update({
-        'speech_samples': firestore.ArrayUnion([sample_path]),
-        'updated_at': datetime.now(timezone.utc),
-    })
+    person_ref.update(
+        {
+            'speech_samples': firestore.ArrayUnion([sample_path]),
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
     return True
 
 
@@ -144,6 +146,54 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
 
     person_data = person_doc.to_dict()
     return len(person_data.get('speech_samples', []))
+
+
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
+    """
+    Store speaker embedding for a person.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        embedding: List of floats representing the speaker embedding
+
+    Returns:
+        True if stored successfully, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
+    """
+    Get speaker embedding for a person.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+
+    Returns:
+        List of floats representing the embedding, or None if not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return None
+
+    person_data = person_doc.to_dict()
+    return person_data.get('speaker_embedding')
 
 
 def delete_user_data(uid: str):

@@ -44,14 +44,13 @@ RUN ldconfig && \
 
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-# Install Python requirements
-WORKDIR /app
+# Install Python requirements (now including lc3py if present)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
 
-# COPY . .
+#COPY . .
 COPY ./routers ./routers
 COPY ./pretrained_models ./pretrained_models
 COPY ./database ./database
@@ -69,7 +68,7 @@ COPY ./modal ./modal
 COPY ./migration ./migration
 COPY google-credentials.json ./
 
+
 EXPOSE 8080
 
-CMD uvicorn main:app --host 0.0.0.0 --port 8080 #--limit-concurrency 10
-#CMD gunicorn main:app -k uvicorn.workers.UvicornWorker --workers 2 --bind 0.0.0.0:8080
+CMD uvicorn pusher.main:app --host 0.0.0.0 --port 8080 --limit-concurrency 16 --backlog 32
