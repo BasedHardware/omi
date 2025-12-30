@@ -134,6 +134,8 @@ dependencies:
   fl_chart: ^0.68.0
   image: ^4.3.0
   calendar_date_picker2: ^2.0.1
+  whisper_flutter_new: ^1.0.1
+  disk_space_2: ^1.0.11
 
 dependency_overrides:
   js: ^0.7.1
