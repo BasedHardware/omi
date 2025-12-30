@@ -194,9 +194,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             getProcessingConversationsWidget(convoProvider.processingConversations),
             // Goal tracker widget - before folders
             Selector<DeveloperModeProvider, bool>(
-              selector: (context, provider) => provider.showDailyGradeEnabled,
-              builder: (context, showDailyGradeEnabled, child) {
-                if (!showDailyGradeEnabled) return const SliverToBoxAdapter(child: SizedBox.shrink());
+              selector: (context, provider) => provider.showGoalTrackerEnabled,
+              builder: (context, showGoalTrackerEnabled, child) {
+                if (!showGoalTrackerEnabled) return const SliverToBoxAdapter(child: SizedBox.shrink());
                 return const SliverToBoxAdapter(child: GoalTrackerWidget());
               },
             ),

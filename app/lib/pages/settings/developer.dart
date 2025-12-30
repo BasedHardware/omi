@@ -1660,8 +1660,8 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           title: 'Goal Tracker',
                           description: 'Track your personal goals on homepage',
                           icon: FontAwesomeIcons.bullseye,
-                          value: provider.showDailyGradeEnabled,
-                          onChanged: provider.onShowDailyGradeChanged,
+                          value: provider.showGoalTrackerEnabled,
+                          onChanged: provider.onShowGoalTrackerChanged,
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),
