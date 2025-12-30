@@ -275,7 +275,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           floatingActionButton: Padding(
-            padding: const EdgeInsets.only(bottom: 60.0),
+            padding: const EdgeInsets.only(bottom: 100.0),
             child: FloatingActionButton(
               heroTag: 'action_items_fab',
               onPressed: () => _showCreateActionItemSheet(),
@@ -292,7 +292,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             backgroundColor: Colors.white,
             child: provider.isLoading && provider.actionItems.isEmpty
                 ? _buildLoadingState()
-                : provider.actionItems.isEmpty && !showCompleted
+                : categorizedItems.values.every((l) => l.isEmpty)
                     ? _buildEmptyState()
                     : _buildTasksList(categorizedItems, provider),
           ),
