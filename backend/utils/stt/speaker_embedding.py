@@ -7,7 +7,7 @@ from scipy.spatial.distance import cdist
 
 # Cosine distance threshold for speaker matching
 # Based on VoxCeleb 1 test set EER of 2.8%
-SPEAKER_MATCH_THRESHOLD = 0.35
+SPEAKER_MATCH_THRESHOLD = 0.45
 
 
 def _get_api_url() -> str:
