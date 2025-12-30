@@ -133,7 +133,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 uint8_t transport_started = 0;
 static uint16_t packet_next_index = 0;
 #define SD_BLE_SIZE 440
-static uint8_t storage_write_buffer[SD_BLE_SIZE * 5];
+static uint8_t storage_write_buffer[SD_BLE_SIZE];
 
 static uint32_t offset = 0;
 static uint8_t index = 0;
@@ -364,8 +364,7 @@ static void write_to_gatt(struct bt_conn *conn)
 
 static void write_to_tcp()
 {
-    uint32_t max_size = SD_BLE_SIZE * 5;
-    uint32_t to_read = MIN(remaining_length, max_size);
+    uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE);
     int ret = read_audio_data(storage_write_buffer, to_read, offset);
     if (ret > 0) {
         offset += to_read;
