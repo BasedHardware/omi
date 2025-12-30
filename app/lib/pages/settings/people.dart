@@ -8,7 +8,6 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/functions.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
@@ -161,7 +160,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
     );
   }
 
-  Future<void> _confirmDeleteSample(int peopleIdx, Person person, String url, PeopleProvider provider) async {
+  Future<void> _confirmDeleteSample(int peopleIdx, Person person, int sampleIdx, PeopleProvider provider) async {
     final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
     if (!connectivityProvider.isConnected) {
       ConnectivityProvider.showNoInternetDialog(context);
@@ -180,7 +179,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
     );
 
     if (confirmed == true) {
-      provider.deletePersonSample(peopleIdx, url);
+      await provider.deletePersonSample(peopleIdx, sampleIdx);
     }
   }
 
@@ -297,20 +296,11 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                             ),
                                             onPressed: () => provider.playPause(index, j, sample),
                                           ),
-                                          title: Text(index == 0
+                                          title: Text(j == 0
                                               ? context.l10n.speechProfile
-                                              : context.l10n.sampleNumber(index)),
-                                          onTap: () => _confirmDeleteSample(index, person, sample, provider),
-                                          subtitle: FutureBuilder<Duration?>(
-                                            future: AudioPlayer().setUrl(sample),
-                                            builder: (context, snapshot) {
-                                              if (snapshot.hasData) {
-                                                return Text(context.l10n.secondsCount(snapshot.data!.inSeconds));
-                                              } else {
-                                                return Text(context.l10n.loadingDuration);
-                                              }
-                                            },
-                                          ),
+                                              : context.l10n.sampleNumber(j)),
+                                          onTap: () => _confirmDeleteSample(index, person, j, provider),
+                                          subtitle: Text('Tap to delete'),
                                         )),
                                   ],
                                 ),

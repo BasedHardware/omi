@@ -243,6 +243,18 @@ Future<bool> deletePerson(String personId) async {
   return response.statusCode == 204;
 }
 
+Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people/$personId/speech-samples/$sampleIndex',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deletePersonSpeechSample response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<String> getFollowUpQuestion({String conversationId = '0'}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/joan/$conversationId/followup-question',

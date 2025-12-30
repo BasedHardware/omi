@@ -148,6 +148,31 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
     return len(person_data.get('speech_samples', []))
 
 
+def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
+    """
+    Remove a speech sample path from person's speech_samples list.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        sample_path: GCS path to remove
+
+    Returns:
+        True if removed, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_ref.update({
+        'speech_samples': firestore.ArrayRemove([sample_path]),
+        'updated_at': datetime.now(timezone.utc),
+    })
+    return True
+
+
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
     """
     Store speaker embedding for a person.

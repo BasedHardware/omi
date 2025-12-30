@@ -53,8 +53,9 @@ from utils.notifications import send_notification, send_training_data_submitted_
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
-    get_user_person_speech_samples,
+    get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
+    delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
 
@@ -242,7 +243,9 @@ def get_single_person(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     if include_speech_samples:
-        person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
+        # Convert stored GCS paths to signed URLs
+        stored_paths = person.get('speech_samples', [])
+        person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return person
 
 
@@ -251,13 +254,10 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-
-        def single(person):
-            person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
-
-        threads = [threading.Thread(target=single, args=(person,)) for person in people]
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        # Convert stored GCS paths to signed URLs for each person
+        for person in people:
+            stored_paths = person.get('speech_samples', [])
+            person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return people
 
 
@@ -275,6 +275,36 @@ def update_person_name(
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
+def delete_person_speech_sample_endpoint(
+    person_id: str,
+    sample_index: int,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Delete a specific speech sample for a person by index."""
+    person = get_person(uid, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    speech_samples = person.get('speech_samples', [])
+    if sample_index < 0 or sample_index >= len(speech_samples):
+        raise HTTPException(status_code=404, detail="Sample not found")
+
+    path_to_delete = speech_samples[sample_index]
+    
+    # Extract filename from path for GCS deletion
+    filename = path_to_delete.split('/')[-1]
+
+    # Delete from GCS
+    delete_user_person_speech_sample(uid, person_id, filename)
+
+    # Remove from Firestore
+    from database.users import remove_person_speech_sample
+    remove_person_speech_sample(uid, person_id, path_to_delete)
+
     return {'status': 'ok'}
 
 

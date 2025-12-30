@@ -186,6 +186,27 @@ def get_user_person_speech_samples(uid: str, person_id: str, download: bool = Fa
     return [_get_signed_url(blob, 60) for blob in blobs]
 
 
+def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
+    """
+    Generate signed URLs for speech samples given their GCS paths.
+    Uses the paths stored in Firestore instead of listing GCS blobs.
+    
+    Args:
+        paths: List of GCS paths (e.g., '{uid}/people_profiles/{person_id}/{filename}')
+    
+    Returns:
+        List of signed URLs
+    """
+    if not paths:
+        return []
+    bucket = storage_client.bucket(speech_profiles_bucket)
+    signed_urls = []
+    for path in paths:
+        blob = bucket.blob(path)
+        signed_urls.append(_get_signed_url(blob, 60))
+    return signed_urls
+
+
 # ********************************************
 # ************* POST PROCESSING **************
 # ********************************************
