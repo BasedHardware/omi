@@ -90,6 +90,40 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
     return all_people
 
 
+def add_shared_person_to_user(target_uid: str, source_uid: str, name: str, embedding: list, profile_url: str = None) -> None:
+    """
+    Add a shared person entry to target user's `shared_people` subcollection.
+
+    The document id will be the source_uid to make revoke simple.
+    """
+    user_ref = db.collection('users').document(target_uid)
+    shared_ref = user_ref.collection('shared_people').document(source_uid)
+    data = {
+        'id': source_uid,
+        'source_uid': source_uid,
+        'name': name,
+        'speaker_embedding': embedding,
+        'profile_url': profile_url,
+    }
+    shared_ref.set(data, merge=True)
+
+
+def remove_shared_person_from_user(target_uid: str, source_uid: str) -> bool:
+    """Remove a previously shared person/profile (by source_uid) from target user's shared_people."""
+    shared_ref = db.collection('users').document(target_uid).collection('shared_people').document(source_uid)
+    if not shared_ref.get().exists:
+        return False
+    shared_ref.delete()
+    return True
+
+
+def get_shared_people(target_uid: str) -> list:
+    """Return list of shared people documents for the target user."""
+    shared_ref = db.collection('users').document(target_uid).collection('shared_people')
+    docs = shared_ref.stream()
+    return [d.to_dict() for d in docs]
+
+
 def update_person(uid: str, person_id: str, name: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.update({'name': name})

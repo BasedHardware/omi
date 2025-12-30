@@ -1,4 +1,5 @@
 import os
+import json
 from typing import Optional
 
 import av
@@ -26,6 +27,8 @@ from utils.other.storage import (
     get_user_has_speech_profile,
 )
 from utils.stt.vad import apply_vad_for_speech_profile
+from database.users import add_shared_person_to_user, remove_shared_person_from_user, get_shared_people, get_person
+from database import redis_db
 
 router = APIRouter()
 
@@ -101,3 +104,65 @@ def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str =
     if person_id:
         return get_user_person_speech_samples(uid, person_id)
     return get_additional_profile_recordings(uid)
+
+
+@router.post('/v3/speech-profile/share', tags=['v3'])
+def share_speech_profile_with_user(target_uid: str, name: str = None, source_person_id: str = None, uid: str = Depends(auth.get_current_user_uid)):
+    """Share the caller's speech profile (embedding+metadata) with another user (target_uid).
+
+    - This will read the caller's profile embedding stored under their people or main profile
+      and add a shared_people doc under the target user's account keyed by the caller uid.
+    - For now we add a minimal record: source_uid, name, speaker_embedding (if exists), profile_url
+    """
+    # Load specified person embedding if provided, else try to pick a reasonable source
+    person_doc = None
+    embedding = []
+    profile_url = get_profile_audio_if_exists(uid, download=False)
+
+    if source_person_id:
+        person_doc = get_person(uid, source_person_id)
+    else:
+        try:
+            from database.users import get_people
+
+            all_people = get_people(uid)
+            if all_people:
+                person_doc = all_people[0]
+        except Exception:
+            person_doc = None
+
+    if person_doc and person_doc.get('speaker_embedding'):
+        embedding = person_doc.get('speaker_embedding')
+
+    person_name = name or (person_doc.get('name') if person_doc else 'Unknown')
+    add_shared_person_to_user(target_uid, uid, person_name, embedding or [], profile_url)
+
+    # Notify target user's active sessions via Redis pubsub
+    try:
+        channel = f'users:{target_uid}:shared_profiles'
+        payload = {'action': 'add', 'source_uid': uid, 'name': person_name}
+        redis_db.r.publish(channel, json.dumps(payload))
+    except Exception:
+        pass
+
+    return {'status': 'ok'}
+
+
+@router.post('/v3/speech-profile/revoke', tags=['v3'])
+def revoke_speech_profile_from_user(target_uid: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Revoke a previously shared speech profile from target_uid (remove shared doc)."""
+    success = remove_shared_person_from_user(target_uid, uid)
+    try:
+        channel = f'users:{target_uid}:shared_profiles'
+        payload = {'action': 'remove', 'source_uid': uid}
+        redis_db.r.publish(channel, json.dumps(payload))
+    except Exception:
+        pass
+    return {'status': 'ok' if success else 'not_found'}
+
+
+@router.get('/v3/speech-profile/shared', tags=['v3'])
+def list_shared_profiles(uid: str = Depends(auth.get_current_user_uid)):
+    """List profiles shared with the current user."""
+    shared = get_shared_people(uid)
+    return {'shared': shared}
