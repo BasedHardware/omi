@@ -13,7 +13,7 @@ class WalFileManager {
   static File? _walBackupFile;
 
   static Future<void> init() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = await getApplicationSupportDirectory();
     _walFile = File('${directory.path}/$_walFileName');
     _walBackupFile = File('${directory.path}/$_walBackupFileName');
   }
