@@ -26,6 +26,8 @@ class WalSyncs implements IWalSync {
 
     _sdcardSync.setLocalSync(_phoneSync);
     _flashPageSync.setLocalSync(_phoneSync);
+
+    _sdcardSync.loadWifiCredentials();
   }
 
   @override
@@ -147,8 +149,24 @@ class WalSyncs implements IWalSync {
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     // Phase 1a: Download SD card data to phone
+    // Try WiFi sync first if credentials are configured
     debugPrint("WalSyncs: Phase 1a - Downloading SD card data to phone");
-    await _sdcardSync.syncAll(progress: progress);
+    final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+
+    if (missingSDCardWals.isNotEmpty) {
+      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
+
+      if (wifiSupported) {
+        try {
+          await _sdcardSync.syncWithWifi(progress: progress);
+        } catch (e) {
+          debugPrint("WalSyncs: WiFi sync failed ($e), falling back to BLE");
+          await _sdcardSync.syncAll(progress: progress);
+        }
+      } else {
+        await _sdcardSync.syncAll(progress: progress);
+      }
+    }
 
     // Phase 1b: Download flash page data to phone
     debugPrint("WalSyncs: Phase 1b - Downloading flash page data to phone");
@@ -168,9 +186,21 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     if (wal.storage == WalStorage.sdcard) {
-      return _sdcardSync.syncWal(wal: wal, progress: progress);
+      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
+
+      if (wifiSupported) {
+        try {
+          return await _sdcardSync.syncWithWifi(progress: progress);
+        } catch (e) {
+          debugPrint("WalSyncs.syncWal: WiFi sync failed ($e), falling back to BLE");
+          return _sdcardSync.syncWal(wal: wal, progress: progress);
+        }
+      } else {
+        debugPrint("WalSyncs.syncWal: WiFi not available, using BLE sync");
+        return _sdcardSync.syncWal(wal: wal, progress: progress);
+      }
     } else if (wal.storage == WalStorage.flashPage) {
       return _flashPageSync.syncWal(wal: wal, progress: progress);
     } else {

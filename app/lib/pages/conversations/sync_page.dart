@@ -18,6 +18,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
+import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
 Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
@@ -565,13 +566,80 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     }
   }
 
-  void _handleSyncWals(BuildContext context, SyncProvider syncProvider) {
+  void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
+
+    // Check if device supports WiFi but no credentials configured
     if (sdCardWals.isNotEmpty) {
-      _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
+      final walService = ServiceManager.instance().wal;
+      final syncs = walService.getSyncs();
+      final deviceId = SharedPreferencesUtil().btDevice.id;
+
+      if (deviceId.isNotEmpty) {
+        final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+        if (connection != null) {
+          final wifiSupported = await connection.isWifiSyncSupported();
+          final wifiConfigured = await syncs.sdcard.isWifiSyncSupported(); // This checks both support AND credentials
+
+          // If firmware supports WiFi but credentials not set
+          if (wifiSupported && !wifiConfigured) {
+            if (context.mounted) {
+              final shouldConfigure = await _showWifiSyncPromptDialog(context);
+              if (shouldConfigure == null) {
+                return; // Dialog dismissed, do nothing
+              }
+              if (shouldConfigure == true && context.mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const WifiSyncSettingsPage()),
+                );
+                return;
+              }
+              // User chose "Continue with Bluetooth" (false)
+            }
+          }
+        }
+      }
+
+      // Show SD card warning dialog
+      if (context.mounted) {
+        _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
+      }
     } else {
       syncProvider.syncWals();
     }
+  }
+
+  Future<bool?> _showWifiSyncPromptDialog(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.wifi, size: 24, color: Colors.blue.shade300),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('WiFi Sync Available', style: TextStyle(color: Colors.white, fontSize: 18)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Your device supports WiFi sync which is ~10x faster than Bluetooth. Would you like to set it up?',
+          style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Continue with Bluetooth', style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Setup WiFi', style: TextStyle(color: Colors.blue.shade300, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {

@@ -64,6 +64,13 @@ abstract class SDCardWalSync implements IWalSync {
   Future<void> deleteAllSyncedWals();
   bool get isSyncing;
   double get currentSpeedKBps;
+
+  Future<bool> isWifiSyncSupported();
+  Future<bool> setWifiCredentials(String ssid, String password);
+  Future<void> clearWifiCredentials();
+  Future<void> loadWifiCredentials();
+  Map<String, String?>? getWifiCredentials();
+  Future<SyncLocalFilesResponse?> syncWithWifi({IWalSyncProgressListener? progress});
 }
 
 abstract class FlashPageWalSync implements IWalSync {
