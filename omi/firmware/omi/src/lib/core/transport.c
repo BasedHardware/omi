@@ -358,6 +358,9 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     features |= OMI_FEATURE_OFFLINE_STORAGE;
 #endif
+#ifdef CONFIG_OMI_ENABLE_WIFI
+    features |= OMI_FEATURE_WIFI;
+#endif
     // LED dimming is always enabled now with PWM.
     features |= OMI_FEATURE_LED_DIMMING;
     // Mic gain control is always enabled.
