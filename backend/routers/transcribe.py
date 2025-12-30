@@ -1324,25 +1324,6 @@ async def _listen(
                 await _process_conversation(current_conversation_id)
                 await _create_new_in_progress_conversation()
 
-    def _pcm_to_wav_bytes(pcm_data: bytes, sr: int) -> bytes:
-        """Convert PCM16 mono to WAV format using av."""
-        output_buffer = io.BytesIO()
-        output_container = av.open(output_buffer, mode='w', format='wav')
-        output_stream = output_container.add_stream('pcm_s16le', rate=sr)
-        output_stream.layout = 'mono'
-
-        samples = np.frombuffer(pcm_data, dtype=np.int16)
-        frame = av.AudioFrame.from_ndarray(samples.reshape(1, -1), format='s16', layout='mono')
-        frame.rate = sr
-
-        for packet in output_stream.encode(frame):
-            output_container.mux(packet)
-        for packet in output_stream.encode():
-            output_container.mux(packet)
-
-        output_container.close()
-        return output_buffer.getvalue()
-
     async def speaker_identification_task():
         """Consume segment queue, accumulate per speaker, trigger match when ready."""
         nonlocal websocket_active, speaker_to_person_map
