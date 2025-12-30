@@ -306,23 +306,6 @@ static void handle_wifi_connect_result(struct net_mgmt_event_callback *cb, struc
 	atomic_set_bit(&wifi_flags, WIFI_FLAG_CONNECT_RESULT);
 }
 
-static void wifi_power_save(bool enable)
-{
-	LOG_INF("Setting Wi-Fi Power Save: %s", enable ? "ENABLED" : "DISABLED");
-    struct net_if *iface = net_if_get_wifi_sta();
-    struct wifi_ps_params ps = {
-        .enabled = enable,
-    };
-
-    int ret = net_mgmt(NET_REQUEST_WIFI_PS,
-                       iface,
-                       &ps,
-                       sizeof(ps));
-    if (ret) {
-        LOG_ERR("Failed to set Wi-Fi PS: %d", ret);
-    }
-}
-
 static void handle_wifi_disconnect_result(struct net_mgmt_event_callback *cb, struct net_if *iface)
 {
 	if (!wifi_is_connected()) {
@@ -514,8 +497,6 @@ static int wifi_connect(void)
 	/* Bounded timeout so we always get a CONNECT_RESULT event */
 	params.timeout = WIFI_CONNECT_WAIT_MS;
 
-	wifi_power_save(false);
-
 	LOG_INF("Connecting to SSID: %s (len=%d)", wifi_ssid, params.ssid_length);
 	LOG_INF("Password len: %d", params.psk_length);
 	LOG_INF("Security: %s, MFP: %d, Band: auto", 
@@ -553,7 +534,6 @@ static void handle_wifi_shutdown(void)
 		k_sem_reset(&dhcp_bound_sem);
 		struct net_if *iface = net_if_get_wifi_sta();
 		(void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-		wifi_power_save(true);
 
 		if (iface) {
 			LOG_INF("TURN_OFF: calling net_if_down");
@@ -797,18 +777,23 @@ static int register_wifi_ready(void)
  */
 void wifi_turn_off(void)
 {
-	wifi_state_t state = get_wifi_state();
+    wifi_state_t state = get_wifi_state();
 
-	LOG_INF("Processing WIFI_TURN_OFF");
-	if (state == WIFI_STATE_OFF) {
-		LOG_WRN("WiFi already OFF");
-	} else {
-		set_wifi_state(WIFI_STATE_SHUTDOWN);
-		// wait util the state changes to OFF
-		while (get_wifi_state() != WIFI_STATE_OFF) {
-			k_msleep(100);
-		}
-	}
+    LOG_INF("Processing WIFI_TURN_OFF");
+    if (state == WIFI_STATE_OFF) {
+        LOG_WRN("WiFi already OFF");
+    } else {
+        set_wifi_state(WIFI_STATE_SHUTDOWN);
+        // wait util the state changes to OFF
+        while (get_wifi_state() != WIFI_STATE_OFF) {
+            k_msleep(100);
+        }
+        // Ensure WiFi power is off
+        struct net_if *iface = net_if_get_first_wifi();
+        if (iface) {
+            net_if_down(iface);
+        }
+    }
 }
 
 /**
@@ -817,18 +802,18 @@ void wifi_turn_off(void)
  */
 int wifi_turn_on(void)
 {
-	int ret = 0;
-	wifi_state_t state = get_wifi_state();
-	LOG_INF("Processing WIFI_TURN_ON");
-	if (state != WIFI_STATE_OFF) {
-		LOG_WRN("WiFi already ON (state: %s)", wifi_state_str(state));
-		ret = -EALREADY;
-	} else {
+    int ret = 0;
+    wifi_state_t state = get_wifi_state();
+    LOG_INF("Processing WIFI_TURN_ON");
+    if (state != WIFI_STATE_OFF) {
+        LOG_WRN("WiFi already ON (state: %s)", wifi_state_str(state));
+        ret = -EALREADY;
+    } else {
 
-		atomic_set(&dhcp_bound, 0);
-		k_sem_reset(&dhcp_bound_sem);
-		wifi_set_connected(false);
-		wifi_clear_connect_result();
+        atomic_set(&dhcp_bound, 0);
+        k_sem_reset(&dhcp_bound_sem);
+        wifi_set_connected(false);
+        wifi_clear_connect_result();
 
 		/* Bring interface up; driver will report readiness via wifi_ready callback */
 		struct net_if *iface = net_if_get_first_wifi();
