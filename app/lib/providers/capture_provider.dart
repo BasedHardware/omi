@@ -22,6 +22,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_connection.dart';
+import 'package:omi/services/sockets/webhook_only_socket_service.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -336,6 +337,13 @@ class CaptureProvider extends ChangeNotifier
   Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     debugPrint('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
+
+    // Flush any leftover frames to socket before clearing buffer
+    if (_frameBuffer.isNotEmpty && _socket?.state == SocketServiceState.connected) {
+      debugPrint('[AUDIO] Flushing leftover frame buffer: ${_frameBuffer.length} bytes');
+      _socket?.send(List<int>.from(_frameBuffer));
+    }
+
     _frameBuffer.clear();
     final coalesceThreshold = _getCoalesceThreshold();
 
@@ -361,14 +369,22 @@ class CaptureProvider extends ChangeNotifier
 
       // Send WS with optional frame coalescing for battery optimization
       if (_socket?.state == SocketServiceState.connected) {
-        final trimmedValue = value.sublist(3);
+        // For webhook-only mode, send FULL BLE packets (including 3-byte header)
+        // The WebhookOnlySocketService needs the header for frame reassembly
+        // (audio frames can span multiple BLE packets)
+        if (_socket is WebhookOnlySocketService) {
+          // Webhook mode: send full packet with header for frame reassembly
+          _socket?.send(List<int>.from(value));
+        } else {
+          // Standard mode: strip header and coalesce frames for battery optimization
+          // Omi's server handles frame reassembly
+          final trimmedValue = value.sublist(3);
+          _frameBuffer.addAll(trimmedValue);
 
-        // Battery optimization: coalesce frames
-        _frameBuffer.addAll(trimmedValue);
-
-        if (_frameBuffer.length >= coalesceThreshold) {
-          _socket?.send(List<int>.from(_frameBuffer));
-          _frameBuffer.clear();
+          if (_frameBuffer.length >= coalesceThreshold) {
+            _socket?.send(List<int>.from(_frameBuffer));
+            _frameBuffer.clear();
+          }
         }
 
         // Mark as synced
@@ -534,6 +550,22 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future _closeBleStream() async {
+    // Flush any buffered webhook audio before closing
+    if (_socket is WebhookOnlySocketService) {
+      final webhookService = _socket as WebhookOnlySocketService;
+      final bufferSize = webhookService.getPendingBufferSize();
+      final minSize = webhookService.sampleRate * 2 * 30; // 30 seconds minimum
+
+      if (bufferSize >= minSize) {
+        await webhookService.flushImmediately();
+        final secondsBuffered = (bufferSize / (webhookService.sampleRate * 2)).toStringAsFixed(1);
+        debugPrint('[BLE] Flushed webhook buffer ($bufferSize bytes = ${secondsBuffered}s) before disconnect');
+      } else {
+        final secondsBuffered = (bufferSize / (webhookService.sampleRate * 2)).toStringAsFixed(1);
+        debugPrint('[BLE] Skipping flush - buffer too small ($bufferSize bytes = ${secondsBuffered}s < 30s minimum)');
+      }
+    }
+
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
     if (_recordingDevice != null) {
