@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -42,10 +45,10 @@ class ConversationBottomBar extends StatefulWidget {
   });
 
   @override
-  State<ConversationBottomBar> createState() => _ConversationBottomBarState();
+  State<ConversationBottomBar> createState() => ConversationBottomBarState();
 }
 
-class _ConversationBottomBarState extends State<ConversationBottomBar> {
+class ConversationBottomBarState extends State<ConversationBottomBar> {
   // Audio player for inline controls
   AudioPlayer? _audioPlayer;
   bool _isAudioLoading = false;
@@ -56,14 +59,97 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   @override
   void initState() {
     super.initState();
-    _calculateTotalDuration();
+    _calculateTotalDurationWithGaps();
+  }
+
+  /// Creates a silent audio source of the specified duration.
+  /// Uses minimal WAV format: 16kHz, mono, 16-bit PCM with zero samples.
+  AudioSource _createSilenceSource(Duration duration) {
+    const int sampleRate = 16000;
+    const int numChannels = 1;
+    const int bitsPerSample = 16;
+    const int bytesPerSample = bitsPerSample ~/ 8;
+
+    final int numSamples = (duration.inMilliseconds * sampleRate / 1000).round();
+    final int dataSize = numSamples * numChannels * bytesPerSample;
+    final int fileSize = 36 + dataSize;
+
+    final buffer = Uint8List(44 + dataSize);
+    final byteData = ByteData.view(buffer.buffer);
+
+    // RIFF header
+    buffer[0] = 0x52; // 'R'
+    buffer[1] = 0x49; // 'I'
+    buffer[2] = 0x46; // 'F'
+    buffer[3] = 0x46; // 'F'
+    byteData.setUint32(4, fileSize, Endian.little);
+    buffer[8] = 0x57; // 'W'
+    buffer[9] = 0x41; // 'A'
+    buffer[10] = 0x56; // 'V'
+    buffer[11] = 0x45; // 'E'
+
+    // fmt subchunk
+    buffer[12] = 0x66; // 'f'
+    buffer[13] = 0x6D; // 'm'
+    buffer[14] = 0x74; // 't'
+    buffer[15] = 0x20; // ' '
+    byteData.setUint32(16, 16, Endian.little);
+    byteData.setUint16(20, 1, Endian.little);
+    byteData.setUint16(22, numChannels, Endian.little);
+    byteData.setUint32(24, sampleRate, Endian.little);
+    byteData.setUint32(28, sampleRate * numChannels * bytesPerSample, Endian.little);
+    byteData.setUint16(32, numChannels * bytesPerSample, Endian.little);
+    byteData.setUint16(34, bitsPerSample, Endian.little);
+
+    // data subchunk
+    buffer[36] = 0x64; // 'd'
+    buffer[37] = 0x61; // 'a'
+    buffer[38] = 0x74; // 't'
+    buffer[39] = 0x61; // 'a'
+    byteData.setUint32(40, dataSize, Endian.little);
+
+    // Audio data (bytes 44+) is zeros = silence
+
+    final base64Data = base64Encode(buffer);
+    return AudioSource.uri(Uri.parse('data:audio/wav;base64,$base64Data'));
+  }
+
+  /// Seek to a specific segment time (in conversation-relative seconds) and start playback.
+  /// Since playlist now includes silence gaps, segment time maps directly to playlist position.
+  Future<void> seekAndPlay(double segmentStartSeconds) async {
+    if (!_isAudioInitialized && !_isAudioLoading) {
+      await _initAudioIfNeeded();
+    }
+    if (!mounted) return;
+    if (_audioPlayer == null) return;
+
+    final conversation = widget.conversation;
+    if (conversation == null || conversation.audioFiles.isEmpty) return;
+
+    // With silence gaps in playlist, segment time = playlist position directly
+    final targetPosition = Duration(milliseconds: (segmentStartSeconds * 1000).toInt());
+
+    // Clamp to valid range
+    final clampedPosition = targetPosition > _totalDuration ? _totalDuration : targetPosition;
+    final finalPosition = clampedPosition.isNegative ? Duration.zero : clampedPosition;
+
+    // Track play event
+    MixpanelManager().audioPlaybackStarted(
+      conversationId: conversation.id,
+      durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
+    );
+
+    // Seek using combined position which handles track selection
+    await _seekToCombinedPosition(finalPosition);
+    await _audioPlayer!.play();
+    if (mounted) setState(() {});
   }
 
   @override
   void didUpdateWidget(ConversationBottomBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.conversation?.id != oldWidget.conversation?.id) {
-      _calculateTotalDuration();
+      _calculateTotalDurationWithGaps();
     }
   }
 
@@ -73,15 +159,53 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     super.dispose();
   }
 
-  void _calculateTotalDuration() {
+  /// Calculates total duration including gaps between audio files.
+  /// This builds _trackStartOffsets to include silence tracks.
+  void _calculateTotalDurationWithGaps() {
     if (widget.conversation == null) return;
-    double totalSeconds = 0;
-    _trackStartOffsets = [];
-    for (final audioFile in widget.conversation!.audioFiles) {
-      _trackStartOffsets.add(Duration(milliseconds: (totalSeconds * 1000).toInt()));
-      totalSeconds += audioFile.duration;
+
+    final conversation = widget.conversation!;
+    final conversationStartedAt = conversation.startedAt;
+
+    // Sort audio files by startedAt
+    final sortedAudioFiles = conversation.audioFiles.where((af) => af.startedAt != null).toList()
+      ..sort((a, b) => a.startedAt!.compareTo(b.startedAt!));
+
+    if (sortedAudioFiles.isEmpty) {
+      _totalDuration = Duration.zero;
+      _trackStartOffsets = [];
+      return;
     }
-    _totalDuration = Duration(milliseconds: (totalSeconds * 1000).toInt());
+
+    _trackStartOffsets = [];
+    double currentTimeMs = 0;
+
+    // Reference point for calculating gaps
+    DateTime? referenceStart = conversationStartedAt ?? sortedAudioFiles.first.startedAt;
+    DateTime? previousEndTime = referenceStart;
+
+    for (final audioFile in sortedAudioFiles) {
+      final fileStart = audioFile.startedAt!;
+
+      // Calculate gap from previous end to this file's start
+      if (previousEndTime != null) {
+        final gapMs = fileStart.difference(previousEndTime).inMilliseconds;
+        if (gapMs > 100) {
+          // Add offset for silence track
+          _trackStartOffsets.add(Duration(milliseconds: currentTimeMs.toInt()));
+          currentTimeMs += gapMs;
+        }
+      }
+
+      // Add offset for audio file
+      _trackStartOffsets.add(Duration(milliseconds: currentTimeMs.toInt()));
+      currentTimeMs += audioFile.duration * 1000;
+
+      // Update previous end time
+      previousEndTime = fileStart.add(Duration(milliseconds: (audioFile.duration * 1000).toInt()));
+    }
+
+    _totalDuration = Duration(milliseconds: currentTimeMs.toInt());
   }
 
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
@@ -101,38 +225,77 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       _isAudioLoading = true;
     });
 
-    _calculateTotalDuration();
-
     try {
       _audioPlayer = AudioPlayer();
 
-      final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
-      final audioFileIds = widget.conversation!.audioFiles.map((af) => af.id).toList();
+      final conversation = widget.conversation!;
+      final conversationStartedAt = conversation.startedAt;
 
-      List<AudioSource> audioSources = [];
+      // Sort audio files by startedAt
+      final sortedAudioFiles = conversation.audioFiles.where((af) => af.startedAt != null).toList()
+        ..sort((a, b) => a.startedAt!.compareTo(b.startedAt!));
+
+      if (sortedAudioFiles.isEmpty) {
+        debugPrint('No audio files with startedAt found');
+        return;
+      }
+
+      // Fetch signed URLs for all audio files
+      final signedUrlInfos = await getConversationAudioSignedUrls(conversation.id);
       Map<String, String>? fallbackHeaders;
 
-      for (final fileId in audioFileIds) {
-        // Find matching signed URL info
+      // Build playlist with silence gaps
+      List<AudioSource> audioSources = [];
+      _trackStartOffsets = [];
+      double currentTimeMs = 0;
+
+      // Reference point for calculating gaps
+      DateTime? referenceStart = conversationStartedAt ?? sortedAudioFiles.first.startedAt;
+      DateTime? previousEndTime = referenceStart;
+
+      for (final audioFile in sortedAudioFiles) {
+        final fileStart = audioFile.startedAt!;
+
+        // Calculate gap from previous end to this file's start
+        if (previousEndTime != null) {
+          final gapMs = fileStart.difference(previousEndTime).inMilliseconds;
+          if (gapMs > 100) {
+            // Add silence track for gap
+            _trackStartOffsets.add(Duration(milliseconds: currentTimeMs.toInt()));
+            audioSources.add(_createSilenceSource(Duration(milliseconds: gapMs)));
+            currentTimeMs += gapMs;
+            debugPrint('Added silence gap: ${gapMs}ms before audio file ${audioFile.id}');
+          }
+        }
+
+        // Add offset for audio file
+        _trackStartOffsets.add(Duration(milliseconds: currentTimeMs.toInt()));
+
+        // Get audio source for this file
         final urlInfo = signedUrlInfos.firstWhere(
-          (info) => info.id == fileId,
-          orElse: () => AudioFileUrlInfo(id: fileId, status: 'pending', duration: 0),
+          (info) => info.id == audioFile.id,
+          orElse: () => AudioFileUrlInfo(id: audioFile.id, status: 'pending', duration: 0),
         );
 
         if (urlInfo.isCached && urlInfo.signedUrl != null) {
-          // Use signed URL directly
           audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
         } else {
-          // Fall back to API URL
           fallbackHeaders ??= await getAudioHeaders();
           final apiUrl = getAudioStreamUrl(
-            conversationId: widget.conversation!.id,
-            audioFileId: fileId,
+            conversationId: conversation.id,
+            audioFileId: audioFile.id,
             format: 'wav',
           );
           audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
         }
+
+        currentTimeMs += audioFile.duration * 1000;
+
+        // Update previous end time
+        previousEndTime = fileStart.add(Duration(milliseconds: (audioFile.duration * 1000).toInt()));
       }
+
+      _totalDuration = Duration(milliseconds: currentTimeMs.toInt());
 
       final playlist = ConcatenatingAudioSource(
         useLazyPreparation: true,
@@ -141,6 +304,19 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
       await _audioPlayer!.setAudioSource(playlist, preload: true);
       _isAudioInitialized = true;
+
+      // Seek to first segment start position
+      // With silence gaps, segment time = playlist position directly
+      if (conversation.transcriptSegments.isNotEmpty) {
+        final firstSegmentStart = conversation.transcriptSegments.first.start;
+        final targetPosition = Duration(milliseconds: (firstSegmentStart * 1000).toInt());
+
+        // Clamp to valid range
+        final clampedPosition = targetPosition > _totalDuration ? Duration.zero : targetPosition;
+        final finalPosition = clampedPosition.isNegative ? Duration.zero : clampedPosition;
+
+        await _seekToCombinedPosition(finalPosition);
+      }
     } catch (e) {
       debugPrint('Error initializing audio: $e');
     } finally {
