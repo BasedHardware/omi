@@ -62,6 +62,18 @@ class LocalWalSyncImpl implements LocalWalSync {
     await WalFileManager.init();
     _wals = await WalFileManager.loadWals();
     debugPrint("wal service start: ${_wals.length}");
+
+    // Run migrations for legacy Limitless files
+    final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(_wals);
+    if (migratedCount > 0) {
+      // Reload WALs after migration
+      _wals = await WalFileManager.loadWals();
+      debugPrint("wal service after migration: ${_wals.length}");
+    }
+
+    // Fix any inconsistent WAL states from old implementations
+    await WalFileManager.migrateInconsistentWals(_wals);
+
     listener.onWalUpdated();
   }
 
