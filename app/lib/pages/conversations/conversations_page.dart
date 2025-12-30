@@ -39,9 +39,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void initState() {
+    super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final conversationProvider = context.read<ConversationProvider>();
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
       }
@@ -49,7 +50,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (!mounted) return;
 
       // Load folders for folder tabs
-      final folderProvider = Provider.of<FolderProvider>(context, listen: false);
+      final folderProvider = context.read<FolderProvider>();
       if (folderProvider.folders.isEmpty) {
         await folderProvider.loadFolders();
       }
@@ -59,7 +60,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
       }
     });
-    super.initState();
   }
 
   void scrollToTop() {
