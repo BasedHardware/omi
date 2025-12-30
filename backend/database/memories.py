@@ -187,6 +187,20 @@ def change_memory_visibility(uid: str, memory_id: str, value: str):
     memory_ref.update({'visibility': value})
 
 
+def update_memory_tags(uid: str, memory_id: str, tags: list):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'tags': tags, 'updated_at': datetime.now(timezone.utc)})
+
+
+def update_memory_category(uid: str, memory_id: str, category: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'category': category, 'updated_at': datetime.now(timezone.utc)})
+
+
 def edit_memory(uid: str, memory_id: str, value: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)

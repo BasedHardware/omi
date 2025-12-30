@@ -118,6 +118,8 @@ class CreateMemoryRequest(BaseModel):
 class UpdateMemoryRequest(BaseModel):
     content: Optional[str] = Field(default=None, description="New content for the memory", min_length=1, max_length=500)
     visibility: Optional[str] = Field(default=None, description="New visibility: public or private")
+    tags: Optional[List[str]] = Field(default=None, description="New tags for the memory")
+    category: Optional[MemoryCategory] = Field(default=None, description="New category for the memory")
 
 
 class MemoryResponse(BaseModel):
@@ -311,18 +313,20 @@ def update_memory(
     uid: str = Depends(get_uid_with_memories_write),
 ):
     """
-    Update a memory's content or visibility.
+    Update a memory's content, visibility, tags, or category.
 
     - **memory_id**: The ID of the memory to update
     - **content**: New content for the memory (optional)
     - **visibility**: New visibility: public or private (optional)
+    - **tags**: New tags for the memory (optional)
+    - **category**: New category for the memory (optional)
     """
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    if request.content is None and request.visibility is None:
-        raise HTTPException(status_code=422, detail="At least one field (content or visibility) must be provided")
+    if request.content is None and request.visibility is None and request.tags is None and request.category is None:
+        raise HTTPException(status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided")
 
     old_visibility = memory.get('visibility')
 
@@ -333,6 +337,12 @@ def update_memory(
         if request.visibility not in ['public', 'private']:
             raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
         memories_db.change_memory_visibility(uid, memory_id, request.visibility)
+
+    if request.tags is not None:
+        memories_db.update_memory_tags(uid, memory_id, request.tags)
+
+    if request.category is not None:
+        memories_db.update_memory_category(uid, memory_id, request.category.value)
 
     return memories_db.get_memory(uid, memory_id)
 
