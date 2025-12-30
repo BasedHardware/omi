@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/pages/conversations/widgets/merge_confirmation_dialog.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class MergeActionBar extends StatefulWidget {
@@ -79,9 +80,9 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.cancel,
+                          style: const TextStyle(
                             color: Color(0xFF8E8E93),
                             fontSize: 17,
                             fontWeight: FontWeight.w500,
@@ -96,7 +97,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 150),
                       child: Text(
-                        '$count selected',
+                        context.l10n.selectedCount(count),
                         key: ValueKey(count),
                         style: const TextStyle(
                           color: Colors.white,
@@ -128,7 +129,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Merge',
+                              context.l10n.merge,
                               style: TextStyle(
                                 color: canMerge ? Colors.white : const Color(0xFF636366),
                                 fontSize: 15,
@@ -165,8 +166,8 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
           // Show a simple, non-blocking message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text(
-                'Merging in background. This may take a moment.',
+              content: Text(
+                context.l10n.mergingInBackground,
               ),
               backgroundColor: const Color(0xFF2C2C2E),
               behavior: SnackBarBehavior.floating,
@@ -185,7 +186,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Failed to start merge'),
+              content: Text(context.l10n.failedToStartMerge),
               backgroundColor: Colors.red.shade700,
               behavior: SnackBarBehavior.floating,
               margin: const EdgeInsets.all(16),

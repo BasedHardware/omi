@@ -173,6 +173,13 @@ def review_memory(uid: str, memory_id: str, value: bool):
     memory_ref.update({'reviewed': True, 'user_review': value})
 
 
+def set_memory_kg_extracted(uid: str, memory_id: str):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    memory_ref.update({'kg_extracted': True})
+
+
 def change_memory_visibility(uid: str, memory_id: str, value: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)

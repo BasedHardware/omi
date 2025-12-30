@@ -9,6 +9,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/functions.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class UserPeoplePage extends StatelessWidget {
@@ -113,21 +114,23 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         ? [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
             ),
             CupertinoDialogAction(
               onPressed: onPressed,
-              child: Text(person == null ? 'Add' : 'Update', style: const TextStyle(color: Colors.white)),
+              child: Text(person == null ? context.l10n.add : context.l10n.update,
+                  style: const TextStyle(color: Colors.white)),
             ),
           ]
         : [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(context.l10n.cancel),
             ),
             TextButton(
               onPressed: onPressed,
-              child: Text(person == null ? 'Add' : 'Update', style: const TextStyle(color: Colors.white)),
+              child: Text(person == null ? context.l10n.add : context.l10n.update,
+                  style: const TextStyle(color: Colors.white)),
             ),
           ];
   }
@@ -146,12 +149,12 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
       context: context,
       builder: (BuildContext context) => Platform.isIOS
           ? CupertinoAlertDialog(
-              title: Text(person == null ? 'Add New Person' : 'Edit Person'),
+              title: Text(person == null ? context.l10n.addNewPerson : context.l10n.editPerson),
               content: _showPersonDialogForm(formKey, nameController),
               actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             )
           : AlertDialog(
-              title: Text(person == null ? 'Add New Person' : 'Edit Person'),
+              title: Text(person == null ? context.l10n.addNewPerson : context.l10n.editPerson),
               content: _showPersonDialogForm(formKey, nameController),
               actions: _showPersonDialogActions(context, formKey, nameController, provider, person: person),
             ),
@@ -172,7 +175,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         () => Navigator.pop(context, true),
         'Delete Sample?',
         'Are you sure you want to delete ${person.name}\'s sample?',
-        okButtonText: 'Confirm',
+        okButtonText: context.l10n.confirm,
       ),
     );
 
@@ -190,7 +193,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         () => Navigator.pop(context, true),
         'Confirm Deletion',
         'Are you sure you want to delete ${person.name}? This will also remove all associated speech samples.',
-        okButtonText: 'Confirm',
+        okButtonText: context.l10n.confirm,
       ),
     );
 
@@ -204,7 +207,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: AppBar(
-            title: const Text('People'),
+            title: Text(context.l10n.people),
             backgroundColor: Theme.of(context).colorScheme.primary,
             centerTitle: true,
             actions: [
@@ -239,19 +242,19 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   ),
                 )
               : provider.people.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Icon(Icons.question_mark, size: 40),
-                          SizedBox(height: 24),
+                          const Icon(Icons.question_mark, size: 40),
+                          const SizedBox(height: 24),
                           Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 32),
-                            child: Text('Create a new person and train Omi to recognize their speech too!',
-                                style: TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Text(context.l10n.createPersonHint,
+                                style: const TextStyle(color: Colors.white, fontSize: 24), textAlign: TextAlign.center),
                           ),
-                          SizedBox(height: 64),
+                          const SizedBox(height: 64),
                         ],
                       ),
                     )
@@ -294,15 +297,17 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                                             ),
                                             onPressed: () => provider.playPause(index, j, sample),
                                           ),
-                                          title: Text(index == 0 ? 'Speech Profile' : 'Sample $index'),
+                                          title: Text(index == 0
+                                              ? context.l10n.speechProfile
+                                              : context.l10n.sampleNumber(index)),
                                           onTap: () => _confirmDeleteSample(index, person, sample, provider),
                                           subtitle: FutureBuilder<Duration?>(
                                             future: AudioPlayer().setUrl(sample),
                                             builder: (context, snapshot) {
                                               if (snapshot.hasData) {
-                                                return Text('${snapshot.data!.inSeconds} seconds');
+                                                return Text(context.l10n.secondsCount(snapshot.data!.inSeconds));
                                               } else {
-                                                return const Text('Loading duration...');
+                                                return Text(context.l10n.loadingDuration);
                                               }
                                             },
                                           ),

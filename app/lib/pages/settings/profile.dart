@@ -6,13 +6,15 @@ import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
+import 'package:omi/pages/settings/daily_summary_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
-import 'package:omi/providers/home_provider.dart';
+
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
+
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -155,9 +157,9 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        title: const Text(
-          'Profile',
-          style: TextStyle(
+        title: Text(
+          context.l10n.profile,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -178,8 +180,10 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
-                  title: 'Name',
-                  chipValue: SharedPreferencesUtil().givenName.isEmpty ? 'Not set' : SharedPreferencesUtil().givenName,
+                  title: context.l10n.name,
+                  chipValue: SharedPreferencesUtil().givenName.isEmpty
+                      ? context.l10n.notSet
+                      : SharedPreferencesUtil().givenName,
                   icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     MixpanelManager().pageOpened('Profile Change Name');
@@ -193,37 +197,24 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Email',
-                  chipValue: SharedPreferencesUtil().email.isEmpty ? 'Not set' : SharedPreferencesUtil().email,
+                  title: context.l10n.email,
+                  chipValue:
+                      SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
                   icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {},
                   showChevron: false,
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
-                Consumer<HomeProvider>(
-                  builder: (context, homeProvider, _) {
-                    final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
-                        ? homeProvider.availableLanguages.entries
-                            .firstWhere(
-                              (element) => element.value == homeProvider.userPrimaryLanguage,
-                              orElse: () => const MapEntry('Not set', ''),
-                            )
-                            .key
-                        : 'Not set';
-
-                    return _buildProfileItem(
-                      title: 'Language',
-                      chipValue: languageName,
-                      icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
-                      onTap: () {
-                        routeToPage(context, const LanguageSettingsPage());
-                      },
-                    );
+                _buildProfileItem(
+                  title: context.l10n.language,
+                  icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const LanguageSettingsPage());
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Custom Vocabulary',
+                  title: context.l10n.customVocabulary,
                   icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const CustomVocabularyPage());
@@ -237,7 +228,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
-                  title: 'Speech Profile',
+                  title: context.l10n.speechProfile,
                   icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const SpeechProfilePage());
@@ -246,10 +237,25 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Identifying Others',
+                  title: context.l10n.identifyingOthers,
                   icon: const FaIcon(FontAwesomeIcons.users, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const UserPeoplePage());
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // NOTIFICATIONS SECTION
+            _buildSectionContainer(
+              children: [
+                _buildProfileItem(
+                  title: 'Daily Summary',
+                  subtitle: 'Configure your daily action items digest',
+                  icon: const FaIcon(FontAwesomeIcons.solidBell, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const DailySummarySettingsPage());
                   },
                 ),
               ],
@@ -260,7 +266,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildSectionContainer(
               children: [
                 _buildProfileItem(
-                  title: 'Payment Methods',
+                  title: context.l10n.paymentMethods,
                   icon: const FaIcon(FontAwesomeIcons.solidCreditCard, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const PaymentsPage());
@@ -268,7 +274,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Conversation Display',
+                  title: context.l10n.conversationDisplay,
                   icon: const FaIcon(FontAwesomeIcons.list, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const ConversationDisplaySettings());
@@ -276,7 +282,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Data & Privacy',
+                  title: context.l10n.dataPrivacy,
                   icon: const FaIcon(FontAwesomeIcons.shield, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     Navigator.of(context).push(
@@ -299,20 +305,19 @@ class _ProfilePageState extends State<ProfilePage> {
                     final truncatedUid =
                         uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
                     return _buildProfileItem(
-                      title: 'User ID',
+                      title: context.l10n.userId,
                       chipValue: truncatedUid,
                       icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: uid));
-                        ScaffoldMessenger.of(context)
-                            .showSnackBar(const SnackBar(content: Text('User ID copied to clipboard')));
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
                       },
                     );
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: 'Delete Account',
+                  title: context.l10n.deleteAccountTitle,
                   icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
                   onTap: () {
                     MixpanelManager().pageOpened('Profile Delete Account Dialog');

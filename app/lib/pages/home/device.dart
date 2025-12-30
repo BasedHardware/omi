@@ -12,6 +12,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/device_widget.dart';
+import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -32,6 +33,15 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     if (connection == null) {
       return Future.value(null);
     }
+    return await connection.disconnect();
+  }
+
+  Future _bleUnpairDevice(BtDevice btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    await connection.unpair();
     return await connection.disconnect();
   }
 
@@ -349,6 +359,70 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               ),
             ),
           ),
+          // Unpair Device - only for Limitless devices
+          if (provider.connectedDevice?.type == DeviceType.limitless) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            GestureDetector(
+              onTap: () async {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.of(context).pop(),
+                    () async {
+                      Navigator.of(context).pop();
+                      await SharedPreferencesUtil()
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                      SharedPreferencesUtil().deviceName = '';
+                      if (provider.connectedDevice != null) {
+                        await _bleUnpairDevice(provider.connectedDevice!);
+                      }
+                      if (context.mounted) {
+                        context.read<DeviceProvider>().setIsConnected(false);
+                        context.read<DeviceProvider>().setConnectedDevice(null);
+                        context.read<DeviceProvider>().updateConnectingStatus(false);
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Device unpaired. Go to Settings > Bluetooth and forget the device to complete unpairing.'),
+                            duration: Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    },
+                    'Unpair Device',
+                    'This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.',
+                    okButtonText: 'Unpair',
+                  ),
+                );
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Padding(
+                        padding: EdgeInsets.only(left: 2, top: 1),
+                        child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Text(
+                      'Unpair and Forget Device',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
