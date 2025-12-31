@@ -322,6 +322,11 @@ class SharedPreferencesUtil {
 
   set showGetOmiCard(bool value) => saveBool('showGetOmiCard', value);
 
+  // Show/hide Goals widget on home screen
+  bool get showGoalsOnHome => getBool('showGoalsOnHome', defaultValue: true);
+
+  set showGoalsOnHome(bool value) => saveBool('showGoalsOnHome', value);
+
   // A/B Test: Conversation card style (false = original, true = compact)
   bool get useCompactConversationCard => getBool('useCompactConversationCard', defaultValue: false);
 
@@ -342,7 +347,18 @@ class SharedPreferencesUtil {
     saveStringList('appsList', apps);
   }
 
+  // Separate storage for enabled app IDs (more reliable than full app cache)
+  Set<String> get enabledAppIds => getStringList('enabledAppIds').toSet();
+
+  set enabledAppIds(Set<String> value) => saveStringList('enabledAppIds', value.toList());
+
   enableApp(String value) {
+    // Update the separate enabled IDs list
+    final ids = enabledAppIds;
+    ids.add(value);
+    enabledAppIds = ids;
+
+    // Also update appsList for backward compatibility
     final List<App> apps = appsList;
     App? app = apps.firstWhereOrNull((element) => element.id == value);
     if (app != null) {
@@ -352,6 +368,12 @@ class SharedPreferencesUtil {
   }
 
   disableApp(String value) {
+    // Update the separate enabled IDs list
+    final ids = enabledAppIds;
+    ids.remove(value);
+    enabledAppIds = ids;
+
+    // Also update appsList for backward compatibility
     final List<App> apps = appsList;
     App? app = apps.firstWhereOrNull((element) => element.id == value);
     if (app != null) {

@@ -223,7 +223,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         width: 180,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A0B2E),
+          color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
@@ -328,7 +328,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
+        color: const Color(0xFF3B82F6),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -362,7 +362,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       width: 56,
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+        color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF2C2C2E),
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -453,7 +453,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
+        color: const Color(0xFF3B82F6),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -527,7 +527,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           ),
           child: const Icon(
             Icons.play_arrow,
-            color: Color(0xFF6B46C1),
+            color: Color(0xFF3B82F6),
             size: 20,
           ),
         ),
@@ -563,7 +563,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             ),
             child: Icon(
               isPlaying ? Icons.pause : Icons.play_arrow,
-              color: const Color(0xFF6B46C1),
+              color: const Color(0xFF3B82F6),
               size: 20,
             ),
           ),
@@ -721,7 +721,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         height: 56,
         width: 56,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+          color: isSelected ? const Color(0xFF3B82F6) : const Color(0xFF2C2C2E),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(

@@ -167,16 +167,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           ],
                         )
                       : provider.isClearingChat
-                          ? const Column(
+                          ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                CircularProgressIndicator(
+                                const CircularProgressIndicator(
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Text(
-                                  "Deleting your messages from Omi's memory...",
-                                  style: TextStyle(color: Colors.white),
+                                  "Deleting your messages from ${Env.appName}'s memory...",
+                                  style: const TextStyle(color: Colors.white),
                                 ),
                               ],
                             )
@@ -252,8 +252,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               MixpanelManager()
                                                   .track('Chat Message Shared', properties: {'message': message.text});
                                               Share.share(
-                                                '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
-                                                subject: 'Chat with Omi',
+                                                '${message.text.decodeString}\n\nResponse from ${Env.appName}.',
+                                                subject: 'Chat with ${Env.appName}',
                                               );
                                               Navigator.pop(context);
                                             },
@@ -796,7 +796,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
     return AppBar(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Colors.black,
       elevation: 0,
       leading: Container(
         width: 36,
@@ -878,7 +878,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         Container(
           constraints: const BoxConstraints(maxWidth: 140),
           child: Text(
-            selectedApp != null ? selectedApp.getName() : "Omi",
+            selectedApp != null ? selectedApp.getName() : Env.appName,
             style: const TextStyle(color: Colors.white, fontSize: 16),
             overflow: TextOverflow.ellipsis,
           ),
@@ -981,10 +981,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                   child: ListView(
                     padding: EdgeInsets.zero,
                     children: [
-                      // Omi option
+                      // Default app option
                       _buildDrawerAppItem(
                         avatar: _getOmiAvatar(),
-                        name: 'Omi',
+                        name: Env.appName,
                         isSelected: isOmiSelected,
                         onTap: () {
                           Navigator.of(context).pop();

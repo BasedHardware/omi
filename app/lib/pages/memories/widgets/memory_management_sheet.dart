@@ -103,14 +103,14 @@ class MemoryManagementSheet extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.purpleAccent : Colors.white,
+                color: isSelected ? const Color(0xFF3B82F6) : Colors.white,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                 fontSize: 16,
               ),
             ),
             const Spacer(),
             if (isSelected)
-              const Icon(Icons.check, color: Colors.purpleAccent, size: 20),
+              const Icon(Icons.check, color: Color(0xFF3B82F6), size: 20),
           ],
         ),
       ),

@@ -478,7 +478,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   alignment: Alignment.bottomCenter,
                                   child: Container(
                                     width: double.infinity,
-                                    height: 100,
                                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                                     decoration: const BoxDecoration(
                                       gradient: LinearGradient(
@@ -642,7 +641,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                       },
                                     ),
                                   ),
-                                // Floating Chat Button - Bottom Right (only on homepage)
+                                // Floating GPT Button - Bottom Right (only on homepage)
                                 if (home.selectedIndex == 0)
                                   Positioned(
                                     right: 20,
@@ -650,7 +649,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     child: GestureDetector(
                                       onTap: () {
                                         HapticFeedback.mediumImpact();
-                                        MixpanelManager().bottomNavigationTabClicked('Chat');
+                                        MixpanelManager().bottomNavigationTabClicked('GPT');
                                         // Navigate to chat page
                                         Navigator.push(
                                           context,
@@ -663,19 +662,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                         decoration: BoxDecoration(
                                           borderRadius: BorderRadius.circular(32),
-                                          color: Colors.deepPurple,
+                                          color: const Color(0xFF3b82f6),
                                         ),
                                         child: const Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Icon(
-                                              FontAwesomeIcons.solidComment,
+                                              Icons.auto_awesome,
                                               size: 22,
                                               color: Colors.white,
                                             ),
                                             SizedBox(width: 10),
                                             Text(
-                                              'Ask Omi',
+                                              'GPT',
                                               style: TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 17,
@@ -988,56 +987,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     }
                   },
                 ),
-              ),
-              // GPT Button - Only show on home page (index 0)
-              Consumer<HomeProvider>(
-                builder: (context, provider, child) {
-                  if (provider.selectedIndex == 0) {
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        MixpanelManager().bottomNavigationTabClicked('GPT');
-                        // Navigate to chat page
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ChatPage(isPivotBottom: false),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        height: 36,
-                        margin: const EdgeInsets.only(left: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3b82f6),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.auto_awesome,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'GPT',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  } else {
-                    return const SizedBox.shrink();
-                  }
-                },
               ),
             ],
           ),

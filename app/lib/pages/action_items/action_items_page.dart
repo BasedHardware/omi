@@ -124,7 +124,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: FloatingActionButton(
                     heroTag: 'action_items_fab',
                     onPressed: _showCreateActionItemSheet,
-                    backgroundColor: Colors.deepPurpleAccent,
+                    backgroundColor: const Color(0xFF3B82F6),
                     child: const Icon(
                       Icons.add,
                       color: Colors.white,
@@ -136,7 +136,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               HapticFeedback.mediumImpact();
               return provider.forceRefreshActionItems();
             },
-            color: Colors.deepPurpleAccent,
+            color: const Color(0xFF3B82F6),
             backgroundColor: Colors.white,
             child: CustomScrollView(
               controller: _scrollController,
@@ -329,7 +329,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         child: ElevatedButton(
                           onPressed: () => provider.loadMoreActionItems(),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.deepPurpleAccent,
+                            backgroundColor: const Color(0xFF3B82F6),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                             shape: RoundedRectangleBorder(

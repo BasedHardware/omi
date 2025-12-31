@@ -14,6 +14,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 
 class GraphNode3D {
   final String id;
@@ -453,7 +454,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       case 'organization':
         return Colors.orangeAccent;
       case 'thing':
-        return Colors.purpleAccent;
+        return const Color(0xFF3B82F6);
       default:
         return Colors.blueAccent;
     }
@@ -476,9 +477,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       // Draw graph image
       canvas.drawImage(image, Offset.zero, paint);
       
-      // Draw minimal branding "omi.me" at top center
+      // Draw minimal branding at top center
       final textSpan = TextSpan(
-        text: 'omi.me',
+        text: Env.appName,
         style: const TextStyle(
           color: Colors.white,
           fontSize: 72,
@@ -518,9 +519,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text(
-          'omi.me',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          Env.appName,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         centerTitle: true,
         backgroundColor: Colors.transparent,
@@ -546,7 +547,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: Colors.purpleAccent),
+            CircularProgressIndicator(color: const Color(0xFF3B82F6)),
             SizedBox(height: 16),
             Text('Loading Knowledge Graph...', style: TextStyle(color: Colors.white70)),
           ],
@@ -603,7 +604,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                   width: 200,
                   child: LinearProgressIndicator(
                     backgroundColor: Colors.white10,
-                    color: Colors.purpleAccent,
+                    color: const Color(0xFF3B82F6),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 )
@@ -613,8 +614,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                   icon: const Icon(Icons.auto_fix_high),
                   label: const Text('Build Graph'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purpleAccent.withOpacity(0.2),
-                    foregroundColor: Colors.purpleAccent,
+                    backgroundColor: const Color(0xFF3B82F6).withOpacity(0.2),
+                    foregroundColor: const Color(0xFF3B82F6),
                   ),
                 ),
             ],

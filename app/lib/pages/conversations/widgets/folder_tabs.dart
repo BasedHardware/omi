@@ -142,7 +142,7 @@ class _FolderTabsState extends State<FolderTabs> {
     tabs.add(const SizedBox(width: 8));
 
     return Container(
-      height: 36,
+      height: 40,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
@@ -225,7 +225,7 @@ class _FolderTab extends StatelessWidget {
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(20),
@@ -238,18 +238,18 @@ class _FolderTab extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 2),
                 child: FaIcon(
                   folderIconToFa(icon),
-                  size: 12,
+                  size: 14,
                   color: isSelected ? effectiveColor : Colors.grey[400],
                 ),
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 6),
             ],
             Text(
               label,
               style: TextStyle(
                 color: isSelected ? effectiveColor : Colors.grey[400],
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                fontSize: 13,
+                fontSize: 15,
               ),
             ),
           ],

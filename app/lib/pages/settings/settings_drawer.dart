@@ -120,7 +120,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
               SizedBox(
@@ -192,6 +192,49 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToggleItem({
+    required String title,
+    required Widget icon,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: icon,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+            Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+              activeColor: const Color(0xFF3B82F6),
+            ),
+          ],
         ),
       ),
     );
@@ -437,6 +480,17 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       builder: (context) => const IntegrationsPage(),
                     ),
                   );
+                },
+              ),
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              _buildToggleItem(
+                title: 'Show Goals',
+                icon: const FaIcon(FontAwesomeIcons.bullseye, color: Color(0xFF8E8E93), size: 20),
+                value: SharedPreferencesUtil().showGoalsOnHome,
+                onChanged: (value) {
+                  setState(() {
+                    SharedPreferencesUtil().showGoalsOnHome = value;
+                  });
                 },
               ),
             ],

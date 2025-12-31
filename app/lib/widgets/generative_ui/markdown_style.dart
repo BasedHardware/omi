@@ -43,7 +43,7 @@ class MarkdownStyleHelper {
         color: Colors.white.withOpacity(0.05),
         border: const Border(
           left: BorderSide(
-            color: Color(0xFF8B5CF6),
+            color: Color(0xFF3B82F6), // Blue to match brand color
             width: 3,
           ),
         ),

@@ -144,21 +144,12 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     return Selector<AppProvider, List<Map<String, dynamic>>>(
       selector: (context, provider) => provider.groupedApps,
       builder: (context, groups, child) {
-        // Filter out sections that are accessed elsewhere:
-        // - "Summary" (memories) section - accessed via conversation detail page
-        // - "Chat Assistants" (chat) section - accessed via chat page drawer
-        final filteredGroups = groups.where((group) {
-          final capabilityMap = group['capability'] as Map<String, dynamic>?;
-          final groupId = capabilityMap?['id'] as String? ?? '';
-          return groupId != 'memories' && groupId != 'chat';
-        }).toList();
-
         return SliverPadding(
           padding: const EdgeInsets.only(top: 8, bottom: 100),
           sliver: SliverList.builder(
-            itemCount: filteredGroups.length,
+            itemCount: groups.length,
             itemBuilder: (context, index) {
-              final group = filteredGroups[index];
+              final group = groups[index];
               // Support capability-based grouping (new) and category-based (legacy)
               final capabilityMap = group['capability'] as Map<String, dynamic>?;
               final categoryMap = group['category'] as Map<String, dynamic>?;
