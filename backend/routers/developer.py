@@ -696,6 +696,9 @@ class CreateConversationFromTranscriptRequest(BaseModel):
 
 def _add_speaker_names_to_segments(uid, conversations: list):
     """Add speaker_name to transcript segments based on person_id mappings."""
+    user_profile = users_db.get_user_profile(uid)
+    user_name = user_profile.get('name') or 'User'
+
     all_person_ids = set()
     for conv in conversations:
         for seg in conv.get('transcript_segments', []):
@@ -710,7 +713,7 @@ def _add_speaker_names_to_segments(uid, conversations: list):
     for conv in conversations:
         for seg in conv.get('transcript_segments', []):
             if seg.get('is_user'):
-                seg['speaker_name'] = 'User'
+                seg['speaker_name'] = user_name
             elif seg.get('person_id') and seg['person_id'] in people_map:
                 seg['speaker_name'] = people_map[seg['person_id']]
             else:
