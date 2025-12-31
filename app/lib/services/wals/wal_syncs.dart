@@ -157,12 +157,7 @@ class WalSyncs implements IWalSync {
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
       if (wifiSupported) {
-        try {
-          await _sdcardSync.syncWithWifi(progress: progress);
-        } catch (e) {
-          debugPrint("WalSyncs: WiFi sync failed ($e), falling back to BLE");
-          await _sdcardSync.syncAll(progress: progress);
-        }
+        await _sdcardSync.syncWithWifi(progress: progress);
       } else {
         await _sdcardSync.syncAll(progress: progress);
       }
@@ -191,12 +186,7 @@ class WalSyncs implements IWalSync {
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
       if (wifiSupported) {
-        try {
-          return await _sdcardSync.syncWithWifi(progress: progress);
-        } catch (e) {
-          debugPrint("WalSyncs.syncWal: WiFi sync failed ($e), falling back to BLE");
-          return _sdcardSync.syncWal(wal: wal, progress: progress);
-        }
+        return await _sdcardSync.syncWithWifi(progress: progress);
       } else {
         debugPrint("WalSyncs.syncWal: WiFi not available, using BLE sync");
         return _sdcardSync.syncWal(wal: wal, progress: progress);

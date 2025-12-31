@@ -60,6 +60,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     _totalBytesDownloaded = 0;
     _downloadStartTime = null;
     _currentSpeedKBps = 0.0;
+    _smoothedSpeedKBps = 0.0;
+    _wifiSpeedSamples.clear();
+    _wifiSpeedTimestamps.clear();
   }
 
   void _updateSpeed(int bytesDownloaded) {
@@ -75,7 +78,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   // Rolling window for WiFi speed calculation (more accurate for high-speed transfers)
   List<int> _wifiSpeedSamples = [];
   List<DateTime> _wifiSpeedTimestamps = [];
-  static const int _maxWifiSpeedSamples = 10;
+  static const int _maxWifiSpeedSamples = 50;
+  static const double _speedSmoothingFactor = 0.3;
+  double _smoothedSpeedKBps = 0.0;
 
   void _updateWifiSpeed(int bytesDownloaded) {
     _totalBytesDownloaded += bytesDownloaded;
@@ -97,8 +102,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       final windowDuration = _wifiSpeedTimestamps.last.difference(_wifiSpeedTimestamps.first);
       final windowSeconds = windowDuration.inMilliseconds / 1000.0;
 
-      if (windowSeconds > 0.1) {
-        _currentSpeedKBps = (windowBytes / 1024) / windowSeconds;
+      if (windowSeconds > 0.2) {
+        final rawSpeed = (windowBytes / 1024) / windowSeconds;
+        // Apply exponential moving average for smoother display
+        if (_smoothedSpeedKBps == 0.0) {
+          _smoothedSpeedKBps = rawSpeed;
+        } else {
+          _smoothedSpeedKBps = (_speedSmoothingFactor * rawSpeed) + ((1 - _speedSmoothingFactor) * _smoothedSpeedKBps);
+        }
+        _currentSpeedKBps = _smoothedSpeedKBps;
       }
     }
   }
@@ -699,7 +711,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         debugPrint("SDCardWalSync WiFi: Could not determine local IP address");
         await wifiReceiver.stop();
         _resetSyncState();
-        return null;
+        throw Exception('WiFi sync failed: Please enable your phone\'s hotspot and try again');
       }
 
       const tcpPort = WifiAudioReceiver.defaultPort;
@@ -709,7 +721,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (!serverStarted) {
         await wifiReceiver.stop();
         _resetSyncState();
-        return null;
+        throw Exception('WiFi sync failed: Failed to start TCP server');
       }
 
       // Step 1: Setup WiFi on device with credentials and server info
@@ -717,7 +729,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       if (!setupSuccess) {
         await wifiReceiver.stop();
         _resetSyncState();
-        return null;
+        throw Exception('WiFi sync failed: Failed to setup WiFi on device');
       }
 
       // Wait for the device to process the setup command
@@ -729,6 +741,44 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         await wifiReceiver.stop();
         _resetSyncState();
         return null;
+      }
+
+      StreamSubscription? wifiStatusSubscription;
+      int lastWifiStatus = -1;
+      try {
+        wifiStatusSubscription = await connection.getWifiSyncStatusListener(
+          onStatusReceived: (status) {
+            if (status != lastWifiStatus) {
+              lastWifiStatus = status;
+              String statusName;
+              switch (status) {
+                case 0:
+                  statusName = 'OFF';
+                  break;
+                case 1:
+                  statusName = 'SHUTDOWN';
+                  break;
+                case 2:
+                  statusName = 'ON';
+                  break;
+                case 3:
+                  statusName = 'CONNECTING';
+                  break;
+                case 4:
+                  statusName = 'CONNECTED';
+                  break;
+                case 5:
+                  statusName = 'TCP_CONNECTED';
+                  break;
+                default:
+                  statusName = 'UNKNOWN';
+                  break;
+              }
+            }
+          },
+        );
+      } catch (e) {
+        debugPrint("SDCardWalSync WiFi: Failed to setup WiFi status listener: $e");
       }
 
       _downloadStartTime = DateTime.now();
@@ -756,10 +806,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       final audioStream = wifiReceiver.audioStream;
       if (audioStream == null) {
+        debugPrint("SDCardWalSync WiFi: No TCP client connected");
+        await wifiStatusSubscription?.cancel();
         await wifiReceiver.stop();
-        await connection.stopWifiSync();
         _resetSyncState();
-        return null;
+        throw Exception(
+            'WiFi sync failed: Device could not connect to hotspot. Check WiFi credentials and ensure hotspot is active.');
       }
 
       final readStarted = await _writeToStorage(_device!.id, wal.fileNum, 0, offset);
@@ -767,7 +819,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         await wifiReceiver.stop();
         await connection.stopWifiSync();
         _resetSyncState();
-        return null;
+        throw Exception('WiFi sync failed: Failed to start storage read');
       }
 
       // Track position within 440-byte logical blocks
@@ -961,6 +1013,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       // Cleanup
       await audioSubscription.cancel();
+      await wifiStatusSubscription?.cancel();
       await wifiReceiver.stop();
 
       // Stop WiFi on device (may fail if device already disconnected, that's OK)
