@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Goal tracker widget with semicircle gauge
@@ -18,11 +19,13 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   Goal? _goal;
   GoalSuggestion? _suggestion;
   String? _advice;
-  bool _isLoading = true;
+  bool _isLoading = false; // Start as false - show cached data immediately
   bool _isEditingGoal = false;
   bool _isEditingValue = false;
+  bool _initialLoadDone = false;
   
   static const String _goalStorageKey = 'goal_tracker_local_goal';
+  static const String _adviceStorageKey = 'goal_tracker_local_advice';
 
   final TextEditingController _goalTitleController = TextEditingController();
   final TextEditingController _currentValueController = TextEditingController();
@@ -32,7 +35,32 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Load cached data immediately (sync), then refresh in background
+    _loadCachedDataSync();
     _loadGoal();
+  }
+
+  /// Synchronously load cached data for instant display
+  void _loadCachedDataSync() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final goalJson = prefs.getString(_goalStorageKey);
+      final cachedAdvice = prefs.getString(_adviceStorageKey);
+      
+      if (goalJson != null && mounted) {
+        final map = json.decode(goalJson) as Map<String, dynamic>;
+        final cachedGoal = Goal.fromJson(map);
+        setState(() {
+          _goal = cachedGoal;
+          _goalTitleController.text = cachedGoal.title;
+          _currentValueController.text = _rawNum(cachedGoal.currentValue);
+          _targetValueController.text = _rawNum(cachedGoal.targetValue);
+          if (cachedAdvice != null) _advice = cachedAdvice;
+        });
+      }
+    } catch (e) {
+      debugPrint('[GOAL] Error loading cached data: $e');
+    }
   }
 
   @override
@@ -52,7 +80,10 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   }
 
   Future<void> _loadGoal() async {
-    setState(() => _isLoading = true);
+    // Only show loading if we don't have any cached data
+    if (_goal == null && mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       // First, try to load from local storage (for offline/temp goals)
@@ -72,19 +103,22 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         await _saveLocalGoal(backendGoal);
         _loadAdvice();
       } else if (localGoal != null && mounted) {
-        // No backend goal but have local - use local
-        debugPrint('[GOAL] Using local goal: ${localGoal.title}');
-        setState(() {
-          _goal = localGoal;
-          _goalTitleController.text = localGoal.title;
-          _currentValueController.text = _rawNum(localGoal.currentValue);
-          _targetValueController.text = _rawNum(localGoal.targetValue);
-        });
+        // No backend goal but have local - use local (might already be set from cache)
+        if (_goal?.id != localGoal.id) {
+          debugPrint('[GOAL] Using local goal: ${localGoal.title}');
+          setState(() {
+            _goal = localGoal;
+            _goalTitleController.text = localGoal.title;
+            _currentValueController.text = _rawNum(localGoal.currentValue);
+            _targetValueController.text = _rawNum(localGoal.targetValue);
+          });
+        }
         // Try to sync local goal to backend if it's a temp goal
         if (localGoal.id.startsWith('temp_')) {
           _syncLocalGoalToBackend(localGoal);
         }
-      } else {
+        _loadAdvice();
+      } else if (_goal == null) {
         // No goal anywhere - try to get suggestion for when user wants to create
         final suggestion = await suggestGoal();
         if (mounted) {
@@ -93,18 +127,14 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       }
     } catch (e) {
       debugPrint('[GOAL] Error loading goal: $e');
-      // Try local storage as fallback
-      final localGoal = await _loadLocalGoal();
-      if (localGoal != null && mounted) {
+      // Keep whatever cached data we have
+    } finally {
+      if (mounted) {
         setState(() {
-          _goal = localGoal;
-          _goalTitleController.text = localGoal.title;
-          _currentValueController.text = _rawNum(localGoal.currentValue);
-          _targetValueController.text = _rawNum(localGoal.targetValue);
+          _isLoading = false;
+          _initialLoadDone = true;
         });
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
   }
   
@@ -158,10 +188,31 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     if (_goal == null) return;
     try {
       final advice = await getGoalAdvice();
-      if (mounted && advice != null) setState(() => _advice = advice);
+      if (mounted && advice != null) {
+        setState(() => _advice = advice);
+        // Cache the advice for instant display next time
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_adviceStorageKey, advice);
+      }
     } catch (e) {
       debugPrint('Error loading advice: $e');
     }
+  }
+
+  void _openChatWithAdvice() {
+    if (_advice == null || _advice!.isEmpty) return;
+    HapticFeedback.lightImpact();
+    
+    // Navigate to chat and send the advice as a message from Omi AI
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatPage(
+          isPivotBottom: false,
+          autoMessage: _advice,
+        ),
+      ),
+    );
   }
 
   Future<void> _createGoalFromSuggestion() async {
@@ -455,17 +506,27 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                   ),
                 ),
                 const SizedBox(height: 8),
-                // Title
+                // Title with edit hint
                 GestureDetector(
                   onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingGoal = true); },
-                  child: _isEditingGoal ? _buildTitleEdit() : Text(
-                    _goal!.title,
-                    style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w400,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
+                  child: _isEditingGoal ? _buildTitleEdit() : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _goal!.title,
+                          style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w400,
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                    ],
                   ),
                 ),
                 
@@ -483,44 +544,59 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                           size: const Size(260, 160),
                           painter: _GaugePainter(progress: progress, color: color),
                         ),
-                        // Main number
+                        // Main number with edit hint
                         Positioned(
                           bottom: 10,
-                          child: Text(
-                            _formatNum(_goal!.currentValue),
-                            style: const TextStyle(
-                              fontSize: 64, fontWeight: FontWeight.w300,
-                              color: Colors.white, height: 1,
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _formatNum(_goal!.currentValue),
+                                style: const TextStyle(
+                                  fontSize: 48, fontWeight: FontWeight.w300,
+                                  color: Colors.white, height: 1,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4, top: 4),
+                                child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
+        ),
 
-          // Advice section
+          // Advice section - clickable, opens chat with FULL text
           if (_advice != null && _advice!.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('💡', style: TextStyle(fontSize: 16)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _advice!,
-                      style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.7), height: 1.4),
+            GestureDetector(
+              onTap: () => _openChatWithAdvice(),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _advice!,
+                        style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6), height: 1.4),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right, size: 20, color: Colors.white.withOpacity(0.3)),
+                  ],
+                ),
               ),
             ),
           ],

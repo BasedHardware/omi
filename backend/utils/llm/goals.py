@@ -13,7 +13,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
-from utils.llm.clients import llm_mini
+from utils.llm.clients import llm_mini, llm_medium
 
 
 def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
@@ -213,18 +213,15 @@ RECENT CHAT (what they're currently thinking about):
 USER FACTS:
 {context['memory_context'][:600] if context['memory_context'] else 'No facts available'}
 
-Give ONE specific, actionable step. Be concrete - mention specific tactics, channels, people, or actions based on their actual context. 
-No generic advice. No motivational fluff. Just the action.
-Max 35 words."""
+Give ONE specific action in 1-2 sentences. Be concise but complete. No generic advice."""
 
         print(f"[GOAL-ADVICE] Generating advice for '{goal_title}' with {len(context['conversation_context'])} chars conv, {len(context['chat_context'])} chars chat")
         
-        advice = llm_mini.invoke(prompt).content
+        # Use the better model for high-quality advice
+        advice = llm_medium.invoke(prompt).content
         
-        # Clean up the response
+        # Clean up quotes but keep full text
         advice = advice.strip().strip('"').strip("'")
-        if len(advice) > 150:
-            advice = advice[:147] + "..."
         
         return advice
         

@@ -651,10 +651,6 @@ static uint8_t pusher_temp_data[MAX_POSSIBLE_MTU];
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
-    if (!read_from_tx_queue()) {
-        return false;
-    }
-
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
     uint8_t index = 0;
@@ -714,38 +710,11 @@ static bool push_to_gatt(struct bt_conn *conn)
 #define MAX_WRITE_SIZE 440
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-// bool write_to_storage(void)
-// {
-//     if (!read_from_tx_queue())
-//     {
-//         return false;
-//     }
 
-//     uint8_t *buffer = tx_buffer+2;
-//     const uint32_t packet_size = tx_buffer_size;
-//     //load into write at 400 bytes at a time. is faster
-//     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
-//     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
-
-//     buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
-//     if(buffer_offset >= OPUS_PADDED_LENGTH*5) {
-//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-//     write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
-
-//     buffer_offset = 0;
-//     }
-
-//     return true;
-// }
-// for improving ble bandwidth
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 bool write_to_storage(void)
-{ // max possible packing
-    if (!read_from_tx_queue()) {
-        return false;
-    }
-
+{
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
@@ -823,59 +792,38 @@ void pusher(void)
 {
     k_msleep(500);
     while (!atomic_get(&pusher_stop_flag)) {
-        //
-        // Load current connection
-        //
-        struct bt_conn *conn = current_connection;
-        static bool connection_was_true = false;
-        if (conn && !connection_was_true) {
-            k_msleep(100);
-            connection_was_true = true;
-        } else if (!conn) {
-            connection_was_true = false;
+        // Check if there is a new buffer
+        if (!read_from_tx_queue()) {
+            k_sleep(K_MSEC(10));
+            continue;
         }
 
+        // Check BT connection and subscription
+        struct bt_conn *conn = current_connection;
+        bool is_subscribed = false;
         if (conn) {
             conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (current_mtu < MINIMAL_PACKET_SIZE) {
-            valid = false;
-        } else if (!conn) {
-            valid = false;
-        } else {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+            if (current_mtu >= MINIMAL_PACKET_SIZE) {
+                is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+            }
         }
 
-#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-        if (!valid && !storage_is_on) {
-            bool result = false;
-            if (get_file_size() < MAX_STORAGE_BYTES) {
-                if (is_sd_on()) {
-                    result = write_to_storage();
-                }
-            }
-            if (result) {
-                heartbeat_count++;
-                if (heartbeat_count == 255) {
-                    heartbeat_count = 0;
-                    LOG_PRINTK("drawing\n");
-                }
-            } else {
-            }
-        }
-#endif
-        if (valid) {
-            bool sent = push_to_gatt(conn);
-            if (!sent) {
-                // k_sleep(K_MSEC(50));
-            }
-        }
-        if (conn) {
+        if (conn && is_subscribed) {
+            // Push to GATT if connected and subscribed
+            push_to_gatt(conn);
             bt_conn_unref(conn);
+        } else if (!conn) {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+            // No BT connection, write to storage
+            if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                write_to_storage();
+            }
+#endif
+        } else {
+            // Connected but not subscribed, just sleep (buffer will be retried)
+            if (conn) bt_conn_unref(conn);
+            k_sleep(K_MSEC(10));
         }
-
-        k_yield();
     }
 }
 

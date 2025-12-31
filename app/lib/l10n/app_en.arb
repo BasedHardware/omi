@@ -1949,7 +1949,7 @@
   "@termsOfUse": {"description": "Link text for Terms of Use"},
   "omiYourAiCompanion": "Omi – Your AI Companion",
   "@omiYourAiCompanion": {"description": "App title or branding on onboarding screen"},
-  "captureEveryMoment": "Capture every moment. Get AI-powered\\nsummaries. Never take notes again.",
+  "captureEveryMoment": "Capture every moment. Get AI-powered\nsummaries. Never take notes again.",
   "@captureEveryMoment": {"description": "App value proposition or description"},
 
   "appleWatchSetup": "Apple Watch Setup",
@@ -2291,5 +2291,7 @@
   "deleteActionItemConfirmTitle": "Delete Action Item",
   "@deleteActionItemConfirmTitle": {"description": "Dialog title"},
   "deleteActionItemConfirmMessage": "Are you sure you want to delete this action item?",
-  "@deleteActionItemConfirmMessage": {"description": "Dialog message"}
+  "@deleteActionItemConfirmMessage": {"description": "Dialog message"},
+  "appLanguage": "App Language",
+  "@appLanguage": {"description": "Label for app language selector"}
 }
