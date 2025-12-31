@@ -32,12 +32,14 @@ class SttSegment {
   final double start;
   final double end;
   final int speakerId;
+  final String? personId;
 
   SttSegment({
     required this.text,
     required this.start,
     required this.end,
     this.speakerId = 0,
+    this.personId,
   });
 }
 
@@ -97,11 +99,16 @@ class SttTranscriptionResult {
           final speakerValue =
               schema.segmentsSpeakerField != null ? JsonPathNavigator.getValue(seg, schema.segmentsSpeakerField) : null;
 
+          // Extract person_id if present
+          final personId =
+              schema.segmentsPersonIdField != null ? JsonPathNavigator.getString(seg, schema.segmentsPersonIdField) : null;
+
           segments.add(SttSegment(
             text: text,
             start: start,
             end: end,
             speakerId: _extractSpeakerId(speakerValue),
+            personId: personId,
           ));
         }
       }

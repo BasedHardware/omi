@@ -6,6 +6,7 @@ class SttResponseSchema {
   final String? segmentsStartField;
   final String? segmentsEndField;
   final String? segmentsSpeakerField;
+  final String? segmentsPersonIdField;
   final String? textPath;
   final double defaultSegmentDuration;
 
@@ -15,6 +16,7 @@ class SttResponseSchema {
     this.segmentsStartField = 'start',
     this.segmentsEndField = 'end',
     this.segmentsSpeakerField,
+    this.segmentsPersonIdField = 'person_id',
     this.textPath = 'text',
     this.defaultSegmentDuration = 5.0,
   });
@@ -121,6 +123,7 @@ class SttResponseSchema {
       segmentsStartField: json['segments_start_field'] as String?,
       segmentsEndField: json['segments_end_field'] as String?,
       segmentsSpeakerField: json['segments_speaker_field'] as String?,
+      segmentsPersonIdField: json['segments_person_id_field'] as String? ?? 'person_id',
       textPath: json['text_path'] as String?,
       defaultSegmentDuration: (json['default_segment_duration'] as num?)?.toDouble() ?? 5.0,
     );
@@ -132,6 +135,7 @@ class SttResponseSchema {
         'segments_start_field': segmentsStartField,
         'segments_end_field': segmentsEndField,
         'segments_speaker_field': segmentsSpeakerField,
+        'segments_person_id_field': segmentsPersonIdField,
         'text_path': textPath,
         'default_segment_duration': defaultSegmentDuration,
       };
