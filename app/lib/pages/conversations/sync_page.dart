@@ -18,6 +18,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
+import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
 Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
@@ -48,6 +49,20 @@ class WalListItem extends StatelessWidget {
     return progress.clamp(0.0, 1.0);
   }
 
+  String _formatEta(int seconds) {
+    if (seconds < 60) {
+      return '${seconds}s';
+    } else if (seconds < 3600) {
+      final minutes = seconds ~/ 60;
+      final secs = seconds % 60;
+      return '${minutes}m ${secs}s';
+    } else {
+      final hours = seconds ~/ 3600;
+      final minutes = (seconds % 3600) ~/ 60;
+      return '${hours}h ${minutes}m';
+    }
+  }
+
   Widget _buildStatusChip(String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -73,15 +88,13 @@ class WalListItem extends StatelessWidget {
         final hasError = syncProvider.failedWal?.id == wal.id;
 
         return GestureDetector(
-          onTap: wal.storage == WalStorage.sdcard
-              ? null
-              : () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => WalItemDetailPage(wal: wal),
-                    ),
-                  );
-                },
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => WalItemDetailPage(wal: wal),
+              ),
+            );
+          },
           child: Container(
             decoration: BoxDecoration(
               color: const Color(0xFF1C1C1E),
@@ -148,12 +161,89 @@ class WalListItem extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 3),
-                                Text(
-                                  '${secondsToHumanReadable(wal.seconds)}${wal.storage == WalStorage.sdcard ? " • SD Card" : ""}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 13,
-                                  ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      secondsToHumanReadable(wal.seconds),
+                                      style: TextStyle(
+                                        color: Colors.grey.shade500,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    if (wal.storage == WalStorage.sdcard) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.deepPurple.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.sd_card, size: 10, color: Colors.deepPurpleAccent),
+                                            SizedBox(width: 3),
+                                            Text(
+                                              'SD Card',
+                                              style: TextStyle(
+                                                color: Colors.deepPurpleAccent,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else if (wal.originalStorage == WalStorage.sdcard) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.deepPurple.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.sd_card, size: 10, color: Colors.deepPurple.shade300),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'From SD',
+                                              style: TextStyle(
+                                                color: Colors.deepPurple.shade300,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else if (wal.originalStorage == WalStorage.flashPage) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.teal.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.memory, size: 10, color: Colors.teal.shade300),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'Limitless',
+                                              style: TextStyle(
+                                                color: Colors.teal.shade300,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),
@@ -171,15 +261,41 @@ class WalListItem extends StatelessWidget {
                           wal.syncStartedAt != null &&
                           wal.storage != WalStorage.flashPage) ...[
                         const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
-                            backgroundColor: const Color(0xFF3C3C43),
-                            color: Colors.white70,
-                            minHeight: 3,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: calculateProgress(wal.syncStartedAt, wal.syncEtaSeconds ?? 0),
+                                  backgroundColor: const Color(0xFF3C3C43),
+                                  color: Colors.white70,
+                                  minHeight: 3,
+                                ),
+                              ),
+                            ),
+                            if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
+                              const SizedBox(width: 12),
+                              Text(
+                                '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
+                        if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'ETA: ${_formatEta(wal.syncEtaSeconds!)}',
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ],
                     ],
                   ),
@@ -340,8 +456,8 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
         final phoneCount = stats?.phoneFiles ?? 0;
-        final sdCardCount = stats?.sdcardFiles ?? 0;
-        final limitlessCount = stats?.limitlessFiles ?? 0;
+        final sdCardRelatedCount = stats?.sdcardRelatedFiles ?? 0; // On SD card + from SD card
+        final flashPageRelatedCount = stats?.flashPageRelatedFiles ?? 0; // On flash page + from flash page
         final totalCount = stats?.totalFiles ?? 0;
 
         return SingleChildScrollView(
@@ -358,13 +474,13 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   syncProvider.storageFilter == WalStorage.disk || syncProvider.storageFilter == WalStorage.mem,
                   () => syncProvider.setStorageFilter(WalStorage.disk)),
               const SizedBox(width: 8),
-              if (sdCardCount > 0) ...[
-                _buildChip('SD Card', sdCardCount, syncProvider.storageFilter == WalStorage.sdcard,
+              if (sdCardRelatedCount > 0) ...[
+                _buildChip('SD Card', sdCardRelatedCount, syncProvider.storageFilter == WalStorage.sdcard,
                     () => syncProvider.setStorageFilter(WalStorage.sdcard)),
                 const SizedBox(width: 8),
               ],
-              if (limitlessCount > 0)
-                _buildChip('Limitless', limitlessCount, syncProvider.storageFilter == WalStorage.flashPage,
+              if (flashPageRelatedCount > 0)
+                _buildChip('Limitless', flashPageRelatedCount, syncProvider.storageFilter == WalStorage.flashPage,
                     () => syncProvider.setStorageFilter(WalStorage.flashPage)),
             ],
           ),
@@ -416,6 +532,22 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     );
   }
 
+  void _showCancelSyncDialog(BuildContext context, SyncProvider provider) async {
+    final confirmed = await OmiConfirmDialog.show(
+      context,
+      title: 'Cancel Sync',
+      message: 'Data already downloaded will be saved. You can resume later.',
+      confirmLabel: 'Cancel Sync',
+      confirmColor: Colors.orange,
+    );
+    if (confirmed == true && context.mounted) {
+      provider.cancelSync();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sync cancelled'), backgroundColor: Colors.orange),
+      );
+    }
+  }
+
   void _showDeleteProcessedDialog(BuildContext context, SyncProvider provider) async {
     final confirmed = await OmiConfirmDialog.show(
       context,
@@ -434,13 +566,80 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     }
   }
 
-  void _handleSyncWals(BuildContext context, SyncProvider syncProvider) {
+  void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
+
+    // Check if device supports WiFi but no credentials configured
     if (sdCardWals.isNotEmpty) {
-      _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
+      final walService = ServiceManager.instance().wal;
+      final syncs = walService.getSyncs();
+      final deviceId = SharedPreferencesUtil().btDevice.id;
+
+      if (deviceId.isNotEmpty) {
+        final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+        if (connection != null) {
+          final wifiSupported = await connection.isWifiSyncSupported();
+          final wifiConfigured = await syncs.sdcard.isWifiSyncSupported(); // This checks both support AND credentials
+
+          // If firmware supports WiFi but credentials not set
+          if (wifiSupported && !wifiConfigured) {
+            if (context.mounted) {
+              final shouldConfigure = await _showWifiSyncPromptDialog(context);
+              if (shouldConfigure == null) {
+                return; // Dialog dismissed, do nothing
+              }
+              if (shouldConfigure == true && context.mounted) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const WifiSyncSettingsPage()),
+                );
+                return;
+              }
+              // User chose "Continue with Bluetooth" (false)
+            }
+          }
+        }
+      }
+
+      // Show SD card warning dialog
+      if (context.mounted) {
+        _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
+      }
     } else {
       syncProvider.syncWals();
     }
+  }
+
+  Future<bool?> _showWifiSyncPromptDialog(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.wifi, size: 24, color: Colors.blue.shade300),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('WiFi Sync Available', style: TextStyle(color: Colors.white, fontSize: 18)),
+            ),
+          ],
+        ),
+        content: Text(
+          'Your device supports WiFi sync which is ~10x faster than Bluetooth. Would you like to set it up?',
+          style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Continue with Bluetooth', style: TextStyle(color: Colors.grey.shade400)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Setup WiFi', style: TextStyle(color: Colors.blue.shade300, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {
@@ -528,6 +727,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     if (syncProvider.isSyncing) {
       final progress =
           syncProvider.walBasedProgress > 0 ? syncProvider.walBasedProgress : syncProvider.walsSyncedProgress;
+      final speedKBps = syncProvider.syncSpeedKBps;
+      final isSdCardSyncing = syncProvider.isSdCardSyncing;
+
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
@@ -546,15 +748,43 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: Text(
-                      'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isSdCardSyncing
+                              ? 'Downloading from SD Card'
+                              : 'Processing ${syncProvider.processedWalsCount}/${syncProvider.initialMissingWalsCount}',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        if (speedKBps != null && speedKBps > 0) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '${speedKBps.toStringAsFixed(1)} KB/s',
+                            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   Text(
                     '${(progress * 100).toInt()}%',
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
                   ),
+                  if (isSdCardSyncing) ...[
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => _showCancelSyncDialog(context, syncProvider),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.close, color: Colors.red, size: 18),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 12),
@@ -710,9 +940,9 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: Padding(
-                padding: const EdgeInsets.only(left: 2, top: 1),
-                child: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: const Padding(
+                padding: EdgeInsets.only(left: 2, top: 1),
+                child: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),

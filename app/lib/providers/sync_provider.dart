@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
@@ -30,6 +28,32 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (_storageFilter == null) {
       return _allWals;
     }
+
+    // SD Card filter: show WALs on SD card OR transferred from SD card
+    if (_storageFilter == WalStorage.sdcard) {
+      return _allWals
+          .where((wal) => wal.storage == WalStorage.sdcard || wal.originalStorage == WalStorage.sdcard)
+          .toList();
+    }
+
+    // Flash Page filter: show WALs on flash page OR transferred from flash page
+    if (_storageFilter == WalStorage.flashPage) {
+      return _allWals
+          .where((wal) => wal.storage == WalStorage.flashPage || wal.originalStorage == WalStorage.flashPage)
+          .toList();
+    }
+
+    // Phone filter: show WALs on phone that are NOT originally from SD card or flash page
+    if (_storageFilter == WalStorage.disk || _storageFilter == WalStorage.mem) {
+      return _allWals
+          .where((wal) =>
+              (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
+              wal.originalStorage != WalStorage.sdcard &&
+              wal.originalStorage != WalStorage.flashPage)
+          .toList();
+    }
+
+    // Other filters
     return _allWals.where((wal) => wal.storage == _storageFilter).toList();
   }
 
@@ -50,17 +74,22 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool get syncCompleted => _syncState.isCompleted;
   bool get isFetchingConversations => _syncState.isFetchingConversations;
   double get walsSyncedProgress => _syncState.progress;
+  double? get syncSpeedKBps => _syncState.speedKBps;
   List<SyncedConversationPointer> get syncedConversationsPointers => _syncState.syncedConversations;
   String? get syncError => _syncState.errorMessage;
   Wal? get failedWal => _syncState.failedWal;
 
-  // Flash page (Limitless) sync states - distinct phases
-  // isSyncingFromPendant: true when receiving data from pendant (pendant → phone)
-  // isUploadingToCloud: true when uploading files to cloud (phone → cloud)
-  bool get isSyncingFromPendant => _walService.getSyncs().flashPage.isSyncing;
-  bool get isUploadingToCloud => _walService.getSyncs().flashPage.isUploading;
-  bool get hasOrphanedFiles => _walService.getSyncs().flashPage.hasOrphanedFiles;
-  int get orphanedFilesCount => _walService.getSyncs().flashPage.orphanedFilesCount;
+  // Flash page (Limitless) sync state
+  bool get isFlashPageSyncing => _walService.getSyncs().isFlashPageSyncing;
+
+  /// Get a WAL by ID from the current list
+  Wal? getWalById(String walId) {
+    try {
+      return _allWals.firstWhere((w) => w.id == walId);
+    } catch (e) {
+      return null;
+    }
+  }
 
   // Audio playback delegates
   String? get currentPlayingWalId => _audioPlayerUtils.currentPlayingId;
@@ -140,6 +169,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }) async {
     try {
       _updateSyncState(_syncState.toSyncing());
+
+      // Check for SD card WALs - if present, log two-phase sync
+      final sdCardWals = missingWals.where((w) => w.storage == WalStorage.sdcard).toList();
+      if (sdCardWals.isNotEmpty) {
+        debugPrint('SyncProvider: Two-phase sync - ${sdCardWals.length} SD card files will be downloaded first');
+      }
 
       final result = await operation();
 
@@ -272,11 +307,40 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   @override
-  void onWalSyncedProgress(double percentage) {
+  void onWalSyncedProgress(double percentage, {double? speedKBps}) {
     if (_syncState.isSyncing) {
-      _updateSyncState(_syncState.toSyncing(progress: percentage));
+      _updateSyncState(_syncState.toSyncing(progress: percentage, speedKBps: speedKBps));
     }
   }
+
+  /// Cancel ongoing sync operation
+  void cancelSync() {
+    _walService.getSyncs().cancelSync();
+    _updateSyncState(_syncState.toIdle());
+  }
+
+  /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
+  Future<void> transferWalToPhone(Wal wal) async {
+    if (wal.storage != WalStorage.sdcard && wal.storage != WalStorage.flashPage) {
+      throw Exception('This recording is already on phone');
+    }
+
+    // Set sync state to syncing so progress updates are processed
+    _updateSyncState(_syncState.toSyncing());
+
+    try {
+      await _walService.getSyncs().syncWal(wal: wal, progress: this);
+      await refreshWals();
+      _updateSyncState(_syncState.toIdle());
+    } catch (e) {
+      await refreshWals();
+      _updateSyncState(_syncState.toIdle());
+      rethrow;
+    }
+  }
+
+  /// Check if SD card sync is in progress
+  bool get isSdCardSyncing => _walService.getSyncs().isSdCardSyncing;
 
   // Calculate progress based on WALs synced
   double get walBasedProgress {
