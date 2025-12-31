@@ -172,10 +172,10 @@ class SharedPreferencesUtil {
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
 
-  // Goal tracker widget on homepage - default is false (experimental feature)
-  set showDailyGradeEnabled(bool value) => saveBool('showDailyGradeEnabled', value);
+  // Goal tracker widget on homepage - default is true (experimental feature)
+  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
 
-  bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
+  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
 
   // Daily reflection notification at 9 PM - default is true (enabled)
   set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);

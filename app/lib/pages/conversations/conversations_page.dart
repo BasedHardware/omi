@@ -10,6 +10,7 @@ import 'package:omi/pages/conversations/widgets/wrapped_banner.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -192,7 +193,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
             // Goal tracker widget - before folders
-            const SliverToBoxAdapter(child: GoalTrackerWidget()),
+            Selector<DeveloperModeProvider, bool>(
+              selector: (context, provider) => provider.showGoalTrackerEnabled,
+              builder: (context, showGoalTrackerEnabled, child) {
+                if (!showGoalTrackerEnabled) return const SliverToBoxAdapter(child: SizedBox.shrink());
+                return const SliverToBoxAdapter(child: GoalTrackerWidget());
+              },
+            ),
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {
