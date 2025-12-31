@@ -19,6 +19,7 @@ import 'package:disk_space_2/disk_space_2.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
@@ -70,7 +71,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
   CustomSttConfig? get _currentProviderConfig => _configsPerProvider[_selectedProvider];
-  String get _currentLanguage => _currentProviderConfig?.language ?? _currentConfig.defaultLanguage;
+  String get _currentLanguage {
+    final lang = _currentProviderConfig?.language ?? _currentConfig.defaultLanguage;
+    if (Platform.isIOS && lang == 'multi') {
+      return 'en';
+    }
+    return lang;
+  }
   String get _currentModel => _currentProviderConfig?.model ?? _currentConfig.defaultModel;
   String get _currentRequestJson => _requestJsonPerProvider[_selectedProvider] ?? '{}';
   String get _currentSchemaJson => _schemaJsonPerProvider[_selectedProvider] ?? '{}';
@@ -1037,6 +1044,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _selectedProvider = SttProvider.onDeviceWhisper;
       if (!isIOS) {
         _checkLocalModel();
+      } else {
+        OnDeviceAppleProvider.requestPermission();
       }
       MixpanelManager().transcriptionSourceSelected(source: isIOS ? 'custom_on_device_ios' : 'custom_on_device');
     });
