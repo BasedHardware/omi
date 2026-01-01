@@ -820,7 +820,13 @@ void pusher(void)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
             // No BT connection, write to storage
             if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                storage_full_warned = false;
                 write_to_storage();
+            } else {
+                if (!storage_full_warned) {
+                    LOG_WRN("Storage full, stopping offline storage");
+                    storage_full_warned = true;
+                }
             }
 #endif
         } else {
