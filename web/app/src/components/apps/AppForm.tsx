@@ -424,18 +424,58 @@ export function AppForm({ mode, app }: AppFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl mx-auto p-6 space-y-8">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="p-2 rounded-lg hover:bg-bg-secondary transition-colors"
-        >
-          <ArrowLeftIcon className="w-5 h-5 text-text-secondary" />
-        </button>
-        <h1 className="text-2xl font-display font-semibold text-text-primary">
-          {mode === 'create' ? 'Create App' : 'Edit App'}
-        </h1>
+      {/* Sticky Header with Actions */}
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 py-4 bg-bg-primary/95 backdrop-blur-sm border-b border-border-secondary">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="p-2 rounded-lg hover:bg-bg-secondary transition-colors"
+            >
+              <ArrowLeftIcon className="w-5 h-5 text-text-secondary" />
+            </button>
+            <h1 className="text-2xl font-display font-semibold text-text-primary">
+              {mode === 'create' ? 'Create App' : 'Edit App'}
+            </h1>
+          </div>
+
+          {/* Action Buttons in Header */}
+          <div className="flex items-center gap-3">
+            {mode === 'edit' && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-sm',
+                  'bg-red-500/10 text-red-400 border border-red-500/20',
+                  'hover:bg-red-500/20 transition-colors',
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                )}
+              >
+                <TrashIcon className="w-4 h-4" />
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={cn(
+                'flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium',
+                'bg-accent-primary text-white',
+                'hover:bg-accent-primary/90 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              {isSubmitting
+                ? 'Saving...'
+                : mode === 'create'
+                  ? 'Create App'
+                  : 'Save Changes'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Error display */}
@@ -918,41 +958,8 @@ export function AppForm({ mode, app }: AppFormProps) {
         )}
       </section>
 
-      {/* Action Buttons */}
-      <div className="flex gap-4 pt-4">
-        {mode === 'edit' && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className={cn(
-              'flex items-center gap-2 px-6 py-3 rounded-xl',
-              'bg-red-500/10 text-red-400 border border-red-500/20',
-              'hover:bg-red-500/20 transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
-            )}
-          >
-            <TrashIcon className="w-5 h-5" />
-            {isDeleting ? 'Deleting...' : 'Delete'}
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className={cn(
-            'flex-1 py-3 rounded-xl font-medium',
-            'bg-accent-primary text-white',
-            'hover:bg-accent-primary/90 transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          {isSubmitting
-            ? 'Saving...'
-            : mode === 'create'
-              ? 'Create App'
-              : 'Save Changes'}
-        </button>
-      </div>
+      {/* Bottom padding to ensure content isn't cut off */}
+      <div className="h-4" />
     </form>
   );
 }
