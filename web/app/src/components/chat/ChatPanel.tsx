@@ -2,11 +2,21 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Sparkles, Trash2, Brain } from 'lucide-react';
+import { X, Send, Sparkles, Trash2, Brain, Paperclip } from 'lucide-react';
 import { useChat as useChatContext } from './ChatContext';
 import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
+import { InlineVoiceRecorder } from './VoiceRecorder';
+import { uploadChatFiles } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+interface FilePreviewItem {
+  file: File;
+  preview?: string;
+  uploading?: boolean;
+  uploadedId?: string;
+}
 
 // Quick prompts based on context
 function getQuickPrompts(contextType: string | undefined): string[] {
@@ -55,8 +65,11 @@ export function ChatPanel() {
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load history when panel opens
   useEffect(() => {
@@ -79,10 +92,90 @@ export function ChatPanel() {
 
   const quickPrompts = getQuickPrompts(currentContext?.type);
 
+  // Handle file selection
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Limit to MAX_FILES
+    const availableSlots = MAX_FILES - selectedFiles.length;
+    const filesToAdd = files.slice(0, availableSlots);
+
+    // Create preview items
+    const newItems: FilePreviewItem[] = await Promise.all(
+      filesToAdd.map(async (file) => {
+        let preview: string | undefined;
+        if (file.type.startsWith('image/')) {
+          preview = URL.createObjectURL(file);
+        }
+        return { file, preview, uploading: true };
+      })
+    );
+
+    setSelectedFiles((prev) => [...prev, ...newItems]);
+
+    // Upload files
+    setIsUploading(true);
+    try {
+      const uploadedFiles = await uploadChatFiles(filesToAdd);
+
+      // Update items with uploaded IDs
+      setSelectedFiles((prev) =>
+        prev.map((item) => {
+          const uploadedFile = uploadedFiles.find(
+            (f) => f.name === item.file.name
+          );
+          if (uploadedFile) {
+            return { ...item, uploading: false, uploadedId: uploadedFile.id };
+          }
+          return item;
+        })
+      );
+    } catch (err) {
+      console.error('Failed to upload files:', err);
+      // Remove failed uploads
+      setSelectedFiles((prev) =>
+        prev.filter((item) => !filesToAdd.includes(item.file))
+      );
+    } finally {
+      setIsUploading(false);
+    }
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Remove file from selection
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => {
+      const item = prev[index];
+      // Revoke object URL if it was an image
+      if (item.preview) {
+        URL.revokeObjectURL(item.preview);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // Handle voice transcript - append to input and focus
+  const handleVoiceTranscript = (transcript: string) => {
+    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    inputRef.current?.focus();
+  };
+
   const handleSend = async (text: string = input) => {
     if (!text.trim() || isStreaming) return;
+
+    // Get file IDs from uploaded files
+    const fileIds = selectedFiles
+      .filter((item) => item.uploadedId)
+      .map((item) => item.uploadedId as string);
+
     setInput('');
-    await sendMessage(text);
+    setSelectedFiles([]);
+    await sendMessage(text, fileIds);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -101,6 +194,8 @@ export function ChatPanel() {
       setIsClearing(false);
     }
   };
+
+  const canSend = (input.trim() || selectedFiles.some((f) => f.uploadedId)) && !isStreaming && !isUploading;
 
   return (
     <AnimatePresence>
@@ -290,39 +385,82 @@ export function ChatPanel() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
-            <div className="p-4 border-t border-bg-tertiary">
-              <div className="flex items-center gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask anything..."
+            {/* Input area */}
+            <div className="border-t border-bg-tertiary">
+              {/* File preview bar */}
+              {selectedFiles.length > 0 && (
+                <FilePreview
+                  files={selectedFiles}
+                  onRemove={handleRemoveFile}
                   disabled={isStreaming}
-                  className={cn(
-                    'flex-1 px-4 py-3 rounded-xl',
-                    'bg-bg-tertiary border border-bg-quaternary',
-                    'text-text-primary placeholder:text-text-quaternary',
-                    'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                    'transition-shadow',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
-                  )}
                 />
-                <button
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || isStreaming}
-                  className={cn(
-                    'p-3 rounded-xl',
-                    'bg-purple-primary hover:bg-purple-secondary',
-                    'disabled:opacity-50 disabled:cursor-not-allowed',
-                    'transition-colors'
-                  )}
-                  aria-label="Send message"
-                >
-                  <Send className="w-5 h-5 text-white" />
-                </button>
+              )}
+
+              <div className="p-4">
+                <div className="flex items-center gap-2">
+                  {/* File attach button */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isStreaming || selectedFiles.length >= MAX_FILES}
+                    className={cn(
+                      'p-2 rounded-lg flex-shrink-0',
+                      'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      'transition-colors'
+                    )}
+                    title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
+                  >
+                    <Paperclip className="w-5 h-5" />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ALLOWED_EXTENSIONS}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+
+                  {/* Text input */}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask anything..."
+                    disabled={isStreaming}
+                    className={cn(
+                      'flex-1 px-4 py-3 rounded-xl',
+                      'bg-bg-tertiary border border-bg-quaternary',
+                      'text-text-primary placeholder:text-text-quaternary',
+                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                      'transition-shadow',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  />
+
+                  {/* Inline voice recorder */}
+                  <InlineVoiceRecorder
+                    onTranscript={handleVoiceTranscript}
+                    disabled={isStreaming}
+                  />
+
+                  {/* Send button */}
+                  <button
+                    onClick={() => handleSend()}
+                    disabled={!canSend}
+                    className={cn(
+                      'p-3 rounded-xl flex-shrink-0',
+                      'bg-purple-primary hover:bg-purple-secondary',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
+                      'transition-colors'
+                    )}
+                    aria-label="Send message"
+                  >
+                    <Send className="w-5 h-5 text-white" />
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
