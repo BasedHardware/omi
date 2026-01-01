@@ -156,3 +156,100 @@ export interface AppsFilters {
   sort?: SortOption;
   installed?: boolean;
 }
+
+// ============================================================================
+// App Creation/Editing Types
+// ============================================================================
+
+export interface ExternalIntegrationTrigger {
+  id: string;
+  title: string;
+}
+
+export interface NotificationScope {
+  id: string;
+  title: string;
+}
+
+export interface PaymentPlan {
+  id: string;
+  title: string;
+}
+
+export interface AppFormData {
+  // Metadata
+  name: string;
+  description: string;
+  category: string;
+
+  // Capabilities
+  capabilities: string[];
+
+  // Prompts (conditional based on capabilities)
+  chatPrompt?: string;
+  memoryPrompt?: string;
+  personaPrompt?: string;
+
+  // External integration (conditional)
+  externalIntegration?: {
+    triggerEvent?: string;
+    webhookUrl?: string;
+    setupCompletedUrl?: string;
+    setupInstructionsFilePath?: string;
+    isInstructionsUrl?: boolean;
+    appHomeUrl?: string;
+    authSteps?: AuthStep[];
+  };
+
+  // Notification scopes (conditional)
+  notificationScopes?: string[];
+
+  // Privacy & Payment
+  isPrivate: boolean;
+  isPaid: boolean;
+  price?: number;
+  paymentPlan?: string;
+}
+
+export interface CreateAppRequest {
+  name: string;
+  description: string;
+  category: string;
+  capabilities: string[];
+  private: boolean;
+  is_paid?: boolean;
+  price?: number;
+  payment_plan?: string;
+  chat_prompt?: string;
+  memory_prompt?: string;
+  persona_prompt?: string;
+  external_integration?: {
+    triggers_on?: string;
+    webhook_url?: string;
+    setup_completed_url?: string;
+    setup_instructions_file_path?: string;
+    is_instructions_url?: boolean;
+    app_home_url?: string;
+    auth_steps?: AuthStep[];
+  };
+  proactive_notification_scopes?: string[];
+}
+
+export interface UpdateAppRequest extends Partial<CreateAppRequest> {
+  id: string;
+}
+
+export interface ThumbnailUploadResponse {
+  thumbnail_url: string;
+  thumbnail_id: string;
+}
+
+export interface GenerateDescriptionResponse {
+  description: string;
+}
+
+export interface AppApiKey {
+  id: string;
+  key?: string; // Only returned on creation
+  created_at: string;
+}

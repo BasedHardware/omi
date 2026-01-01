@@ -20,6 +20,13 @@ import type {
   AppsGroupedResponse,
   AppsSearchResponse,
   AppsSearchParams,
+  CreateAppRequest,
+  UpdateAppRequest,
+  ThumbnailUploadResponse,
+  GenerateDescriptionResponse,
+  NotificationScope,
+  PaymentPlan,
+  AppApiKey,
 } from '@/types/apps';
 
 // Use proxy in development to avoid CORS, direct API in production
@@ -820,4 +827,212 @@ export async function getChatApps(): Promise<App[]> {
   return response.data.filter(app =>
     app.capabilities?.includes('chat') || app.capabilities?.includes('persona')
   );
+}
+
+// ============================================================================
+// App Creation/Editing API
+// ============================================================================
+
+/**
+ * Create a new app
+ */
+export async function createApp(
+  data: CreateAppRequest,
+  imageFile?: File
+): Promise<{ app_id: string }> {
+  let token: string | null = null;
+
+  try {
+    token = await getIdToken();
+  } catch (tokenError) {
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
+  }
+
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const url = `${API_BASE_URL}/v1/apps`;
+
+  const formData = new FormData();
+  formData.append('data', JSON.stringify(data));
+  if (imageFile) {
+    formData.append('file', imageFile, imageFile.name);
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Create app error:', response.status, errorText);
+    throw new Error(`Failed to create app: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Update an existing app
+ */
+export async function updateApp(
+  appId: string,
+  data: Partial<CreateAppRequest>,
+  imageFile?: File
+): Promise<void> {
+  let token: string | null = null;
+
+  try {
+    token = await getIdToken();
+  } catch (tokenError) {
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
+  }
+
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const url = `${API_BASE_URL}/v1/apps/${appId}`;
+
+  const formData = new FormData();
+  formData.append('data', JSON.stringify(data));
+  if (imageFile) {
+    formData.append('file', imageFile, imageFile.name);
+  }
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Update app error:', response.status, errorText);
+    throw new Error(`Failed to update app: ${response.status}`);
+  }
+}
+
+/**
+ * Delete an app
+ */
+export async function deleteApp(appId: string): Promise<void> {
+  await fetchWithAuth(`/v1/apps/${appId}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Change app visibility (public/private)
+ */
+export async function changeAppVisibility(
+  appId: string,
+  isPrivate: boolean
+): Promise<void> {
+  await fetchWithAuth(`/v1/apps/${appId}/change-visibility?private=${isPrivate}`, {
+    method: 'PATCH',
+  });
+}
+
+/**
+ * Upload app thumbnail
+ */
+export async function uploadAppThumbnail(
+  file: File
+): Promise<ThumbnailUploadResponse> {
+  let token: string | null = null;
+
+  try {
+    token = await getIdToken();
+  } catch (tokenError) {
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
+  }
+
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const url = `${API_BASE_URL}/v1/app/thumbnails`;
+
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Upload thumbnail error:', response.status, errorText);
+    throw new Error(`Failed to upload thumbnail: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Generate app description using AI
+ */
+export async function generateAppDescription(
+  name: string,
+  currentDescription: string
+): Promise<string> {
+  const response = await fetchWithAuth<GenerateDescriptionResponse>('/v1/app/generate-description', {
+    method: 'POST',
+    body: JSON.stringify({ name, description: currentDescription }),
+  });
+  return response.description;
+}
+
+/**
+ * Get proactive notification scopes
+ */
+export async function getNotificationScopes(): Promise<NotificationScope[]> {
+  return fetchWithAuth<NotificationScope[]>('/v1/apps/proactive-notification-scopes');
+}
+
+/**
+ * Get available payment plans
+ */
+export async function getPaymentPlans(): Promise<PaymentPlan[]> {
+  return fetchWithAuth<PaymentPlan[]>('/v1/app/plans');
+}
+
+/**
+ * Get API keys for an app
+ */
+export async function getAppApiKeys(appId: string): Promise<AppApiKey[]> {
+  return fetchWithAuth<AppApiKey[]>(`/v1/apps/${appId}/api-keys`);
+}
+
+/**
+ * Create new API key for an app
+ */
+export async function createAppApiKey(appId: string): Promise<AppApiKey> {
+  return fetchWithAuth<AppApiKey>(`/v1/apps/${appId}/api-keys`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Delete API key for an app
+ */
+export async function deleteAppApiKey(appId: string, keyId: string): Promise<void> {
+  await fetchWithAuth(`/v1/apps/${appId}/api-keys/${keyId}`, {
+    method: 'DELETE',
+  });
 }

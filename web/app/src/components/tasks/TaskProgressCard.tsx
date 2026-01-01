@@ -14,6 +14,7 @@ interface TaskProgressCardProps {
   weekCompleted?: number;
   weekPending?: number;
   streak?: number;
+  compact?: boolean;
 }
 
 export function TaskProgressCard({
@@ -25,6 +26,7 @@ export function TaskProgressCard({
   weekCompleted = 0,
   weekPending = 0,
   streak = 0,
+  compact = false,
 }: TaskProgressCardProps) {
   const [animatedProgress, setAnimatedProgress] = useState(0);
 
@@ -78,11 +80,14 @@ export function TaskProgressCard({
       className={cn(
         'rounded-xl',
         'bg-bg-tertiary border border-bg-quaternary',
-        'grid grid-cols-2 gap-0'
+        compact ? 'flex flex-col' : 'grid grid-cols-2 gap-0'
       )}
     >
       {/* Left side - Progress Ring & Main Stats */}
-      <div className="flex items-center gap-4 p-4 border-r border-bg-quaternary">
+      <div className={cn(
+        "flex items-center gap-4 p-4",
+        !compact && "border-r border-bg-quaternary"
+      )}>
         {/* Progress Ring */}
         <div className="relative flex-shrink-0">
           <svg width={size} height={size} className="transform -rotate-90">
@@ -159,7 +164,10 @@ export function TaskProgressCard({
       </div>
 
       {/* Right side - Weekly Stats & Streak */}
-      <div className="flex flex-col justify-center p-4 gap-3">
+      <div className={cn(
+        "flex flex-col justify-center p-4 gap-3",
+        compact && "border-t border-bg-quaternary"
+      )}>
         {/* This Week Progress */}
         <div>
           <div className="flex items-center justify-between mb-1.5">

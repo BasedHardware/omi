@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Loader2, X, ChevronDown, Star } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, Loader2, X, ChevronDown, Star, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getAppsGrouped,
@@ -219,6 +220,7 @@ function SortDropdown({
 }
 
 export function AppsExplorer() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>('explore');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -409,7 +411,20 @@ export function AppsExplorer() {
       {/* Sticky Header */}
       <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
         <div className="max-w-6xl mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-text-primary mb-4">Apps</h1>
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold text-text-primary">Apps</h1>
+            <button
+              onClick={() => router.push('/apps/new')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-xl',
+                'bg-purple-primary text-white font-medium',
+                'hover:bg-purple-primary/90 transition-colors'
+              )}
+            >
+              <Plus className="w-5 h-5" />
+              <span className="hidden sm:inline">Create App</span>
+            </button>
+          </div>
 
           {/* Tabs */}
           <div className="flex gap-1 mb-4">

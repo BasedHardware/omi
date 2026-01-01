@@ -130,14 +130,11 @@ export function TaskHub() {
   const filteredView = getVisibleGroups();
   const isEmpty = !loading && items.length === 0;
 
-  // Check if we have priority tasks to show in left column
-  const hasPriorityTasks = groupedItems.overdue.length > 0;
-
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 bg-bg-primary border-b border-bg-tertiary">
-        <div className="flex items-center justify-between mb-4">
+      <div className="flex-shrink-0 px-4 py-3 bg-bg-primary border-b border-bg-tertiary">
+        <div className="flex items-center justify-between">
           {/* View mode toggle */}
           <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
             <button
@@ -198,126 +195,97 @@ export function TaskHub() {
             </button>
           </div>
         </div>
-
-        {/* Quick add */}
-        <TaskQuickAdd onAdd={handleAddTask} disabled={loading} />
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Error state */}
-        {error && (
-          <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
-            {error}
-          </div>
-        )}
+      {/* Content - Two column layout for Hub view */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        {/* Left Column - Tasks (scrollable) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
+          {/* Quick add */}
+          <TaskQuickAdd onAdd={handleAddTask} disabled={loading} />
 
-        {/* Loading state */}
-        {loading && items.length === 0 && (
-          <div className="space-y-6">
-            <div className="h-24 bg-bg-tertiary rounded-xl animate-pulse" />
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                <div key={i} className="w-[72px] h-20 bg-bg-tertiary rounded-lg animate-pulse" />
-              ))}
+          {/* Error state */}
+          {error && (
+            <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
+              {error}
             </div>
-            <TaskGroupSkeleton count={3} />
-            <TaskGroupSkeleton count={2} />
-          </div>
-        )}
+          )}
 
-        {/* Empty state */}
-        {isEmpty && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center py-16 text-center"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
-              <CheckSquare className="w-8 h-8 text-text-quaternary" />
+          {/* Loading state */}
+          {loading && items.length === 0 && (
+            <div className="space-y-4">
+              <TaskGroupSkeleton count={3} />
+              <TaskGroupSkeleton count={2} />
+              <TaskGroupSkeleton count={3} />
             </div>
-            <h3 className="text-lg font-medium text-text-primary mb-2">
-              No tasks yet
-            </h3>
-            <p className="text-text-tertiary text-sm max-w-xs">
-              Add a task above or they&apos;ll appear automatically from your conversations
-            </p>
-          </motion.div>
-        )}
+          )}
 
-        {/* Task content */}
-        {!loading && items.length > 0 && (
-          <>
-            {/* Progress card - only in Hub view */}
-            {viewMode === 'hub' && (
-              <TaskProgressCard
-                overdueCount={stats.overdue}
-                todayTotal={stats.todayTotal}
-                todayCompleted={stats.todayCompleted}
-                totalPending={stats.pending}
-                totalCompleted={stats.completed}
-                weekCompleted={stats.weekCompleted}
-                weekPending={stats.weekPending}
-                streak={stats.streak}
-              />
-            )}
-
-            {/* Week strip - only in Hub view */}
-            {viewMode === 'hub' && (
-              <WeekStrip
-                days={weekData}
-                selectedDate={selectedDate}
-                onSelectDate={handleDateSelect}
-                onDropTask={handleDropTask}
-              />
-            )}
-
-            {/* Selected date filter indicator - only in Hub view */}
-            {viewMode === 'hub' && selectedDate && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-text-secondary">
-                  Showing tasks for {filteredView?.dateLabel}
-                </span>
-                <button
-                  onClick={() => setSelectedDate(null)}
-                  className="text-xs text-purple-primary hover:underline"
-                >
-                  Show all
-                </button>
+          {/* Empty state */}
+          {isEmpty && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center py-16 text-center"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
+                <CheckSquare className="w-8 h-8 text-text-quaternary" />
               </div>
-            )}
+              <h3 className="text-lg font-medium text-text-primary mb-2">
+                No tasks yet
+              </h3>
+              <p className="text-text-tertiary text-sm max-w-xs">
+                Add a task above or they&apos;ll appear automatically from your conversations
+              </p>
+            </motion.div>
+          )}
 
-            {/* Filtered view (when date is selected in Hub view) */}
-            {viewMode === 'hub' && filteredView ? (
-              <div className="space-y-6">
-                {filteredView.pending.length > 0 && (
-                  <TaskGroup
-                    title="Pending"
-                    icon="📋"
-                    tasks={filteredView.pending}
-                    {...taskGroupProps}
-                  />
-                )}
-                {filteredView.completed.length > 0 && (
-                  <TaskGroup
-                    title="Completed"
-                    icon="✓"
-                    tasks={filteredView.completed}
-                    collapsible
-                    defaultCollapsed
-                    {...taskGroupProps}
-                  />
-                )}
-                {filteredView.pending.length === 0 && filteredView.completed.length === 0 && (
-                  <div className="text-center py-8 text-text-tertiary text-sm">
-                    No tasks for this date
-                  </div>
-                )}
-              </div>
-            ) : viewMode === 'hub' ? (
-              /* Hub view - Two column layout */
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Column - Priority Tasks */}
+          {/* Task content */}
+          {!loading && items.length > 0 && (
+            <>
+              {/* Selected date filter indicator - only in Hub view */}
+              {viewMode === 'hub' && selectedDate && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-text-secondary">
+                    Showing tasks for {filteredView?.dateLabel}
+                  </span>
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="text-xs text-purple-primary hover:underline"
+                  >
+                    Show all
+                  </button>
+                </div>
+              )}
+
+              {/* Filtered view (when date is selected in Hub view) */}
+              {viewMode === 'hub' && filteredView ? (
+                <div className="space-y-4">
+                  {filteredView.pending.length > 0 && (
+                    <TaskGroup
+                      title="Pending"
+                      icon="📋"
+                      tasks={filteredView.pending}
+                      {...taskGroupProps}
+                    />
+                  )}
+                  {filteredView.completed.length > 0 && (
+                    <TaskGroup
+                      title="Completed"
+                      icon="✓"
+                      tasks={filteredView.completed}
+                      collapsible
+                      defaultCollapsed
+                      {...taskGroupProps}
+                    />
+                  )}
+                  {filteredView.pending.length === 0 && filteredView.completed.length === 0 && (
+                    <div className="text-center py-8 text-text-tertiary text-sm">
+                      No tasks for this date
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* All task groups in single column */
                 <div className="space-y-4">
                   <TaskGroup
                     title="Priority Tasks"
@@ -325,15 +293,6 @@ export function TaskHub() {
                     tasks={groupedItems.overdue}
                     {...taskGroupProps}
                   />
-                  {!hasPriorityTasks && (
-                    <div className="rounded-xl border border-dashed border-bg-quaternary p-6 text-center">
-                      <p className="text-sm text-text-quaternary">No overdue tasks</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right Column - Today & Upcoming */}
-                <div className="space-y-4">
                   <TaskGroup
                     title="Today"
                     icon="📅"
@@ -354,66 +313,70 @@ export function TaskHub() {
                     defaultCollapsed={groupedItems.thisWeek.length > 5}
                     {...taskGroupProps}
                   />
+                  {viewMode === 'list' && (
+                    <TaskGroup
+                      title="Later"
+                      icon="📋"
+                      tasks={groupedItems.later}
+                      {...taskGroupProps}
+                    />
+                  )}
+                  <TaskGroup
+                    title="Completed"
+                    icon="✓"
+                    tasks={groupedItems.completed}
+                    collapsible
+                    defaultCollapsed
+                    maxVisible={10}
+                    {...taskGroupProps}
+                  />
                 </div>
-              </div>
-            ) : (
-              /* List view - Single column with all groups */
-              <div className="space-y-6">
-                <TaskGroup
-                  title="Priority Tasks"
-                  icon="🔥"
-                  tasks={groupedItems.overdue}
-                  {...taskGroupProps}
-                />
-                <TaskGroup
-                  title="Today"
-                  icon="📅"
-                  tasks={groupedItems.today}
-                  {...taskGroupProps}
-                />
-                <TaskGroup
-                  title="Tomorrow"
-                  icon="📆"
-                  tasks={groupedItems.tomorrow}
-                  {...taskGroupProps}
-                />
-                <TaskGroup
-                  title="This Week"
-                  icon="🗓"
-                  tasks={groupedItems.thisWeek}
-                  {...taskGroupProps}
-                />
-                <TaskGroup
-                  title="Later"
-                  icon="📋"
-                  tasks={groupedItems.later}
-                  {...taskGroupProps}
-                />
-                <TaskGroup
-                  title="Completed"
-                  icon="✓"
-                  tasks={groupedItems.completed}
-                  collapsible
-                  defaultCollapsed
-                  maxVisible={10}
-                  {...taskGroupProps}
-                />
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Right Column - Dashboard (sticky sidebar) - only in Hub view */}
+        {viewMode === 'hub' && (
+          <div className="w-full lg:w-[480px] lg:flex-shrink-0 p-4 lg:pl-4 lg:border-l border-bg-tertiary order-first lg:order-last space-y-4 lg:h-full lg:overflow-y-auto">
+            {/* Loading state for dashboard */}
+            {loading && items.length === 0 && (
+              <div className="space-y-4">
+                <div className="h-24 bg-bg-tertiary rounded-xl animate-pulse" />
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                    <div key={i} className="w-[42px] h-16 bg-bg-tertiary rounded-lg animate-pulse" />
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Completed section - only show in Hub view below the columns */}
-            {viewMode === 'hub' && !filteredView && (
-              <TaskGroup
-                title="Completed"
-                icon="✓"
-                tasks={groupedItems.completed}
-                collapsible
-                defaultCollapsed
-                maxVisible={10}
-                {...taskGroupProps}
-              />
+            {/* Dashboard content */}
+            {!loading && items.length > 0 && (
+              <>
+                {/* Progress card */}
+                <TaskProgressCard
+                  overdueCount={stats.overdue}
+                  todayTotal={stats.todayTotal}
+                  todayCompleted={stats.todayCompleted}
+                  totalPending={stats.pending}
+                  totalCompleted={stats.completed}
+                  weekCompleted={stats.weekCompleted}
+                  weekPending={stats.weekPending}
+                  streak={stats.streak}
+                  compact
+                />
+
+                {/* Week strip */}
+                <WeekStrip
+                  days={weekData}
+                  selectedDate={selectedDate}
+                  onSelectDate={handleDateSelect}
+                  onDropTask={handleDropTask}
+                />
+              </>
             )}
-          </>
+          </div>
         )}
       </div>
 

@@ -16,7 +16,9 @@ import {
   Zap,
   Brain,
   Share2,
+  Pencil,
 } from 'lucide-react';
+import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import { getApp, enableApp, disableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
@@ -56,10 +58,14 @@ const CAPABILITY_INFO: Record<string, { icon: React.ReactNode; label: string; co
 
 export function AppDetail({ appId }: AppDetailProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [app, setApp] = useState<App | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if user owns this app
+  const isOwner = user && app?.uid === user.uid;
 
   useEffect(() => {
     async function loadApp() {
@@ -238,6 +244,21 @@ export function AppDetail({ appId }: AppDetailProps) {
             >
               <Share2 className="w-5 h-5" />
             </button>
+
+            {isOwner && (
+              <button
+                onClick={() => router.push(`/apps/${app.id}/edit`)}
+                className={cn(
+                  'px-4 py-2.5 rounded-xl font-medium',
+                  'border border-bg-quaternary',
+                  'text-text-secondary hover:bg-bg-tertiary',
+                  'transition-colors flex items-center gap-2'
+                )}
+              >
+                <Pencil className="w-4 h-4" />
+                Edit
+              </button>
+            )}
 
             {app.enabled && app.external_integration?.app_home_url && (
               <a
