@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -18,6 +19,8 @@ import { formatTime, formatDuration } from '@/lib/utils';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
+import { ConversationActionsMenu } from './ConversationActionsMenu';
+import { EditableTitle } from './EditableTitle';
 import type { Conversation, ActionItem, AppResponse } from '@/types/conversation';
 
 interface ConversationDetailPanelProps {
@@ -27,6 +30,7 @@ interface ConversationDetailPanelProps {
   userName?: string;
   onBack?: () => void;
   onConversationUpdate?: (conversation: Conversation) => void;
+  onDelete?: () => void;
 }
 
 type TabId = 'summary' | 'actions' | 'transcript' | 'location';
@@ -334,8 +338,32 @@ export function ConversationDetailPanel({
   userName,
   onBack,
   onConversationUpdate,
+  onDelete,
 }: ConversationDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('summary');
+  const router = useRouter();
+
+  // Handle title change - update conversation with new title
+  const handleTitleChange = useCallback((newTitle: string) => {
+    if (conversation && onConversationUpdate) {
+      onConversationUpdate({
+        ...conversation,
+        structured: {
+          ...conversation.structured,
+          title: newTitle,
+        },
+      });
+    }
+  }, [conversation, onConversationUpdate]);
+
+  // Handle delete
+  const handleDelete = useCallback(() => {
+    if (onDelete) {
+      onDelete();
+    } else if (onBack) {
+      onBack();
+    }
+  }, [onDelete, onBack]);
 
   if (loading || !conversation) {
     return <DetailSkeleton />;
@@ -411,10 +439,13 @@ export function ConversationDetailPanel({
           </div>
 
           <div className="flex-1 min-w-0">
-            {/* Title */}
-            <h1 className="text-xl font-display font-semibold text-text-primary mb-2 line-clamp-2">
-              {structured.title || 'Untitled Conversation'}
-            </h1>
+            {/* Editable Title */}
+            <EditableTitle
+              conversationId={conversationId}
+              title={structured.title || 'Untitled Conversation'}
+              onTitleChange={handleTitleChange}
+              className="text-xl font-display font-semibold text-text-primary mb-2 line-clamp-2"
+            />
 
             {/* Meta info */}
             <div className="flex flex-wrap items-center gap-3 text-sm text-text-tertiary">
@@ -444,6 +475,13 @@ export function ConversationDetailPanel({
               )}
             </div>
           </div>
+
+          {/* Actions Menu */}
+          <ConversationActionsMenu
+            conversation={conversation}
+            onConversationUpdate={onConversationUpdate}
+            onDelete={handleDelete}
+          />
         </div>
       </div>
 

@@ -1505,3 +1505,37 @@ export async function reprocessConversation(
     method: 'POST',
   });
 }
+
+/**
+ * Update a conversation's title
+ * @param conversationId - The ID of the conversation
+ * @param title - The new title
+ */
+export async function updateConversationTitle(
+  conversationId: string,
+  title: string
+): Promise<void> {
+  await fetchWithAuth(`/v1/conversations/${conversationId}/title?title=${encodeURIComponent(title)}`, {
+    method: 'PATCH',
+  });
+}
+
+/**
+ * Test a custom prompt against a conversation
+ * @param conversationId - The ID of the conversation
+ * @param prompt - The custom prompt to test
+ * @returns The generated summary
+ */
+export async function testConversationPrompt(
+  conversationId: string,
+  prompt: string
+): Promise<string> {
+  const response = await fetchWithAuth<{ summary: string }>(
+    `/v1/conversations/${conversationId}/test-prompt`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    }
+  );
+  return response.summary;
+}

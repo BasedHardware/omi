@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -19,6 +20,8 @@ import { formatTime, formatDuration } from '@/lib/utils';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
+import { ConversationActionsMenu } from './ConversationActionsMenu';
+import { EditableTitle } from './EditableTitle';
 import type { Conversation, ActionItem, AppResponse } from '@/types/conversation';
 
 interface ConversationDetailProps {
@@ -291,6 +294,7 @@ function LocationTab({ geolocation, address }: {
 }
 
 export function ConversationDetail({ conversation, userName, onConversationUpdate }: ConversationDetailProps) {
+  const router = useRouter();
   const { structured, transcript_segments, geolocation } = conversation;
   const duration = calculateDuration(conversation.started_at, conversation.finished_at);
   const actionItems = structured.action_items || [];
@@ -307,6 +311,24 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
   };
 
   const [activeTab, setActiveTab] = useState<TabId>(getInitialTab());
+
+  // Handle title change
+  const handleTitleChange = useCallback((newTitle: string) => {
+    if (onConversationUpdate) {
+      onConversationUpdate({
+        ...conversation,
+        structured: {
+          ...conversation.structured,
+          title: newTitle,
+        },
+      });
+    }
+  }, [conversation, onConversationUpdate]);
+
+  // Handle delete - navigate back to conversations list
+  const handleDelete = useCallback(() => {
+    router.push('/conversations');
+  }, [router]);
 
   // Build tabs array based on available content
   const tabs: Tab[] = [
@@ -369,10 +391,13 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
           </div>
 
           <div className="flex-1 min-w-0">
-            {/* Title */}
-            <h1 className="text-2xl font-display font-semibold text-text-primary mb-2">
-              {structured.title || 'Untitled Conversation'}
-            </h1>
+            {/* Editable Title */}
+            <EditableTitle
+              conversationId={conversation.id}
+              title={structured.title || 'Untitled Conversation'}
+              onTitleChange={handleTitleChange}
+              className="text-2xl font-display font-semibold text-text-primary mb-2"
+            />
 
             {/* Meta info */}
             <div className="flex flex-wrap items-center gap-4 text-sm text-text-tertiary">
@@ -408,6 +433,13 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
               )}
             </div>
           </div>
+
+          {/* Actions Menu */}
+          <ConversationActionsMenu
+            conversation={conversation}
+            onConversationUpdate={onConversationUpdate}
+            onDelete={handleDelete}
+          />
         </div>
       </motion.div>
 

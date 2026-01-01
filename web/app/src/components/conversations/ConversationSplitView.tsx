@@ -319,6 +319,10 @@ export function ConversationSplitView() {
                 userName={user?.displayName || undefined}
                 onBack={() => setSelectedId(null)}
                 onConversationUpdate={updateSelectedConversation}
+                onDelete={() => {
+                  setSelectedId(null);
+                  refresh();
+                }}
               />
             </motion.div>
           ) : (
