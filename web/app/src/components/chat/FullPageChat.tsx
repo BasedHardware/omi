@@ -6,7 +6,7 @@ import { Send, Sparkles, Trash2, Brain, Paperclip, X } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
-import { VoiceRecorder, VoiceMicButton } from './VoiceRecorder';
+import { InlineVoiceRecorder } from './VoiceRecorder';
 import { AppSelector } from './AppSelector';
 import { uploadChatFiles } from '@/lib/api';
 import type { MessageFile } from '@/types/conversation';
@@ -48,7 +48,6 @@ export function FullPageChat() {
   const [isClearing, setIsClearing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -66,10 +65,8 @@ export function FullPageChat() {
 
   // Focus input on mount
   useEffect(() => {
-    if (!showVoiceRecorder) {
-      inputRef.current?.focus();
-    }
-  }, [showVoiceRecorder]);
+    inputRef.current?.focus();
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -155,10 +152,9 @@ export function FullPageChat() {
     });
   };
 
-  // Handle voice transcript
+  // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
     setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-    setShowVoiceRecorder(false);
     inputRef.current?.focus();
   };
 
@@ -391,85 +387,72 @@ export function FullPageChat() {
         )}
 
         <div className="max-w-3xl mx-auto px-4 py-4">
-          {/* Voice recorder overlay */}
-          {showVoiceRecorder ? (
-            <div className="flex items-center justify-center py-2">
-              <VoiceRecorder
-                onTranscript={handleVoiceTranscript}
-                onClose={() => setShowVoiceRecorder(false)}
-                disabled={isStreaming}
-              />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              {/* File attach button */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isStreaming || selectedFiles.length >= MAX_FILES}
-                className={cn(
-                  'p-2 rounded-lg flex-shrink-0',
-                  'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
-                  'transition-colors'
-                )}
-                title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept={ALLOWED_EXTENSIONS}
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-
-              {/* Text input */}
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask anything..."
-                disabled={isStreaming}
-                rows={1}
-                className={cn(
-                  'flex-1 px-4 py-3 rounded-xl resize-none',
-                  'bg-bg-tertiary border border-bg-quaternary',
-                  'text-text-primary placeholder:text-text-quaternary',
-                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50 focus:border-purple-primary/50',
-                  'transition-all',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
-                  'h-[48px] max-h-[200px]'
-                )}
-              />
-
-              {/* Voice input button (shows when input is empty) */}
-              {!input.trim() && selectedFiles.length === 0 && (
-                <VoiceMicButton
-                  onClick={() => setShowVoiceRecorder(true)}
-                  disabled={isStreaming}
-                />
+          <div className="flex items-center gap-2">
+            {/* File attach button */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isStreaming || selectedFiles.length >= MAX_FILES}
+              className={cn(
+                'p-2 rounded-lg flex-shrink-0',
+                'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                'transition-colors'
               )}
+              title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
+            >
+              <Paperclip className="w-5 h-5" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ALLOWED_EXTENSIONS}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
 
-              {/* Send button */}
-              <button
-                onClick={() => handleSend()}
-                disabled={!canSend}
-                className={cn(
-                  'w-[48px] h-[48px] rounded-xl flex-shrink-0',
-                  'flex items-center justify-center',
-                  'bg-purple-primary hover:bg-purple-secondary',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
-                  'transition-colors'
-                )}
-                aria-label="Send message"
-              >
-                <Send className="w-5 h-5 text-white" />
-              </button>
-            </div>
-          )}
+            {/* Text input */}
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask anything..."
+              disabled={isStreaming}
+              rows={1}
+              className={cn(
+                'flex-1 px-4 py-3 rounded-xl resize-none',
+                'bg-bg-tertiary border border-bg-quaternary',
+                'text-text-primary placeholder:text-text-quaternary',
+                'focus:outline-none focus:ring-2 focus:ring-purple-primary/50 focus:border-purple-primary/50',
+                'transition-all',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                'h-[48px] max-h-[200px]'
+              )}
+            />
+
+            {/* Inline voice recorder - always visible */}
+            <InlineVoiceRecorder
+              onTranscript={handleVoiceTranscript}
+              disabled={isStreaming}
+            />
+
+            {/* Send button */}
+            <button
+              onClick={() => handleSend()}
+              disabled={!canSend}
+              className={cn(
+                'w-[48px] h-[48px] rounded-xl flex-shrink-0',
+                'flex items-center justify-center',
+                'bg-purple-primary hover:bg-purple-secondary',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                'transition-colors'
+              )}
+              aria-label="Send message"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
           <p className="text-xs text-text-quaternary mt-2 text-center">
             Press Enter to send, Shift+Enter for new line
           </p>
