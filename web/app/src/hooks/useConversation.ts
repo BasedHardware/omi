@@ -13,6 +13,7 @@ interface UseConversationReturn {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  update: (conversation: Conversation) => void;
 }
 
 /**
@@ -56,10 +57,15 @@ export function useConversation(
     await fetchConversation();
   }, [fetchConversation]);
 
+  const update = useCallback((updatedConversation: Conversation) => {
+    setConversation(updatedConversation);
+  }, []);
+
   return {
     conversation,
     loading,
     error,
     refresh,
+    update,
   };
 }

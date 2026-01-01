@@ -69,7 +69,7 @@ function ConversationDetailSkeleton() {
 function ConversationPageContent({ params }: ConversationPageProps) {
   const { id } = use(params);
   const { user } = useAuth();
-  const { conversation, loading, error } = useConversation(id);
+  const { conversation, loading, error, update: updateConversation } = useConversation(id);
 
   return (
     <MainLayout>
@@ -95,6 +95,7 @@ function ConversationPageContent({ params }: ConversationPageProps) {
           <ConversationDetail
             conversation={conversation}
             userName={user?.displayName || undefined}
+            onConversationUpdate={updateConversation}
           />
         )}
 

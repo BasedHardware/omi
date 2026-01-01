@@ -70,7 +70,10 @@ async function fetchWithAuth<T>(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'No error body');
-      console.error('API error response:', response.status, errorText);
+      // Only log non-404 errors (404s are expected for optional endpoints)
+      if (response.status !== 404) {
+        console.error('API error response:', response.status, errorText);
+      }
 
       if (response.status === 401) {
         throw new Error('Unauthorized - please sign in again');
@@ -1086,6 +1089,7 @@ import type {
   UserUsage,
   UserUsageResponse,
   UsageStats,
+  AllUsageData,
   UserSubscription,
   UserSubscriptionResponse,
   Person,
@@ -1238,14 +1242,13 @@ export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
 }
 
 /**
- * Get user usage stats
+ * Get user usage stats for a specific period
  */
 export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly'): Promise<UserUsage | null> {
   try {
     const response = await fetchWithAuth<UserUsageResponse>(`/v1/users/me/usage?period=${period}`);
-    console.log('getUserUsage API response:', JSON.stringify(response, null, 2));
 
-    // Extract the relevant period's stats - explicitly handle each period
+    // Extract the relevant period's stats
     let stats: UsageStats | undefined;
     if (period === 'all_time') {
       stats = response.all_time;
@@ -1263,21 +1266,32 @@ export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all
     }
 
     if (stats) {
-      const result = {
+      return {
         transcription_seconds: stats.transcription_seconds || 0,
         words_transcribed: stats.words_transcribed || 0,
         insights_gained: stats.insights_gained || 0,
         memories_created: stats.memories_created || 0,
+        history: response.history,
       };
-      console.log('getUserUsage parsed result:', result);
-      return result;
     }
-    console.log('getUserUsage: No stats found in response');
     return null;
   } catch (error) {
     console.error('getUserUsage error:', error);
     return null;
   }
+}
+
+/**
+ * Get all usage data for all periods (for tabs display)
+ */
+export async function getAllUsageData(): Promise<AllUsageData> {
+  const [today, monthly, yearly, all_time] = await Promise.all([
+    getUserUsage('today'),
+    getUserUsage('monthly'),
+    getUserUsage('yearly'),
+    getUserUsage('all_time'),
+  ]);
+  return { today, monthly, yearly, all_time };
 }
 
 /**
@@ -1374,7 +1388,7 @@ import type { DeveloperApiKey, CustomVocabulary, Integration } from '@/types/use
  */
 export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
   try {
-    return await fetchWithAuth<DeveloperApiKey[]>('/v1/developer/api-keys');
+    return await fetchWithAuth<DeveloperApiKey[]>('/v1/dev/keys');
   } catch {
     return [];
   }
@@ -1384,7 +1398,7 @@ export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
  * Create a new developer API key
  */
 export async function createDeveloperApiKey(name?: string): Promise<DeveloperApiKey> {
-  return fetchWithAuth<DeveloperApiKey>('/v1/developer/api-keys', {
+  return fetchWithAuth<DeveloperApiKey>('/v1/dev/keys', {
     method: 'POST',
     body: JSON.stringify({ name: name || 'API Key' }),
   });
@@ -1394,34 +1408,39 @@ export async function createDeveloperApiKey(name?: string): Promise<DeveloperApi
  * Delete a developer API key
  */
 export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
-  await fetchWithAuth(`/v1/developer/api-keys/${keyId}`, {
+  await fetchWithAuth(`/v1/dev/keys/${keyId}`, {
     method: 'DELETE',
   });
 }
 
 // ============================================================================
-// Custom Vocabulary
+// Custom Vocabulary (via Transcription Preferences)
 // ============================================================================
 
+interface TranscriptionPreferences {
+  single_language_mode?: boolean;
+  vocabulary?: string[];
+}
+
 /**
- * Get custom vocabulary words
+ * Get custom vocabulary words from transcription preferences
  */
 export async function getCustomVocabulary(): Promise<string[]> {
   try {
-    const result = await fetchWithAuth<CustomVocabulary>('/v1/users/vocabulary');
-    return result.words || [];
+    const result = await fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
+    return result.vocabulary || [];
   } catch {
     return [];
   }
 }
 
 /**
- * Update custom vocabulary words
+ * Update custom vocabulary words via transcription preferences
  */
 export async function updateCustomVocabulary(words: string[]): Promise<void> {
-  await fetchWithAuth('/v1/users/vocabulary', {
-    method: 'POST',
-    body: JSON.stringify({ words }),
+  await fetchWithAuth('/v1/users/transcription-preferences', {
+    method: 'PATCH',
+    body: JSON.stringify({ vocabulary: words }),
   });
 }
 
@@ -1462,6 +1481,31 @@ export async function connectIntegration(integrationId: string): Promise<{ redir
  */
 export async function disconnectIntegration(integrationId: string): Promise<void> {
   await fetchWithAuth(`/v1/integrations/${integrationId}/disconnect`, {
+    method: 'POST',
+  });
+}
+
+// ============================================================================
+// Conversation Reprocessing API
+// ============================================================================
+
+/**
+ * Reprocess a conversation with an optional specific app
+ * @param conversationId - The ID of the conversation to reprocess
+ * @param appId - Optional app ID to use for processing (if provided, only this app will be triggered)
+ * @returns The updated conversation after reprocessing
+ */
+export async function reprocessConversation(
+  conversationId: string,
+  appId?: string
+): Promise<Conversation> {
+  const queryParams = new URLSearchParams();
+  if (appId) {
+    queryParams.set('app_id', appId);
+  }
+
+  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ''}`;
+  return fetchWithAuth<Conversation>(endpoint, {
     method: 'POST',
   });
 }

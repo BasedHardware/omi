@@ -97,12 +97,30 @@ export interface UserSubscriptionResponse {
   show_subscription_ui: boolean;
 }
 
+// Usage history data point
+export interface UsageHistoryPoint {
+  date: string;
+  transcription_seconds: number;
+  words_transcribed: number;
+  insights_gained: number;
+  memories_created: number;
+}
+
 // Simplified types for component use
 export interface UserUsage {
   transcription_seconds: number;
   words_transcribed: number;
   insights_gained: number;
   memories_created: number;
+  history?: UsageHistoryPoint[];
+}
+
+// All usage data for all periods
+export interface AllUsageData {
+  today: UserUsage | null;
+  monthly: UserUsage | null;
+  yearly: UserUsage | null;
+  all_time: UserUsage | null;
 }
 
 export interface UserSubscription {

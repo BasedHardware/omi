@@ -44,7 +44,7 @@ import {
   getTrainingDataOptIn,
   setTrainingDataOptIn,
   deleteAccount,
-  getUserUsage,
+  getAllUsageData,
   getUserSubscription,
   getCustomVocabulary,
   updateCustomVocabulary,
@@ -58,7 +58,7 @@ import {
   getIntegrations,
 } from '@/lib/api';
 import { SUPPORTED_LANGUAGES } from '@/types/user';
-import type { DailySummarySettings, UserUsage, UserSubscription, DeveloperWebhooks, DeveloperApiKey, Integration } from '@/types/user';
+import type { DailySummarySettings, UserUsage, UserSubscription, AllUsageData, DeveloperWebhooks, DeveloperApiKey, Integration, UsageHistoryPoint } from '@/types/user';
 
 // ============================================================================
 // Types
@@ -646,13 +646,180 @@ function PrivacySection({
 // Plan & Usage Section
 // ============================================================================
 
+type UsagePeriod = 'today' | 'monthly' | 'yearly' | 'all_time';
+
+const PERIOD_LABELS: Record<UsagePeriod, string> = {
+  today: 'Today',
+  monthly: 'This Month',
+  yearly: 'This Year',
+  all_time: 'All Time',
+};
+
+function UsageChart({ history, period }: { history?: UsageHistoryPoint[]; period: UsagePeriod }) {
+  const [visibleMetrics, setVisibleMetrics] = useState({
+    listening: true,
+    words: true,
+    insights: true,
+    memories: true,
+  });
+
+  if (!history || history.length === 0) {
+    return (
+      <Card className="h-48 flex items-center justify-center">
+        <p className="text-text-quaternary">No activity data available</p>
+      </Card>
+    );
+  }
+
+  // Process history data for display
+  const processedData = history.map((point, index) => {
+    const date = new Date(point.date);
+    let label = '';
+    if (period === 'today') {
+      label = `${date.getHours()}:00`;
+    } else if (period === 'monthly') {
+      label = `${date.getDate()}`;
+    } else if (period === 'yearly') {
+      label = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
+    } else {
+      label = `${date.getFullYear()}`;
+    }
+    return { ...point, label, index };
+  });
+
+  // Find max values for scaling
+  const maxListening = Math.max(...processedData.map(d => d.transcription_seconds / 60), 1);
+  const maxWords = Math.max(...processedData.map(d => d.words_transcribed), 1);
+  const maxInsights = Math.max(...processedData.map(d => d.insights_gained), 1);
+  const maxMemories = Math.max(...processedData.map(d => d.memories_created), 1);
+
+  const metricConfig = [
+    { key: 'listening', color: 'rgb(96, 165, 250)', label: 'Listening', visible: visibleMetrics.listening },
+    { key: 'words', color: 'rgb(74, 222, 128)', label: 'Words', visible: visibleMetrics.words },
+    { key: 'insights', color: 'rgb(251, 146, 60)', label: 'Insights', visible: visibleMetrics.insights },
+    { key: 'memories', color: 'rgb(192, 132, 252)', label: 'Memories', visible: visibleMetrics.memories },
+  ];
+
+  const toggleMetric = (key: string) => {
+    setVisibleMetrics(prev => ({ ...prev, [key]: !prev[key as keyof typeof prev] }));
+  };
+
+  // Create SVG path for each metric
+  const createPath = (data: UsageHistoryPoint[], getValue: (d: UsageHistoryPoint) => number, max: number) => {
+    const width = 100;
+    const height = 100;
+    const points = data.map((d, i) => {
+      const x = (i / (data.length - 1 || 1)) * width;
+      const y = height - (getValue(d) / max) * height;
+      return `${x},${y}`;
+    });
+    return `M ${points.join(' L ')}`;
+  };
+
+  return (
+    <Card>
+      {/* Legend/Toggles */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        {metricConfig.map(metric => (
+          <button
+            key={metric.key}
+            onClick={() => toggleMetric(metric.key)}
+            className={cn(
+              'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+              metric.visible
+                ? 'opacity-100'
+                : 'opacity-40'
+            )}
+            style={{
+              backgroundColor: metric.visible ? `${metric.color}20` : 'transparent',
+              color: metric.color,
+              border: `1px solid ${metric.color}40`,
+            }}
+          >
+            {metric.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Chart */}
+      <div className="relative h-40 w-full">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+          {/* Grid lines */}
+          <line x1="0" y1="25" x2="100" y2="25" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+          <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+          <line x1="0" y1="75" x2="100" y2="75" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+          <line x1="0" y1="100" x2="100" y2="100" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" />
+
+          {/* Lines */}
+          {visibleMetrics.listening && (
+            <>
+              <defs>
+                <linearGradient id="listeningGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgb(96, 165, 250)" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="rgb(96, 165, 250)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path
+                d={createPath(processedData, d => d.transcription_seconds / 60, maxListening)}
+                fill="none"
+                stroke="rgb(96, 165, 250)"
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+              />
+            </>
+          )}
+          {visibleMetrics.words && (
+            <path
+              d={createPath(processedData, d => d.words_transcribed, maxWords)}
+              fill="none"
+              stroke="rgb(74, 222, 128)"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          {visibleMetrics.insights && (
+            <path
+              d={createPath(processedData, d => d.insights_gained, maxInsights)}
+              fill="none"
+              stroke="rgb(251, 146, 60)"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          {visibleMetrics.memories && (
+            <path
+              d={createPath(processedData, d => d.memories_created, maxMemories)}
+              fill="none"
+              stroke="rgb(192, 132, 252)"
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </svg>
+      </div>
+
+      {/* X-axis labels */}
+      <div className="flex justify-between mt-2 text-xs text-text-quaternary">
+        {processedData.filter((_, i) => {
+          const step = Math.ceil(processedData.length / 6);
+          return i % step === 0 || i === processedData.length - 1;
+        }).map((d, i) => (
+          <span key={i}>{d.label}</span>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function UsageSection({
-  usage,
+  allUsage,
   subscription,
 }: {
-  usage: UserUsage | null;
+  allUsage: AllUsageData | null;
   subscription: UserSubscription | null;
 }) {
+  const [selectedPeriod, setSelectedPeriod] = useState<UsagePeriod>('all_time');
+
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -685,6 +852,10 @@ function UsageSection({
     if (plan === 'basic') return 'Free';
     return plan || 'Free';
   };
+
+  // Get usage for selected period
+  const usage = allUsage ? allUsage[selectedPeriod] : null;
+  const periods: UsagePeriod[] = ['today', 'monthly', 'yearly', 'all_time'];
 
   return (
     <div className="space-y-6">
@@ -723,62 +894,80 @@ function UsageSection({
         </div>
       </Card>
 
-      {/* Usage Stats - 2x2 Grid like mobile app */}
-      <div>
-        <p className="text-text-tertiary text-sm mb-3">All Time Stats</p>
-        <div className="grid grid-cols-2 gap-4">
-          <Card>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-blue-500/10">
-                <Clock className="w-5 h-5 text-blue-400" />
-              </div>
-              <span className="text-text-tertiary text-sm">Listening</span>
-            </div>
-            <p className="text-3xl font-bold text-blue-400">
-              {usage ? formatDuration(usage.transcription_seconds) : '0m'}
-            </p>
-            <p className="text-text-quaternary text-sm mt-1">Total time listening</p>
-          </Card>
+      {/* Period Tabs */}
+      <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl">
+        {periods.map((period) => (
+          <button
+            key={period}
+            onClick={() => setSelectedPeriod(period)}
+            className={cn(
+              'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all',
+              selectedPeriod === period
+                ? 'bg-purple-500 text-white shadow-md'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary'
+            )}
+          >
+            {PERIOD_LABELS[period]}
+          </button>
+        ))}
+      </div>
 
-          <Card>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <MessageSquare className="w-5 h-5 text-green-400" />
-              </div>
-              <span className="text-text-tertiary text-sm">Understanding</span>
-            </div>
-            <p className="text-3xl font-bold text-green-400">
-              {usage ? formatNumber(usage.words_transcribed) : '0'}
-            </p>
-            <p className="text-text-quaternary text-sm mt-1">Words transcribed</p>
-          </Card>
+      {/* Usage Chart */}
+      <UsageChart history={usage?.history} period={selectedPeriod} />
 
-          <Card>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <BarChart3 className="w-5 h-5 text-orange-400" />
-              </div>
-              <span className="text-text-tertiary text-sm">Insights</span>
+      {/* Usage Stats - 2x2 Grid */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-blue-500/10">
+              <Clock className="w-5 h-5 text-blue-400" />
             </div>
-            <p className="text-3xl font-bold text-orange-400">
-              {usage?.insights_gained || 0}
-            </p>
-            <p className="text-text-quaternary text-sm mt-1">Insights gained</p>
-          </Card>
+            <span className="text-text-tertiary text-sm">Listening</span>
+          </div>
+          <p className="text-3xl font-bold text-blue-400">
+            {usage ? formatDuration(usage.transcription_seconds) : '0m'}
+          </p>
+          <p className="text-text-quaternary text-sm mt-1">Time listening</p>
+        </Card>
 
-          <Card>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Brain className="w-5 h-5 text-purple-400" />
-              </div>
-              <span className="text-text-tertiary text-sm">Memories</span>
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-green-500/10">
+              <MessageSquare className="w-5 h-5 text-green-400" />
             </div>
-            <p className="text-3xl font-bold text-purple-400">
-              {usage?.memories_created || 0}
-            </p>
-            <p className="text-text-quaternary text-sm mt-1">Memories created</p>
-          </Card>
-        </div>
+            <span className="text-text-tertiary text-sm">Understanding</span>
+          </div>
+          <p className="text-3xl font-bold text-green-400">
+            {usage ? formatNumber(usage.words_transcribed) : '0'}
+          </p>
+          <p className="text-text-quaternary text-sm mt-1">Words transcribed</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-orange-500/10">
+              <BarChart3 className="w-5 h-5 text-orange-400" />
+            </div>
+            <span className="text-text-tertiary text-sm">Insights</span>
+          </div>
+          <p className="text-3xl font-bold text-orange-400">
+            {usage?.insights_gained || 0}
+          </p>
+          <p className="text-text-quaternary text-sm mt-1">Insights gained</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-purple-500/10">
+              <Brain className="w-5 h-5 text-purple-400" />
+            </div>
+            <span className="text-text-tertiary text-sm">Memories</span>
+          </div>
+          <p className="text-3xl font-bold text-purple-400">
+            {usage?.memories_created || 0}
+          </p>
+          <p className="text-text-quaternary text-sm mt-1">Memories created</p>
+        </Card>
       </div>
     </div>
   );
@@ -1102,7 +1291,7 @@ export function SettingsPage() {
   const [dailySummary, setDailySummary] = useState<DailySummarySettings>({ enabled: true, hour: 22 });
   const [recordingPermission, setRecordingPermissionState] = useState(false);
   const [trainingDataOptIn, setTrainingDataOptInState] = useState(false);
-  const [usage, setUsage] = useState<UserUsage | null>(null);
+  const [allUsage, setAllUsage] = useState<AllUsageData | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
@@ -1119,24 +1308,23 @@ export function SettingsPage() {
       setIsLoading(true);
       try {
         const [lang, vocab, summary, recording, training, usageData, sub, integ, keys, webhookStatus] = await Promise.all([
-          getUserLanguage().catch((e) => { console.error('getUserLanguage error:', e); return 'en'; }),
-          getCustomVocabulary().catch((e) => { console.error('getCustomVocabulary error:', e); return []; }),
-          getDailySummarySettings().catch((e) => { console.error('getDailySummarySettings error:', e); return { enabled: true, hour: 22 }; }),
-          getRecordingPermission().catch((e) => { console.error('getRecordingPermission error:', e); return { enabled: false }; }),
-          getTrainingDataOptIn().catch((e) => { console.error('getTrainingDataOptIn error:', e); return { opted_in: false }; }),
-          getUserUsage('all_time').catch((e) => { console.error('getUserUsage error:', e); return null; }),
-          getUserSubscription().catch((e) => { console.error('getUserSubscription error:', e); return null; }),
-          getIntegrations().catch((e) => { console.error('getIntegrations error:', e); return []; }),
-          getDeveloperApiKeys().catch((e) => { console.error('getDeveloperApiKeys error:', e); return []; }),
-          getDeveloperWebhooksStatus().catch((e) => { console.error('getDeveloperWebhooksStatus error:', e); return {}; }),
+          getUserLanguage().catch(() => 'en'),
+          getCustomVocabulary().catch(() => []),
+          getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
+          getRecordingPermission().catch(() => ({ enabled: false })),
+          getTrainingDataOptIn().catch(() => ({ opted_in: false })),
+          getAllUsageData().catch(() => null),
+          getUserSubscription().catch(() => null),
+          getIntegrations().catch(() => []),
+          getDeveloperApiKeys().catch(() => []),
+          getDeveloperWebhooksStatus().catch(() => ({})),
         ]);
-        console.log('Settings loaded:', { lang, vocab, summary, recording, training, usageData, sub });
         setLanguage(lang);
         setVocabulary(vocab);
         setDailySummary(summary);
         setRecordingPermissionState(recording.enabled);
         setTrainingDataOptInState(training.opted_in);
-        setUsage(usageData);
+        setAllUsage(usageData);
         setSubscription(sub);
         setIntegrations(integ);
         setApiKeys(keys);
@@ -1321,7 +1509,7 @@ export function SettingsPage() {
           />
         );
       case 'usage':
-        return <UsageSection usage={usage} subscription={subscription} />;
+        return <UsageSection allUsage={allUsage} subscription={subscription} />;
       case 'integrations':
         return <IntegrationsSection integrations={integrations} />;
       case 'developer':

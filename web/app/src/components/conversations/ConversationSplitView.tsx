@@ -69,6 +69,7 @@ export function ConversationSplitView() {
   const {
     conversation: selectedConversation,
     loading: detailLoading,
+    update: updateSelectedConversation,
   } = useConversation(selectedId);
 
   // Update chat context when conversation changes
@@ -317,6 +318,7 @@ export function ConversationSplitView() {
                 loading={detailLoading}
                 userName={user?.displayName || undefined}
                 onBack={() => setSelectedId(null)}
+                onConversationUpdate={updateSelectedConversation}
               />
             </motion.div>
           ) : (

@@ -12,15 +12,19 @@ import {
   MessageSquare,
   FileText,
   MapPin,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
 import { TranscriptView } from './TranscriptView';
-import type { Conversation, ActionItem } from '@/types/conversation';
+import { AppSummaryCard } from './AppSummaryCard';
+import { GenerateSummaryButton } from './GenerateSummaryButton';
+import type { Conversation, ActionItem, AppResponse } from '@/types/conversation';
 
 interface ConversationDetailProps {
   conversation: Conversation;
   userName?: string;
+  onConversationUpdate?: (conversation: Conversation) => void;
 }
 
 type TabId = 'summary' | 'actions' | 'transcript' | 'location';
@@ -108,21 +112,83 @@ function ActionItemRow({ item }: { item: ActionItem }) {
 }
 
 /**
- * Summary tab content
+ * Summary tab content with app summaries
  */
-function SummaryTab({ overview, category }: { overview: string; category?: string }) {
+interface SummaryTabProps {
+  overview: string;
+  category?: string;
+  conversationId: string;
+  appResults: AppResponse[];
+  suggestedAppIds: string[];
+  onGenerateComplete?: (conversation: Conversation) => void;
+}
+
+function SummaryTab({
+  overview,
+  category,
+  conversationId,
+  appResults,
+  suggestedAppIds,
+  onGenerateComplete,
+}: SummaryTabProps) {
+  const hasAppSummaries = appResults && appResults.length > 0;
+  const hasSuggestedApps = suggestedAppIds && suggestedAppIds.length > 0;
+
   return (
-    <div className="space-y-4">
-      {category && (
-        <div>
-          <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
-            {category}
-          </span>
+    <div className="space-y-6">
+      {/* Default Summary Section */}
+      <div>
+        {category && (
+          <div className="mb-3">
+            <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+              {category}
+            </span>
+          </div>
+        )}
+        <p className="text-text-secondary leading-relaxed text-lg">
+          {overview}
+        </p>
+      </div>
+
+      {/* App Summaries Section */}
+      {(hasAppSummaries || hasSuggestedApps) && (
+        <div className="pt-4 border-t border-bg-tertiary">
+          {/* Section Header */}
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <h3 className="text-sm font-medium text-text-primary">App Summaries</h3>
+          </div>
+
+          {/* App Summary Cards */}
+          {hasAppSummaries && (
+            <div className="space-y-3 mb-4">
+              {appResults.map((appResponse, index) => (
+                <AppSummaryCard
+                  key={`${appResponse.app_id}-${index}`}
+                  appResponse={appResponse}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Generate More Button */}
+          {hasSuggestedApps && (
+            <GenerateSummaryButton
+              conversationId={conversationId}
+              suggestedAppIds={suggestedAppIds}
+              existingAppResults={appResults}
+              onGenerateComplete={onGenerateComplete}
+            />
+          )}
+
+          {/* Empty state for app summaries */}
+          {!hasAppSummaries && hasSuggestedApps && (
+            <p className="text-sm text-text-tertiary mb-4">
+              No app summaries yet. Generate one using the button above.
+            </p>
+          )}
         </div>
       )}
-      <p className="text-text-secondary leading-relaxed text-lg">
-        {overview}
-      </p>
     </div>
   );
 }
@@ -224,7 +290,7 @@ function LocationTab({ geolocation, address }: {
   );
 }
 
-export function ConversationDetail({ conversation, userName }: ConversationDetailProps) {
+export function ConversationDetail({ conversation, userName, onConversationUpdate }: ConversationDetailProps) {
   const { structured, transcript_segments, geolocation } = conversation;
   const duration = calculateDuration(conversation.started_at, conversation.finished_at);
   const actionItems = structured.action_items || [];
@@ -395,7 +461,14 @@ export function ConversationDetail({ conversation, userName }: ConversationDetai
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'summary' && structured.overview && (
-                  <SummaryTab overview={structured.overview} category={structured.category} />
+                  <SummaryTab
+                    overview={structured.overview}
+                    category={structured.category}
+                    conversationId={conversation.id}
+                    appResults={conversation.app_results || []}
+                    suggestedAppIds={conversation.suggested_summarization_apps || []}
+                    onGenerateComplete={onConversationUpdate}
+                  />
                 )}
 
                 {activeTab === 'actions' && hasActionItems && (
