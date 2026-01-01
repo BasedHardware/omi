@@ -671,8 +671,32 @@ function UsageChart({ history, period }: { history?: UsageHistoryPoint[]; period
     );
   }
 
+  // For all_time with many data points, aggregate by month
+  let dataToProcess = history;
+  if (period === 'all_time' && history.length > 60) {
+    // Group by year-month and aggregate
+    const monthlyData = new Map<string, UsageHistoryPoint>();
+    history.forEach(point => {
+      const date = new Date(point.date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const existing = monthlyData.get(key);
+      if (existing) {
+        monthlyData.set(key, {
+          date: `${key}-01`,
+          transcription_seconds: existing.transcription_seconds + point.transcription_seconds,
+          words_transcribed: existing.words_transcribed + point.words_transcribed,
+          insights_gained: existing.insights_gained + point.insights_gained,
+          memories_created: existing.memories_created + point.memories_created,
+        });
+      } else {
+        monthlyData.set(key, { ...point, date: `${key}-01` });
+      }
+    });
+    dataToProcess = Array.from(monthlyData.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   // Process history data for display
-  const processedData = history.map((point, index) => {
+  const processedData = dataToProcess.map((point, index) => {
     const date = new Date(point.date);
     let label = '';
     if (period === 'today') {
@@ -682,7 +706,9 @@ function UsageChart({ history, period }: { history?: UsageHistoryPoint[]; period
     } else if (period === 'yearly') {
       label = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
     } else {
-      label = `${date.getFullYear()}`;
+      // For all_time, show "Mon 'YY" format
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      label = `${months[date.getMonth()]} '${String(date.getFullYear()).slice(2)}`;
     }
     return { ...point, label, index };
   });
