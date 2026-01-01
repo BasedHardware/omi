@@ -153,15 +153,25 @@ function SummaryTab({
       {/* App Summaries Section */}
       {(hasAppSummaries || hasSuggestedApps) && (
         <div className="pt-4 border-t border-bg-tertiary">
-          {/* Section Header */}
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
-            <h3 className="text-sm font-medium text-text-primary">App Summaries</h3>
+          {/* Section Header with Generate Button */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-primary" />
+              <h3 className="text-sm font-medium text-text-primary">App Summaries</h3>
+            </div>
+            {hasSuggestedApps && (
+              <GenerateSummaryButton
+                conversationId={conversationId}
+                suggestedAppIds={suggestedAppIds}
+                existingAppResults={appResults}
+                onGenerateComplete={onGenerateComplete}
+              />
+            )}
           </div>
 
           {/* App Summary Cards */}
           {hasAppSummaries && (
-            <div className="space-y-3 mb-4">
+            <div className="space-y-3">
               {appResults.map((appResponse, index) => (
                 <AppSummaryCard
                   key={`${appResponse.app_id}-${index}`}
@@ -171,20 +181,10 @@ function SummaryTab({
             </div>
           )}
 
-          {/* Generate More Button */}
-          {hasSuggestedApps && (
-            <GenerateSummaryButton
-              conversationId={conversationId}
-              suggestedAppIds={suggestedAppIds}
-              existingAppResults={appResults}
-              onGenerateComplete={onGenerateComplete}
-            />
-          )}
-
           {/* Empty state for app summaries */}
           {!hasAppSummaries && hasSuggestedApps && (
-            <p className="text-sm text-text-tertiary mb-4">
-              No app summaries yet. Generate one using the button above.
+            <p className="text-sm text-text-tertiary mt-2">
+              No app summaries yet. Click the button above to generate one.
             </p>
           )}
         </div>
