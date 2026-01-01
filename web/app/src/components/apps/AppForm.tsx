@@ -148,8 +148,8 @@ export function AppForm({ mode, app }: AppFormProps) {
         const [cats, caps, scopes, plans] = await Promise.all([
           getAppCategories(),
           getAppCapabilities(),
-          getNotificationScopes().catch(() => []),
-          getPaymentPlans().catch(() => []),
+          getNotificationScopes(),
+          getPaymentPlans(),
         ]);
         setCategories(cats);
         setCapabilities(caps);

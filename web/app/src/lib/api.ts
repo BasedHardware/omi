@@ -856,7 +856,7 @@ export async function createApp(
   const url = `${API_BASE_URL}/v1/apps`;
 
   const formData = new FormData();
-  formData.append('data', JSON.stringify(data));
+  formData.append('app_data', JSON.stringify(data));
   if (imageFile) {
     formData.append('file', imageFile, imageFile.name);
   }
@@ -901,8 +901,11 @@ export async function updateApp(
 
   const url = `${API_BASE_URL}/v1/apps/${appId}`;
 
+  // The API requires the id to be included in the app_data
+  const dataWithId = { ...data, id: appId };
+
   const formData = new FormData();
-  formData.append('data', JSON.stringify(data));
+  formData.append('app_data', JSON.stringify(dataWithId));
   if (imageFile) {
     formData.append('file', imageFile, imageFile.name);
   }
@@ -1000,16 +1003,48 @@ export async function generateAppDescription(
 
 /**
  * Get proactive notification scopes
+ * Note: This endpoint may not exist in all API versions, returns empty array on 404
  */
 export async function getNotificationScopes(): Promise<NotificationScope[]> {
-  return fetchWithAuth<NotificationScope[]>('/v1/apps/proactive-notification-scopes');
+  try {
+    const token = await getIdToken();
+    if (!token) return [];
+
+    const response = await fetch(`${API_BASE_URL}/v1/apps/proactive-notification-scopes`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return [];
+    return response.json();
+  } catch {
+    return [];
+  }
 }
 
 /**
  * Get available payment plans
+ * Note: This endpoint may not exist in all API versions, returns empty array on 404
  */
 export async function getPaymentPlans(): Promise<PaymentPlan[]> {
-  return fetchWithAuth<PaymentPlan[]>('/v1/app/plans');
+  try {
+    const token = await getIdToken();
+    if (!token) return [];
+
+    const response = await fetch(`${API_BASE_URL}/v1/app/plans`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return [];
+    return response.json();
+  } catch {
+    return [];
+  }
 }
 
 /**

@@ -17,6 +17,9 @@ function EditAppContent() {
 
   useEffect(() => {
     async function loadApp() {
+      if (!appId) return;
+
+      console.log('Loading app for edit, appId:', appId);
       try {
         const appData = await getApp(appId);
         setApp(appData);
