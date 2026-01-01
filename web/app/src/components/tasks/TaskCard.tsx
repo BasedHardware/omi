@@ -15,6 +15,7 @@ interface TaskCardProps {
   onSetDueDate?: (id: string, date: Date | null) => void;
   isSelected?: boolean;
   onSelect?: (id: string, selected: boolean) => void;
+  selectionMode?: boolean;
 }
 
 /**
@@ -71,6 +72,7 @@ export function TaskCard({
   onSetDueDate,
   isSelected = false,
   onSelect,
+  selectionMode = false,
 }: TaskCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -107,6 +109,12 @@ export function TaskCard({
   const handleCheckboxClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
+    // In selection mode, toggle selection instead of completing
+    if (selectionMode && onSelect) {
+      onSelect(task.id, !isSelected);
+      return;
+    }
+
     // Handle shift-click for multi-select
     if (e.shiftKey && onSelect) {
       onSelect(task.id, !isSelected);
@@ -116,6 +124,13 @@ export function TaskCard({
     setIsCompleting(true);
     await onToggleComplete(task.id, !task.completed);
     setTimeout(() => setIsCompleting(false), 300);
+  };
+
+  const handleSelectionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onSelect) {
+      onSelect(task.id, !isSelected);
+    }
   };
 
   const handleSnooze = (e: React.MouseEvent, days: number) => {
@@ -200,7 +215,36 @@ export function TaskCard({
       )}
     >
       <div className="flex items-start gap-3">
-        {/* Checkbox */}
+        {/* Selection checkbox - shown in selection mode */}
+        {selectionMode && (
+          <button
+            onClick={handleSelectionClick}
+            className={cn(
+              'flex-shrink-0 w-5 h-5 mt-0.5 rounded',
+              'border-2 transition-all duration-200',
+              'flex items-center justify-center',
+              isSelected
+                ? 'bg-purple-primary border-purple-primary'
+                : 'border-text-quaternary hover:border-purple-primary'
+            )}
+            aria-label={isSelected ? 'Deselect task' : 'Select task'}
+          >
+            <AnimatePresence>
+              {isSelected && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </button>
+        )}
+
+        {/* Completion checkbox */}
         <button
           onClick={handleCheckboxClick}
           className={cn(
@@ -211,7 +255,8 @@ export function TaskCard({
               ? 'bg-success border-success'
               : isOverdue
               ? 'border-purple-primary hover:bg-purple-primary/20'
-              : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-secondary'
+              : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-secondary',
+            selectionMode && 'opacity-50'
           )}
           aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
         >

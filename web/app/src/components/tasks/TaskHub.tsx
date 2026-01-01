@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { LayoutGrid, List, RefreshCw, MoreHorizontal, CheckSquare } from 'lucide-react';
+import { LayoutGrid, List, RefreshCw, MoreHorizontal, CheckSquare, CheckCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionItems } from '@/hooks/useActionItems';
 import { TaskProgressCard } from './TaskProgressCard';
@@ -17,6 +17,7 @@ export function TaskHub() {
   const [viewMode, setViewMode] = useState<ViewMode>('hub');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
 
   const {
     items,
@@ -45,6 +46,7 @@ export function TaskHub() {
     onSetDueDate: setDueDate,
     selectedIds,
     onSelect: handleSelect,
+    selectionMode,
   };
 
   // Handle task selection
@@ -60,9 +62,10 @@ export function TaskHub() {
     });
   }
 
-  // Clear selection
+  // Clear selection and exit selection mode
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
+    setSelectionMode(false);
   }, []);
 
   // Bulk actions
@@ -169,6 +172,20 @@ export function TaskHub() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectionMode(!selectionMode)}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm',
+                'transition-colors',
+                selectionMode
+                  ? 'bg-purple-primary text-white'
+                  : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary'
+              )}
+              title={selectionMode ? 'Exit selection mode' : 'Select tasks'}
+            >
+              <CheckCheck className="w-4 h-4" />
+              <span className="hidden sm:inline">Select</span>
+            </button>
             <button
               onClick={refresh}
               disabled={loading}
