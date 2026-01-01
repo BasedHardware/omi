@@ -10,8 +10,7 @@ import {
   Trash2,
   Check,
   X,
-  Eye,
-  EyeOff,
+  Lock,
   ThumbsUp,
   ThumbsDown,
 } from 'lucide-react';
@@ -178,7 +177,17 @@ export function MemoryCard({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-text-primary leading-relaxed">{memory.content}</p>
+            <p
+              onDoubleClick={() => setIsEditing(true)}
+              title="Double-click to edit"
+              className={cn(
+                'text-sm text-text-primary leading-relaxed',
+                'cursor-text select-none',
+                'hover:bg-bg-quaternary/30 rounded px-1 -mx-1 transition-colors'
+              )}
+            >
+              {memory.content}
+            </p>
           )}
 
           {/* Metadata row */}
@@ -201,29 +210,19 @@ export function MemoryCard({
                 {formatDate(memory.created_at)}
               </span>
 
-              {/* Visibility badge */}
-              <button
-                onClick={handleToggleVisibility}
-                className={cn(
-                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs',
-                  'transition-colors cursor-pointer',
-                  memory.visibility === 'public'
-                    ? 'bg-success/10 text-success hover:bg-success/20'
-                    : 'bg-warning/10 text-warning hover:bg-warning/20'
-                )}
-              >
-                {memory.visibility === 'public' ? (
-                  <>
-                    <Eye className="w-3 h-3" />
-                    Public
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="w-3 h-3" />
-                    Private
-                  </>
-                )}
-              </button>
+              {/* Private indicator */}
+              {memory.visibility === 'private' && (
+                <button
+                  onClick={handleToggleVisibility}
+                  className={cn(
+                    'p-0.5 rounded transition-colors cursor-pointer',
+                    'text-text-quaternary hover:text-text-tertiary'
+                  )}
+                  title="Private memory (click to make public)"
+                >
+                  <Lock className="w-3 h-3" />
+                </button>
+              )}
 
               {/* Edited indicator */}
               {memory.edited && (

@@ -38,6 +38,12 @@ import {
   Mic,
   Radio,
   FileText,
+  FlaskConical,
+  Activity,
+  UserPlus,
+  Lightbulb,
+  Target,
+  Moon,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
@@ -1398,6 +1404,39 @@ function DeveloperSection({
   const [showDeleteGraphDialog, setShowDeleteGraphDialog] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  // Experimental features (stored in localStorage)
+  const [experimentalFeatures, setExperimentalFeatures] = useState({
+    transcriptionDiagnostics: false,
+    autoCreateSpeakers: false,
+    followUpQuestions: false,
+    goalTracker: false,
+    dailyReflection: true,
+  });
+
+  // Load experimental features from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('omi_experimental_features');
+      if (saved) {
+        try {
+          setExperimentalFeatures(JSON.parse(saved));
+        } catch {
+          // Ignore parse errors
+        }
+      }
+    }
+  }, []);
+
+  // Save experimental features to localStorage when they change
+  const updateExperimentalFeature = (key: keyof typeof experimentalFeatures, value: boolean) => {
+    const updated = { ...experimentalFeatures, [key]: value };
+    setExperimentalFeatures(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('omi_experimental_features', JSON.stringify(updated));
+    }
+  };
+
   // Parse audio_bytes URL which may contain comma-separated URL and delay (e.g., "https://example.com,5")
   const parseAudioBytesUrl = (rawUrl: string) => {
     if (!rawUrl) return { url: '', delay: '5' };
@@ -1745,6 +1784,102 @@ function DeveloperSection({
                 </div>
               );
             })}
+          </div>
+        </Card>
+      </div>
+
+      {/* Experimental Features */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Experimental</h3>
+          <FlaskConical className="w-4 h-4 text-purple-400" />
+        </div>
+        <Card>
+          <div className="space-y-1">
+            {/* Transcription Diagnostics */}
+            <div className="flex items-center justify-between py-3 border-b border-border-secondary">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-bg-tertiary">
+                  <Activity className="w-4 h-4 text-text-tertiary" />
+                </div>
+                <div>
+                  <p className="text-text-primary font-medium text-sm">Transcription Diagnostics</p>
+                  <p className="text-xs text-text-tertiary">Detailed diagnostic messages</p>
+                </div>
+              </div>
+              <Toggle
+                enabled={experimentalFeatures.transcriptionDiagnostics}
+                onChange={(v) => updateExperimentalFeature('transcriptionDiagnostics', v)}
+              />
+            </div>
+
+            {/* Auto-create Speakers */}
+            <div className="flex items-center justify-between py-3 border-b border-border-secondary">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-bg-tertiary">
+                  <UserPlus className="w-4 h-4 text-text-tertiary" />
+                </div>
+                <div>
+                  <p className="text-text-primary font-medium text-sm">Auto-create Speakers</p>
+                  <p className="text-xs text-text-tertiary">Auto-create when name detected</p>
+                </div>
+              </div>
+              <Toggle
+                enabled={experimentalFeatures.autoCreateSpeakers}
+                onChange={(v) => updateExperimentalFeature('autoCreateSpeakers', v)}
+              />
+            </div>
+
+            {/* Follow-up Questions */}
+            <div className="flex items-center justify-between py-3 border-b border-border-secondary">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-bg-tertiary">
+                  <Lightbulb className="w-4 h-4 text-text-tertiary" />
+                </div>
+                <div>
+                  <p className="text-text-primary font-medium text-sm">Follow-up Questions</p>
+                  <p className="text-xs text-text-tertiary">Suggest questions after conversations</p>
+                </div>
+              </div>
+              <Toggle
+                enabled={experimentalFeatures.followUpQuestions}
+                onChange={(v) => updateExperimentalFeature('followUpQuestions', v)}
+              />
+            </div>
+
+            {/* Goal Tracker */}
+            <div className="flex items-center justify-between py-3 border-b border-border-secondary">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-bg-tertiary">
+                  <Target className="w-4 h-4 text-text-tertiary" />
+                </div>
+                <div>
+                  <p className="text-text-primary font-medium text-sm">Goal Tracker</p>
+                  <p className="text-xs text-text-tertiary">Track your personal goals on homepage</p>
+                </div>
+              </div>
+              <Toggle
+                enabled={experimentalFeatures.goalTracker}
+                onChange={(v) => updateExperimentalFeature('goalTracker', v)}
+              />
+            </div>
+
+            {/* Daily Reflection */}
+            <div className="flex items-center justify-between py-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-bg-tertiary">
+                  <Moon className="w-4 h-4 text-text-tertiary" />
+                </div>
+                <div>
+                  <p className="text-text-primary font-medium text-sm">Daily Reflection</p>
+                  <p className="text-xs text-text-tertiary">Get a 9 PM reminder to reflect on your day</p>
+                </div>
+              </div>
+              <Toggle
+                enabled={experimentalFeatures.dailyReflection}
+                onChange={(v) => updateExperimentalFeature('dailyReflection', v)}
+              />
+            </div>
           </div>
         </Card>
       </div>

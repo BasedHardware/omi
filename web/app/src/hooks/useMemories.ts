@@ -11,6 +11,48 @@ import {
   reviewMemory,
 } from '@/lib/api';
 
+// Cache configuration
+const CACHE_KEY = 'omi_memories_cache';
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface MemoriesCache {
+  memories: Memory[];
+  timestamp: number;
+  categoriesKey: string;
+}
+
+function getCacheKey(categories: MemoryCategory[]): string {
+  return categories.length > 0 ? categories.sort().join(',') : 'all';
+}
+
+function getCache(categoriesKey: string): MemoriesCache | null {
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+
+    const data: MemoriesCache = JSON.parse(cached);
+    if (data.categoriesKey !== categoriesKey) return null;
+    if (Date.now() - data.timestamp > CACHE_TTL_MS) return null;
+
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function setCache(memories: Memory[], categoriesKey: string): void {
+  try {
+    const data: MemoriesCache = {
+      memories,
+      timestamp: Date.now(),
+      categoriesKey,
+    };
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 export interface UseMemoriesOptions {
   categories?: MemoryCategory[];
   limit?: number;
@@ -48,11 +90,14 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
   );
 
   const initialFetchDone = useRef(false);
+  const cacheLoaded = useRef(false);
 
   // Fetch memories
-  const fetchMemories = useCallback(async (reset = false) => {
+  const fetchMemories = useCallback(async (reset = false, isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) {
+        setLoading(true);
+      }
       setError(null);
 
       const currentOffset = reset ? 0 : offset;
@@ -65,8 +110,15 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       if (reset) {
         setMemories(result);
         setOffset(result.length);
+        // Update cache with fresh data
+        setCache(result, getCacheKey(activeCategories));
       } else {
-        setMemories((prev) => [...prev, ...result]);
+        setMemories((prev) => {
+          const updated = [...prev, ...result];
+          // Update cache with all loaded memories
+          setCache(updated, getCacheKey(activeCategories));
+          return updated;
+        });
         setOffset((prev) => prev + result.length);
       }
 
@@ -78,18 +130,46 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     }
   }, [limit, offset, activeCategories]);
 
-  // Initial fetch
+  // Initial fetch with cache
   useEffect(() => {
     if (!initialFetchDone.current) {
       initialFetchDone.current = true;
-      fetchMemories(true);
+
+      // Try to load from cache first
+      const categoriesKey = getCacheKey(activeCategories);
+      const cached = getCache(categoriesKey);
+
+      if (cached && !cacheLoaded.current) {
+        cacheLoaded.current = true;
+        setMemories(cached.memories);
+        setOffset(cached.memories.length);
+        setHasMore(cached.memories.length >= limit);
+        setLoading(false);
+
+        // Fetch fresh data in background
+        fetchMemories(true, true);
+      } else {
+        fetchMemories(true);
+      }
     }
-  }, [fetchMemories]);
+  }, [fetchMemories, activeCategories, limit]);
 
   // Refetch when categories change
   useEffect(() => {
     if (initialFetchDone.current) {
-      fetchMemories(true);
+      // Check cache for new categories first
+      const categoriesKey = getCacheKey(activeCategories);
+      const cached = getCache(categoriesKey);
+
+      if (cached) {
+        setMemories(cached.memories);
+        setOffset(cached.memories.length);
+        setHasMore(cached.memories.length >= limit);
+        // Still fetch fresh in background
+        fetchMemories(true, true);
+      } else {
+        fetchMemories(true);
+      }
     }
   }, [activeCategories]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -100,11 +180,11 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     }
   }, [loading, hasMore, fetchMemories]);
 
-  // Refresh
+  // Refresh - always fetch fresh, ignore cache
   const refresh = useCallback(async () => {
     initialFetchDone.current = true;
     setOffset(0);
-    await fetchMemories(true);
+    await fetchMemories(true, false);
   }, [fetchMemories]);
 
   // Add memory
