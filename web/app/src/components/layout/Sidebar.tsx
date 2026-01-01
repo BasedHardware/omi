@@ -43,14 +43,14 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: 'Chat',
-    href: '/chat',
-    icon: <Sparkles className="w-5 h-5" />,
-  },
-  {
     label: 'Conversations',
     href: '/conversations',
     icon: <MessageSquare className="w-5 h-5" />,
+  },
+  {
+    label: 'Chat',
+    href: '/chat',
+    icon: <Sparkles className="w-5 h-5" />,
   },
   {
     label: 'Apps',
