@@ -69,6 +69,10 @@ class _FCMNotificationService implements NotificationInterface {
         debug: false);
 
     debugPrint('initializeNotifications: $initialized');
+
+    // Reset badge to clear existing badge count if any
+    int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
+    if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
 
   @override
