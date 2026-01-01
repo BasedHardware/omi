@@ -5,7 +5,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
@@ -13,6 +12,7 @@ import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class FoundDevices extends StatefulWidget {
@@ -76,7 +76,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error connecting to Apple Watch: $e'),
+          content: Text(context.l10n.errorConnectingAppleWatch(e.toString())),
           backgroundColor: Colors.red,
         ),
       );
@@ -175,12 +175,12 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (context) => ConfirmationDialog(
         title: device.getFirmwareWarningTitle(),
         description: warningMessage,
-        checkboxText: "Don't show it again",
+        checkboxText: context.l10n.dontShowAgain,
         checkboxValue: false,
         onCheckboxChanged: (value) {
           dontShowAgain = value;
         },
-        confirmText: "I Understand",
+        confirmText: context.l10n.iUnderstand,
         onConfirm: () {
           if (dontShowAgain) {
             SharedPreferencesUtil().saveBool(prefKey, true);
@@ -227,17 +227,17 @@ class _FoundDevicesState extends State<FoundDevices> {
             !provider.isConnected
                 ? Text(
                     provider.deviceList.isEmpty
-                        ? 'Searching for devices...'
-                        : '${provider.deviceList.length} ${provider.deviceList.length == 1 ? "DEVICE" : "DEVICES"} FOUND NEARBY',
+                        ? context.l10n.searchingForDevices
+                        : context.l10n.devicesFoundNearby(provider.deviceList.length),
                     style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 14,
                       color: Color(0x66FFFFFF),
                     ),
                   )
-                : const Text(
-                    'PAIRING SUCCESSFUL',
-                    style: TextStyle(
+                : Text(
+                    context.l10n.pairingSuccessful,
+                    style: const TextStyle(
                       fontWeight: FontWeight.w400,
                       fontSize: 12,
                       color: Color(0x66FFFFFF),

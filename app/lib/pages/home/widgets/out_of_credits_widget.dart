@@ -3,6 +3,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class OutOfCreditsWidget extends StatelessWidget {
@@ -22,10 +23,10 @@ class OutOfCreditsWidget extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  "You've reached your monthly limit.",
-                  style: TextStyle(
+                  context.l10n.monthlyLimitReached,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
                   ),
@@ -39,9 +40,9 @@ class OutOfCreditsWidget extends StatelessWidget {
                   MixpanelManager().paywallOpened('Out of Credits Banner');
                   routeToPage(context, const UsagePage());
                 },
-                child: const Text(
-                  'Check Usage',
-                  style: TextStyle(color: Color(0xFFC4B5FD), fontWeight: FontWeight.bold, fontSize: 13),
+                child: Text(
+                  context.l10n.checkUsage,
+                  style: const TextStyle(color: Color(0xFFC4B5FD), fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
             ],

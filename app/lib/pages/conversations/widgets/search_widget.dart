@@ -7,6 +7,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 

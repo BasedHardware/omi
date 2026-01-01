@@ -11,6 +11,7 @@ import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -229,9 +230,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
@@ -247,10 +248,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Todoist authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('Todoist')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -270,9 +271,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
@@ -286,10 +287,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Asana authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('Asana')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -309,9 +310,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
@@ -325,10 +326,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start Google Tasks authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('Google Tasks')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -348,9 +349,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           if (success) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please complete authentication in your browser. Once done, return to the app.'),
-                  duration: Duration(seconds: 5),
+                SnackBar(
+                  content: Text(context.l10n.completeAuthBrowser),
+                  duration: const Duration(seconds: 5),
                 ),
               );
             }
@@ -364,10 +365,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Failed to start ClickUp authentication'),
+                SnackBar(
+                  content: Text(context.l10n.failedToStartAppAuth('ClickUp')),
                   backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
+                  duration: const Duration(seconds: 3),
                 ),
               );
             }
@@ -394,26 +395,26 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Connect to ${app.displayName}',
+            context.l10n.connectToAppTitle(app.displayName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'You\'ll need to authorize Omi to create tasks in your ${app.displayName} account. This will open your browser for authentication.',
+            context.l10n.authorizeOmiForTasks(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF8E8E93)),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Continue',
-                style: TextStyle(color: Colors.white),
+              child: Text(
+                context.l10n.continueButton,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -432,19 +433,19 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            '${app.displayName} Integration',
+            context.l10n.appIntegration(app.displayName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'Integration with ${app.displayName} is coming soon! We\'re working hard to bring you more task management options.',
+            context.l10n.integrationComingSoon(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text(
-                'Got it',
-                style: TextStyle(color: Colors.white),
+              child: Text(
+                context.l10n.gotIt,
+                style: const TextStyle(color: Colors.white),
               ),
             ),
           ],
@@ -654,9 +655,9 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Task Integrations',
-          style: TextStyle(
+        title: Text(
+          context.l10n.taskIntegrations,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -669,7 +670,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             IconButton(
               icon: const Icon(Icons.settings, color: Colors.white),
               onPressed: _openSelectedAppSettings,
-              tooltip: 'Configure Settings',
+              tooltip: context.l10n.configureSettings,
             ),
         ],
       ),
@@ -713,7 +714,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Tasks can be exported to one app at a time.',
+                        context.l10n.tasksExportedOneApp,
                         style: const TextStyle(
                           color: Color(0xFF8E8E93),
                           fontSize: 14,

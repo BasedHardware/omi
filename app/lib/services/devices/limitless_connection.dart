@@ -113,25 +113,46 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _highestReceivedIndex = index;
     }
 
-    if (_isBatchMode) {
-      _fragmentBuffer.putIfAbsent(index, () => {});
-      _fragmentBuffer[index]![seq] = payload;
+    // Both batch and real-time mode need fragment reassembly
+    _fragmentBuffer.putIfAbsent(index, () => {});
+    _fragmentBuffer[index]![seq] = payload;
 
-      if (_fragmentBuffer[index]!.length == numFrags) {
-        final completePayload = <int>[];
-        for (int i = 0; i < numFrags; i++) {
-          final fragment = _fragmentBuffer[index]![i];
-          if (fragment != null) {
-            completePayload.addAll(fragment);
-          }
+    if (_fragmentBuffer[index]!.length == numFrags) {
+      final completePayload = <int>[];
+      for (int i = 0; i < numFrags; i++) {
+        final fragment = _fragmentBuffer[index]![i];
+        if (fragment != null) {
+          completePayload.addAll(fragment);
         }
+      }
 
-        _fragmentBuffer.remove(index);
+      _fragmentBuffer.remove(index);
 
+      if (_isBatchMode) {
         _handlePendantMessage(completePayload);
+      } else {
+        _handleRealTimePayload(completePayload);
+      }
+    }
+  }
+
+  /// Handle reassembled payload in real-time mode
+  void _handleRealTimePayload(List<int> payload) {
+    // Extract Opus frames from the protobuf payload
+    final frames = _extractOpusFramesFromFlashPage(payload);
+
+    if (frames.isNotEmpty) {
+      for (final frame in frames) {
+        _audioController.add(frame);
       }
     } else {
-      _rawDataBuffer.addAll(data);
+      final result = _extractOpusFrames(payload);
+      final extractedFrames = result[0] as List<List<int>>;
+      if (extractedFrames.isNotEmpty) {
+        for (final frame in extractedFrames) {
+          _audioController.add(frame);
+        }
+      }
     }
   }
 
@@ -1456,52 +1477,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     final wrapperController = StreamController<List<int>>();
-    Timer? extractionTimer;
     StreamSubscription? audioSubscription;
 
     wrapperController.onCancel = () {
-      extractionTimer?.cancel();
       audioSubscription?.cancel();
     };
-
-    extractionTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      if (_isBatchMode) {
-        return;
-      }
-
-      if (_rawDataBuffer.isEmpty) return;
-
-      final result = _extractOpusFrames(_rawDataBuffer);
-      final frames = result[0] as List<List<int>>;
-      final remainingStartPos = result[1] as int;
-
-      if (frames.isNotEmpty) {
-        for (final frame in frames) {
-          _audioController.add(frame);
-        }
-      }
-
-      if (remainingStartPos > 0) {
-        final remaining = _rawDataBuffer.sublist(remainingStartPos);
-        _rawDataBuffer.clear();
-        _rawDataBuffer.addAll(remaining);
-      } else if (frames.isNotEmpty) {
-        // This shouldn't really happen but we don't know how the device behaves so we clear the buffer just in case.
-        _rawDataBuffer.clear();
-      }
-
-      if (_rawDataBuffer.length > 65536) {
-        debugPrint('Limitless: Buffer overflow, clearing buffer');
-        _rawDataBuffer.clear();
-      }
-
-      // NOTE: Do NOT acknowledge based on packet index during real-time streaming!
-      // TODO: Verify if acknowledgement is needed during real-time streaming.
-      // if (_highestReceivedIndex > _lastAcknowledgedIndex && frames.isNotEmpty) {
-      //   _lastAcknowledgedIndex = _highestReceivedIndex;
-      //   acknowledgeProcessedData(_highestReceivedIndex);
-      // }
-    });
 
     audioSubscription = _audioController.stream.listen(
       (frame) => wrapperController.add(frame),

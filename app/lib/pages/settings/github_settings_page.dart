@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
 import 'package:omi/services/github_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:shimmer/shimmer.dart';
 
 class GitHubSettingsPage extends StatefulWidget {
@@ -68,7 +69,7 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load repositories: $e'),
+            content: Text(context.l10n.failedToLoadRepos(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -89,15 +90,15 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Default repository saved'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(context.l10n.defaultRepoSaved),
+          duration: const Duration(seconds: 2),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to save default repository'),
+        SnackBar(
+          content: Text(context.l10n.failedToSaveDefaultRepo),
           backgroundColor: Colors.red,
         ),
       );
@@ -114,9 +115,9 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'GitHub Settings',
-          style: TextStyle(
+        title: Text(
+          context.l10n.appSettings('GitHub'),
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -212,20 +213,20 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
       disconnectService: _githubService.disconnect,
       showRefresh: true,
       onRefresh: _initializeGitHub,
-      infoText: 'Issues will be created in your default repository',
+      infoText: context.l10n.issuesCreatedInRepo,
       children: [
-        const Text(
-          'Default Repository',
-          style: TextStyle(
+        Text(
+          context.l10n.defaultRepository,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Select a default repository for creating issues. You can still specify a different repository when creating issues.',
-          style: TextStyle(
+        Text(
+          context.l10n.selectDefaultRepoDesc,
+          style: const TextStyle(
             color: Color(0xFF8E8E93),
             fontSize: 14,
           ),
@@ -238,10 +239,10 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
               color: const Color(0xFF1C1C1E),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
-                'No repositories found',
-                style: TextStyle(
+                context.l10n.noReposFound,
+                style: const TextStyle(
                   color: Color(0xFF8E8E93),
                   fontSize: 14,
                 ),
@@ -286,9 +287,9 @@ class _GitHubSettingsPageState extends State<GitHubSettingsPage> {
                                     color: Colors.orange.withOpacity(0.2),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
-                                  child: const Text(
-                                    'Private',
-                                    style: TextStyle(
+                                  child: Text(
+                                    context.l10n.private,
+                                    style: const TextStyle(
                                       color: Colors.orange,
                                       fontSize: 10,
                                     ),

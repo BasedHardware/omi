@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:provider/provider.dart';
 
@@ -43,26 +44,26 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Disconnect from ${widget.appName}?',
+            context.l10n.disconnectFromApp(widget.appName),
             style: const TextStyle(color: Colors.white),
           ),
           content: Text(
-            'This will remove your ${widget.appName} authentication. You\'ll need to reconnect to use it again.',
+            context.l10n.disconnectFromAppDesc(widget.appName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0xFF8E8E93)),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
               ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Disconnect',
-                style: TextStyle(color: Colors.red),
+              child: Text(
+                context.l10n.disconnect,
+                style: const TextStyle(color: Colors.red),
               ),
             ),
           ],
@@ -92,7 +93,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
       provider.refresh();
       scaffoldMessenger.showSnackBar(
         SnackBar(
-          content: Text('Disconnected from ${widget.appName}'),
+          content: Text(context.l10n.disconnectedFrom(widget.appName)),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -112,7 +113,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          '${widget.appName} Settings',
+          context.l10n.appSettings(widget.appName),
           style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -159,9 +160,9 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                   ],
                 ),
               ),
-              const Text(
-                'Account',
-                style: TextStyle(
+              Text(
+                context.l10n.account,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -169,7 +170,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                widget.infoText ?? 'Your action items will be synced to your ${widget.appName} account',
+                widget.infoText ?? context.l10n.actionItemsSyncedTo(widget.appName),
                 style: const TextStyle(
                   color: Color(0xFF8E8E93),
                   fontSize: 14,
@@ -205,7 +206,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'Disconnect from ${widget.appName}',
+                        context.l10n.disconnectFromApp(widget.appName).replaceAll('?', ''),
                         style: const TextStyle(
                           color: Colors.red,
                           fontSize: 16,

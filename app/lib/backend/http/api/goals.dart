@@ -67,8 +67,9 @@ class Goal {
   }
 
   double get progressPercentage {
-    if (targetValue <= minValue) return currentValue > minValue ? 1.0 : 0.0;
-    return ((currentValue - minValue) / (targetValue - minValue)).clamp(0.0, 1.0);
+    // For numeric goals, progress is simply currentValue / targetValue
+    if (targetValue <= 0) return currentValue > 0 ? 1.0 : 0.0;
+    return (currentValue / targetValue).clamp(0.0, 1.0);
   }
 }
 

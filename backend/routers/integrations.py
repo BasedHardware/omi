@@ -42,7 +42,7 @@ AUTH_PROVIDERS = {
         'redirect_path': '/v2/integrations/google-calendar/callback',
         'query': {
             'response_type': 'code',
-            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/gmail.readonly',
+            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly',
             'access_type': 'offline',
             'prompt': 'consent',
         },

@@ -13,7 +13,8 @@ enum SttProvider {
   geminiLive,
   localWhisper,
   custom,
-  customLive;
+  customLive,
+  onDeviceWhisper;
 
   static SttProvider fromString(String value) {
     return SttProvider.values.firstWhere(
@@ -59,6 +60,7 @@ class SttLanguages {
   };
 
   static const List<String> whisperSupported = [
+    'multi',
     'en',
     'es',
     'fr',
@@ -278,6 +280,18 @@ class SttProviderConfig {
       defaultLanguage: 'en',
       responseSchema: SttResponseSchema.openAI,
     ),
+    SttProvider.onDeviceWhisper: SttProviderConfig(
+      provider: SttProvider.onDeviceWhisper,
+      displayName: 'On-Device',
+      description: 'Run Whisper locally on your device (Offline)',
+      icon: FontAwesomeIcons.microchip,
+      requestType: SttRequestType.multipartForm, // Used for polling/file interface internally
+      supportedLanguages: SttLanguages.whisperSupported,
+      supportedModels: const ['tiny', 'base', 'small', 'medium', 'large-v1', 'large-v2'],
+      defaultLanguage: 'multi',
+      defaultModel: 'tiny',
+      responseSchema: SttResponseSchema.openAI,
+    ),
   };
 
   static SttProviderConfig get(SttProvider provider) => _configs[provider]!;
@@ -301,6 +315,7 @@ class SttProviderConfig {
     SttProvider.deepgramLive,
     SttProvider.geminiLive,
     SttProvider.localWhisper,
+    SttProvider.onDeviceWhisper,
     SttProvider.customLive,
   ];
 

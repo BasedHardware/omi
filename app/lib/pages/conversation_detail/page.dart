@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
@@ -208,14 +209,14 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.dispose();
   }
 
-  String _getTabTitle(ConversationTab tab) {
+  String _getTabTitle(BuildContext context, ConversationTab tab) {
     switch (tab) {
       case ConversationTab.transcript:
-        return 'Transcript';
+        return context.l10n.transcriptTab;
       case ConversationTab.summary:
-        return 'Conversation';
+        return context.l10n.conversationTab;
       case ConversationTab.actionItems:
-        return 'Action Items';
+        return context.l10n.actionItemsTab;
     }
   }
 
@@ -287,9 +288,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             Navigator.pop(context); // Close dialog
             Navigator.pop(context, {'deleted': true}); // Close detail page
           },
-          'Delete Conversation?',
-          'Are you sure you want to delete this conversation? This action cannot be undone.',
-          okButtonText: 'Confirm',
+          context.l10n.deleteConversationTitle,
+          context.l10n.deleteConversationMessage,
+          okButtonText: context.l10n.confirm,
         ),
       );
     } else {
@@ -299,10 +300,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           context,
           () => Navigator.pop(context),
           () => Navigator.pop(context),
-          'Unable to Delete Conversation',
-          'Please check your internet connection and try again.',
+          context.l10n.unableToDeleteConversation,
+          context.l10n.noInternetConnection,
           singleButton: true,
-          okButtonText: 'OK',
+          okButtonText: context.l10n.ok,
         ),
       );
     }
@@ -311,7 +312,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void _copyContent(BuildContext context, String content) {
     Clipboard.setData(ClipboardData(text: content));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Content copied to clipboard')),
+      SnackBar(content: Text(context.l10n.contentCopied)),
     );
     HapticFeedback.lightImpact();
   }
@@ -358,8 +359,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       child: MessageListener<ConversationDetailProvider>(
         showError: (error) {
           if (error == 'REPROCESS_FAILED') {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Error while processing conversation. Please try again later.')));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(context.l10n.errorProcessingConversation)));
           }
         },
         showInfo: (info) {},
@@ -399,7 +400,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               child: Padding(
                 padding: const EdgeInsets.only(left: 8.0),
                 child: Text(
-                  _getTabTitle(selectedTab),
+                  _getTabTitle(context, selectedTab),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -457,7 +458,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                     } else {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Failed to update starred status.')),
+                                        SnackBar(content: Text(context.l10n.failedToUpdateStarred)),
                                       );
                                     }
                                   } catch (e) {
@@ -510,7 +511,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     bool shared = await setConversationVisibility(provider.conversation.id);
                                     if (!shared) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Conversation URL could not be shared.')),
+                                        SnackBar(content: Text(context.l10n.conversationUrlNotShared)),
                                       );
                                       setState(() {
                                         _isSharing = false;
@@ -600,12 +601,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                         child: PullDownButton(
                           itemBuilder: (context) => [
                             PullDownMenuItem(
-                              title: 'Copy Transcript',
+                              title: context.l10n.copyTranscript,
                               iconWidget: FaIcon(FontAwesomeIcons.copy, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
                             ),
                             PullDownMenuItem(
-                              title: 'Copy Summary',
+                              title: context.l10n.copySummary,
                               iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                               onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                             ),
@@ -615,18 +616,18 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
                             // ),
                             PullDownMenuItem(
-                              title: 'Test Prompt',
+                              title: context.l10n.testPrompt,
                               iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
                               onTap: () => _handleMenuSelection(context, 'test_prompt', provider),
                             ),
                             if (!provider.conversation.discarded)
                               PullDownMenuItem(
-                                title: 'Reprocess Conversation',
+                                title: context.l10n.reprocessConversation,
                                 iconWidget: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'reprocess', provider),
                               ),
                             PullDownMenuItem(
-                              title: 'Delete Conversation',
+                              title: context.l10n.deleteConversation,
                               iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
                               onTap: () => _handleMenuSelection(context, 'delete', provider),
                             ),
@@ -993,7 +994,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       conversationId: provider.conversation.id,
                                       query: value,
                                       resultsCount: _totalSearchResults,
-                                      activeTab: _getTabTitle(selectedTab),
+                                      activeTab: _getTabTitle(context, selectedTab),
                                     );
                                   }
                                 });

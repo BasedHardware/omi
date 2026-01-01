@@ -51,6 +51,7 @@ from utils.retrieval.tools import (
     create_github_issue_tool,
     close_github_issue_tool,
     search_files_tool,
+    manage_daily_summary_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -102,6 +103,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
         'get_omi_product_info_tool': 'Looking up product info',
+        'manage_daily_summary_tool': 'Updating notification settings',
     }
 
     # Try exact match first
@@ -240,6 +242,7 @@ def execute_agentic_chat(
         create_github_issue_tool,
         close_github_issue_tool,
         search_files_tool,
+        manage_daily_summary_tool,
     ]
 
     # Load tools from enabled apps
@@ -339,6 +342,7 @@ async def execute_agentic_chat_stream(
         create_github_issue_tool,
         close_github_issue_tool,
         search_files_tool,
+        manage_daily_summary_tool,
     ]
 
     # Load tools from enabled apps

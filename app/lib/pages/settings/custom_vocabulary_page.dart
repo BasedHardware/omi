@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class CustomVocabularyPage extends StatefulWidget {
@@ -66,9 +67,9 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'Add Words',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.addWords,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -94,7 +95,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Names, terms, or uncommon words',
+                      context.l10n.addWordsDesc,
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 13,
@@ -121,7 +122,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                     enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
                     style: const TextStyle(color: Colors.white, fontSize: 15),
                     decoration: InputDecoration(
-                      hintText: 'Omi, Callie, OpenAI',
+                      hintText: context.l10n.vocabularyHint,
                       hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       border: InputBorder.none,
@@ -299,9 +300,9 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
             icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: const Text(
-            'Custom Vocabulary',
-            style: TextStyle(
+          title: Text(
+            context.l10n.customVocabularyTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,

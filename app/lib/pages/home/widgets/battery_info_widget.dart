@@ -8,6 +8,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class BatteryInfoWidget extends StatelessWidget {
@@ -116,7 +117,7 @@ class BatteryInfoWidget extends StatelessWidget {
                       ),
                       const SizedBox(width: 6.0),
                       Text(
-                        "Disconnected",
+                        context.l10n.disconnected,
                         style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white70, fontSize: 12),
                       ),
                     ],
@@ -152,13 +153,13 @@ class BatteryInfoWidget extends StatelessWidget {
                       isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
                       deviceProvider.isConnecting && isMemoriesPage
                           ? Text(
-                              "Searching",
+                              context.l10n.searching,
                               style:
                                   Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                             )
                           : isMemoriesPage
                               ? Text(
-                                  "Connect Device",
+                                  context.l10n.connectDevice,
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodyMedium!

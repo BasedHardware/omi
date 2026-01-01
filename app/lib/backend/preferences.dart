@@ -177,6 +177,11 @@ class SharedPreferencesUtil {
 
   bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
 
+  // Daily reflection notification at 9 PM - default is true (enabled)
+  set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
+
+  bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
+
   // Wrapped 2025 - track if user has viewed their wrapped
   set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
 

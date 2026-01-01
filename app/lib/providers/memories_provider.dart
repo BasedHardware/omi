@@ -158,6 +158,15 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
 
     _memories = await getMemories(limit: limit);
+
+    // Merge pending memories that haven't synced yet
+    final pendingMemories = SharedPreferencesUtil().pendingMemories;
+    for (var pending in pendingMemories) {
+      if (!_memories.any((m) => m.id == pending.id)) {
+        _memories.add(pending);
+      }
+    }
+
     _loading = false;
     _setCategories();
   }
@@ -300,8 +309,22 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
     notifyListeners();
 
+    // Save to pending memories for persistence across app restarts
+    SharedPreferencesUtil().addPendingMemory(newMemory);
 
-    // Always return true since memory is saved locally
+    // Try to sync to server immediately
+    final success = await createMemoryServer(
+      content,
+      visibility.name,
+      category.name,
+    );
+
+    if (success) {
+      // Remove from pending if server sync succeeded
+      SharedPreferencesUtil().removePendingMemory(newMemory.id);
+    }
+
+    // Return true since memory is saved locally regardless of server sync
     return true;
   }
 

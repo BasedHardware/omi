@@ -15,11 +15,13 @@ import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 class DesktopActionItemFormDialog extends StatefulWidget {
   final ActionItemWithMetadata? actionItem;
   final String? conversationId;
+  final DateTime? defaultDueDate;
 
   const DesktopActionItemFormDialog({
     super.key,
     this.actionItem,
     this.conversationId,
+    this.defaultDueDate,
   });
 
   @override
@@ -46,6 +48,8 @@ class _DesktopActionItemFormDialogState extends State<DesktopActionItemFormDialo
       _descriptionController.text = widget.actionItem!.description;
       _isCompleted = widget.actionItem!.completed;
       _dueDate = widget.actionItem!.dueAt;
+    } else {
+      _dueDate = widget.defaultDueDate;
     }
 
     if (!_isEditing) {

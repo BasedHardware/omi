@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ConversationTimeoutDialog {
   static Future<void> show(BuildContext context) async {
@@ -24,9 +25,9 @@ class ConversationTimeoutDialog {
             return AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text(
-                'Conversation Timeout',
-                style: TextStyle(
+              title: Text(
+                context.l10n.conversationTimeout,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
@@ -38,9 +39,9 @@ class ConversationTimeoutDialog {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Choose how long to wait in silence before automatically ending a conversation:',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.conversationTimeoutDesc,
+                      style: const TextStyle(
                         color: Color(0xFF8E8E93),
                         fontSize: 14,
                       ),
@@ -115,9 +116,9 @@ class ConversationTimeoutDialog {
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(color: Color(0xFF8E8E93)),
+                  child: Text(
+                    context.l10n.cancel,
+                    style: const TextStyle(color: Color(0xFF8E8E93)),
                   ),
                 ),
                 TextButton(
@@ -135,9 +136,9 @@ class ConversationTimeoutDialog {
                     }
                     AppSnackbar.showSnackbar(message);
                   },
-                  child: const Text(
-                    'Save',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  child: Text(
+                    context.l10n.save,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],

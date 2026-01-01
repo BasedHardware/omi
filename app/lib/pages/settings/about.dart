@@ -4,6 +4,7 @@ import 'package:omi/pages/settings/webview.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutOmiPage extends StatefulWidget {
@@ -19,7 +20,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        title: Text('About ${Env.appName}'),
+        title: Text(context.l10n.aboutOmi),
         backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: Padding(
@@ -28,7 +29,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
           children: [
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
-              title: const Text('Privacy Policy', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.privacyPolicy, style: const TextStyle(color: Colors.white)),
               trailing: const Icon(Icons.privacy_tip_outlined, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Privacy Policy');
@@ -40,7 +41,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
-              title: const Text('Visit Website', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.visitWebsite, style: const TextStyle(color: Colors.white)),
               subtitle: const Text('https://omi.me'),
               trailing: const Icon(Icons.language_outlined, size: 20),
               onTap: () {
@@ -50,7 +51,7 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
               },
             ),
             ListTile(
-              title: const Text('Help or Inquiries?', style: TextStyle(color: Colors.white)),
+              title: Text(context.l10n.helpOrInquiries, style: const TextStyle(color: Colors.white)),
               subtitle: const Text('team@basedhardware.com'),
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
               trailing: const Icon(Icons.help_outline_outlined, color: Colors.white, size: 20),
@@ -60,8 +61,8 @@ class _AboutOmiPageState extends State<AboutOmiPage> {
             ),
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(4, 0, 24, 0),
-              title: const Text('Join the community!', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('8000+ members and counting.'),
+              title: Text(context.l10n.joinCommunity, style: const TextStyle(color: Colors.white)),
+              subtitle: Text(context.l10n.membersAndCounting),
               trailing: const Icon(Icons.discord, color: Colors.purple, size: 20),
               onTap: () {
                 MixpanelManager().pageOpened('About Join Discord');

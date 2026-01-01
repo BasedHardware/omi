@@ -7,6 +7,7 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:omi/widgets/dialog.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:gradient_borders/gradient_borders.dart';
 
 class DeleteAccount extends StatefulWidget {
@@ -50,7 +51,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         appBar: AppBar(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          title: const Text('Delete Account'),
+          title: Text(context.l10n.deleteAccountTitle),
         ),
         body: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -59,11 +60,11 @@ class _DeleteAccountState extends State<DeleteAccount> {
               const SizedBox(
                 height: 10,
               ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 50),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 50),
                 child: Text(
-                  "Are you sure you want to delete your account?",
-                  style: TextStyle(
+                  context.l10n.deleteAccountConfirm,
+                  style: const TextStyle(
                     fontSize: 24,
                   ),
                   textAlign: TextAlign.center,
@@ -72,25 +73,24 @@ class _DeleteAccountState extends State<DeleteAccount> {
               const SizedBox(
                 height: 10,
               ),
-              const Text(
-                "This cannot be undone.",
-                style: TextStyle(fontSize: 18),
+              Text(
+                context.l10n.cannotBeUndone,
+                style: const TextStyle(fontSize: 18),
               ),
               const SizedBox(
                 height: 30,
               ),
-              const ListTile(
-                leading: Icon(Icons.message_rounded),
-                title: Text("All of your memories and conversations will be permanently erased."),
+              ListTile(
+                leading: const Icon(Icons.message_rounded),
+                title: Text(context.l10n.allDataErased),
               ),
-              const ListTile(
-                leading: Icon(Icons.person_pin_outlined),
-                title: Text("Your Apps and Integrations will be disconnected effectively immediately."),
+              ListTile(
+                leading: const Icon(Icons.person_pin_outlined),
+                title: Text(context.l10n.appsDisconnected),
               ),
-              const ListTile(
-                leading: Icon(Icons.upload_file_outlined),
-                title: Text(
-                    "You can export your data before deleting your account, but once deleted, it cannot be recovered."),
+              ListTile(
+                leading: const Icon(Icons.upload_file_outlined),
+                title: Text(context.l10n.exportBeforeDelete),
               ),
               const Spacer(),
               Row(
@@ -105,8 +105,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.80,
-                    child: const Text(
-                        "I understand that deleting my account is permanent and all data, including memories and conversations, will be lost and cannot be recovered. "),
+                    child: Text(context.l10n.deleteAccountCheckbox),
                   ),
                 ],
               ),
@@ -142,15 +141,13 @@ class _DeleteAccountState extends State<DeleteAccount> {
                                   }, () {
                                     deleteAccountNow();
                                     Navigator.of(context).pop();
-                                  }, "Are you sure?\n",
-                                      "This action is irreversible and will permanently delete your account and all associated data. Are you sure you want to proceed?",
-                                      okButtonText: 'Delete Now', cancelButtonText: 'Go Back');
+                                  }, context.l10n.areYouSure, context.l10n.deleteAccountFinal,
+                                      okButtonText: context.l10n.deleteNow, cancelButtonText: context.l10n.goBack);
                                 });
                           } else {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'Check the box to confirm you understand that deleting your account is permanent and irreversible.'),
+                              SnackBar(
+                                content: Text(context.l10n.checkBoxToConfirm),
                               ),
                             );
                           }

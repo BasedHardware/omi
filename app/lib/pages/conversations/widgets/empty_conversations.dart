@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class EmptyConversationsWidget extends StatefulWidget {
   final bool isStarredFilterActive;
@@ -35,16 +36,16 @@ class _EmptyConversationsWidgetState extends State<EmptyConversationsWidget> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'No starred conversations yet.',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+            Text(
+              context.l10n.noStarredConversations,
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
               child: Text(
-                'To star a conversation, open it and tap the star icon in the header.',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
+                context.l10n.starConversationHint,
+                style: const TextStyle(color: Colors.grey, fontSize: 14),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -53,11 +54,11 @@ class _EmptyConversationsWidgetState extends State<EmptyConversationsWidget> {
       );
     }
 
-    return const Padding(
-      padding: EdgeInsets.only(top: 120.0),
+    return Padding(
+      padding: const EdgeInsets.only(top: 120.0),
       child: Text(
-        'No conversations yet.',
-        style: TextStyle(color: Colors.grey, fontSize: 16),
+        context.l10n.noConversationsYet,
+        style: const TextStyle(color: Colors.grey, fontSize: 16),
       ),
     );
   }

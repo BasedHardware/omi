@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -137,9 +138,9 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
             openAppSettings();
           },
           () {},
-          'Permissions Required',
-          'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.',
-          okButtonText: 'Open Settings',
+          context.l10n.permissionsRequired,
+          context.l10n.permissionsRequiredDesc,
+          okButtonText: context.l10n.openSettings,
           singleButton: true,
         ),
         barrierDismissible: false,
@@ -224,7 +225,7 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text(
-                                              'Connect ${Env.appName} / ${Env.appName}Glass',
+                                              context.l10n.connectOmiOmiGlass,
                                               style: const TextStyle(
                                                 color: Colors.black87,
                                                 fontSize: 18,
@@ -311,9 +312,9 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              const Text(
-                                                'Continue Without Device',
-                                                style: TextStyle(
+                                              Text(
+                                                context.l10n.continueWithoutDevice,
+                                                style: const TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.w600,

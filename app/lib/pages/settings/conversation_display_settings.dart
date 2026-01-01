@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class ConversationDisplaySettings extends StatefulWidget {
@@ -116,18 +117,18 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
   }
 
   Widget _buildThresholdSelector(ConversationProvider provider) {
-    final thresholds = [
-      (60, '1 min'),
-      (120, '2 min'),
-      (180, '3 min'),
-      (240, '4 min'),
-      (300, '5 min'),
-    ];
-
     String getThresholdLabel(int seconds) {
       final minutes = seconds ~/ 60;
-      return '$minutes min';
+      return context.l10n.minLabel(minutes);
     }
+
+    final thresholds = [
+      (60, context.l10n.minLabel(1)),
+      (120, context.l10n.minLabel(2)),
+      (180, context.l10n.minLabel(3)),
+      (240, context.l10n.minLabel(4)),
+      (300, context.l10n.minLabel(5)),
+    ];
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -156,9 +157,9 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Duration Threshold',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.durationThreshold,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
@@ -166,7 +167,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Hide conversations shorter than this',
+                      context.l10n.durationThresholdDesc,
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 12,
@@ -243,9 +244,9 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
           icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Conversation Display',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        title: Text(
+          context.l10n.conversationDisplay,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
         ),
         centerTitle: true,
       ),
@@ -257,15 +258,15 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSectionHeader(
-                  'Visibility',
-                  subtitle: 'Control which conversations appear in your list',
+                  context.l10n.visibility,
+                  subtitle: context.l10n.visibilitySubtitle,
                 ),
                 _buildSectionContainer(
                   children: [
                     _buildToggleItem(
                       icon: FontAwesomeIcons.clock,
-                      title: 'Show Short Conversations',
-                      description: 'Display conversations shorter than the threshold',
+                      title: context.l10n.showShortConversations,
+                      description: context.l10n.showShortConversationsDesc,
                       value: provider.showShortConversations,
                       onChanged: (_) {
                         provider.toggleShortConversations();
@@ -275,8 +276,8 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                     const Divider(height: 1, color: Color(0xFF3C3C43)),
                     _buildToggleItem(
                       icon: FontAwesomeIcons.trash,
-                      title: 'Show Discarded Conversations',
-                      description: 'Include conversations marked as discarded',
+                      title: context.l10n.showDiscardedConversations,
+                      description: context.l10n.showDiscardedConversationsDesc,
                       value: provider.showDiscardedConversations,
                       onChanged: (_) {
                         provider.toggleDiscardConversations();
@@ -287,8 +288,8 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
                 ),
                 const SizedBox(height: 32),
                 _buildSectionHeader(
-                  'Short Conversation Threshold',
-                  subtitle: 'Conversations shorter than this will be hidden unless enabled above',
+                  context.l10n.shortConversationThreshold,
+                  subtitle: context.l10n.shortConversationThresholdSubtitle,
                 ),
                 _buildSectionContainer(
                   children: [

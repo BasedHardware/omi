@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/providers/onboarding_provider.dart';
@@ -19,7 +20,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: const Text('Connect'),
+          title: Text(context.l10n.connect),
           backgroundColor: Theme.of(context).colorScheme.primary,
           actions: [
             IconButton(

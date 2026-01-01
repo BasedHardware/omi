@@ -55,6 +55,7 @@ nvidia-cusparselt-cu12==0.7.1
 nvidia-nccl-cu12==2.27.3
 nvidia-nvjitlink-cu12==12.8.93
 nvidia-nvtx-cu12==12.8.90
+omegaconf==2.3.0
 opentelemetry-api==1.39.1
 opentelemetry-exporter-otlp==1.39.1
 opentelemetry-exporter-otlp-proto-common==1.39.1

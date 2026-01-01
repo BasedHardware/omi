@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/calendar_provider.dart';
 import 'package:omi/services/calendar_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -53,9 +54,9 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
       appBar: AppBar(
         backgroundColor: ResponsiveHelper.backgroundPrimary,
         elevation: 0,
-        title: const Text(
-          'Calendar settings',
-          style: TextStyle(
+        title: Text(
+          context.l10n.calendarSettings,
+          style: const TextStyle(
             color: ResponsiveHelper.textPrimary,
             fontSize: 20,
             fontWeight: FontWeight.w600,
@@ -72,14 +73,14 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
             children: [
               // Calendar Providers Section
-              _buildSectionHeader('Calendar Providers'),
+              _buildSectionHeader(context.l10n.calendarProviders),
               const SizedBox(height: 12),
               _buildCalendarProviderCard(
                 context,
                 icon: FontAwesomeIcons.calendar,
                 iconColor: const Color(0xFF5AC8FA),
-                title: 'macOS Calendar',
-                description: 'Connect your local macOS calendar',
+                title: context.l10n.macOsCalendar,
+                description: context.l10n.connectMacOsCalendar,
                 isEnabled: provider.isAuthorized && provider.isMonitoring,
                 onToggle: (value) async {
                   if (value) {
@@ -101,8 +102,8 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                 context,
                 icon: FontAwesomeIcons.google,
                 iconColor: const Color(0xFF4285F4),
-                title: 'Google Calendar',
-                description: 'Sync with your Google account',
+                title: context.l10n.googleCalendar,
+                description: context.l10n.syncGoogleAccount,
                 isEnabled: false,
                 onToggle: (value) {
                   _showComingSoonToast(context);
@@ -116,8 +117,8 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                 _buildSettingItem(
                   icon: FontAwesomeIcons.clock,
                   iconColor: ResponsiveHelper.textSecondary,
-                  title: 'Show upcoming meetings in menu bar',
-                  description: 'Display your next meeting and time until it starts in the macOS menu bar',
+                  title: context.l10n.showMeetingsMenuBar,
+                  description: context.l10n.showMeetingsMenuBarDesc,
                   value: _showMenuBarMeetings,
                   onChanged: (value) {
                     setState(() => _showMenuBarMeetings = value);
@@ -132,8 +133,8 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                 _buildSettingItem(
                   icon: FontAwesomeIcons.calendarDay,
                   iconColor: ResponsiveHelper.textSecondary,
-                  title: 'Show events with no participants',
-                  description: 'When enabled, Coming Up shows events without participants or a video link.',
+                  title: context.l10n.showEventsNoParticipants,
+                  description: context.l10n.showEventsNoParticipantsDesc,
                   value: _showEventsWithNoParticipants,
                   onChanged: (value) {
                     setState(() => _showEventsWithNoParticipants = value);
@@ -149,7 +150,7 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildSectionHeader('Your Meetings'),
+                    _buildSectionHeader(context.l10n.yourMeetings),
                     if (provider.upcomingMeetings.isNotEmpty)
                       TextButton(
                         onPressed: () => provider.refreshMeetings(),
@@ -158,9 +159,9 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text(
-                          'Refresh',
-                          style: TextStyle(
+                        child: Text(
+                          context.l10n.refresh,
+                          style: const TextStyle(
                             color: ResponsiveHelper.purplePrimary,
                             fontSize: 13,
                           ),
@@ -428,26 +429,26 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
             width: 1,
           ),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            Icon(
+            const Icon(
               Icons.event_busy,
               color: ResponsiveHelper.textTertiary,
               size: 40,
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
-              'No upcoming meetings found',
-              style: TextStyle(
+              context.l10n.noUpcomingMeetings,
+              style: const TextStyle(
                 color: ResponsiveHelper.textSecondary,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
             ),
-            SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
-              'Checking next 30 days',
-              style: TextStyle(
+              context.l10n.checkingNextDays,
+              style: const TextStyle(
                 color: ResponsiveHelper.textTertiary,
                 fontSize: 12,
               ),
@@ -528,9 +529,9 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
     final tomorrow = today.add(const Duration(days: 1));
 
     if (date == today) {
-      return 'Today';
+      return context.l10n.today;
     } else if (date == tomorrow) {
-      return 'Tomorrow';
+      return context.l10n.tomorrow;
     } else {
       // Show full date for other days
       return DateFormat('EEEE, MMMM d').format(date);
@@ -623,9 +624,9 @@ class _CalendarSettingsPageState extends State<CalendarSettingsPage> {
   void _showComingSoonToast(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text(
-          'Google Calendar integration coming soon!',
-          style: TextStyle(color: ResponsiveHelper.textPrimary),
+        content: Text(
+          context.l10n.googleCalendarComingSoon,
+          style: const TextStyle(color: ResponsiveHelper.textPrimary),
         ),
         backgroundColor: ResponsiveHelper.backgroundTertiary,
         behavior: SnackBarBehavior.floating,

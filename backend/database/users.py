@@ -100,6 +100,127 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
+def add_person_speech_sample(uid: str, person_id: str, sample_path: str, max_samples: int = 5) -> bool:
+    """
+    Append speech sample path to person's speech_samples list.
+    Limits to max_samples to prevent unlimited growth.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        sample_path: GCS path to the speech sample
+        max_samples: Maximum number of samples to keep (default 5)
+
+    Returns:
+        True if sample was added, False if limit reached
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_data = person_doc.to_dict()
+    current_samples = person_data.get('speech_samples', [])
+
+    # Check if we've hit the limit
+    if len(current_samples) >= max_samples:
+        return False
+
+    person_ref.update(
+        {
+            'speech_samples': firestore.ArrayUnion([sample_path]),
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def get_person_speech_samples_count(uid: str, person_id: str) -> int:
+    """Get the count of speech samples for a person."""
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return 0
+
+    person_data = person_doc.to_dict()
+    return len(person_data.get('speech_samples', []))
+
+
+def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
+    """
+    Remove a speech sample path from person's speech_samples list.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        sample_path: GCS path to remove
+
+    Returns:
+        True if removed, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_ref.update({
+        'speech_samples': firestore.ArrayRemove([sample_path]),
+        'updated_at': datetime.now(timezone.utc),
+    })
+    return True
+
+
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
+    """
+    Store speaker embedding for a person.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+        embedding: List of floats representing the speaker embedding
+
+    Returns:
+        True if stored successfully, False if person not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return False
+
+    person_ref.update(
+        {
+            'speaker_embedding': embedding,
+            'updated_at': datetime.now(timezone.utc),
+        }
+    )
+    return True
+
+
+def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
+    """
+    Get speaker embedding for a person.
+
+    Args:
+        uid: User ID
+        person_id: Person ID
+
+    Returns:
+        List of floats representing the embedding, or None if not found
+    """
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return None
+
+    person_data = person_doc.to_dict()
+    return person_data.get('speaker_embedding')
+
+
 def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
     if not user_ref.get().exists:

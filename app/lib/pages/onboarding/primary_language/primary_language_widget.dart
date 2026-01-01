@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:gradient_borders/gradient_borders.dart';
-import 'package:intercom_flutter/intercom_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class PrimaryLanguageWidget extends StatefulWidget {
@@ -83,13 +81,13 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              const Flexible(
+              Flexible(
                 child: Text(
-                  'Select your primary language',
+                  context.l10n.selectPrimaryLanguage,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   softWrap: true,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -107,7 +105,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                         Navigator.pop(context);
                       },
                 child: Text(
-                  'Done',
+                  context.l10n.done,
                   style: TextStyle(
                     color: currentSelectedLanguage == null ? null : Colors.white,
                   ),
@@ -116,9 +114,9 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Set your language for sharper transcriptions and a personalized experience',
-            style: TextStyle(
+          Text(
+            context.l10n.languageBenefits,
+            style: const TextStyle(
               fontSize: 14,
               color: Colors.grey,
             ),
@@ -130,18 +128,18 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
             autofocus: false,
             onSubmitted: (_) {}, // Prevent form submission on Enter
             decoration: InputDecoration(
-              hintText: 'Search language by name or code',
+              hintText: context.l10n.searchLanguageHint,
               hintStyle: const TextStyle(color: Colors.grey),
               prefixIcon: const Icon(Icons.search, color: Colors.grey),
               filled: true,
               fillColor: const Color(0xFF2A2A2A),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Color(0xFF35343B)),
+                borderSide: const BorderSide(color: Color(0xFF35343B)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Color(0xFF35343B)),
+                borderSide: const BorderSide(color: Color(0xFF35343B)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -152,10 +150,10 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
           const SizedBox(height: 16),
           Expanded(
             child: filteredLanguages.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No languages found',
-                      style: TextStyle(color: Colors.grey),
+                      context.l10n.noLanguagesFound,
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   )
                 : ListView.builder(
@@ -279,9 +277,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                 const SizedBox(height: 16),
 
                 // Main title
-                const Text(
-                  'What\'s your primary language?',
-                  style: TextStyle(
+                Text(
+                  context.l10n.whatsYourPrimaryLanguage,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -316,7 +314,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          selectedLanguageName ?? 'Select your language',
+                          selectedLanguageName ?? context.l10n.selectYourLanguage,
                           style: TextStyle(
                             color: selectedLanguageName != null ? Colors.white : Colors.grey[500],
                             fontSize: 18,
@@ -363,9 +361,9 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Continue',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.continueButton,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         fontFamily: 'Manrope',

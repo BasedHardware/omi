@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/env/env.dart';
@@ -243,6 +244,18 @@ Future<bool> deletePerson(String personId) async {
   return response.statusCode == 204;
 }
 
+Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/people/$personId/speech-samples/$sampleIndex',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  debugPrint('deletePersonSpeechSample response: ${response.body}');
+  return response.statusCode == 200;
+}
+
 Future<String> getFollowUpQuestion({String conversationId = '0'}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/joan/$conversationId/followup-question',
@@ -446,4 +459,124 @@ Future<UserSubscriptionResponse?> getUserSubscription() async {
     return UserSubscriptionResponse.fromJson(jsonDecode(response.body));
   }
   return null;
+}
+
+// Daily Summary Settings
+
+class DailySummarySettings {
+  final bool enabled;
+  final int hour; // Local hour (0-23)
+
+  DailySummarySettings({required this.enabled, required this.hour});
+
+  factory DailySummarySettings.fromJson(Map<String, dynamic> json) {
+    return DailySummarySettings(
+      enabled: json['enabled'] ?? true,
+      hour: json['hour'] ?? 22, // Default to 10 PM
+    );
+  }
+}
+
+Future<DailySummarySettings?> getDailySummarySettings() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return null;
+  debugPrint('getDailySummarySettings response: ${response.body}');
+  if (response.statusCode == 200) {
+    return DailySummarySettings.fromJson(jsonDecode(response.body));
+  }
+  return null;
+}
+
+Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
+  Map<String, dynamic> body = {};
+  if (enabled != null) {
+    body['enabled'] = enabled;
+  }
+  if (hour != null) {
+    body['hour'] = hour;
+  }
+
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode(body),
+  );
+  if (response == null) return false;
+  debugPrint('setDailySummarySettings response: ${response.body}');
+  return response.statusCode == 200;
+}
+
+// Daily Summaries API
+
+Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return [];
+
+  try {
+    final data = jsonDecode(response.body);
+    final summaries = (data['summaries'] as List<dynamic>?)?.map((e) => DailySummary.fromJson(e)).toList() ?? [];
+    return summaries;
+  } catch (e) {
+    debugPrint('Error parsing daily summaries: $e');
+    return [];
+  }
+}
+
+Future<DailySummary?> getDailySummary(String summaryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+
+  try {
+    final data = jsonDecode(response.body);
+    return DailySummary.fromJson(data);
+  } catch (e) {
+    debugPrint('Error parsing daily summary: $e');
+    return null;
+  }
+}
+
+Future<bool> deleteDailySummary(String summaryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  return response?.statusCode == 200;
+}
+
+/// Generate a daily summary for a specific date (or today if not specified)
+/// Returns the summary_id on success, null on failure
+Future<String?> generateDailySummary({String? date}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
+    headers: {},
+    method: 'POST',
+    body: date != null ? jsonEncode({'date': date}) : '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+
+  try {
+    final data = jsonDecode(response.body);
+    return data['summary_id'] as String?;
+  } catch (e) {
+    debugPrint('Error parsing generate summary response: $e');
+    return null;
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 
 class LanguageSelectionDialog {
@@ -78,9 +79,9 @@ class LanguageSelectionDialog {
             return AlertDialog(
               backgroundColor: const Color(0xFF1A1A1A),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text(
-                'Tell us your primary language',
-                style: TextStyle(
+              title: Text(
+                context.l10n.tellUsPrimaryLanguage,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -93,9 +94,9 @@ class LanguageSelectionDialog {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Set your language for sharper transcriptions and a personalized experience.',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.languageForTranscription,
+                      style: const TextStyle(
                         color: Colors.grey,
                         fontSize: 14,
                       ),
@@ -109,14 +110,14 @@ class LanguageSelectionDialog {
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFF8E8E93).withOpacity(0.3)),
                         ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 18),
-                            SizedBox(width: 8),
+                            const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 18),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Single Language Mode is enabled. Translation is disabled for higher accuracy.',
-                                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                                context.l10n.singleLanguageModeInfo,
+                                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
                               ),
                             ),
                           ],
@@ -128,7 +129,7 @@ class LanguageSelectionDialog {
                       onChanged: filterLanguages,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: 'Search language by name or code',
+                        hintText: context.l10n.searchLanguageHint,
                         hintStyle: const TextStyle(color: Colors.grey),
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
                         filled: true,
@@ -150,10 +151,10 @@ class LanguageSelectionDialog {
                     const SizedBox(height: 16),
                     Expanded(
                       child: filteredLanguages.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                'No languages found',
-                                style: TextStyle(color: Colors.grey),
+                                context.l10n.noLanguagesFound,
+                                style: const TextStyle(color: Colors.grey),
                               ),
                             )
                           : ListView.builder(
@@ -218,7 +219,7 @@ class LanguageSelectionDialog {
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.grey,
                     ),
-                    child: const Text('Skip'),
+                    child: Text(context.l10n.skip),
                   ),
                 ElevatedButton(
                   onPressed: selectedLanguage == null
@@ -228,9 +229,9 @@ class LanguageSelectionDialog {
                           if (success && context.mounted) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();
-                            AppSnackbar.showSnackbarSuccess('Language set to $selectedLanguageName');
+                            AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));
                           } else {
-                            AppSnackbar.showSnackbarError('Failed to set language');
+                            AppSnackbar.showSnackbarError(context.l10n.failedToSetLanguage);
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -238,7 +239,7 @@ class LanguageSelectionDialog {
                     disabledBackgroundColor: Colors.deepPurple.withOpacity(0.3),
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('Confirm'),
+                  child: Text(context.l10n.confirm),
                 ),
               ],
             );

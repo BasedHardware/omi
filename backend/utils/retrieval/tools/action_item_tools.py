@@ -293,32 +293,30 @@ def create_action_item_tool(
     """
     Create a new action item (task/to-do) for the user.
 
-    Use this tool when:
-    - User asks to create a new task or to-do
-    - User asks to add something to their task list
-    - User says "remind me to...", "I need to...", "add task..."
-    - User wants to track something they need to do
-    - User mentions a deadline or something due
+    **ONLY use this tool when user EXPLICITLY asks to create a task:**
+    - "add task...", "create a task...", "remind me to..."
+    - "add to my list...", "add these tasks..."
+    - "I need to do X tomorrow" (clear commitment language)
 
-    **IMPORTANT**: This creates a NEW action item. To update an existing item, use update_action_item_tool instead.
+    **DO NOT use this tool when:**
+    - User asks a question ("how would this help?", "what do you think?")
+    - User acknowledges something ("nice", "I like it", "sounds good")
+    - You're giving advice or suggestions
+    - User is exploring ideas without committing to action
 
-    Examples:
-    - "Add a task to buy milk" -> create_action_item_tool(description="Buy milk")
-    - "Remind me to call mom tomorrow at 3pm" -> create_action_item_tool(description="Call mom", due_at="2024-01-20T15:00:00")
-    - "I need to finish the report by Friday" -> create_action_item_tool(description="Finish the report", due_at="2024-01-19T23:59:59")
-
-    Due date formatting:
-    - Use ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM
-    - Example: "2024-01-20T14:30:00-08:00" for January 20, 2024 at 2:30 PM in PST
-    - If user doesn't specify time, use end of day (23:59:59) in user's timezone
+    **Task description rules:**
+    - Keep descriptions SHORT: 5-10 words max
+    - Just the action, no explanations
+    - Good: "Ship mentor to production"
+    - Bad: "Ship mentor to production - Make the mentor/goal-tracking flow usable end-to-end"
 
     Args:
-        description: The task description (required)
-        due_at: Optional due date in ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM, e.g. "2024-01-20T14:30:00-08:00")
-        conversation_id: Optional ID of the conversation this task came from
+        description: Short task description (5-10 words, just the action)
+        due_at: Optional due date (ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM)
+        conversation_id: Optional conversation ID this task came from
 
     Returns:
-        Confirmation message with the created action item details.
+        Brief confirmation message.
     """
     print(
         f"🔧 create_action_item_tool called - description: {description}, "
@@ -390,40 +388,30 @@ def create_action_item_tool(
         if not created_item:
             return "Action item created, but couldn't retrieve details."
 
-        # Build confirmation message
-        result = f"✅ Successfully created action item:\n"
-        result += f"Description: {created_item.get('description', 'Unknown')}\n"
-        result += f"ID: {created_item.get('id')}\n"
-        result += f"Status: Pending\n"
-
-        if created_item.get('created_at'):
-            created_at = created_item['created_at']
-            result += f"Created: {created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        # Build concise confirmation message
+        task_desc = created_item.get('description', 'Task')
+        result = f"✅ Added: {task_desc}"
 
         if created_item.get('due_at'):
             due = created_item['due_at']
-            result += f"Due: {due.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f" (due {due.strftime('%b %d')})"
 
             # Send FCM notification for scheduled reminder
             try:
                 send_action_item_data_message(
                     user_id=uid,
                     action_item_id=action_item_id,
-                    description=created_item.get('description', ''),
+                    description=task_desc,
                     due_at=due.isoformat(),
                 )
-                result += "\n📱 Reminder notification scheduled"
             except Exception as notif_error:
                 print(f"⚠️ Failed to send notification: {notif_error}")
-                # Don't fail the creation if notification fails
 
         # Send immediate notification that task was created
         try:
-            send_action_item_created_notification(uid, created_item.get('description', 'Task'))
-            result += "\n📱 Creation notification sent"
+            send_action_item_created_notification(uid, task_desc)
         except Exception as notif_error:
             print(f"⚠️ Failed to send creation notification: {notif_error}")
-            # Don't fail the creation if notification fails
 
         return result
 
