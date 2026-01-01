@@ -1044,11 +1044,18 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _selectedProvider = SttProvider.onDeviceWhisper;
       if (!isIOS) {
         _checkLocalModel();
-      } else {
-        OnDeviceAppleProvider.requestPermission();
       }
       MixpanelManager().transcriptionSourceSelected(source: isIOS ? 'custom_on_device_ios' : 'custom_on_device');
     });
+
+    if (isIOS) {
+      final granted = await OnDeviceAppleProvider.requestPermission();
+      if (!granted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Speech recognition permission is required. Please enable it in Settings.')),
+        );
+      }
+    }
   }
 
   Widget _buildSourceSelector() {
