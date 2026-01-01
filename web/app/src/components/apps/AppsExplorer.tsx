@@ -21,7 +21,7 @@ import type {
 import { AppCard } from './AppCard';
 import { AppGridSection } from './AppGridSection';
 
-type Tab = 'explore' | 'installed';
+type Tab = 'explore' | 'installed' | 'my-apps';
 
 // Quick filter dropdown component
 function FilterDropdown({
@@ -230,6 +230,7 @@ export function AppsExplorer() {
   const [popularApps, setPopularApps] = useState<App[]>([]);
   const [searchResults, setSearchResults] = useState<App[]>([]);
   const [installedApps, setInstalledApps] = useState<App[]>([]);
+  const [myApps, setMyApps] = useState<App[]>([]);
   const [categories, setCategories] = useState<AppCategory[]>([]);
   const [capabilities, setCapabilities] = useState<AppCapability[]>([]);
 
@@ -297,6 +298,7 @@ export function AppsExplorer() {
           rating: filters.rating,
           sort: filters.sort,
           installed_apps: activeTab === 'installed' ? true : undefined,
+          my_apps: activeTab === 'my-apps' ? true : undefined,
           limit: 50,
         });
         setSearchResults(response.data || []);
@@ -327,6 +329,24 @@ export function AppsExplorer() {
     loadInstalled();
   }, [activeTab]);
 
+  // Load my apps when switching to my-apps tab
+  useEffect(() => {
+    async function loadMyApps() {
+      if (activeTab !== 'my-apps') return;
+
+      setIsLoading(true);
+      try {
+        const response = await searchApps({ my_apps: true, limit: 100 });
+        setMyApps(response.data || []);
+      } catch (err) {
+        console.error('Failed to load my apps:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadMyApps();
+  }, [activeTab]);
+
   const clearFilters = useCallback(() => {
     setFilters({});
     setSearchQuery('');
@@ -337,6 +357,9 @@ export function AppsExplorer() {
     if (activeTab === 'installed') {
       const response = await searchApps({ installed_apps: true, limit: 100 });
       setInstalledApps(response.data || []);
+    } else if (activeTab === 'my-apps') {
+      const response = await searchApps({ my_apps: true, limit: 100 });
+      setMyApps(response.data || []);
     }
     // Refresh groups to update enabled state
     const groupedData = await getAppsGrouped();
@@ -358,10 +381,33 @@ export function AppsExplorer() {
     return group.capability?.id || group.category?.id || 'unknown';
   };
 
+  // Get apps to display based on current tab
+  const getAppsForCurrentTab = (): App[] => {
+    if (activeTab === 'installed') return installedApps;
+    if (activeTab === 'my-apps') return myApps;
+    return [];
+  };
+
+  const getEmptyMessage = () => {
+    if (activeTab === 'installed') {
+      return {
+        title: 'No installed apps yet',
+        subtitle: 'Explore and install apps to enhance your Omi experience',
+      };
+    }
+    if (activeTab === 'my-apps') {
+      return {
+        title: 'No apps created yet',
+        subtitle: 'Create your own apps to customize your Omi experience',
+      };
+    }
+    return { title: '', subtitle: '' };
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex-shrink-0 border-b border-bg-tertiary bg-bg-secondary">
+    <div className="min-h-full">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <h1 className="text-2xl font-bold text-text-primary mb-4">Apps</h1>
 
@@ -388,6 +434,17 @@ export function AppsExplorer() {
               )}
             >
               Installed
+            </button>
+            <button
+              onClick={() => setActiveTab('my-apps')}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                activeTab === 'my-apps'
+                  ? 'bg-purple-primary text-white'
+                  : 'text-text-secondary hover:bg-bg-tertiary'
+              )}
+            >
+              My Apps
             </button>
           </div>
 
@@ -454,83 +511,99 @@ export function AppsExplorer() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-4 py-6">
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
-            </div>
-          ) : isSearching ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
-            </div>
-          ) : activeTab === 'installed' ? (
-            // Installed apps view
-            <div>
-              {installedApps.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-text-tertiary">No installed apps yet</p>
-                  <p className="text-sm text-text-quaternary mt-1">
-                    Explore and install apps to enhance your Omi experience
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {installedApps.map(app => (
-                    <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : isShowingSearchResults ? (
-            // Search results view
-            <div>
-              <p className="text-sm text-text-tertiary mb-4">
-                {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'} found
-              </p>
-              {searchResults.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-text-tertiary">No apps match your search</p>
-                  <p className="text-sm text-text-quaternary mt-1">
-                    Try different keywords or adjust your filters
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {searchResults.map(app => (
-                    <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            // Explore view with grouped apps
-            <div className="space-y-8">
-              {/* Popular apps section */}
-              {popularApps.length > 0 && (
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+          </div>
+        ) : isSearching ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
+          </div>
+        ) : activeTab === 'installed' || activeTab === 'my-apps' ? (
+          // Installed or My Apps view
+          <div>
+            {isShowingSearchResults ? (
+              // Search results within tab
+              <>
+                <p className="text-sm text-text-tertiary mb-4">
+                  {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'} found
+                </p>
+                {searchResults.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-text-tertiary">No apps match your search</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {searchResults.map(app => (
+                      <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : getAppsForCurrentTab().length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-text-tertiary">{getEmptyMessage().title}</p>
+                <p className="text-sm text-text-quaternary mt-1">
+                  {getEmptyMessage().subtitle}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {getAppsForCurrentTab().map(app => (
+                  <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : isShowingSearchResults ? (
+          // Search results view (explore tab)
+          <div>
+            <p className="text-sm text-text-tertiary mb-4">
+              {searchResults.length} {searchResults.length === 1 ? 'app' : 'apps'} found
+            </p>
+            {searchResults.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-text-tertiary">No apps match your search</p>
+                <p className="text-sm text-text-quaternary mt-1">
+                  Try different keywords or adjust your filters
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {searchResults.map(app => (
+                  <AppCard key={app.id} app={app} onUpdate={handleAppUpdate} />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          // Explore view with grouped apps
+          <div className="space-y-8 pb-8">
+            {/* Popular apps section */}
+            {popularApps.length > 0 && (
+              <AppGridSection
+                title="Popular"
+                apps={popularApps.slice(0, 6)}
+                onUpdate={handleAppUpdate}
+              />
+            )}
+
+            {/* Capability/Category groups */}
+            {appGroups
+              .filter(group => group.data && group.data.length > 0)
+              .map(group => (
                 <AppGridSection
-                  title="Popular"
-                  apps={popularApps.slice(0, 6)}
+                  key={getGroupId(group)}
+                  title={getGroupTitle(group)}
+                  apps={group.data.slice(0, 6)}
+                  totalCount={group.pagination?.total}
+                  capabilityId={group.capability?.id}
                   onUpdate={handleAppUpdate}
                 />
-              )}
-
-              {/* Capability/Category groups */}
-              {appGroups
-                .filter(group => group.data && group.data.length > 0)
-                .map(group => (
-                  <AppGridSection
-                    key={getGroupId(group)}
-                    title={getGroupTitle(group)}
-                    apps={group.data.slice(0, 6)}
-                    totalCount={group.pagination?.total}
-                    capabilityId={group.capability?.id}
-                    onUpdate={handleAppUpdate}
-                  />
-                ))}
-            </div>
-          )}
-        </div>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );

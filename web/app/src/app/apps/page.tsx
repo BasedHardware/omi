@@ -6,8 +6,10 @@ import { AppsExplorer } from '@/components/apps/AppsExplorer';
 
 function AppsContent() {
   return (
-    <MainLayout>
-      <AppsExplorer />
+    <MainLayout hideHeader>
+      <div className="h-full overflow-y-auto">
+        <AppsExplorer />
+      </div>
     </MainLayout>
   );
 }
