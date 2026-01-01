@@ -6,7 +6,7 @@ import { LayoutGrid, List, RefreshCw, MoreHorizontal, CheckSquare } from 'lucide
 import { cn } from '@/lib/utils';
 import { useActionItems } from '@/hooks/useActionItems';
 import { TaskProgressCard } from './TaskProgressCard';
-import { WeekStrip } from './WeekStrip';
+import { MonthCalendar } from './MonthCalendar';
 import { TaskGroup, TaskGroupSkeleton } from './TaskGroup';
 import { TaskQuickAdd } from './TaskQuickAdd';
 import { BulkActionBar } from './BulkActionBar';
@@ -24,7 +24,6 @@ export function TaskHub() {
     loading,
     error,
     stats,
-    weekData,
     refresh,
     addItem,
     toggleComplete,
@@ -342,12 +341,8 @@ export function TaskHub() {
             {/* Loading state for dashboard */}
             {loading && items.length === 0 && (
               <div className="space-y-4">
-                <div className="h-24 bg-bg-tertiary rounded-xl animate-pulse" />
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5, 6, 7].map((i) => (
-                    <div key={i} className="w-[42px] h-16 bg-bg-tertiary rounded-lg animate-pulse" />
-                  ))}
-                </div>
+                <div className="h-32 bg-bg-tertiary rounded-xl animate-pulse" />
+                <div className="h-64 bg-bg-tertiary rounded-xl animate-pulse" />
               </div>
             )}
 
@@ -367,9 +362,9 @@ export function TaskHub() {
                   compact
                 />
 
-                {/* Week strip */}
-                <WeekStrip
-                  days={weekData}
+                {/* Month calendar */}
+                <MonthCalendar
+                  items={items}
                   selectedDate={selectedDate}
                   onSelectDate={handleDateSelect}
                   onDropTask={handleDropTask}
