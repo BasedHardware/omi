@@ -582,6 +582,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                           keyboardType: TextInputType.multiline,
                                           textCapitalization: TextCapitalization.sentences,
                                           style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
+                                          onChanged: (_) {
+                                            // Trigger rebuild to update send button visibility
+                                            setState(() {});
+                                          },
                                         ),
                                 ),
                                 // Microphone button
