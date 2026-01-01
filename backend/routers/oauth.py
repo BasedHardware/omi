@@ -65,7 +65,10 @@ async def oauth_authorize(
                         permissions.append({"icon": "📖", "text": "Access and read your conversation history."})
                     elif action_type_value == ActionType.READ_MEMORIES.value:
                         permissions.append({"icon": "🔍", "text": "Access and read your stored memories."})
-
+                    elif action_type_value == ActionType.CREATE_TASK.value:
+                        permissions.append({"icon": "➕", "text": "Create new tasks for you."})
+                    elif action_type_value == ActionType.READ_TASKS.value:
+                        permissions.append({"icon": "📋", "text": "Read your tasks."})
         if (
             "proactive_notification" in app.capabilities
             and app.proactive_notification
@@ -79,19 +82,6 @@ async def oauth_authorize(
                 permissions.append({"icon": "📜", "text": "Access your conversation context for notifications."})
             if "user_chat" in app.proactive_notification.scopes:
                 permissions.append({"icon": "🗣️", "text": "Access your chat history for notifications."})
-        if "tasks" in app.capabilities:
-            permissions.append({"icon": "📋", "text": "Access and manage your tasks."})
-
-        if app.external_integration and app.external_integration.actions:
-            for action_item in app.external_integration.actions:
-                if action_item.action.value == "create_task":
-                    permissions.append({"icon": "➕", "text": "Create new tasks"})
-                elif action_item.action.value == "read_tasks":
-                    permissions.append({"icon": "📖", "text": "Read your tasks"})
-                # elif action_item.action.value == "update_task":
-                #     permissions.append({"icon": "✏️", "text": "Update your tasks"})
-                # elif action_item.action.value == "delete_task":
-                #     permissions.append({"icon": "🗑️", "text": "Delete your tasks"})    
 
     if not permissions:
         permissions.append({"icon": "✅", "text": "Access your basic Omi profile information."})
