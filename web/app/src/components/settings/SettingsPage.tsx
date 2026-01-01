@@ -31,6 +31,13 @@ import {
   Twitter,
   Settings,
   Brain,
+  Server,
+  Monitor,
+  Download,
+  Network,
+  Mic,
+  Radio,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
@@ -55,10 +62,15 @@ import {
   getDeveloperApiKeys,
   createDeveloperApiKey,
   deleteDeveloperApiKey,
+  getMcpApiKeys,
+  createMcpApiKey,
+  deleteMcpApiKey,
+  exportAllData,
+  deleteKnowledgeGraph,
   getIntegrations,
 } from '@/lib/api';
-import { SUPPORTED_LANGUAGES } from '@/types/user';
-import type { DailySummarySettings, UserUsage, UserSubscription, AllUsageData, DeveloperWebhooks, DeveloperApiKey, Integration, UsageHistoryPoint } from '@/types/user';
+import { SUPPORTED_LANGUAGES, API_KEY_SCOPES } from '@/types/user';
+import type { DailySummarySettings, UserUsage, UserSubscription, AllUsageData, DeveloperWebhooks, DeveloperApiKey, McpApiKey, Integration, UsageHistoryPoint } from '@/types/user';
 
 // ============================================================================
 // Types
@@ -1060,145 +1072,667 @@ function IntegrationsSection({ integrations }: { integrations: Integration[] }) 
 // Developer Section
 // ============================================================================
 
+// Create API Key Dialog
+function CreateApiKeyDialog({
+  isOpen,
+  onClose,
+  onCreateKey,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreateKey: (name: string, scopes: string[]) => Promise<DeveloperApiKey | null>;
+}) {
+  const [keyName, setKeyName] = useState('');
+  const [scopes, setScopes] = useState<Record<string, boolean>>({
+    'conversations:read': false,
+    'conversations:write': false,
+    'memories:read': false,
+    'memories:write': false,
+    'action_items:read': false,
+    'action_items:write': false,
+  });
+  const [isCreating, setIsCreating] = useState(false);
+  const [createdKey, setCreatedKey] = useState<DeveloperApiKey | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const selectedScopes = Object.entries(scopes).filter(([, v]) => v).map(([k]) => k);
+  const isReadOnly = scopes['conversations:read'] && scopes['memories:read'] && scopes['action_items:read'] &&
+    !scopes['conversations:write'] && !scopes['memories:write'] && !scopes['action_items:write'];
+  const isFullAccess = Object.values(scopes).every(v => v);
+
+  const selectReadOnly = () => {
+    setScopes({
+      'conversations:read': true, 'conversations:write': false,
+      'memories:read': true, 'memories:write': false,
+      'action_items:read': true, 'action_items:write': false,
+    });
+  };
+
+  const selectFullAccess = () => {
+    setScopes(Object.fromEntries(Object.keys(scopes).map(k => [k, true])));
+  };
+
+  const handleCreate = async () => {
+    if (!keyName.trim()) return;
+    setIsCreating(true);
+    const key = await onCreateKey(keyName.trim(), selectedScopes.length > 0 ? selectedScopes : undefined as unknown as string[]);
+    if (key) {
+      setCreatedKey(key);
+    }
+    setIsCreating(false);
+  };
+
+  const handleCopy = () => {
+    if (createdKey?.key) {
+      navigator.clipboard.writeText(createdKey.key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleClose = () => {
+    setKeyName('');
+    setScopes(Object.fromEntries(Object.keys(scopes).map(k => [k, false])));
+    setCreatedKey(null);
+    setCopied(false);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={handleClose}>
+      <div className="bg-bg-secondary rounded-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+        {createdKey ? (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 rounded-xl bg-green-500/20">
+                <Check className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">API Key Created</h3>
+                <p className="text-sm text-text-tertiary">Save this key now - you won&apos;t see it again!</p>
+              </div>
+            </div>
+            <div className="p-4 rounded-xl bg-bg-tertiary mb-4">
+              <p className="text-xs text-text-tertiary mb-2">Your API Key</p>
+              <code className="text-sm text-text-primary font-mono break-all">{createdKey.key}</code>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={handleCopy} className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
+                copied ? 'bg-green-500/20 text-green-400' : 'bg-purple-500 text-white hover:bg-purple-600'
+              )}>
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copied!' : 'Copy Key'}
+              </button>
+              <button onClick={handleClose} className="px-4 py-3 rounded-xl bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary transition-colors">
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-text-primary">Create API Key</h3>
+              <button onClick={handleClose} className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors">
+                <X className="w-5 h-5 text-text-tertiary" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Key Name</label>
+                <input
+                  type="text"
+                  value={keyName}
+                  onChange={e => setKeyName(e.target.value)}
+                  placeholder="e.g., My App Integration"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-border-secondary text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Permissions</label>
+                  <div className="flex gap-2">
+                    <button onClick={selectReadOnly} className={cn(
+                      'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                      isReadOnly ? 'bg-purple-500 text-white' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary'
+                    )}>Read Only</button>
+                    <button onClick={selectFullAccess} className={cn(
+                      'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                      isFullAccess ? 'bg-purple-500 text-white' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary'
+                    )}>Full Access</button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {['Conversations', 'Memories', 'Action Items'].map(resource => {
+                    const readKey = `${resource.toLowerCase().replace(' ', '_')}:read`;
+                    const writeKey = `${resource.toLowerCase().replace(' ', '_')}:write`;
+                    return (
+                      <div key={resource} className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary">
+                        <span className="text-sm text-text-primary">{resource}</span>
+                        <div className="flex bg-bg-quaternary rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setScopes({ ...scopes, [readKey]: !scopes[readKey] })}
+                            className={cn(
+                              'px-3 py-1.5 text-xs font-semibold transition-colors',
+                              scopes[readKey] ? 'bg-blue-500 text-white' : 'text-text-quaternary hover:text-text-secondary'
+                            )}
+                          >R</button>
+                          <button
+                            onClick={() => setScopes({ ...scopes, [writeKey]: !scopes[writeKey] })}
+                            className={cn(
+                              'px-3 py-1.5 text-xs font-semibold transition-colors',
+                              scopes[writeKey] ? 'bg-purple-500 text-white' : 'text-text-quaternary hover:text-text-secondary'
+                            )}
+                          >W</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-text-quaternary mt-2">R = Read, W = Write. Defaults to read-only if nothing selected.</p>
+              </div>
+
+              <button
+                onClick={handleCreate}
+                disabled={!keyName.trim() || isCreating}
+                className={cn(
+                  'w-full py-3 rounded-xl font-medium transition-colors',
+                  keyName.trim() && !isCreating
+                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed'
+                )}
+              >
+                {isCreating ? 'Creating...' : 'Create Key'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Create MCP Key Dialog
+function CreateMcpKeyDialog({
+  isOpen,
+  onClose,
+  onCreateKey,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreateKey: (name: string) => Promise<McpApiKey | null>;
+}) {
+  const [keyName, setKeyName] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [createdKey, setCreatedKey] = useState<McpApiKey | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCreate = async () => {
+    if (!keyName.trim()) return;
+    setIsCreating(true);
+    const key = await onCreateKey(keyName.trim());
+    if (key) {
+      setCreatedKey(key);
+    }
+    setIsCreating(false);
+  };
+
+  const handleCopy = () => {
+    if (createdKey?.key) {
+      navigator.clipboard.writeText(createdKey.key);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleClose = () => {
+    setKeyName('');
+    setCreatedKey(null);
+    setCopied(false);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={handleClose}>
+      <div className="bg-bg-secondary rounded-2xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+        {createdKey ? (
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 rounded-xl bg-green-500/20">
+                <Check className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">MCP Key Created</h3>
+                <p className="text-sm text-text-tertiary">Save this key now - you won&apos;t see it again!</p>
+              </div>
+            </div>
+            <div className="p-4 rounded-xl bg-bg-tertiary mb-4">
+              <p className="text-xs text-text-tertiary mb-2">Your MCP Key</p>
+              <code className="text-sm text-text-primary font-mono break-all">{createdKey.key}</code>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={handleCopy} className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
+                copied ? 'bg-green-500/20 text-green-400' : 'bg-purple-500 text-white hover:bg-purple-600'
+              )}>
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Copied!' : 'Copy Key'}
+              </button>
+              <button onClick={handleClose} className="px-4 py-3 rounded-xl bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary transition-colors">
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-text-primary">Create MCP Key</h3>
+              <button onClick={handleClose} className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors">
+                <X className="w-5 h-5 text-text-tertiary" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Key Name</label>
+                <input
+                  type="text"
+                  value={keyName}
+                  onChange={e => setKeyName(e.target.value)}
+                  placeholder="e.g., Claude Desktop"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-border-secondary text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                />
+              </div>
+              <button
+                onClick={handleCreate}
+                disabled={!keyName.trim() || isCreating}
+                className={cn(
+                  'w-full py-3 rounded-xl font-medium transition-colors',
+                  keyName.trim() && !isCreating
+                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed'
+                )}
+              >
+                {isCreating ? 'Creating...' : 'Create Key'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DeveloperSection({
   apiKeys,
+  mcpKeys,
   webhooks,
   onCreateApiKey,
   onDeleteApiKey,
+  onCreateMcpKey,
+  onDeleteMcpKey,
   onWebhookChange,
+  onExportData,
+  onDeleteKnowledgeGraph,
 }: {
   apiKeys: DeveloperApiKey[];
+  mcpKeys: McpApiKey[];
   webhooks: DeveloperWebhooks;
-  onCreateApiKey: () => void;
+  onCreateApiKey: (name: string, scopes: string[]) => Promise<DeveloperApiKey | null>;
   onDeleteApiKey: (keyId: string) => void;
-  onWebhookChange: (type: string, enabled: boolean, url?: string) => void;
+  onCreateMcpKey: (name: string) => Promise<McpApiKey | null>;
+  onDeleteMcpKey: (keyId: string) => void;
+  onWebhookChange: (type: string, enabled: boolean, url?: string, delay?: string) => void;
+  onExportData: () => void;
+  onDeleteKnowledgeGraph: () => void;
 }) {
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [showMcpKeyDialog, setShowMcpKeyDialog] = useState(false);
+  const [showDeleteGraphDialog, setShowDeleteGraphDialog] = useState(false);
+  const [copiedConfig, setCopiedConfig] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
   const [webhookUrls, setWebhookUrls] = useState<Record<string, string>>({
     memory_created: webhooks.memory_created?.url || '',
     transcript_received: webhooks.transcript_received?.url || '',
+    audio_bytes: webhooks.audio_bytes?.url || '',
     day_summary: webhooks.day_summary?.url || '',
   });
+  const [audioBytesDelay, setAudioBytesDelay] = useState('5');
+
+  // Update webhook URLs when webhooks prop changes
+  useEffect(() => {
+    setWebhookUrls({
+      memory_created: webhooks.memory_created?.url || '',
+      transcript_received: webhooks.transcript_received?.url || '',
+      audio_bytes: webhooks.audio_bytes?.url || '',
+      day_summary: webhooks.day_summary?.url || '',
+    });
+  }, [webhooks]);
 
   const webhookTypes = [
-    { id: 'memory_created', label: 'Conversation Created', description: 'Triggered when a new conversation is created' },
-    { id: 'transcript_received', label: 'Transcript Received', description: 'Triggered when a transcript is received' },
-    { id: 'day_summary', label: 'Daily Summary', description: 'Triggered when daily summary is generated' },
+    { id: 'memory_created', label: 'Conversation Events', description: 'New conversation created', icon: MessageSquare },
+    { id: 'transcript_received', label: 'Real-time Transcript', description: 'Transcript received', icon: FileText },
+    { id: 'audio_bytes', label: 'Audio Bytes', description: 'Audio data received', icon: Radio, hasDelay: true },
+    { id: 'day_summary', label: 'Day Summary', description: 'Summary generated', icon: Calendar },
   ];
 
+  const mcpServerUrl = 'https://api.omi.me/v1/mcp/sse';
+
+  const claudeDesktopConfig = `{
+  "mcpServers": {
+    "omi": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server:latest"]
+    }
+  }
+}`;
+
+  const copyConfig = () => {
+    navigator.clipboard.writeText(claudeDesktopConfig);
+    setCopiedConfig(true);
+    setTimeout(() => setCopiedConfig(false), 2000);
+  };
+
+  const copyUrl = () => {
+    navigator.clipboard.writeText(mcpServerUrl);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <h2 className="text-xl font-semibold text-text-primary">Developer</h2>
 
-      {/* API Keys */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-text-primary font-medium flex items-center gap-2">
-              <Key className="w-4 h-4 text-purple-400" />
-              API Keys
-            </h3>
-            <p className="text-sm text-text-tertiary mt-1">
-              Manage your API keys for programmatic access
-            </p>
+      {/* Data Management */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Data Management</h3>
+        <Card>
+          <button
+            onClick={onExportData}
+            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-purple-400 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-bg-tertiary">
+              <Download className="w-5 h-5 text-text-tertiary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium">Export All Data</p>
+              <p className="text-xs text-text-tertiary">Export conversations to a JSON file</p>
+            </div>
+            <ExternalLink className="w-4 h-4 text-text-quaternary" />
+          </button>
+        </Card>
+        <Card className="border-red-500/20">
+          <button
+            onClick={() => setShowDeleteGraphDialog(true)}
+            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-red-400 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-red-500/10">
+              <Network className="w-5 h-5 text-red-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium">Delete Knowledge Graph</p>
+              <p className="text-xs text-text-tertiary">Clear all nodes and connections</p>
+            </div>
+            <Trash2 className="w-4 h-4 text-text-quaternary" />
+          </button>
+        </Card>
+      </div>
+
+      {/* Developer API Keys */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Developer API Keys</h3>
+          <button
+            onClick={() => setShowApiKeyDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            Create Key
+          </button>
+        </div>
+        <Card>
+          {apiKeys.length > 0 ? (
+            <div className="space-y-3">
+              {apiKeys.map((apiKey) => (
+                <div key={apiKey.id} className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm text-text-primary font-medium">{apiKey.name}</span>
+                      <code className="text-xs text-text-tertiary font-mono bg-bg-quaternary px-2 py-0.5 rounded">
+                        {apiKey.key_prefix}...
+                      </code>
+                      {apiKey.scopes && apiKey.scopes.length > 0 && (
+                        <span className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                          {apiKey.scopes.length} scopes
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-quaternary mt-1">
+                      Created {new Date(apiKey.created_at).toLocaleDateString()}
+                      {apiKey.last_used_at && ` • Last used ${new Date(apiKey.last_used_at).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onDeleteApiKey(apiKey.id)}
+                    className="p-2 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-text-quaternary text-center py-6">No API keys created yet</p>
+          )}
+        </Card>
+      </div>
+
+      {/* MCP Section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">MCP</h3>
+            <a href="https://docs.omi.me/doc/developer/MCP" target="_blank" rel="noopener noreferrer"
+               className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
+              Docs ↗
+            </a>
           </div>
           <button
-            onClick={onCreateApiKey}
-            className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-lg',
-              'bg-purple-500/10 text-purple-400',
-              'hover:bg-purple-500/20 transition-colors'
-            )}
+            onClick={() => setShowMcpKeyDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
           >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm font-medium">Create Key</span>
+            <Plus className="w-3 h-3" />
+            Create Key
           </button>
         </div>
 
-        {apiKeys.length > 0 ? (
-          <div className="space-y-3">
-            {apiKeys.map((apiKey) => (
-              <div
-                key={apiKey.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-text-primary font-medium">{apiKey.name}</span>
-                    <code className="text-xs text-text-tertiary font-mono bg-bg-quaternary px-2 py-0.5 rounded">
-                      {apiKey.key_prefix}...
-                    </code>
+        {/* MCP Keys List */}
+        <Card>
+          {mcpKeys.length > 0 ? (
+            <div className="space-y-3">
+              {mcpKeys.map((key) => (
+                <div key={key.id} className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-text-primary font-medium">{key.name}</span>
+                      <code className="text-xs text-text-tertiary font-mono bg-bg-quaternary px-2 py-0.5 rounded">
+                        {key.key_prefix}...
+                      </code>
+                    </div>
+                    <p className="text-xs text-text-quaternary mt-1">
+                      Created {new Date(key.created_at).toLocaleDateString()}
+                      {key.last_used_at && ` • Last used ${new Date(key.last_used_at).toLocaleDateString()}`}
+                    </p>
                   </div>
-                  <p className="text-xs text-text-quaternary mt-1">
-                    Created {new Date(apiKey.created_at).toLocaleDateString()}
-                    {apiKey.last_used_at && ` • Last used ${new Date(apiKey.last_used_at).toLocaleDateString()}`}
-                  </p>
+                  <button
+                    onClick={() => onDeleteMcpKey(key.id)}
+                    className="p-2 rounded-lg text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => onDeleteApiKey(apiKey.id)}
-                  className="p-2 rounded-lg bg-bg-quaternary text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title="Delete API key"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-text-quaternary text-center py-6">No MCP keys created yet</p>
+          )}
+        </Card>
+
+        {/* Claude Desktop Config */}
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-bg-tertiary">
+              <Monitor className="w-5 h-5 text-text-tertiary" />
+            </div>
+            <div>
+              <p className="text-text-primary font-medium">Claude Desktop</p>
+              <p className="text-xs text-text-tertiary">Add to claude_desktop_config.json</p>
+            </div>
           </div>
-        ) : (
-          <p className="text-sm text-text-quaternary text-center py-4">
-            No API keys created yet
-          </p>
-        )}
-      </Card>
+          <div className="p-4 rounded-xl bg-[#0d0d0d] border border-border-secondary font-mono text-xs overflow-x-auto">
+            <pre className="text-text-secondary whitespace-pre">{claudeDesktopConfig}</pre>
+          </div>
+          <button
+            onClick={copyConfig}
+            className={cn(
+              'w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl transition-colors',
+              copiedConfig ? 'bg-green-500/20 text-green-400' : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary'
+            )}
+          >
+            {copiedConfig ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copiedConfig ? 'Copied!' : 'Copy Config'}
+          </button>
+        </Card>
+
+        {/* MCP Server Info */}
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-bg-tertiary">
+              <Server className="w-5 h-5 text-text-tertiary" />
+            </div>
+            <div>
+              <p className="text-text-primary font-medium">MCP Server</p>
+              <p className="text-xs text-text-tertiary">Connect AI assistants to your data</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">Server URL</p>
+              <button
+                onClick={copyUrl}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-border-secondary hover:border-purple-500/50 transition-colors"
+              >
+                <code className="text-sm text-text-primary font-mono">{mcpServerUrl}</code>
+                {copiedUrl ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-text-quaternary" />}
+              </button>
+            </div>
+
+            <div className="border-t border-border-secondary pt-4">
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">API Key Auth</p>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-text-tertiary">Header</span>
+                <code className="text-text-quaternary font-mono text-xs">Authorization: Bearer &lt;key&gt;</code>
+              </div>
+            </div>
+
+            <div className="border-t border-border-secondary pt-4">
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">OAuth</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-4">
+                  <span className="text-text-tertiary w-24">Client ID</span>
+                  <code className="text-text-primary font-mono">omi</code>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-text-tertiary w-24">Client Secret</span>
+                  <span className="text-text-quaternary italic text-xs">Use your MCP API key</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
 
       {/* Webhooks */}
-      <Card>
-        <div className="mb-4">
-          <h3 className="text-text-primary font-medium flex items-center gap-2">
-            <Webhook className="w-4 h-4 text-purple-400" />
-            Webhooks
-          </h3>
-          <p className="text-sm text-text-tertiary mt-1">
-            Receive real-time notifications for events
-          </p>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Webhooks</h3>
+          <a href="https://docs.omi.me/doc/developer/apps/Introduction" target="_blank" rel="noopener noreferrer"
+             className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
+            Docs ↗
+          </a>
         </div>
+        <Card>
+          <div className="space-y-1">
+            {webhookTypes.map((webhook, index) => {
+              const webhookData = webhooks[webhook.id as keyof DeveloperWebhooks];
+              const isEnabled = webhookData?.enabled || false;
+              const Icon = webhook.icon;
 
-        <div className="space-y-4">
-          {webhookTypes.map((webhook) => {
-            const webhookData = webhooks[webhook.id as keyof DeveloperWebhooks];
-            const isEnabled = webhookData?.enabled || false;
-
-            return (
-              <div key={webhook.id} className="p-4 rounded-xl bg-bg-tertiary">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-text-primary font-medium">{webhook.label}</p>
-                    <p className="text-xs text-text-tertiary">{webhook.description}</p>
-                  </div>
-                  <Toggle
-                    enabled={isEnabled}
-                    onChange={(enabled) => onWebhookChange(webhook.id, enabled, webhookUrls[webhook.id])}
-                  />
-                </div>
-                {isEnabled && (
-                  <input
-                    type="url"
-                    value={webhookUrls[webhook.id] || ''}
-                    onChange={(e) => setWebhookUrls({ ...webhookUrls, [webhook.id]: e.target.value })}
-                    onBlur={() => onWebhookChange(webhook.id, true, webhookUrls[webhook.id])}
-                    placeholder="https://your-server.com/webhook"
-                    className={cn(
-                      'w-full mt-3 px-3 py-2 rounded-lg',
-                      'bg-bg-quaternary border border-border-secondary',
-                      'text-text-primary text-sm placeholder:text-text-quaternary',
-                      'focus:outline-none focus:border-purple-500'
+              return (
+                <div key={webhook.id}>
+                  {index > 0 && <div className="border-t border-border-secondary my-4" />}
+                  <div className="py-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-bg-tertiary">
+                          <Icon className="w-4 h-4 text-text-tertiary" />
+                        </div>
+                        <div>
+                          <p className="text-text-primary font-medium text-sm">{webhook.label}</p>
+                          <p className="text-xs text-text-tertiary">{webhook.description}</p>
+                        </div>
+                      </div>
+                      <Toggle
+                        enabled={isEnabled}
+                        onChange={(enabled) => onWebhookChange(
+                          webhook.id,
+                          enabled,
+                          webhookUrls[webhook.id],
+                          webhook.hasDelay ? audioBytesDelay : undefined
+                        )}
+                      />
+                    </div>
+                    {isEnabled && (
+                      <div className="mt-3 space-y-2">
+                        <input
+                          type="url"
+                          value={webhookUrls[webhook.id] || ''}
+                          onChange={(e) => setWebhookUrls({ ...webhookUrls, [webhook.id]: e.target.value })}
+                          onBlur={() => onWebhookChange(
+                            webhook.id,
+                            true,
+                            webhookUrls[webhook.id],
+                            webhook.hasDelay ? audioBytesDelay : undefined
+                          )}
+                          placeholder="https://your-server.com/webhook"
+                          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-border-secondary text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                        />
+                        {webhook.hasDelay && (
+                          <input
+                            type="number"
+                            value={audioBytesDelay}
+                            onChange={(e) => setAudioBytesDelay(e.target.value)}
+                            onBlur={() => onWebhookChange(webhook.id, true, webhookUrls[webhook.id], audioBytesDelay)}
+                            placeholder="Interval (seconds)"
+                            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-border-secondary text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                          />
+                        )}
+                      </div>
                     )}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      </div>
 
       {/* Links */}
       <Card>
@@ -1215,6 +1749,52 @@ function DeveloperSection({
           <ExternalLink className="w-4 h-4" />
         </a>
       </Card>
+
+      {/* Dialogs */}
+      <CreateApiKeyDialog
+        isOpen={showApiKeyDialog}
+        onClose={() => setShowApiKeyDialog(false)}
+        onCreateKey={onCreateApiKey}
+      />
+      <CreateMcpKeyDialog
+        isOpen={showMcpKeyDialog}
+        onClose={() => setShowMcpKeyDialog(false)}
+        onCreateKey={onCreateMcpKey}
+      />
+
+      {/* Delete Knowledge Graph Dialog */}
+      {showDeleteGraphDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowDeleteGraphDialog(false)}>
+          <div className="bg-bg-secondary rounded-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 rounded-xl bg-red-500/20">
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-text-primary">Delete Knowledge Graph?</h3>
+            </div>
+            <p className="text-text-secondary text-sm mb-6">
+              This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteGraphDialog(false)}
+                className="flex-1 py-3 rounded-xl bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteKnowledgeGraph();
+                  setShowDeleteGraphDialog(false);
+                }}
+                className="flex-1 py-3 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1305,6 +1885,7 @@ export function SettingsPage() {
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
+  const [mcpKeys, setMcpKeys] = useState<McpApiKey[]>([]);
   const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
 
   // Dialog states
@@ -1354,11 +1935,13 @@ export function SettingsPage() {
             setIntegrations(integ);
             break;
           case 'developer':
-            const [keys, webhookStatus] = await Promise.all([
+            const [keys, mKeys, webhookStatus] = await Promise.all([
               getDeveloperApiKeys().catch(() => []),
+              getMcpApiKeys().catch(() => []),
               getDeveloperWebhooksStatus().catch(() => ({})),
             ]);
             setApiKeys(keys);
+            setMcpKeys(mKeys);
             setWebhooks(webhookStatus);
             break;
           // 'profile' and 'account' don't need API calls
@@ -1451,12 +2034,14 @@ export function SettingsPage() {
     }
   };
 
-  const handleCreateApiKey = async () => {
+  const handleCreateApiKey = async (name: string, scopes: string[]): Promise<DeveloperApiKey | null> => {
     try {
-      const newKey = await createDeveloperApiKey();
+      const newKey = await createDeveloperApiKey(name, scopes);
       setApiKeys([...apiKeys, newKey]);
+      return newKey;
     } catch (error) {
       console.error('Failed to create API key:', error);
+      return null;
     }
   };
 
@@ -1469,11 +2054,59 @@ export function SettingsPage() {
     }
   };
 
-  const handleWebhookChange = async (type: string, enabled: boolean, url?: string) => {
+  const handleCreateMcpKey = async (name: string): Promise<McpApiKey | null> => {
+    try {
+      const newKey = await createMcpApiKey(name);
+      setMcpKeys([...mcpKeys, newKey]);
+      return newKey;
+    } catch (error) {
+      console.error('Failed to create MCP key:', error);
+      return null;
+    }
+  };
+
+  const handleDeleteMcpKey = async (keyId: string) => {
+    try {
+      await deleteMcpApiKey(keyId);
+      setMcpKeys(mcpKeys.filter((k) => k.id !== keyId));
+    } catch (error) {
+      console.error('Failed to delete MCP key:', error);
+    }
+  };
+
+  const handleExportData = async () => {
+    try {
+      const data = await exportAllData();
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'omi-export.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export data:', error);
+    }
+  };
+
+  const handleDeleteKnowledgeGraph = async () => {
+    try {
+      await deleteKnowledgeGraph();
+    } catch (error) {
+      console.error('Failed to delete knowledge graph:', error);
+    }
+  };
+
+  const handleWebhookChange = async (type: string, enabled: boolean, url?: string, delay?: string) => {
     const webhookType = type as 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary';
     try {
-      if (url) {
-        await setDeveloperWebhook(webhookType, url);
+      // For audio_bytes, combine URL and delay if both are provided
+      const webhookUrl = type === 'audio_bytes' && url && delay ? `${url},${delay}` : url;
+      if (webhookUrl) {
+        await setDeveloperWebhook(webhookType, webhookUrl);
       }
       if (enabled) {
         await enableDeveloperWebhook(webhookType);
@@ -1553,10 +2186,15 @@ export function SettingsPage() {
         return (
           <DeveloperSection
             apiKeys={apiKeys}
+            mcpKeys={mcpKeys}
             webhooks={webhooks}
             onCreateApiKey={handleCreateApiKey}
             onDeleteApiKey={handleDeleteApiKey}
+            onCreateMcpKey={handleCreateMcpKey}
+            onDeleteMcpKey={handleDeleteMcpKey}
             onWebhookChange={handleWebhookChange}
+            onExportData={handleExportData}
+            onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
           />
         );
       case 'account':

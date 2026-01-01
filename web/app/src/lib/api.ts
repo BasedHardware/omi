@@ -1382,7 +1382,7 @@ export async function setTrainingDataOptIn(optIn: boolean): Promise<void> {
 // Developer API Keys
 // ============================================================================
 
-import type { DeveloperApiKey, CustomVocabulary, Integration } from '@/types/user';
+import type { DeveloperApiKey, CustomVocabulary, Integration, McpApiKey } from '@/types/user';
 
 /**
  * Get user's developer API keys
@@ -1396,12 +1396,16 @@ export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
 }
 
 /**
- * Create a new developer API key
+ * Create a new developer API key with optional scopes
  */
-export async function createDeveloperApiKey(name?: string): Promise<DeveloperApiKey> {
+export async function createDeveloperApiKey(name: string, scopes?: string[]): Promise<DeveloperApiKey> {
+  const body: { name: string; scopes?: string[] } = { name };
+  if (scopes && scopes.length > 0) {
+    body.scopes = scopes;
+  }
   return fetchWithAuth<DeveloperApiKey>('/v1/dev/keys', {
     method: 'POST',
-    body: JSON.stringify({ name: name || 'API Key' }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -1410,6 +1414,60 @@ export async function createDeveloperApiKey(name?: string): Promise<DeveloperApi
  */
 export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
   await fetchWithAuth(`/v1/dev/keys/${keyId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============================================================================
+// MCP API Keys
+// ============================================================================
+
+/**
+ * Get user's MCP API keys
+ */
+export async function getMcpApiKeys(): Promise<McpApiKey[]> {
+  try {
+    return await fetchWithAuth<McpApiKey[]>('/v1/mcp/keys');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Create a new MCP API key
+ */
+export async function createMcpApiKey(name: string): Promise<McpApiKey> {
+  return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+/**
+ * Delete an MCP API key
+ */
+export async function deleteMcpApiKey(keyId: string): Promise<void> {
+  await fetchWithAuth(`/v1/mcp/keys/${keyId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============================================================================
+// Data Export & Knowledge Graph
+// ============================================================================
+
+/**
+ * Export all conversations as JSON
+ */
+export async function exportAllData(): Promise<{ conversations: unknown[] }> {
+  return fetchWithAuth<{ conversations: unknown[] }>('/v1/conversations?limit=10000&offset=0');
+}
+
+/**
+ * Delete the knowledge graph
+ */
+export async function deleteKnowledgeGraph(): Promise<void> {
+  await fetchWithAuth('/v1/knowledge-graph', {
     method: 'DELETE',
   });
 }

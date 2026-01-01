@@ -157,6 +157,28 @@ export interface DeveloperApiKey {
   scopes?: string[];
 }
 
+// Available scopes for Developer API keys
+export const API_KEY_SCOPES = [
+  { id: 'conversations:read', label: 'Conversations', type: 'read' },
+  { id: 'conversations:write', label: 'Conversations', type: 'write' },
+  { id: 'memories:read', label: 'Memories', type: 'read' },
+  { id: 'memories:write', label: 'Memories', type: 'write' },
+  { id: 'action_items:read', label: 'Action Items', type: 'read' },
+  { id: 'action_items:write', label: 'Action Items', type: 'write' },
+] as const;
+
+export type ApiKeyScope = typeof API_KEY_SCOPES[number]['id'];
+
+// MCP API Key types
+export interface McpApiKey {
+  id: string;
+  key_prefix: string;
+  key?: string;  // Full key only returned when creating
+  name: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
 export interface CustomVocabulary {
   words: string[];
 }
