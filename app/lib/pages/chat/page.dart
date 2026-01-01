@@ -74,9 +74,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     apps = prefs.appsList;
     scrollController = ScrollController(initialScrollOffset: 1e9);
     textFieldFocusNode = FocusNode();
-    textController.addListener(() {
-      setState(() {});
-    });
+    // Removed redundant listener - using ValueListenableBuilder instead for better performance
 
     scrollController.addListener(() {
       if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
@@ -582,43 +580,40 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                           keyboardType: TextInputType.multiline,
                                           textCapitalization: TextCapitalization.sentences,
                                           style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
-                                          onChanged: (_) {
-                                            // Trigger rebuild to update send button visibility
-                                            setState(() {});
-                                          },
                                         ),
                                 ),
-                                // Microphone button
-                                if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
-                                  GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      FocusScope.of(context).unfocus();
-                                      setState(() {
-                                        _showVoiceRecorder = true;
-                                      });
-                                    },
-                                    child: Container(
-                                      height: 44,
-                                      width: 44,
-                                      alignment: Alignment.center,
-                                      child: const FaIcon(
-                                        FontAwesomeIcons.microphone,
-                                        color: Colors.grey,
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                                // Send button - only show when there's text
-                                if (shouldShowSendButton(provider))
-                                  ValueListenableBuilder<TextEditingValue>(
-                                    valueListenable: textController,
-                                    builder: (context, value, child) {
-                                      bool hasText = value.text.trim().isNotEmpty;
-                                      if (!hasText) return const SizedBox.shrink();
-
-                                      bool canSend = hasText &&
-                                          !provider.sendingMessage &&
+                                // Microphone and Send buttons - wrapped in ValueListenableBuilder for efficient rebuilds
+                                ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: textController,
+                                  builder: (context, value, child) {
+                                    bool hasText = value.text.trim().isNotEmpty;
+                                    
+                                    // Show microphone button when text is empty
+                                    if (shouldShowVoiceRecorderButton() && !hasText) {
+                                      return GestureDetector(
+                                        onTap: () {
+                                          HapticFeedback.lightImpact();
+                                          FocusScope.of(context).unfocus();
+                                          setState(() {
+                                            _showVoiceRecorder = true;
+                                          });
+                                        },
+                                        child: Container(
+                                          height: 44,
+                                          width: 44,
+                                          alignment: Alignment.center,
+                                          child: const FaIcon(
+                                            FontAwesomeIcons.microphone,
+                                            color: Colors.grey,
+                                            size: 20,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    
+                                    // Show send button when there's text
+                                    if (shouldShowSendButton(provider) && hasText) {
+                                      bool canSend = !provider.sendingMessage &&
                                           !provider.isUploadingFiles &&
                                           connectivityProvider.isConnected;
 
@@ -647,8 +642,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                           ),
                                         ),
                                       );
-                                    },
-                                  ),
+                                    }
+                                    
+                                    return const SizedBox.shrink();
+                                  },
+                                ),
                               ],
                             ),
                           ),
