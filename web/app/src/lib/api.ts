@@ -1084,7 +1084,9 @@ import type {
   RecordingPermission,
   PrivateCloudSync,
   UserUsage,
+  UserUsageResponse,
   UserSubscription,
+  UserSubscriptionResponse,
   Person,
 } from '@/types/user';
 
@@ -1237,15 +1239,41 @@ export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
 /**
  * Get user usage stats
  */
-export async function getUserUsage(period: 'day' | 'week' | 'month' = 'month'): Promise<UserUsage> {
-  return fetchWithAuth<UserUsage>(`/v1/users/me/usage?period=${period}`);
+export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly'): Promise<UserUsage | null> {
+  try {
+    const response = await fetchWithAuth<UserUsageResponse>(`/v1/users/me/usage?period=${period}`);
+    // Extract the relevant period's stats
+    const stats = response[period] || response.monthly || response.today;
+    if (stats) {
+      return {
+        transcription_seconds: stats.transcription_seconds || 0,
+        words_transcribed: stats.words_transcribed || 0,
+        insights_gained: stats.insights_gained || 0,
+        memories_created: stats.memories_created || 0,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('getUserUsage error:', error);
+    return null;
+  }
 }
 
 /**
  * Get user subscription info
  */
-export async function getUserSubscription(): Promise<UserSubscription> {
-  return fetchWithAuth<UserSubscription>('/v1/users/me/subscription');
+export async function getUserSubscription(): Promise<UserSubscription | null> {
+  try {
+    const response = await fetchWithAuth<UserSubscriptionResponse>('/v1/users/me/subscription');
+    return {
+      plan: response.subscription?.plan || 'basic',
+      status: response.subscription?.status || 'active',
+      is_unlimited: response.subscription?.plan === 'unlimited',
+    };
+  } catch (error) {
+    console.error('getUserSubscription error:', error);
+    return null;
+  }
 }
 
 /**

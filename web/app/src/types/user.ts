@@ -38,10 +38,71 @@ export interface PrivateCloudSync {
   enabled: boolean;
 }
 
+// Usage stats for a period
+export interface UsageStats {
+  transcription_seconds: number;
+  words_transcribed: number;
+  insights_gained: number;
+  memories_created: number;
+}
+
+// Full usage response from API
+export interface UserUsageResponse {
+  today?: UsageStats;
+  monthly?: UsageStats;
+  yearly?: UsageStats;
+  all_time?: UsageStats;
+  history?: Array<{
+    date: string;
+    transcription_seconds: number;
+    words_transcribed: number;
+    insights_gained: number;
+    memories_created: number;
+  }>;
+}
+
+// Subscription details
+export interface Subscription {
+  plan: 'basic' | 'unlimited';
+  status: 'active' | 'inactive';
+  current_period_end?: number;
+  stripe_subscription_id?: string;
+  current_price_id?: string;
+  features: string[];
+  cancel_at_period_end: boolean;
+}
+
+// Full subscription response from API
+export interface UserSubscriptionResponse {
+  subscription: Subscription;
+  transcription_seconds_used: number;
+  transcription_seconds_limit: number;
+  words_transcribed_used: number;
+  words_transcribed_limit: number;
+  insights_gained_used: number;
+  insights_gained_limit: number;
+  memories_created_used: number;
+  memories_created_limit: number;
+  available_plans: Array<{
+    id: string;
+    title: string;
+    features: string[];
+    prices: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      price_string: string;
+    }>;
+  }>;
+  show_subscription_ui: boolean;
+}
+
+// Simplified types for component use
 export interface UserUsage {
-  conversations_count: number;
-  total_duration_seconds: number;
-  period: string;
+  transcription_seconds: number;
+  words_transcribed: number;
+  insights_gained: number;
+  memories_created: number;
 }
 
 export interface UserSubscription {

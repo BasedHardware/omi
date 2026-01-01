@@ -30,6 +30,7 @@ import {
   Github,
   Twitter,
   Settings,
+  Brain,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
@@ -661,6 +662,13 @@ function UsageSection({
     return `${minutes}m`;
   };
 
+  const formatNumber = (num: number) => {
+    if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}k`;
+    }
+    return num.toString();
+  };
+
   const getPlanBadgeColor = (plan: string) => {
     switch (plan?.toLowerCase()) {
       case 'pro':
@@ -670,6 +678,12 @@ function UsageSection({
       default:
         return 'bg-bg-tertiary text-text-secondary border-border-secondary';
     }
+  };
+
+  const getPlanDisplayName = (plan: string) => {
+    if (plan === 'unlimited') return 'Unlimited';
+    if (plan === 'basic') return 'Free';
+    return plan || 'Free';
   };
 
   return (
@@ -685,11 +699,11 @@ function UsageSection({
               <p className="text-text-tertiary text-sm">Current Plan</p>
               <div className="flex items-center gap-2 mt-1">
                 <h3 className="text-2xl font-bold text-text-primary">
-                  {subscription?.plan || 'Free'}
+                  {getPlanDisplayName(subscription?.plan || '')}
                 </h3>
                 {subscription?.is_unlimited && (
                   <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border', getPlanBadgeColor('unlimited'))}>
-                    Unlimited
+                    PRO
                   </span>
                 )}
               </div>
@@ -709,32 +723,58 @@ function UsageSection({
         </div>
       </Card>
 
-      {/* Usage Stats */}
+      {/* Usage Stats - 2x2 Grid like mobile app */}
       <div className="grid grid-cols-2 gap-4">
         <Card>
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 rounded-lg bg-blue-500/10">
-              <MessageSquare className="w-5 h-5 text-blue-400" />
+              <Clock className="w-5 h-5 text-blue-400" />
             </div>
-            <span className="text-text-tertiary text-sm">Conversations</span>
+            <span className="text-text-tertiary text-sm">Listening</span>
           </div>
-          <p className="text-3xl font-bold text-text-primary">
-            {usage?.conversations_count || 0}
+          <p className="text-3xl font-bold text-blue-400">
+            {usage ? formatDuration(usage.transcription_seconds) : '0m'}
           </p>
-          <p className="text-text-quaternary text-sm mt-1">This month</p>
+          <p className="text-text-quaternary text-sm mt-1">Total time listening</p>
         </Card>
 
         <Card>
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 rounded-lg bg-green-500/10">
-              <Clock className="w-5 h-5 text-green-400" />
+              <MessageSquare className="w-5 h-5 text-green-400" />
             </div>
-            <span className="text-text-tertiary text-sm">Total Duration</span>
+            <span className="text-text-tertiary text-sm">Understanding</span>
           </div>
-          <p className="text-3xl font-bold text-text-primary">
-            {usage ? formatDuration(usage.total_duration_seconds) : '0m'}
+          <p className="text-3xl font-bold text-green-400">
+            {usage ? formatNumber(usage.words_transcribed) : '0'}
           </p>
-          <p className="text-text-quaternary text-sm mt-1">This month</p>
+          <p className="text-text-quaternary text-sm mt-1">Words transcribed</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-orange-500/10">
+              <BarChart3 className="w-5 h-5 text-orange-400" />
+            </div>
+            <span className="text-text-tertiary text-sm">Insights</span>
+          </div>
+          <p className="text-3xl font-bold text-orange-400">
+            {usage?.insights_gained || 0}
+          </p>
+          <p className="text-text-quaternary text-sm mt-1">Insights gained</p>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 rounded-lg bg-purple-500/10">
+              <Brain className="w-5 h-5 text-purple-400" />
+            </div>
+            <span className="text-text-tertiary text-sm">Memories</span>
+          </div>
+          <p className="text-3xl font-bold text-purple-400">
+            {usage?.memories_created || 0}
+          </p>
+          <p className="text-text-quaternary text-sm mt-1">Memories created</p>
         </Card>
       </div>
     </div>
@@ -1076,17 +1116,18 @@ export function SettingsPage() {
       setIsLoading(true);
       try {
         const [lang, vocab, summary, recording, training, usageData, sub, integ, keys, webhookStatus] = await Promise.all([
-          getUserLanguage().catch(() => 'en'),
-          getCustomVocabulary().catch(() => []),
-          getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
-          getRecordingPermission().catch(() => ({ enabled: false })),
-          getTrainingDataOptIn().catch(() => ({ opted_in: false })),
-          getUserUsage('month').catch(() => null),
-          getUserSubscription().catch(() => null),
-          getIntegrations().catch(() => []),
-          getDeveloperApiKeys().catch(() => []),
-          getDeveloperWebhooksStatus().catch(() => ({})),
+          getUserLanguage().catch((e) => { console.error('getUserLanguage error:', e); return 'en'; }),
+          getCustomVocabulary().catch((e) => { console.error('getCustomVocabulary error:', e); return []; }),
+          getDailySummarySettings().catch((e) => { console.error('getDailySummarySettings error:', e); return { enabled: true, hour: 22 }; }),
+          getRecordingPermission().catch((e) => { console.error('getRecordingPermission error:', e); return { enabled: false }; }),
+          getTrainingDataOptIn().catch((e) => { console.error('getTrainingDataOptIn error:', e); return { opted_in: false }; }),
+          getUserUsage('all_time').catch((e) => { console.error('getUserUsage error:', e); return null; }),
+          getUserSubscription().catch((e) => { console.error('getUserSubscription error:', e); return null; }),
+          getIntegrations().catch((e) => { console.error('getIntegrations error:', e); return []; }),
+          getDeveloperApiKeys().catch((e) => { console.error('getDeveloperApiKeys error:', e); return []; }),
+          getDeveloperWebhooksStatus().catch((e) => { console.error('getDeveloperWebhooksStatus error:', e); return {}; }),
         ]);
+        console.log('Settings loaded:', { lang, vocab, summary, recording, training, usageData, sub });
         setLanguage(lang);
         setVocabulary(vocab);
         setDailySummary(summary);
