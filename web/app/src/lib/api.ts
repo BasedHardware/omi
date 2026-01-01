@@ -1071,3 +1071,241 @@ export async function deleteAppApiKey(appId: string, keyId: string): Promise<voi
     method: 'DELETE',
   });
 }
+
+// ============================================================================
+// User Settings API
+// ============================================================================
+
+import type {
+  DailySummarySettings,
+  TranscriptionPreferences,
+  DeveloperWebhooks,
+  WebhookSettings,
+  RecordingPermission,
+  PrivateCloudSync,
+  UserUsage,
+  UserSubscription,
+  Person,
+} from '@/types/user';
+
+/**
+ * Get user's primary language
+ */
+export async function getUserLanguage(): Promise<string> {
+  const response = await fetchWithAuth<{ language: string }>('/v1/users/language');
+  return response.language;
+}
+
+/**
+ * Set user's primary language
+ */
+export async function setUserLanguage(language: string): Promise<void> {
+  await fetchWithAuth('/v1/users/language', {
+    method: 'PATCH',
+    body: JSON.stringify({ language }),
+  });
+}
+
+/**
+ * Get daily summary settings
+ */
+export async function getDailySummarySettings(): Promise<DailySummarySettings> {
+  return fetchWithAuth<DailySummarySettings>('/v1/users/daily-summary-settings');
+}
+
+/**
+ * Update daily summary settings
+ */
+export async function updateDailySummarySettings(settings: DailySummarySettings): Promise<void> {
+  await fetchWithAuth('/v1/users/daily-summary-settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
+}
+
+/**
+ * Get transcription preferences
+ */
+export async function getTranscriptionPreferences(): Promise<TranscriptionPreferences> {
+  return fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
+}
+
+/**
+ * Update transcription preferences
+ */
+export async function updateTranscriptionPreferences(
+  preferences: Partial<TranscriptionPreferences>
+): Promise<void> {
+  await fetchWithAuth('/v1/users/transcription-preferences', {
+    method: 'PATCH',
+    body: JSON.stringify(preferences),
+  });
+}
+
+/**
+ * Get developer webhook URL
+ */
+export async function getDeveloperWebhook(
+  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary'
+): Promise<WebhookSettings> {
+  return fetchWithAuth<WebhookSettings>(`/v1/users/developer/webhook/${type}`);
+}
+
+/**
+ * Set developer webhook URL
+ */
+export async function setDeveloperWebhook(
+  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary',
+  url: string
+): Promise<void> {
+  await fetchWithAuth(`/v1/users/developer/webhook/${type}`, {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
+
+/**
+ * Enable developer webhook
+ */
+export async function enableDeveloperWebhook(
+  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary'
+): Promise<void> {
+  await fetchWithAuth(`/v1/users/developer/webhook/${type}/enable`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Disable developer webhook
+ */
+export async function disableDeveloperWebhook(
+  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary'
+): Promise<void> {
+  await fetchWithAuth(`/v1/users/developer/webhook/${type}/disable`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Get all webhook statuses
+ */
+export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
+  return fetchWithAuth<DeveloperWebhooks>('/v1/users/developer/webhooks/status');
+}
+
+/**
+ * Get store recording permission
+ */
+export async function getRecordingPermission(): Promise<RecordingPermission> {
+  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+}
+
+/**
+ * Set store recording permission
+ */
+export async function setRecordingPermission(enabled: boolean): Promise<void> {
+  await fetchWithAuth(`/v1/users/store-recording-permission?value=${enabled}`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Delete recording permission and all stored recordings
+ */
+export async function deleteRecordingPermission(): Promise<void> {
+  await fetchWithAuth('/v1/users/store-recording-permission', {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Get private cloud sync status
+ */
+export async function getPrivateCloudSync(): Promise<PrivateCloudSync> {
+  return fetchWithAuth<PrivateCloudSync>('/v1/users/private-cloud-sync');
+}
+
+/**
+ * Set private cloud sync
+ */
+export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
+  await fetchWithAuth(`/v1/users/private-cloud-sync?value=${enabled}`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Get user usage stats
+ */
+export async function getUserUsage(period: 'day' | 'week' | 'month' = 'month'): Promise<UserUsage> {
+  return fetchWithAuth<UserUsage>(`/v1/users/me/usage?period=${period}`);
+}
+
+/**
+ * Get user subscription info
+ */
+export async function getUserSubscription(): Promise<UserSubscription> {
+  return fetchWithAuth<UserSubscription>('/v1/users/me/subscription');
+}
+
+/**
+ * Get all people for speaker identification
+ */
+export async function getPeople(): Promise<Person[]> {
+  return fetchWithAuth<Person[]>('/v1/users/people');
+}
+
+/**
+ * Create a new person
+ */
+export async function createPerson(name: string): Promise<Person> {
+  return fetchWithAuth<Person>('/v1/users/people', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+}
+
+/**
+ * Update person name
+ */
+export async function updatePersonName(personId: string, name: string): Promise<void> {
+  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+/**
+ * Delete a person
+ */
+export async function deletePerson(personId: string): Promise<void> {
+  await fetchWithAuth(`/v1/users/people/${personId}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Delete account permanently
+ */
+export async function deleteAccount(): Promise<void> {
+  await fetchWithAuth('/v1/users/delete-account', {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Get training data opt-in status
+ */
+export async function getTrainingDataOptIn(): Promise<{ opted_in: boolean }> {
+  return fetchWithAuth<{ opted_in: boolean }>('/v1/users/training-data-opt-in');
+}
+
+/**
+ * Set training data opt-in
+ */
+export async function setTrainingDataOptIn(optIn: boolean): Promise<void> {
+  await fetchWithAuth('/v1/users/training-data-opt-in', {
+    method: 'POST',
+    body: JSON.stringify({ opted_in: optIn }),
+  });
+}
