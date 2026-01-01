@@ -13,6 +13,14 @@ import type {
   MessageChunkType,
   MessageFile,
 } from '@/types/conversation';
+import type {
+  App,
+  AppCategory,
+  AppCapability,
+  AppsGroupedResponse,
+  AppsSearchResponse,
+  AppsSearchParams,
+} from '@/types/apps';
 
 // Use proxy in development to avoid CORS, direct API in production
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -707,55 +715,109 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
 // Apps API
 // ============================================================================
 
-export interface App {
-  id: string;
-  name: string;
-  description: string;
-  image?: string;
-  author?: string;
-  capabilities: string[];
-  category?: string;
-  enabled: boolean;
-  deleted: boolean;
-  installs?: number;
-  rating_avg?: number;
-  rating_count?: number;
-  private?: boolean;
-}
+// Re-export App type for backward compatibility
+export type { App } from '@/types/apps';
 
-interface AppsSearchResponse {
-  apps: App[];
+/**
+ * Get apps grouped by capability (for explore page)
+ */
+export async function getAppsGrouped(params: {
+  capability?: string;
+  offset?: number;
+  limit?: number;
+} = {}): Promise<AppsGroupedResponse> {
+  const { capability, offset = 0, limit = 20 } = params;
+
+  const queryParams = new URLSearchParams({
+    offset: offset.toString(),
+    limit: limit.toString(),
+  });
+
+  if (capability) {
+    queryParams.set('capability', capability);
+  }
+
+  return fetchWithAuth<AppsGroupedResponse>(`/v2/apps?${queryParams}`);
 }
 
 /**
- * Get apps with optional filters
+ * Search apps with filters
  */
-export async function getApps(params: {
-  installed?: boolean;
-  limit?: number;
-  offset?: number;
-} = {}): Promise<App[]> {
-  const { installed, limit = 50, offset = 0 } = params;
+export async function searchApps(params: AppsSearchParams = {}): Promise<AppsSearchResponse> {
+  const queryParams = new URLSearchParams();
 
-  const queryParams = new URLSearchParams({
-    limit: limit.toString(),
-    offset: offset.toString(),
+  if (params.q) queryParams.set('q', params.q);
+  if (params.category) queryParams.set('category', params.category);
+  if (params.capability) queryParams.set('capability', params.capability);
+  if (params.rating !== undefined) queryParams.set('rating', params.rating.toString());
+  if (params.sort) queryParams.set('sort', params.sort);
+  if (params.my_apps) queryParams.set('my_apps', 'true');
+  if (params.installed_apps) queryParams.set('installed_apps', 'true');
+  queryParams.set('offset', (params.offset || 0).toString());
+  queryParams.set('limit', (params.limit || 20).toString());
+
+  return fetchWithAuth<AppsSearchResponse>(`/v2/apps/search?${queryParams}`);
+}
+
+/**
+ * Get popular apps
+ */
+export async function getPopularApps(): Promise<App[]> {
+  return fetchWithAuth<App[]>('/v1/apps/popular');
+}
+
+/**
+ * Get a single app by ID
+ */
+export async function getApp(appId: string): Promise<App> {
+  return fetchWithAuth<App>(`/v1/apps/${appId}`);
+}
+
+/**
+ * Get app categories
+ */
+export async function getAppCategories(): Promise<AppCategory[]> {
+  return fetchWithAuth<AppCategory[]>('/v1/app-categories');
+}
+
+/**
+ * Get app capabilities
+ */
+export async function getAppCapabilities(): Promise<AppCapability[]> {
+  return fetchWithAuth<AppCapability[]>('/v1/app-capabilities');
+}
+
+/**
+ * Enable (install) an app
+ */
+export async function enableApp(appId: string): Promise<{ status: string }> {
+  return fetchWithAuth<{ status: string }>(`/v1/apps/enable?app_id=${appId}`, {
+    method: 'POST',
   });
+}
 
-  if (installed !== undefined) {
-    queryParams.set('installed_apps', installed.toString());
-  }
+/**
+ * Disable (uninstall) an app
+ */
+export async function disableApp(appId: string): Promise<{ status: string }> {
+  return fetchWithAuth<{ status: string }>(`/v1/apps/disable?app_id=${appId}`, {
+    method: 'POST',
+  });
+}
 
-  const response = await fetchWithAuth<AppsSearchResponse>(`/v2/apps?${queryParams}`);
-  return response.apps || [];
+/**
+ * Get installed apps
+ */
+export async function getInstalledApps(): Promise<AppsSearchResponse> {
+  return searchApps({ installed_apps: true, limit: 100 });
 }
 
 /**
  * Get chat-enabled apps (apps with 'chat' or 'persona' capability)
  */
 export async function getChatApps(): Promise<App[]> {
-  const apps = await getApps({ installed: true });
-  return apps.filter(app =>
+  const response = await searchApps({ installed_apps: true, limit: 100 });
+  return response.data.filter(app =>
     app.capabilities?.includes('chat') || app.capabilities?.includes('persona')
   );
 }
