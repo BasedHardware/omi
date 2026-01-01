@@ -1353,6 +1353,41 @@ export async function deletePerson(personId: string): Promise<void> {
 }
 
 /**
+ * Bulk assign speaker to transcript segments
+ * @param conversationId - The conversation ID
+ * @param segmentIds - Array of segment IDs to assign
+ * @param isUser - If true, marks segments as user's speech
+ * @param personId - Person ID to assign (null to unassign)
+ */
+export async function assignBulkTranscriptSegments(
+  conversationId: string,
+  segmentIds: string[],
+  options: { isUser?: boolean; personId?: string | null }
+): Promise<void> {
+  const { isUser, personId } = options;
+
+  let assignType: 'is_user' | 'person_id';
+  let value: string | null;
+
+  if (isUser) {
+    assignType = 'is_user';
+    value = 'true';
+  } else {
+    assignType = 'person_id';
+    value = personId ?? null;
+  }
+
+  await fetchWithAuth(`/v1/conversations/${conversationId}/segments/assign-bulk`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      segment_ids: segmentIds,
+      assign_type: assignType,
+      value,
+    }),
+  });
+}
+
+/**
  * Delete account permanently
  */
 export async function deleteAccount(): Promise<void> {

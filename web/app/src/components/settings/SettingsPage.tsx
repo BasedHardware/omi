@@ -55,6 +55,7 @@ import {
   getUserSubscription,
   getCustomVocabulary,
   updateCustomVocabulary,
+  getDeveloperWebhook,
   getDeveloperWebhooksStatus,
   setDeveloperWebhook,
   enableDeveloperWebhook,
@@ -1397,22 +1398,36 @@ function DeveloperSection({
   const [showDeleteGraphDialog, setShowDeleteGraphDialog] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  // Parse audio_bytes URL which may contain comma-separated URL and delay (e.g., "https://example.com,5")
+  const parseAudioBytesUrl = (rawUrl: string) => {
+    if (!rawUrl) return { url: '', delay: '5' };
+    const parts = rawUrl.split(',');
+    if (parts.length >= 2) {
+      return { url: parts[0], delay: parts[1] };
+    }
+    return { url: rawUrl, delay: '5' };
+  };
+
+  const initialAudioBytes = parseAudioBytesUrl(webhooks.audio_bytes?.url || '');
+
   const [webhookUrls, setWebhookUrls] = useState<Record<string, string>>({
     memory_created: webhooks.memory_created?.url || '',
     transcript_received: webhooks.transcript_received?.url || '',
-    audio_bytes: webhooks.audio_bytes?.url || '',
+    audio_bytes: initialAudioBytes.url,
     day_summary: webhooks.day_summary?.url || '',
   });
-  const [audioBytesDelay, setAudioBytesDelay] = useState('5');
+  const [audioBytesDelay, setAudioBytesDelay] = useState(initialAudioBytes.delay);
 
   // Update webhook URLs when webhooks prop changes
   useEffect(() => {
+    const audioBytes = parseAudioBytesUrl(webhooks.audio_bytes?.url || '');
     setWebhookUrls({
       memory_created: webhooks.memory_created?.url || '',
       transcript_received: webhooks.transcript_received?.url || '',
-      audio_bytes: webhooks.audio_bytes?.url || '',
+      audio_bytes: audioBytes.url,
       day_summary: webhooks.day_summary?.url || '',
     });
+    setAudioBytesDelay(audioBytes.delay);
   }, [webhooks]);
 
   const webhookTypes = [
@@ -1935,14 +1950,40 @@ export function SettingsPage() {
             setIntegrations(integ);
             break;
           case 'developer':
-            const [keys, mKeys, webhookStatus] = await Promise.all([
+            // Fetch API keys, MCP keys, webhook status, and individual webhook URLs in parallel
+            // Note: Status API returns boolean fields, URL API returns {url: string}
+            const [keys, mKeys, webhookStatus, memoryUrl, transcriptUrl, audioBytesUrl, daySummaryUrl] = await Promise.all([
               getDeveloperApiKeys().catch(() => []),
               getMcpApiKeys().catch(() => []),
               getDeveloperWebhooksStatus().catch(() => ({})),
+              getDeveloperWebhook('memory_created').catch(() => ({ url: '' })),
+              getDeveloperWebhook('transcript_received').catch(() => ({ url: '' })),
+              getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
+              getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
             ]);
             setApiKeys(keys);
             setMcpKeys(mKeys);
-            setWebhooks(webhookStatus);
+            // Combine status (booleans) with URLs
+            // Status API uses 'realtime_transcript', we normalize to 'transcript_received'
+            const statusMap = webhookStatus as Record<string, boolean>;
+            setWebhooks({
+              memory_created: {
+                url: memoryUrl?.url || '',
+                enabled: statusMap['memory_created'] ?? false
+              },
+              transcript_received: {
+                url: transcriptUrl?.url || '',
+                enabled: statusMap['realtime_transcript'] ?? statusMap['transcript_received'] ?? false
+              },
+              audio_bytes: {
+                url: audioBytesUrl?.url || '',
+                enabled: statusMap['audio_bytes'] ?? false
+              },
+              day_summary: {
+                url: daySummaryUrl?.url || '',
+                enabled: statusMap['day_summary'] ?? false
+              },
+            });
             break;
           // 'profile' and 'account' don't need API calls
         }

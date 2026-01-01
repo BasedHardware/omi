@@ -22,7 +22,8 @@ import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import { EditableTitle } from './EditableTitle';
-import type { Conversation, ActionItem, AppResponse } from '@/types/conversation';
+import { usePeople } from '@/hooks/usePeople';
+import type { Conversation, ActionItem, AppResponse, TranscriptSegment } from '@/types/conversation';
 
 interface ConversationDetailProps {
   conversation: Conversation;
@@ -295,6 +296,7 @@ function LocationTab({ geolocation, address }: {
 
 export function ConversationDetail({ conversation, userName, onConversationUpdate }: ConversationDetailProps) {
   const router = useRouter();
+  const { people } = usePeople();
   const { structured, transcript_segments, geolocation } = conversation;
   const duration = calculateDuration(conversation.started_at, conversation.finished_at);
   const actionItems = structured.action_items || [];
@@ -311,6 +313,16 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
   };
 
   const [activeTab, setActiveTab] = useState<TabId>(getInitialTab());
+
+  // Handle segment updates from transcript editing
+  const handleSegmentsUpdate = useCallback((updatedSegments: TranscriptSegment[]) => {
+    if (onConversationUpdate) {
+      onConversationUpdate({
+        ...conversation,
+        transcript_segments: updatedSegments,
+      });
+    }
+  }, [conversation, onConversationUpdate]);
 
   // Handle title change
   const handleTitleChange = useCallback((newTitle: string) => {
@@ -508,7 +520,14 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
                 )}
 
                 {activeTab === 'transcript' && hasTranscript && (
-                  <TranscriptView segments={transcript_segments} userName={userName} />
+                  <TranscriptView
+                    segments={transcript_segments}
+                    userName={userName}
+                    conversationId={conversation.id}
+                    people={people}
+                    editable={true}
+                    onSegmentsUpdate={handleSegmentsUpdate}
+                  />
                 )}
 
                 {activeTab === 'location' && (

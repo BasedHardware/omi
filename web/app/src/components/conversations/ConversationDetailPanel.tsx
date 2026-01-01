@@ -21,7 +21,8 @@ import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import { EditableTitle } from './EditableTitle';
-import type { Conversation, ActionItem, AppResponse } from '@/types/conversation';
+import { usePeople } from '@/hooks/usePeople';
+import type { Conversation, ActionItem, AppResponse, TranscriptSegment } from '@/types/conversation';
 
 interface ConversationDetailPanelProps {
   conversationId: string;
@@ -342,6 +343,17 @@ export function ConversationDetailPanel({
 }: ConversationDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('summary');
   const router = useRouter();
+  const { people } = usePeople();
+
+  // Handle segment updates from transcript editing
+  const handleSegmentsUpdate = useCallback((updatedSegments: TranscriptSegment[]) => {
+    if (conversation && onConversationUpdate) {
+      onConversationUpdate({
+        ...conversation,
+        transcript_segments: updatedSegments,
+      });
+    }
+  }, [conversation, onConversationUpdate]);
 
   // Handle title change - update conversation with new title
   const handleTitleChange = useCallback((newTitle: string) => {
@@ -547,7 +559,14 @@ export function ConversationDetailPanel({
             )}
 
             {activeTab === 'transcript' && hasTranscript && (
-              <TranscriptView segments={transcript_segments} userName={userName} />
+              <TranscriptView
+                segments={transcript_segments}
+                userName={userName}
+                conversationId={conversationId}
+                people={people}
+                editable={true}
+                onSegmentsUpdate={handleSegmentsUpdate}
+              />
             )}
 
             {activeTab === 'location' && (
