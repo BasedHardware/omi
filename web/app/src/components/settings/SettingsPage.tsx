@@ -883,14 +883,6 @@ function UsageSection({
   const usage = allUsage ? allUsage[selectedPeriod] : null;
   const periods: UsagePeriod[] = ['today', 'monthly', 'yearly', 'all_time'];
 
-  // Debug: log usage data
-  console.log('UsageSection render:', {
-    allUsage,
-    selectedPeriod,
-    usage,
-    hasHistory: usage?.history?.length ?? 0,
-  });
-
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-text-primary">Plan & Usage</h2>
