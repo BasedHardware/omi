@@ -45,7 +45,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/theme/brand_colors.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 
@@ -77,7 +77,7 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
-        
+
         // Schedule daily reflection notification if enabled
         if (SharedPreferencesUtil().dailyReflectionEnabled) {
           DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
@@ -786,18 +786,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              // Sync icon for Limitless devices
+              // Sync icon - shows when there are pending files or a device is paired
               Consumer2<DeviceProvider, SyncProvider>(
                 builder: (context, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
                   final hasPending = syncProvider.missingWals.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  if (device != null && device.type == DeviceType.limitless) {
+                  // Show sync icon if there's a paired device OR if there are pending files to sync
+                  if (device != null || hasPending) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        SyncBottomSheet.show(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SyncPage()),
+                        );
                       },
                       child: Container(
                         width: 36,

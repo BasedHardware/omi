@@ -63,4 +63,10 @@ config OMI_ENABLE_MONITOR
          Disable in production to save power, RAM, and flash space."
     default n
 
+config OMI_ENABLE_WIFI
+    bool "Enable WiFi support"
+    help
+        "Enable the WiFi support to sync audio data over TCP."
+    default n
+
 endmenu

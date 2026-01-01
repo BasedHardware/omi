@@ -31,7 +31,7 @@ LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
  * data, needs to free that block.
  */
 #define MAX_BLOCK_SIZE BLOCK_SIZE(MAX_SAMPLE_RATE, 2)
-#define BLOCK_COUNT 4
+#define BLOCK_COUNT 8
 
 K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 4);
 
@@ -88,18 +88,22 @@ static void mic_thread_function(void *p1, void *p2, void *p3)
     ARG_UNUSED(p2);
     ARG_UNUSED(p3);
 
-    while (mic_running) {
-        void *buffer;
-        uint32_t size;
-
-        int ret = dmic_read(dmic_dev, 0, &buffer, &size, READ_TIMEOUT);
-        if (ret < 0) {
-            LOG_ERR("Read failed: %d", ret);
-            continue;
+    while (true) {
+        if (mic_running) {
+            void *buffer;
+            uint32_t size;
+    
+            int ret = dmic_read(dmic_dev, 0, &buffer, &size, READ_TIMEOUT);
+            if (ret < 0) {
+                LOG_ERR("Read failed: %d", ret);
+                continue;
+            }
+    
+            LOG_DBG("Got buffer %p of %u bytes", buffer, size);
+            process_audio_buffer(buffer, size);
+        } else {
+            k_sleep(K_MSEC(100));
         }
-
-        LOG_DBG("Got buffer %p of %u bytes", buffer, size);
-        process_audio_buffer(buffer, size);
     }
 }
 
@@ -179,6 +183,24 @@ int mic_start()
 void set_mic_callback(mix_handler callback)
 {
     callback_func = callback;
+}
+
+void mic_pause()
+{
+    LOG_INF("Pausing microphone");
+    int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
+    if (mic_running) {
+        mic_running = false;
+    }
+}
+
+void mic_resume()
+{
+    LOG_INF("Resuming microphone");
+    int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
+    if (!mic_running) {
+        mic_running = true;
+    }
 }
 
 void mic_off()

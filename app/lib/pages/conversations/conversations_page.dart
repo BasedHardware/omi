@@ -10,6 +10,7 @@ import 'package:omi/pages/conversations/widgets/wrapped_banner.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -42,8 +43,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void initState() {
+    super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      if (!mounted) return;
+      final conversationProvider = context.read<ConversationProvider>();
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
       } else {
@@ -51,8 +54,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         conversationProvider.checkHasDailySummaries();
       }
 
+      if (!mounted) return;
+
       // Load folders for folder tabs
-      final folderProvider = Provider.of<FolderProvider>(context, listen: false);
+      final folderProvider = context.read<FolderProvider>();
       if (folderProvider.folders.isEmpty) {
         await folderProvider.loadFolders();
       }
@@ -62,7 +67,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
       }
     });
-    super.initState();
   }
 
   void scrollToTop() {
@@ -271,9 +275,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            // Goal tracker widget - before folders (conditionally shown based on user preference)
-            if (SharedPreferencesUtil().showGoalsOnHome)
-              const SliverToBoxAdapter(child: GoalTrackerWidget()),
+            // Goal tracker widget - before folders
+            Selector<DeveloperModeProvider, bool>(
+              selector: (context, provider) => provider.showGoalTrackerEnabled,
+              builder: (context, showGoalTrackerEnabled, child) {
+                if (!showGoalTrackerEnabled) return const SliverToBoxAdapter(child: SizedBox.shrink());
+                return const SliverToBoxAdapter(child: GoalTrackerWidget());
+              },
+            ),
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {

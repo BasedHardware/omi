@@ -18,6 +18,9 @@
 #include "speaker.h"
 #include "transport.h"
 #include "wdog_facade.h"
+#ifdef CONFIG_OMI_ENABLE_WIFI
+#include "wifi.h"
+#endif
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 #include "sd_card.h"
 #endif
@@ -413,7 +416,9 @@ void turnoff_all()
         LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
         return;
     }
-
+#ifdef CONFIG_OMI_ENABLE_WIFI
+    wifi_turn_off();
+#endif
     rc = watchdog_deinit();
     if (rc < 0) {
         LOG_ERR("Failed to deinitialize watchdog (%d)", rc);

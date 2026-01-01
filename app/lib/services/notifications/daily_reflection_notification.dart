@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 /// Schedules a notification every day at 9 PM local time
 class DailyReflectionNotification {
   static final _awesomeNotifications = AwesomeNotifications();
-  
+
   /// The reflection prompt message to send in chat
   static const String reflectionMessage = """It's time for a daily reflection:
 - What did you do today that moved you closer to your goal?
@@ -36,6 +36,7 @@ class DailyReflectionNotification {
           channelKey: channelKey,
           title: '🌙 Time for Daily Reflection',
           body: 'Tell me about your day',
+          badge: 0,
           payload: {
             'navigate_to': '/chat/omi',
             'auto_message': 'daily_reflection',
@@ -54,7 +55,7 @@ class DailyReflectionNotification {
           preciseAlarm: true,
         ),
       );
-      
+
       debugPrint('[DailyReflection] Scheduled daily notification for 9 PM');
     } catch (e) {
       debugPrint('[DailyReflection] Error scheduling notification: $e');
@@ -76,4 +77,3 @@ class DailyReflectionNotification {
     return payload['auto_message'] == 'daily_reflection';
   }
 }
-

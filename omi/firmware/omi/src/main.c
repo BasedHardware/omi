@@ -321,7 +321,10 @@ int main(void)
         error_microphone();
         return ret;
     }
-
+#ifdef CONFIG_OMI_ENABLE_WIFI
+    // Initialize wifi
+    wifi_init();
+#endif
     LOG_INF("Device initialized successfully\n");
 
     while (1) {

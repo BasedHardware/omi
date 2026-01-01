@@ -38,6 +38,7 @@ static const struct gpio_dt_spec rfsw_en = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(rfsw
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 extern struct bt_gatt_service storage_service;
 extern bool storage_is_on;
+static bool storage_full_warned = false;
 #endif
 
 extern bool is_connected;
@@ -356,6 +357,9 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
 #endif
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     features |= OMI_FEATURE_OFFLINE_STORAGE;
+#endif
+#ifdef CONFIG_OMI_ENABLE_WIFI
+    features |= OMI_FEATURE_WIFI;
 #endif
     // LED dimming is always enabled now with PWM.
     features |= OMI_FEATURE_LED_DIMMING;
@@ -816,7 +820,13 @@ void pusher(void)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
             // No BT connection, write to storage
             if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                storage_full_warned = false;
                 write_to_storage();
+            } else {
+                if (!storage_full_warned) {
+                    LOG_WRN("Storage full, stopping offline storage");
+                    storage_full_warned = true;
+                }
             }
 #endif
         } else {

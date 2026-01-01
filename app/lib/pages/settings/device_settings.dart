@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
@@ -35,6 +36,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+
+  // WiFi sync state
+  bool _isWifiSupported = false;
+  String? _wifiSsid;
+  String? _wifiPassword;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -121,6 +127,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             setState(() {
               _isMicGainLoaded = true; // Loaded, but no value, use default
             });
+          }
+        }
+
+        final wifiSupported = await connection.isWifiSyncSupported();
+        if (mounted) {
+          setState(() {
+            _isWifiSupported = wifiSupported;
+          });
+
+          if (wifiSupported) {
+            final walService = ServiceManager.instance().wal;
+            final syncs = walService.getSyncs();
+            final credentials = syncs.sdcard.getWifiCredentials();
+            if (mounted && credentials != null) {
+              setState(() {
+                _wifiSsid = credentials['ssid'];
+                _wifiPassword = credentials['password'];
+              });
+            }
           }
         }
       }
@@ -728,6 +753,29 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
+  void _showWifiSyncSheet() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => WifiSyncSettingsPage(
+          initialSsid: _wifiSsid,
+          initialPassword: _wifiPassword,
+          onCredentialsSaved: (ssid, password) {
+            setState(() {
+              _wifiSsid = ssid;
+              _wifiPassword = password;
+            });
+          },
+          onCredentialsCleared: () {
+            setState(() {
+              _wifiSsid = null;
+              _wifiPassword = null;
+            });
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildPresetButton(String label, int level, int currentLevel, VoidCallback onTap) {
     final isSelected = level == currentLevel;
     return GestureDetector(
@@ -796,6 +844,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               title: context.l10n.micGain,
               chipValue: _getMicGainLabel(_micGain.round()),
               onTap: _showMicGainSheet,
+            ),
+          ],
+          // WiFi Sync
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.wifi,
+              title: 'WiFi Sync',
+              chipValue: _wifiSsid != null ? 'Configured' : 'Not Set',
+              onTap: _showWifiSyncSheet,
             ),
           ],
         ],

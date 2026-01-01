@@ -38,6 +38,9 @@ def _add_speaker_names_to_payload(uid, payload: dict):
     if not segments:
         return
 
+    user_profile = users_db.get_user_profile(uid)
+    user_name = user_profile.get('name') or 'User'
+
     person_ids = [seg.get('person_id') for seg in segments if seg.get('person_id')]
     people_map = {}
     if person_ids:
@@ -46,7 +49,7 @@ def _add_speaker_names_to_payload(uid, payload: dict):
 
     for seg in segments:
         if seg.get('is_user'):
-            seg['speaker_name'] = 'User'
+            seg['speaker_name'] = user_name
         elif seg.get('person_id') and seg['person_id'] in people_map:
             seg['speaker_name'] = people_map[seg['person_id']]
         else:

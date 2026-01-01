@@ -29,7 +29,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
-  bool showDailyGradeEnabled = false;
+  bool showGoalTrackerEnabled = false;
   bool dailyReflectionEnabled = true;
 
   void onConversationEventsToggled(bool value) {
@@ -101,7 +101,7 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
-    showDailyGradeEnabled = SharedPreferencesUtil().showDailyGradeEnabled;
+    showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -197,7 +197,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
     prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
-    prefs.showDailyGradeEnabled = showDailyGradeEnabled;
+    prefs.showGoalTrackerEnabled = showGoalTrackerEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -228,9 +228,9 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onShowDailyGradeChanged(var value) {
-    showDailyGradeEnabled = value;
-    SharedPreferencesUtil().showDailyGradeEnabled = value; // Save immediately
+  void onShowGoalTrackerChanged(var value) {
+    showGoalTrackerEnabled = value;
+    SharedPreferencesUtil().showGoalTrackerEnabled = value; // Save immediately
     notifyListeners();
   }
 
