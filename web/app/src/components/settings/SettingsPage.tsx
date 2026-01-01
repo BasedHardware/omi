@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -1265,8 +1265,8 @@ export function SettingsPage() {
   const { user, signOut } = useAuth();
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
 
-  // Track which sections have been loaded
-  const [loadedSections, setLoadedSections] = useState<Set<SettingsSection>>(new Set(['profile']));
+  // Track which sections have been loaded (using ref to avoid dependency issues)
+  const loadedSectionsRef = useRef<Set<SettingsSection>>(new Set(['profile', 'account']));
   const [sectionLoading, setSectionLoading] = useState<SettingsSection | null>(null);
 
   // Settings state - each section's data
@@ -1287,66 +1287,66 @@ export function SettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Load section data on demand
-  const loadSectionData = useCallback(async (section: SettingsSection) => {
-    if (loadedSections.has(section)) return;
-
-    setSectionLoading(section);
-    try {
-      switch (section) {
-        case 'language':
-          const [lang, vocab] = await Promise.all([
-            getUserLanguage().catch(() => 'en'),
-            getCustomVocabulary().catch(() => []),
-          ]);
-          setLanguage(lang);
-          setVocabulary(vocab);
-          break;
-        case 'notifications':
-          const summary = await getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 }));
-          setDailySummary(summary);
-          break;
-        case 'privacy':
-          const [recording, training] = await Promise.all([
-            getRecordingPermission().catch(() => ({ enabled: false })),
-            getTrainingDataOptIn().catch(() => ({ opted_in: false })),
-          ]);
-          setRecordingPermissionState(recording.enabled);
-          setTrainingDataOptInState(training.opted_in);
-          break;
-        case 'usage':
-          const [usageData, sub] = await Promise.all([
-            getAllUsageData().catch(() => null),
-            getUserSubscription().catch(() => null),
-          ]);
-          setAllUsage(usageData);
-          setSubscription(sub);
-          break;
-        case 'integrations':
-          const integ = await getIntegrations().catch(() => []);
-          setIntegrations(integ);
-          break;
-        case 'developer':
-          const [keys, webhookStatus] = await Promise.all([
-            getDeveloperApiKeys().catch(() => []),
-            getDeveloperWebhooksStatus().catch(() => ({})),
-          ]);
-          setApiKeys(keys);
-          setWebhooks(webhookStatus);
-          break;
-        // 'profile' and 'account' don't need API calls
-      }
-      setLoadedSections(prev => new Set([...prev, section]));
-    } catch (error) {
-      console.error(`Failed to load ${section} settings:`, error);
-    } finally {
-      setSectionLoading(null);
-    }
-  }, [loadedSections]);
-
-  // Load data when section changes
   useEffect(() => {
-    loadSectionData(activeSection);
-  }, [activeSection, loadSectionData]);
+    const section = activeSection;
+    if (loadedSectionsRef.current.has(section)) return;
+
+    const loadSectionData = async () => {
+      setSectionLoading(section);
+      try {
+        switch (section) {
+          case 'language':
+            const [lang, vocab] = await Promise.all([
+              getUserLanguage().catch(() => 'en'),
+              getCustomVocabulary().catch(() => []),
+            ]);
+            setLanguage(lang);
+            setVocabulary(vocab);
+            break;
+          case 'notifications':
+            const summary = await getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 }));
+            setDailySummary(summary);
+            break;
+          case 'privacy':
+            const [recording, training] = await Promise.all([
+              getRecordingPermission().catch(() => ({ enabled: false })),
+              getTrainingDataOptIn().catch(() => ({ opted_in: false })),
+            ]);
+            setRecordingPermissionState(recording.enabled);
+            setTrainingDataOptInState(training.opted_in);
+            break;
+          case 'usage':
+            const [usageData, sub] = await Promise.all([
+              getAllUsageData().catch(() => null),
+              getUserSubscription().catch(() => null),
+            ]);
+            setAllUsage(usageData);
+            setSubscription(sub);
+            break;
+          case 'integrations':
+            const integ = await getIntegrations().catch(() => []);
+            setIntegrations(integ);
+            break;
+          case 'developer':
+            const [keys, webhookStatus] = await Promise.all([
+              getDeveloperApiKeys().catch(() => []),
+              getDeveloperWebhooksStatus().catch(() => ({})),
+            ]);
+            setApiKeys(keys);
+            setWebhooks(webhookStatus);
+            break;
+          // 'profile' and 'account' don't need API calls
+        }
+        loadedSectionsRef.current.add(section);
+      } catch (error) {
+        console.error(`Failed to load ${section} settings:`, error);
+      } finally {
+        setSectionLoading(null);
+      }
+    };
+
+    loadSectionData();
+  }, [activeSection]);
 
   // Handlers
   const handleLanguageChange = async (newLanguage: string) => {
