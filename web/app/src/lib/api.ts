@@ -1149,11 +1149,14 @@ export async function updateTranscriptionPreferences(
   });
 }
 
+// Webhook type enum matching backend API
+type WebhookType = 'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
+
 /**
  * Get developer webhook URL
  */
 export async function getDeveloperWebhook(
-  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary'
+  type: WebhookType
 ): Promise<WebhookSettings> {
   return fetchWithAuth<WebhookSettings>(`/v1/users/developer/webhook/${type}`);
 }
@@ -1162,7 +1165,7 @@ export async function getDeveloperWebhook(
  * Set developer webhook URL
  */
 export async function setDeveloperWebhook(
-  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary',
+  type: WebhookType,
   url: string
 ): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}`, {
@@ -1175,7 +1178,7 @@ export async function setDeveloperWebhook(
  * Enable developer webhook
  */
 export async function enableDeveloperWebhook(
-  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary'
+  type: WebhookType
 ): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/enable`, {
     method: 'POST',
@@ -1186,7 +1189,7 @@ export async function enableDeveloperWebhook(
  * Disable developer webhook
  */
 export async function disableDeveloperWebhook(
-  type: 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary'
+  type: WebhookType
 ): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/disable`, {
     method: 'POST',

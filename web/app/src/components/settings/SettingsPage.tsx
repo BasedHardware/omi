@@ -1957,14 +1957,13 @@ export function SettingsPage() {
               getMcpApiKeys().catch(() => []),
               getDeveloperWebhooksStatus().catch(() => ({})),
               getDeveloperWebhook('memory_created').catch(() => ({ url: '' })),
-              getDeveloperWebhook('transcript_received').catch(() => ({ url: '' })),
+              getDeveloperWebhook('realtime_transcript').catch(() => ({ url: '' })),
               getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
               getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
             ]);
             setApiKeys(keys);
             setMcpKeys(mKeys);
             // Combine status (booleans) with URLs
-            // Status API uses 'realtime_transcript', we normalize to 'transcript_received'
             const statusMap = webhookStatus as Record<string, boolean>;
             setWebhooks({
               memory_created: {
@@ -1973,7 +1972,7 @@ export function SettingsPage() {
               },
               transcript_received: {
                 url: transcriptUrl?.url || '',
-                enabled: statusMap['realtime_transcript'] ?? statusMap['transcript_received'] ?? false
+                enabled: statusMap['realtime_transcript'] ?? false
               },
               audio_bytes: {
                 url: audioBytesUrl?.url || '',
@@ -2142,7 +2141,10 @@ export function SettingsPage() {
   };
 
   const handleWebhookChange = async (type: string, enabled: boolean, url?: string, delay?: string) => {
-    const webhookType = type as 'memory_created' | 'transcript_received' | 'audio_bytes' | 'day_summary';
+    // Convert internal type names to API type names
+    // UI uses 'transcript_received' but API expects 'realtime_transcript'
+    const apiType = type === 'transcript_received' ? 'realtime_transcript' : type;
+    const webhookType = apiType as 'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
     try {
       // For audio_bytes, combine URL and delay if both are provided
       const webhookUrl = type === 'audio_bytes' && url && delay ? `${url},${delay}` : url;
