@@ -17,6 +17,7 @@ import {
   X,
   PanelLeftClose,
   PanelLeft,
+  Mic,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
@@ -46,6 +47,11 @@ const navItems: NavItem[] = [
     label: 'Conversations',
     href: '/conversations',
     icon: <MessageSquare className="w-5 h-5" />,
+  },
+  {
+    label: 'Record',
+    href: '/record',
+    icon: <Mic className="w-5 h-5" />,
   },
   {
     label: 'Chat',

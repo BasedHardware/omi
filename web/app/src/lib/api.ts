@@ -1603,6 +1603,29 @@ export async function reprocessConversation(
 }
 
 /**
+ * Process a recorded conversation (create conversation from transcript segments)
+ * Called after stopping a recording session to process the captured audio/transcript
+ * @param segments - Array of transcript segments with speaker info
+ * @returns The created conversation
+ */
+export interface TranscriptSegmentInput {
+  text: string;
+  speaker: number;
+  is_user: boolean;
+  start?: number;
+  end?: number;
+}
+
+export async function processRecordedConversation(
+  segments: TranscriptSegmentInput[]
+): Promise<Conversation> {
+  return fetchWithAuth<Conversation>('/v4/conversation/process', {
+    method: 'POST',
+    body: JSON.stringify({ segments }),
+  });
+}
+
+/**
  * Update a conversation's title
  * @param conversationId - The ID of the conversation
  * @param title - The new title
