@@ -465,7 +465,7 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
                     overview={structured.overview}
                     category={structured.category}
                     conversationId={conversation.id}
-                    appResults={conversation.app_results || []}
+                    appResults={conversation.apps_results || []}
                     suggestedAppIds={conversation.suggested_summarization_apps || []}
                     onGenerateComplete={onConversationUpdate}
                   />

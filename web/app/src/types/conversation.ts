@@ -90,7 +90,7 @@ export interface Conversation {
   geolocation: Geolocation | null;
   photos: ConversationPhoto[];
   audio_files: AudioFile[];
-  app_results: AppResponse[];
+  apps_results: AppResponse[];  // Note: backend uses 'apps_results' (with 's')
   suggested_summarization_apps: string[];
   source: string | null;
   language: string | null;

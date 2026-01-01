@@ -498,7 +498,7 @@ export function ConversationDetailPanel({
                 overview={structured.overview}
                 category={structured.category}
                 conversationId={conversationId}
-                appResults={conversation.app_results || []}
+                appResults={conversation.apps_results || []}
                 suggestedAppIds={conversation.suggested_summarization_apps || []}
                 onGenerateComplete={onConversationUpdate}
               />

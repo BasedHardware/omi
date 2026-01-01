@@ -149,10 +149,12 @@ export interface Integration {
 
 export interface DeveloperApiKey {
   id: string;
-  key: string;
-  name?: string;
+  key_prefix: string;  // For existing keys, only prefix is returned
+  key?: string;        // Full key only returned when creating
+  name: string;
   created_at: string;
   last_used_at?: string;
+  scopes?: string[];
 }
 
 export interface CustomVocabulary {

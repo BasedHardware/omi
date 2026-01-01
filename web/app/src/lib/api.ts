@@ -1417,11 +1417,6 @@ export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
 // Custom Vocabulary (via Transcription Preferences)
 // ============================================================================
 
-interface TranscriptionPreferences {
-  single_language_mode?: boolean;
-  vocabulary?: string[];
-}
-
 /**
  * Get custom vocabulary words from transcription preferences
  */

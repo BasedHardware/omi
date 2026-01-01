@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -1047,18 +1047,11 @@ function DeveloperSection({
   onDeleteApiKey: (keyId: string) => void;
   onWebhookChange: (type: string, enabled: boolean, url?: string) => void;
 }) {
-  const [copiedKeyId, setCopiedKeyId] = useState<string | null>(null);
   const [webhookUrls, setWebhookUrls] = useState<Record<string, string>>({
     memory_created: webhooks.memory_created?.url || '',
     transcript_received: webhooks.transcript_received?.url || '',
     day_summary: webhooks.day_summary?.url || '',
   });
-
-  const handleCopyKey = (key: string, keyId: string) => {
-    navigator.clipboard.writeText(key);
-    setCopiedKeyId(keyId);
-    setTimeout(() => setCopiedKeyId(null), 2000);
-  };
 
   const webhookTypes = [
     { id: 'memory_created', label: 'Conversation Created', description: 'Triggered when a new conversation is created' },
@@ -1103,36 +1096,24 @@ function DeveloperSection({
                 className="flex items-center justify-between p-3 rounded-xl bg-bg-tertiary"
               >
                 <div className="flex-1 min-w-0">
-                  <code className="text-sm text-text-secondary font-mono">
-                    {apiKey.key.slice(0, 12)}...{apiKey.key.slice(-4)}
-                  </code>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-text-primary font-medium">{apiKey.name}</span>
+                    <code className="text-xs text-text-tertiary font-mono bg-bg-quaternary px-2 py-0.5 rounded">
+                      {apiKey.key_prefix}...
+                    </code>
+                  </div>
                   <p className="text-xs text-text-quaternary mt-1">
                     Created {new Date(apiKey.created_at).toLocaleDateString()}
+                    {apiKey.last_used_at && ` • Last used ${new Date(apiKey.last_used_at).toLocaleDateString()}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleCopyKey(apiKey.key, apiKey.id)}
-                    className={cn(
-                      'p-2 rounded-lg transition-colors',
-                      copiedKeyId === apiKey.id
-                        ? 'bg-green-500/10 text-green-400'
-                        : 'bg-bg-quaternary text-text-secondary hover:text-text-primary'
-                    )}
-                  >
-                    {copiedKeyId === apiKey.id ? (
-                      <Check className="w-4 h-4" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => onDeleteApiKey(apiKey.id)}
-                    className="p-2 rounded-lg bg-bg-quaternary text-text-secondary hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                <button
+                  onClick={() => onDeleteApiKey(apiKey.id)}
+                  className="p-2 rounded-lg bg-bg-quaternary text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  title="Delete API key"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>
@@ -1282,10 +1263,13 @@ function AccountSection({
 export function SettingsPage() {
   const router = useRouter();
   const { user, signOut } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
 
-  // Settings state
+  // Track which sections have been loaded
+  const [loadedSections, setLoadedSections] = useState<Set<SettingsSection>>(new Set(['profile']));
+  const [sectionLoading, setSectionLoading] = useState<SettingsSection | null>(null);
+
+  // Settings state - each section's data
   const [language, setLanguage] = useState('en');
   const [vocabulary, setVocabulary] = useState<string[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummarySettings>({ enabled: true, hour: 22 });
@@ -1302,41 +1286,67 @@ export function SettingsPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load settings
-  useEffect(() => {
-    async function loadSettings() {
-      setIsLoading(true);
-      try {
-        const [lang, vocab, summary, recording, training, usageData, sub, integ, keys, webhookStatus] = await Promise.all([
-          getUserLanguage().catch(() => 'en'),
-          getCustomVocabulary().catch(() => []),
-          getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
-          getRecordingPermission().catch(() => ({ enabled: false })),
-          getTrainingDataOptIn().catch(() => ({ opted_in: false })),
-          getAllUsageData().catch(() => null),
-          getUserSubscription().catch(() => null),
-          getIntegrations().catch(() => []),
-          getDeveloperApiKeys().catch(() => []),
-          getDeveloperWebhooksStatus().catch(() => ({})),
-        ]);
-        setLanguage(lang);
-        setVocabulary(vocab);
-        setDailySummary(summary);
-        setRecordingPermissionState(recording.enabled);
-        setTrainingDataOptInState(training.opted_in);
-        setAllUsage(usageData);
-        setSubscription(sub);
-        setIntegrations(integ);
-        setApiKeys(keys);
-        setWebhooks(webhookStatus);
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-      } finally {
-        setIsLoading(false);
+  // Load section data on demand
+  const loadSectionData = useCallback(async (section: SettingsSection) => {
+    if (loadedSections.has(section)) return;
+
+    setSectionLoading(section);
+    try {
+      switch (section) {
+        case 'language':
+          const [lang, vocab] = await Promise.all([
+            getUserLanguage().catch(() => 'en'),
+            getCustomVocabulary().catch(() => []),
+          ]);
+          setLanguage(lang);
+          setVocabulary(vocab);
+          break;
+        case 'notifications':
+          const summary = await getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 }));
+          setDailySummary(summary);
+          break;
+        case 'privacy':
+          const [recording, training] = await Promise.all([
+            getRecordingPermission().catch(() => ({ enabled: false })),
+            getTrainingDataOptIn().catch(() => ({ opted_in: false })),
+          ]);
+          setRecordingPermissionState(recording.enabled);
+          setTrainingDataOptInState(training.opted_in);
+          break;
+        case 'usage':
+          const [usageData, sub] = await Promise.all([
+            getAllUsageData().catch(() => null),
+            getUserSubscription().catch(() => null),
+          ]);
+          setAllUsage(usageData);
+          setSubscription(sub);
+          break;
+        case 'integrations':
+          const integ = await getIntegrations().catch(() => []);
+          setIntegrations(integ);
+          break;
+        case 'developer':
+          const [keys, webhookStatus] = await Promise.all([
+            getDeveloperApiKeys().catch(() => []),
+            getDeveloperWebhooksStatus().catch(() => ({})),
+          ]);
+          setApiKeys(keys);
+          setWebhooks(webhookStatus);
+          break;
+        // 'profile' and 'account' don't need API calls
       }
+      setLoadedSections(prev => new Set([...prev, section]));
+    } catch (error) {
+      console.error(`Failed to load ${section} settings:`, error);
+    } finally {
+      setSectionLoading(null);
     }
-    loadSettings();
-  }, []);
+  }, [loadedSections]);
+
+  // Load data when section changes
+  useEffect(() => {
+    loadSectionData(activeSection);
+  }, [activeSection, loadSectionData]);
 
   // Handlers
   const handleLanguageChange = async (newLanguage: string) => {
@@ -1469,15 +1479,16 @@ export function SettingsPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-      </div>
-    );
-  }
-
   const renderSection = () => {
+    // Show loading spinner when section is loading
+    if (sectionLoading === activeSection) {
+      return (
+        <div className="h-64 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        </div>
+      );
+    }
+
     switch (activeSection) {
       case 'profile':
         return <ProfileSection user={user} onCopyUserId={handleCopyUserId} />;
