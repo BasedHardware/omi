@@ -57,6 +57,29 @@ export interface Person {
   speech_samples_count: number;
 }
 
+export interface Integration {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  connected: boolean;
+  connect_url?: string;
+  disconnect_url?: string;
+  coming_soon?: boolean;
+}
+
+export interface DeveloperApiKey {
+  id: string;
+  key: string;
+  name?: string;
+  created_at: string;
+  last_used_at?: string;
+}
+
+export interface CustomVocabulary {
+  words: string[];
+}
+
 export interface Language {
   code: string;
   name: string;

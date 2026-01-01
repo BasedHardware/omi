@@ -1309,3 +1309,106 @@ export async function setTrainingDataOptIn(optIn: boolean): Promise<void> {
     body: JSON.stringify({ opted_in: optIn }),
   });
 }
+
+// ============================================================================
+// Developer API Keys
+// ============================================================================
+
+import type { DeveloperApiKey, CustomVocabulary, Integration } from '@/types/user';
+
+/**
+ * Get user's developer API keys
+ */
+export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
+  try {
+    return await fetchWithAuth<DeveloperApiKey[]>('/v1/developer/api-keys');
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Create a new developer API key
+ */
+export async function createDeveloperApiKey(name?: string): Promise<DeveloperApiKey> {
+  return fetchWithAuth<DeveloperApiKey>('/v1/developer/api-keys', {
+    method: 'POST',
+    body: JSON.stringify({ name: name || 'API Key' }),
+  });
+}
+
+/**
+ * Delete a developer API key
+ */
+export async function deleteDeveloperApiKey(keyId: string): Promise<void> {
+  await fetchWithAuth(`/v1/developer/api-keys/${keyId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============================================================================
+// Custom Vocabulary
+// ============================================================================
+
+/**
+ * Get custom vocabulary words
+ */
+export async function getCustomVocabulary(): Promise<string[]> {
+  try {
+    const result = await fetchWithAuth<CustomVocabulary>('/v1/users/vocabulary');
+    return result.words || [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Update custom vocabulary words
+ */
+export async function updateCustomVocabulary(words: string[]): Promise<void> {
+  await fetchWithAuth('/v1/users/vocabulary', {
+    method: 'POST',
+    body: JSON.stringify({ words }),
+  });
+}
+
+// ============================================================================
+// Integrations
+// ============================================================================
+
+/**
+ * Get available integrations
+ */
+export async function getIntegrations(): Promise<Integration[]> {
+  try {
+    return await fetchWithAuth<Integration[]>('/v1/integrations');
+  } catch {
+    // Return default integrations if endpoint doesn't exist
+    return [
+      { id: 'notion', name: 'Notion', description: 'Sync notes to Notion', icon: 'notion', connected: false },
+      { id: 'github', name: 'GitHub', description: 'Create issues and notes', icon: 'github', connected: false },
+      { id: 'google-calendar', name: 'Google Calendar', description: 'Sync with your calendar', icon: 'calendar', connected: false },
+      { id: 'whoop', name: 'Whoop', description: 'Health & fitness tracking', icon: 'whoop', connected: false, coming_soon: true },
+      { id: 'gmail', name: 'Gmail', description: 'Email integrations', icon: 'gmail', connected: false, coming_soon: true },
+      { id: 'twitter', name: 'X (Twitter)', description: 'Share to Twitter', icon: 'twitter', connected: false, coming_soon: true },
+    ];
+  }
+}
+
+/**
+ * Connect an integration
+ */
+export async function connectIntegration(integrationId: string): Promise<{ redirect_url: string }> {
+  return fetchWithAuth<{ redirect_url: string }>(`/v1/integrations/${integrationId}/connect`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Disconnect an integration
+ */
+export async function disconnectIntegration(integrationId: string): Promise<void> {
+  await fetchWithAuth(`/v1/integrations/${integrationId}/disconnect`, {
+    method: 'POST',
+  });
+}
