@@ -1247,6 +1247,7 @@ export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
 export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly'): Promise<UserUsage | null> {
   try {
     const response = await fetchWithAuth<UserUsageResponse>(`/v1/users/me/usage?period=${period}`);
+    console.log(`getUserUsage(${period}) API response:`, JSON.stringify(response, null, 2));
 
     // Extract the relevant period's stats
     let stats: UsageStats | undefined;
@@ -1265,12 +1266,16 @@ export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all
       stats = response.all_time || response.monthly || response.yearly || response.today;
     }
 
-    if (stats) {
+    console.log(`getUserUsage(${period}) extracted stats:`, stats);
+    console.log(`getUserUsage(${period}) history length:`, response.history?.length);
+
+    // Return data if we have stats OR history - some periods might have history without aggregate stats
+    if (stats || response.history?.length) {
       return {
-        transcription_seconds: stats.transcription_seconds || 0,
-        words_transcribed: stats.words_transcribed || 0,
-        insights_gained: stats.insights_gained || 0,
-        memories_created: stats.memories_created || 0,
+        transcription_seconds: stats?.transcription_seconds || 0,
+        words_transcribed: stats?.words_transcribed || 0,
+        insights_gained: stats?.insights_gained || 0,
+        memories_created: stats?.memories_created || 0,
         history: response.history,
       };
     }
@@ -1291,6 +1296,7 @@ export async function getAllUsageData(): Promise<AllUsageData> {
     getUserUsage('yearly'),
     getUserUsage('all_time'),
   ]);
+  console.log('getAllUsageData result:', { today, monthly, yearly, all_time });
   return { today, monthly, yearly, all_time };
 }
 

@@ -1,12 +1,51 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 import { getApp } from '@/lib/api';
 import type { AppResponse } from '@/types/conversation';
 import type { App } from '@/types/apps';
+
+/**
+ * Parse markdown content into sections based on h2 headers
+ * Returns an array of { title, content } objects
+ */
+function parseMarkdownSections(content: string): { title: string | null; content: string }[] {
+  const lines = content.split('\n');
+  const sections: { title: string | null; content: string }[] = [];
+  let currentSection: { title: string | null; content: string[] } = { title: null, content: [] };
+
+  for (const line of lines) {
+    // Check for ## headers (h2)
+    const h2Match = line.match(/^##\s+(.+)$/);
+    if (h2Match) {
+      // Save previous section if it has content
+      if (currentSection.content.length > 0 || currentSection.title) {
+        sections.push({
+          title: currentSection.title,
+          content: currentSection.content.join('\n').trim(),
+        });
+      }
+      // Start new section
+      currentSection = { title: h2Match[1], content: [] };
+    } else {
+      currentSection.content.push(line);
+    }
+  }
+
+  // Don't forget the last section
+  if (currentSection.content.length > 0 || currentSection.title) {
+    sections.push({
+      title: currentSection.title,
+      content: currentSection.content.join('\n').trim(),
+    });
+  }
+
+  return sections;
+}
 
 interface AppSummaryCardProps {
   appResponse: AppResponse;
@@ -16,6 +55,14 @@ interface AppSummaryCardProps {
 export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) {
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Parse content into sections
+  const sections = useMemo(() => {
+    return parseMarkdownSections(appResponse.content || '');
+  }, [appResponse.content]);
+
+  // Check if content has multiple sections (h2 headers)
+  const hasMultipleSections = sections.length > 1 || (sections.length === 1 && sections[0].title);
 
   useEffect(() => {
     async function fetchAppInfo() {
@@ -82,10 +129,31 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
         </div>
       </div>
 
-      {/* Summary Content */}
-      <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
-        {appResponse.content}
-      </p>
+      {/* Summary Content - Sectioned or Plain */}
+      {hasMultipleSections ? (
+        <div className="space-y-3">
+          {sections.map((section, index) => (
+            <div key={index}>
+              {section.title && (
+                <h3 className="text-sm font-medium text-text-primary mb-2">
+                  {section.title}
+                </h3>
+              )}
+              {section.content && (
+                <div className="p-3 rounded-lg bg-bg-quaternary/60 border border-bg-quaternary">
+                  <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-1.5 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-2 prose-h3:mb-1 prose-ul:my-1.5 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                    <ReactMarkdown>{section.content}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-2 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-sm prose-h3:mt-3 prose-h3:mb-1 prose-ul:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+          <ReactMarkdown>{appResponse.content}</ReactMarkdown>
+        </div>
+      )}
     </motion.div>
   );
 }

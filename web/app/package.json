@@ -24,6 +24,7 @@
     "react-dom": "^19.0.0",
     "react-force-graph": "^1.48.1",
     "react-force-graph-3d": "^1.29.0",
+    "react-markdown": "^10.1.0",
     "tailwind-merge": "^2.5.2",
     "three": "^0.182.0",
     "three-spritetext": "^1.10.0"
