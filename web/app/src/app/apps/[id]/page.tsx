@@ -10,8 +10,10 @@ function AppDetailContent() {
   const appId = params.id as string;
 
   return (
-    <MainLayout>
-      <AppDetail appId={appId} />
+    <MainLayout hideHeader>
+      <div className="h-full overflow-y-auto">
+        <AppDetail appId={appId} />
+      </div>
     </MainLayout>
   );
 }
