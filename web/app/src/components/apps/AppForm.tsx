@@ -660,22 +660,42 @@ export function AppForm({ mode, app }: AppFormProps) {
           Select what your app can do. Persona is exclusive and cannot be combined with other capabilities.
         </p>
         <div className="grid grid-cols-2 gap-3">
-          {capabilities.map((cap) => (
-            <button
-              key={cap.id}
-              type="button"
-              onClick={() => toggleCapability(cap.id)}
-              className={cn(
-                'px-4 py-3 rounded-xl text-left transition-colors',
-                'border',
-                hasCapability(cap.id)
-                  ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                  : 'bg-bg-secondary border-border-secondary text-text-secondary hover:border-text-tertiary'
-              )}
-            >
-              {cap.title}
-            </button>
-          ))}
+          {capabilities.map((cap) => {
+            const isSelected = hasCapability(cap.id);
+            return (
+              <button
+                key={cap.id}
+                type="button"
+                onClick={() => toggleCapability(cap.id)}
+                className={cn(
+                  'relative px-4 py-4 rounded-xl text-left transition-all',
+                  'border-2 flex items-center justify-between',
+                  isSelected
+                    ? 'bg-purple-500/20 text-white border-purple-400'
+                    : 'bg-bg-secondary border-border-secondary text-text-primary hover:border-text-tertiary hover:bg-bg-tertiary'
+                )}
+              >
+                <span className={cn(
+                  'font-medium',
+                  isSelected ? 'text-white' : 'text-text-primary'
+                )}>
+                  {cap.title}
+                </span>
+                <div className={cn(
+                  'w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all',
+                  isSelected
+                    ? 'bg-purple-400 border-purple-400'
+                    : 'border-gray-500 bg-transparent'
+                )}>
+                  {isSelected && (
+                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -822,28 +842,48 @@ export function AppForm({ mode, app }: AppFormProps) {
         <section className="space-y-4">
           <h2 className="text-lg font-medium text-text-primary">Notification Scopes *</h2>
           <div className="grid grid-cols-2 gap-3">
-            {notificationScopes.map((scope) => (
-              <button
-                key={scope.id}
-                type="button"
-                onClick={() => {
-                  setSelectedScopes(prev =>
-                    prev.includes(scope.id)
-                      ? prev.filter(s => s !== scope.id)
-                      : [...prev, scope.id]
-                  );
-                }}
-                className={cn(
-                  'px-4 py-3 rounded-xl text-left transition-colors',
-                  'border',
-                  selectedScopes.includes(scope.id)
-                    ? 'bg-accent-primary/20 border-accent-primary text-accent-primary'
-                    : 'bg-bg-secondary border-border-secondary text-text-secondary hover:border-text-tertiary'
-                )}
-              >
-                {scope.title}
-              </button>
-            ))}
+            {notificationScopes.map((scope) => {
+              const isSelected = selectedScopes.includes(scope.id);
+              return (
+                <button
+                  key={scope.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedScopes(prev =>
+                      prev.includes(scope.id)
+                        ? prev.filter(s => s !== scope.id)
+                        : [...prev, scope.id]
+                    );
+                  }}
+                  className={cn(
+                    'px-4 py-4 rounded-xl text-left transition-all',
+                    'border-2 flex items-center justify-between',
+                    isSelected
+                      ? 'bg-purple-500/20 text-white border-purple-400'
+                      : 'bg-bg-secondary border-border-secondary text-text-primary hover:border-text-tertiary hover:bg-bg-tertiary'
+                  )}
+                >
+                  <span className={cn(
+                    'font-medium',
+                    isSelected ? 'text-white' : 'text-text-primary'
+                  )}>
+                    {scope.title}
+                  </span>
+                  <div className={cn(
+                    'w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all',
+                    isSelected
+                      ? 'bg-purple-400 border-purple-400'
+                      : 'border-gray-500 bg-transparent'
+                  )}>
+                    {isSelected && (
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </section>
       )}
