@@ -28,6 +28,10 @@ if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
     list(APPEND core_sources src/lib/core/storage.c)
 endif()
 
+if(CONFIG_OMI_ENABLE_WIFI)
+    list(APPEND core_sources src/wifi.c)
+endif()
+
 target_sources(app PRIVATE ${core_sources} ${app_sources})
 target_include_directories(app PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

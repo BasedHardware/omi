@@ -16,7 +16,7 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define DISK_DRIVE_NAME "SD"        // Disk drive name
 #define DISK_MOUNT_PT "/SD:"        // Mount point path
-#define SD_REQ_QUEUE_MSGS  100      // Number of messages in the SD request queue
+#define SD_REQ_QUEUE_MSGS  30       // Number of messages in the SD request queue
 #define SD_FSYNC_THRESHOLD 20000    // Threshold in bytes to trigger fsync
 #define WRITE_BATCH_COUNT 10        // Number of writes to batch before writing to SD card
 #define ERROR_THRESHOLD 5           // Maximum allowed write errors before taking action
