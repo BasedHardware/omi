@@ -64,7 +64,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
-from utils.speaker_identification import detect_speaker_from_text
+from utils.text_speaker_detection import detect_speaker_from_text
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,

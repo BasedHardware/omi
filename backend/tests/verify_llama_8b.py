@@ -13,33 +13,23 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 try:
-    from backend.utils.speaker_identification import SYSTEM_PROMPT as BASE_SYSTEM_PROMPT
+    from backend.utils.text_speaker_detection import SYSTEM_PROMPT as FULL_SYSTEM_PROMPT
+    from backend.utils.text_speaker_detection import identify_speaker_and_clean_transcript
 except ImportError:
-    # Fallback if run from different location
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
-    from utils.speaker_identification import SYSTEM_PROMPT as BASE_SYSTEM_PROMPT
-
-try:
-    from openai import OpenAI, APIConnectionError
-except ImportError:
-    print("❌ 'openai' library not installed. Please run: pip install openai")
-    sys.exit(1)
+    try:
+        from utils.text_speaker_detection import SYSTEM_PROMPT as FULL_SYSTEM_PROMPT
+        from utils.text_speaker_detection import identify_speaker_and_clean_transcript
+    except ImportError:
+         # Fallback if run from omi/backend/tests/
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
+        from utils.text_speaker_detection import SYSTEM_PROMPT as FULL_SYSTEM_PROMPT
+        from utils.text_speaker_detection import identify_speaker_and_clean_transcript
 
 # -------------------------------------------------------------------------
-# 1. PROMPT MODIFICATION
+# 1. PROMPT
 # -------------------------------------------------------------------------
-CLEANING_INSTRUCTION = """
-\nTASK UPDATE:
-In addition to identifying speakers, you must CLEAN the transcript.
-1. Remove all filler words (um, uh, you know, like, er, ah).
-2. Fix basic grammar and capitalization errors.
-3. Remove stuttering or repeated words.
-
-OUTPUT FORMAT MUST BE EXACTLY (You must return valid JSON output):
-{"speakers": ["Name", ...], "cleaned_transcript": "The cleaned text here."}
-"""
-
-FULL_SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + CLEANING_INSTRUCTION
+# The SYSTEM_PROMPT from the module already includes cleaning instructions.
+# No need to append anything.
 
 # -------------------------------------------------------------------------
 # 2. CONFIGURATION
