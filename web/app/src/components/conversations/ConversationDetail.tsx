@@ -22,6 +22,8 @@ import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import { EditableTitle } from './EditableTitle';
+import { SpeakerTagSheet } from './SpeakerTagSheet';
+import { ManagePeopleModal } from './ManagePeopleModal';
 import { usePeople } from '@/hooks/usePeople';
 import type { Conversation, ActionItem, AppResponse, TranscriptSegment } from '@/types/conversation';
 
@@ -313,16 +315,40 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
   };
 
   const [activeTab, setActiveTab] = useState<TabId>(getInitialTab());
+  const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
+  const [showTagSheet, setShowTagSheet] = useState(false);
+  const [showManagePeople, setShowManagePeople] = useState(false);
+
+  // Handle speaker click from transcript
+  const handleSpeakerClick = useCallback((segment: TranscriptSegment) => {
+    setSelectedSegment(segment);
+    setShowTagSheet(true);
+  }, []);
 
   // Handle segment updates from transcript editing
-  const handleSegmentsUpdate = useCallback((updatedSegments: TranscriptSegment[]) => {
-    if (onConversationUpdate) {
-      onConversationUpdate({
-        ...conversation,
-        transcript_segments: updatedSegments,
-      });
-    }
-  }, [conversation, onConversationUpdate]);
+  const handleSegmentsUpdate = useCallback((
+    segmentIds: string[],
+    personId: string | null,
+    isUser: boolean
+  ) => {
+    if (!onConversationUpdate) return;
+
+    const updatedSegments = transcript_segments.map((seg) => {
+      if (seg.id && segmentIds.includes(seg.id)) {
+        return {
+          ...seg,
+          is_user: isUser,
+          person_id: isUser ? null : personId,
+        };
+      }
+      return seg;
+    });
+
+    onConversationUpdate({
+      ...conversation,
+      transcript_segments: updatedSegments,
+    });
+  }, [conversation, transcript_segments, onConversationUpdate]);
 
   // Handle title change
   const handleTitleChange = useCallback((newTitle: string) => {
@@ -495,7 +521,7 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
           </div>
 
           {/* Tab content */}
-          <div className="p-6 rounded-xl bg-bg-secondary border border-bg-tertiary min-h-[300px]">
+          <div className="p-6 rounded-xl bg-bg-secondary border border-bg-tertiary min-h-[300px] relative">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
@@ -526,7 +552,7 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
                     conversationId={conversation.id}
                     people={people}
                     editable={true}
-                    onSegmentsUpdate={handleSegmentsUpdate}
+                    onSpeakerClick={handleSpeakerClick}
                   />
                 )}
 
@@ -538,9 +564,40 @@ export function ConversationDetail({ conversation, userName, onConversationUpdat
                 )}
               </motion.div>
             </AnimatePresence>
+
+            {/* Speaker Tag Sheet - positioned at tab content level for proper anchoring */}
+            {selectedSegment && (
+              <SpeakerTagSheet
+                isOpen={showTagSheet}
+                onClose={() => {
+                  setShowTagSheet(false);
+                  setSelectedSegment(null);
+                }}
+                conversationId={conversation.id}
+                segment={selectedSegment}
+                allSegments={transcript_segments || []}
+                onAssignComplete={handleSegmentsUpdate}
+                onManagePeople={() => {
+                  setShowTagSheet(false);
+                  setShowManagePeople(true);
+                }}
+              />
+            )}
           </div>
         </motion.div>
       )}
+
+      {/* Manage People Modal */}
+      <ManagePeopleModal
+        isOpen={showManagePeople}
+        onClose={() => {
+          setShowManagePeople(false);
+          // Reopen tag sheet if we have a selected segment
+          if (selectedSegment) {
+            setShowTagSheet(true);
+          }
+        }}
+      />
 
       {/* Empty state if no content at all */}
       {enabledTabs.length === 0 && (

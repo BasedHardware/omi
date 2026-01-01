@@ -36,6 +36,7 @@ function formatTimestamp(seconds: number): string {
 
 /**
  * Bottom sheet for tagging speakers in transcript segments
+ * Slides up from the bottom within the detail panel area
  */
 export function SpeakerTagSheet({
   isOpen,
@@ -214,25 +215,25 @@ export function SpeakerTagSheet({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Backdrop - only covers the panel area */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-50"
+            className="absolute inset-0 bg-black/40 z-40 rounded-xl"
           />
 
-          {/* Sheet */}
+          {/* Bottom Sheet - slides up from bottom within panel */}
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
-              'fixed bottom-0 left-0 right-0 z-50',
+              'absolute bottom-0 left-0 right-0 z-50',
               'bg-bg-secondary rounded-t-2xl',
-              'max-h-[85vh] overflow-hidden flex flex-col',
+              'max-h-[80%] overflow-hidden flex flex-col',
               'shadow-xl border-t border-bg-tertiary'
             )}
           >
@@ -402,20 +403,24 @@ export function SpeakerTagSheet({
                       ))}
                     </div>
                   )}
+                </div>
+              )}
 
-                  {/* Manage People Link */}
-                  {onManagePeople && (
-                    <button
-                      onClick={onManagePeople}
-                      className={cn(
-                        'mt-3 flex items-center gap-2 text-sm text-text-tertiary',
-                        'hover:text-text-secondary transition-colors'
-                      )}
-                    >
-                      <Settings className="w-4 h-4" />
-                      <span>Manage People</span>
-                    </button>
-                  )}
+              {/* Manage People Link - always visible */}
+              {onManagePeople && (
+                <div className={cn(
+                  otherUntaggedSegments.length > 0 ? 'mt-4' : 'border-t border-bg-tertiary pt-4'
+                )}>
+                  <button
+                    onClick={onManagePeople}
+                    className={cn(
+                      'flex items-center gap-2 text-sm text-text-tertiary',
+                      'hover:text-text-secondary transition-colors'
+                    )}
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span>Manage People</span>
+                  </button>
                 </div>
               )}
             </div>

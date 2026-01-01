@@ -21,6 +21,8 @@ import { AppSummaryCard } from './AppSummaryCard';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import { EditableTitle } from './EditableTitle';
+import { SpeakerTagSheet } from './SpeakerTagSheet';
+import { ManagePeopleModal } from './ManagePeopleModal';
 import { usePeople } from '@/hooks/usePeople';
 import type { Conversation, ActionItem, AppResponse, TranscriptSegment } from '@/types/conversation';
 
@@ -342,17 +344,41 @@ export function ConversationDetailPanel({
   onDelete,
 }: ConversationDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('summary');
+  const [selectedSegment, setSelectedSegment] = useState<TranscriptSegment | null>(null);
+  const [showTagSheet, setShowTagSheet] = useState(false);
+  const [showManagePeople, setShowManagePeople] = useState(false);
   const router = useRouter();
   const { people } = usePeople();
 
+  // Handle speaker click from transcript
+  const handleSpeakerClick = useCallback((segment: TranscriptSegment) => {
+    setSelectedSegment(segment);
+    setShowTagSheet(true);
+  }, []);
+
   // Handle segment updates from transcript editing
-  const handleSegmentsUpdate = useCallback((updatedSegments: TranscriptSegment[]) => {
-    if (conversation && onConversationUpdate) {
-      onConversationUpdate({
-        ...conversation,
-        transcript_segments: updatedSegments,
-      });
-    }
+  const handleSegmentsUpdate = useCallback((
+    segmentIds: string[],
+    personId: string | null,
+    isUser: boolean
+  ) => {
+    if (!conversation || !onConversationUpdate) return;
+
+    const updatedSegments = conversation.transcript_segments.map((seg) => {
+      if (seg.id && segmentIds.includes(seg.id)) {
+        return {
+          ...seg,
+          is_user: isUser,
+          person_id: isUser ? null : personId,
+        };
+      }
+      return seg;
+    });
+
+    onConversationUpdate({
+      ...conversation,
+      transcript_segments: updatedSegments,
+    });
   }, [conversation, onConversationUpdate]);
 
   // Handle title change - update conversation with new title
@@ -430,7 +456,7 @@ export function ConversationDetailPanel({
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden relative">
       {/* Header */}
       <div className="flex-shrink-0 p-4 lg:p-6 border-b border-bg-tertiary">
         <div className="flex items-start gap-4">
@@ -565,7 +591,7 @@ export function ConversationDetailPanel({
                 conversationId={conversationId}
                 people={people}
                 editable={true}
-                onSegmentsUpdate={handleSegmentsUpdate}
+                onSpeakerClick={handleSpeakerClick}
               />
             )}
 
@@ -578,6 +604,37 @@ export function ConversationDetailPanel({
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {/* Speaker Tag Sheet - positioned at panel level for proper anchoring */}
+      {selectedSegment && (
+        <SpeakerTagSheet
+          isOpen={showTagSheet}
+          onClose={() => {
+            setShowTagSheet(false);
+            setSelectedSegment(null);
+          }}
+          conversationId={conversationId}
+          segment={selectedSegment}
+          allSegments={transcript_segments || []}
+          onAssignComplete={handleSegmentsUpdate}
+          onManagePeople={() => {
+            setShowTagSheet(false);
+            setShowManagePeople(true);
+          }}
+        />
+      )}
+
+      {/* Manage People Modal */}
+      <ManagePeopleModal
+        isOpen={showManagePeople}
+        onClose={() => {
+          setShowManagePeople(false);
+          // Reopen tag sheet if we have a selected segment
+          if (selectedSegment) {
+            setShowTagSheet(true);
+          }
+        }}
+      />
     </div>
   );
 }
