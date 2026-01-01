@@ -8,7 +8,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 
-enum TaskCategory { today, noDeadline, later }
+enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -23,6 +23,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // Track indent levels for each task (task id -> indent level 0-3)
   final Map<String, int> _indentLevels = {};
+
+  // Track custom order for each category (category -> list of item ids)
+  final Map<TaskCategory, List<String>> _categoryOrder = {};
+
+  // Track the item being hovered over during drag
+  String? _hoveredItemId;
+  bool _hoverAbove = false; // true = insert above, false = insert below
 
   @override
   bool get wantKeepAlive => true;
@@ -84,12 +91,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items, bool showCompleted) {
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
     // Filter out old tasks without a future due date (older than 7 days)
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
       TaskCategory.today: [],
+      TaskCategory.tomorrow: [],
       TaskCategory.noDeadline: [],
       TaskCategory.later: [],
     };
@@ -114,6 +123,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final dueDate = item.dueAt!;
         if (dueDate.isBefore(startOfTomorrow)) {
           categorized[TaskCategory.today]!.add(item);
+        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+          categorized[TaskCategory.tomorrow]!.add(item);
         } else {
           categorized[TaskCategory.later]!.add(item);
         }
@@ -125,10 +136,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   String _getCategoryTitle(TaskCategory category) {
     switch (category) {
-      case TaskCategory.noDeadline:
-        return 'No Deadline';
       case TaskCategory.today:
         return 'Today';
+      case TaskCategory.tomorrow:
+        return 'Tomorrow';
+      case TaskCategory.noDeadline:
+        return 'No Deadline';
       case TaskCategory.later:
         return 'Later';
     }
@@ -137,13 +150,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
     final now = DateTime.now();
     switch (category) {
-      case TaskCategory.noDeadline:
-        return null;
       case TaskCategory.today:
         return DateTime(now.year, now.month, now.day, 23, 59);
-      case TaskCategory.later:
-        // Tomorrow
+      case TaskCategory.tomorrow:
         return DateTime(now.year, now.month, now.day + 1, 23, 59);
+      case TaskCategory.noDeadline:
+        return null;
+      case TaskCategory.later:
+        // Day after tomorrow
+        return DateTime(now.year, now.month, now.day + 2, 23, 59);
     }
   }
 
@@ -177,6 +192,77 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     HapticFeedback.lightImpact();
   }
 
+  // Get ordered items for a category, respecting custom order
+  List<ActionItemWithMetadata> _getOrderedItems(
+    TaskCategory category,
+    List<ActionItemWithMetadata> items,
+  ) {
+    final order = _categoryOrder[category];
+    if (order == null || order.isEmpty) {
+      return items;
+    }
+
+    // Sort items based on custom order, new items go at the end
+    final orderedItems = <ActionItemWithMetadata>[];
+    final itemMap = {for (var item in items) item.id: item};
+
+    // Add items in custom order
+    for (final id in order) {
+      if (itemMap.containsKey(id)) {
+        orderedItems.add(itemMap[id]!);
+        itemMap.remove(id);
+      }
+    }
+
+    // Add any remaining items (new ones not in custom order)
+    orderedItems.addAll(itemMap.values);
+
+    return orderedItems;
+  }
+
+  // Reorder item within category
+  void _reorderItemInCategory(
+    ActionItemWithMetadata draggedItem,
+    String targetItemId,
+    bool insertAbove,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    setState(() {
+      // Initialize category order if needed
+      if (!_categoryOrder.containsKey(category)) {
+        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
+      }
+
+      final order = _categoryOrder[category]!;
+
+      // Remove dragged item from its current position
+      order.remove(draggedItem.id);
+
+      // Find target position
+      final targetIndex = order.indexOf(targetItemId);
+      if (targetIndex != -1) {
+        // Insert above or below target
+        final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
+        order.insert(insertIndex, draggedItem.id);
+      } else {
+        // Target not found, add at end
+        order.add(draggedItem.id);
+      }
+
+      // Clear hover state
+      _hoveredItemId = null;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  // Delete task with swipe
+  Future<void> _deleteTask(ActionItemWithMetadata item) async {
+    HapticFeedback.mediumImpact();
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    await provider.deleteActionItem(item);
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -189,7 +275,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
           floatingActionButton: Padding(
-            padding: const EdgeInsets.only(bottom: 60.0),
+            padding: const EdgeInsets.only(bottom: 100.0),
             child: FloatingActionButton(
               heroTag: 'action_items_fab',
               onPressed: () => _showCreateActionItemSheet(),
@@ -206,7 +292,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             backgroundColor: Colors.white,
             child: provider.isLoading && provider.actionItems.isEmpty
                 ? _buildLoadingState()
-                : provider.actionItems.isEmpty && !showCompleted
+                : categorizedItems.values.every((l) => l.isEmpty)
                     ? _buildEmptyState()
                     : _buildTasksList(categorizedItems, provider),
           ),
@@ -276,15 +362,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
 
-        // Build each category section
+        // Build each category section (skip empty ones)
         for (final category in TaskCategory.values)
-          SliverToBoxAdapter(
-            child: _buildCategorySection(
-              category: category,
-              items: categorizedItems[category] ?? [],
-              provider: provider,
+          if ((categorizedItems[category] ?? []).isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildCategorySection(
+                category: category,
+                items: categorizedItems[category] ?? [],
+                provider: provider,
+              ),
             ),
-          ),
 
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
@@ -298,16 +385,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     required ActionItemsProvider provider,
   }) {
     final title = _getCategoryTitle(category);
+    final orderedItems = _getOrderedItems(category, items);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: DragTarget<ActionItemWithMetadata>(
         onWillAcceptWithDetails: (details) => true,
         onAcceptWithDetails: (details) {
-          _updateTaskCategory(details.data, category);
+          // Only change category if dropped on empty area (not on a specific item)
+          if (_hoveredItemId == null) {
+            _updateTaskCategory(details.data, category);
+          }
         },
         builder: (context, candidateData, rejectedData) {
-          final isHovering = candidateData.isNotEmpty;
+          final isHovering = candidateData.isNotEmpty && _hoveredItemId == null;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
@@ -331,9 +422,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         ),
                       ),
                       const Spacer(),
-                      if (items.isNotEmpty)
+                      if (orderedItems.isNotEmpty)
                         Text(
-                          '${items.length}',
+                          '${orderedItems.length}',
                           style: TextStyle(
                             color: Colors.grey[600],
                             fontSize: 14,
@@ -343,8 +434,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   ),
                 ),
 
+                // Drop zone for first position
+                if (orderedItems.isNotEmpty)
+                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
+
                 // Task items
-                ...items.map((item) => _buildTaskItem(item, provider)),
+                ...orderedItems.map((item) => _buildTaskItem(
+                      item,
+                      provider,
+                      category: category,
+                      categoryItems: orderedItems,
+                    )),
 
                 // Spacing after section
                 const SizedBox(height: 8),
@@ -356,13 +456,253 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildTaskItem(ActionItemWithMetadata item, ActionItemsProvider provider) {
+  Widget _buildFirstPositionDropZone(
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+    bool isDragging,
+  ) {
+    final isHoveredFirst = _hoveredItemId == '_first_${category.name}';
+
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) {
+        // Don't accept if it's already the first item
+        if (categoryItems.isNotEmpty && details.data.id == categoryItems.first.id) {
+          return false;
+        }
+        return true;
+      },
+      onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
+
+        // Insert at first position
+        _reorderItemToFirst(draggedItem, category, categoryItems);
+
+        // Also update category if different
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        if (_hoveredItemId != '_first_${category.name}') {
+          setState(() {
+            _hoveredItemId = '_first_${category.name}';
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredItemId == '_first_${category.name}') {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        final showIndicator = isHoveredFirst && candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: showIndicator ? 6 : (isDragging ? 20 : 4),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: showIndicator ? Colors.deepPurpleAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      },
+    );
+  }
+
+  void _reorderItemToFirst(
+    ActionItemWithMetadata draggedItem,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    setState(() {
+      // Initialize category order if needed
+      if (!_categoryOrder.containsKey(category)) {
+        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
+      }
+
+      final order = _categoryOrder[category]!;
+
+      // Remove dragged item from its current position
+      order.remove(draggedItem.id);
+
+      // Insert at first position
+      order.insert(0, draggedItem.id);
+
+      // Clear hover state
+      _hoveredItemId = null;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  Widget _buildTaskItem(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider, {
+    required TaskCategory category,
+    required List<ActionItemWithMetadata> categoryItems,
+  }) {
     final indentLevel = _getIndentLevel(item.id);
     final indentWidth = indentLevel * 28.0;
+    final isHovered = _hoveredItemId == item.id;
 
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) {
+        // Accept if it's a different item
+        return details.data.id != item.id;
+      },
+      onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
+
+        // Reorder within category
+        _reorderItemInCategory(
+          draggedItem,
+          item.id,
+          _hoverAbove,
+          category,
+          categoryItems,
+        );
+
+        // Also update category if different
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        // Determine if hovering on top or bottom half
+        final RenderBox box = context.findRenderObject() as RenderBox;
+        final localPosition = box.globalToLocal(details.offset);
+        final isAbove = localPosition.dy < 20;
+
+        if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
+          setState(() {
+            _hoveredItemId = item.id;
+            _hoverAbove = isAbove;
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredItemId == item.id) {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drop indicator above
+            if (isHovered && _hoverAbove && candidateData.isNotEmpty)
+              Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            _buildDraggableTaskItem(item, provider, indentLevel, indentWidth),
+            // Drop indicator below
+            if (isHovered && !_hoverAbove && candidateData.isNotEmpty)
+              Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDraggableTaskItem(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider,
+    int indentLevel,
+    double indentWidth,
+  ) {
+    final taskContent = _buildTaskItemContent(item, provider, indentWidth);
+
+    // If at indent 0, use Dismissible for swipe-to-delete with animation
+    if (indentLevel == 0) {
+      return Dismissible(
+        key: Key('dismiss_${item.id}'),
+        direction: DismissDirection.endToStart,
+        dismissThresholds: const {DismissDirection.endToStart: 0.3},
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20.0),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.delete, color: Colors.white),
+        ),
+        onDismissed: (direction) {
+          _deleteTask(item);
+        },
+        child: LongPressDraggable<ActionItemWithMetadata>(
+          data: item,
+          delay: const Duration(milliseconds: 150),
+          hapticFeedbackOnStart: true,
+          onDragStarted: () {
+            HapticFeedback.mediumImpact();
+          },
+          onDragEnd: (details) {
+            setState(() {
+              _hoveredItemId = null;
+            });
+          },
+          feedback: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width - 64,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  _buildCheckbox(item.completed),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item.description,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(
+            opacity: 0.3,
+            child: taskContent,
+          ),
+          child: taskContent,
+        ),
+      );
+    }
+
+    // If indented, use GestureDetector for indent changes + draggable
     return GestureDetector(
       onHorizontalDragEnd: (details) {
-        // Swipe right to increase indent, left to decrease
         if (details.primaryVelocity != null) {
           if (details.primaryVelocity! > 200) {
             _incrementIndent(item.id);
@@ -373,6 +713,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       child: LongPressDraggable<ActionItemWithMetadata>(
         data: item,
+        delay: const Duration(milliseconds: 150),
+        hapticFeedbackOnStart: true,
+        onDragStarted: () {
+          HapticFeedback.mediumImpact();
+        },
+        onDragEnd: (details) {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        },
         feedback: Material(
           color: Colors.transparent,
           child: Container(
@@ -407,11 +757,29 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         childWhenDragging: Opacity(
           opacity: 0.3,
-          child: _buildTaskItemContent(item, provider, indentWidth),
+          child: taskContent,
         ),
-        child: _buildTaskItemContent(item, provider, indentWidth),
+        child: taskContent,
       ),
     );
+  }
+
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
+    final now = DateTime.now();
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
+
+    if (item.dueAt == null) {
+      return TaskCategory.noDeadline;
+    }
+    final dueDate = item.dueAt!;
+    if (dueDate.isBefore(startOfTomorrow)) {
+      return TaskCategory.today;
+    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+      return TaskCategory.tomorrow;
+    } else {
+      return TaskCategory.later;
+    }
   }
 
   Widget _buildTaskItemContent(

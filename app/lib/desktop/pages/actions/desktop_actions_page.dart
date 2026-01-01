@@ -11,7 +11,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 
-enum TaskCategory { today, noDeadline, later }
+enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class DesktopActionsPage extends StatefulWidget {
   const DesktopActionsPage({super.key});
@@ -119,13 +119,15 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items) {
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
     // Filter out old tasks without a future due date (older than 7 days)
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
-      TaskCategory.noDeadline: [],
       TaskCategory.today: [],
+      TaskCategory.tomorrow: [],
+      TaskCategory.noDeadline: [],
       TaskCategory.later: [],
     };
 
@@ -149,6 +151,8 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         final dueDate = item.dueAt!;
         if (dueDate.isBefore(startOfTomorrow)) {
           categorized[TaskCategory.today]!.add(item);
+        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+          categorized[TaskCategory.tomorrow]!.add(item);
         } else {
           categorized[TaskCategory.later]!.add(item);
         }
@@ -160,10 +164,12 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
 
   String _getCategoryTitle(TaskCategory category) {
     switch (category) {
-      case TaskCategory.noDeadline:
-        return 'No Deadline';
       case TaskCategory.today:
         return 'Today';
+      case TaskCategory.tomorrow:
+        return 'Tomorrow';
+      case TaskCategory.noDeadline:
+        return 'No Deadline';
       case TaskCategory.later:
         return 'Later';
     }
@@ -172,13 +178,15 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
   DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
     final now = DateTime.now();
     switch (category) {
-      case TaskCategory.noDeadline:
-        return null;
       case TaskCategory.today:
         return DateTime(now.year, now.month, now.day, 23, 59);
-      case TaskCategory.later:
-        // Tomorrow
+      case TaskCategory.tomorrow:
         return DateTime(now.year, now.month, now.day + 1, 23, 59);
+      case TaskCategory.noDeadline:
+        return null;
+      case TaskCategory.later:
+        // Day after tomorrow
+        return DateTime(now.year, now.month, now.day + 2, 23, 59);
     }
   }
 

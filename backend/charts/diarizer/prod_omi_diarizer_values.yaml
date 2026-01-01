@@ -69,6 +69,8 @@ ingress:
       paths:
         - path: /v1/diarization
           pathType: Prefix
+        - path: /v1/embedding
+          pathType: Prefix
 
   tls: []
   #  - secretName: chart-example-tls

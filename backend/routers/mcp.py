@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 import database.memories as memories_db
 import database.conversations as conversations_db
+import database.users as users_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -101,8 +102,35 @@ class SimpleTranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
     speaker_id: Optional[int] = None
+    speaker_name: Optional[str] = None
     start: float
     end: float
+
+
+def _add_speaker_names_to_segments(uid, conversations: list):
+    """Add speaker_name to transcript segments based on person_id mappings."""
+    user_profile = users_db.get_user_profile(uid)
+    user_name = user_profile.get('name') or 'User'
+
+    all_person_ids = set()
+    for conv in conversations:
+        for seg in conv.get('transcript_segments', []):
+            if seg.get('person_id'):
+                all_person_ids.add(seg['person_id'])
+
+    people_map = {}
+    if all_person_ids:
+        people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
+        people_map = {p['id']: p['name'] for p in people_data}
+
+    for conv in conversations:
+        for seg in conv.get('transcript_segments', []):
+            if seg.get('is_user'):
+                seg['speaker_name'] = user_name
+            elif seg.get('person_id') and seg['person_id'] in people_map:
+                seg['speaker_name'] = people_map[seg['person_id']]
+            else:
+                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
 
 
 class SimpleConversation(BaseModel):
@@ -170,5 +198,7 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
+
+    _add_speaker_names_to_segments(uid, [conversation])
 
     return conversation
