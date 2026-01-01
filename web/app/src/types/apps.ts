@@ -93,13 +93,21 @@ export interface AppsGroupedResponse {
 }
 
 export interface AppGroup {
-  capability: {
+  capability?: {
     id: string;
     title: string;
   };
-  apps: App[];
-  total: number;
-  hasMore: boolean;
+  category?: {
+    id: string;
+    title: string;
+  };
+  data: App[];
+  pagination?: {
+    total?: number;
+    count?: number;
+    offset?: number;
+    limit?: number;
+  };
 }
 
 export interface AppsSearchResponse {
