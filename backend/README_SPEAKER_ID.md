@@ -32,7 +32,7 @@ pip install openai
 ## Usage
 
 ```python
-from backend.utils.speaker_identification import identify_speaker_and_clean_transcript
+from backend.utils.text_speaker_detection import identify_speaker_and_clean_transcript
 
 transcript = "Um, hey Alice... can you help?"
 result = identify_speaker_and_clean_transcript(transcript)
@@ -48,7 +48,7 @@ print(result["cleaned_transcript"])
 
 Run unit tests (mocked):
 ```bash
-python3 -m pytest backend/tests/test_speaker_identification.py
+python3 -m pytest backend/tests/test_text_speaker_detection.py
 ```
 
 Run verification script against live vLLM (or Groq):
