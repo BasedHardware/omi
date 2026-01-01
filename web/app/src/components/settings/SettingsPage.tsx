@@ -724,58 +724,61 @@ function UsageSection({
       </Card>
 
       {/* Usage Stats - 2x2 Grid like mobile app */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-blue-500/10">
-              <Clock className="w-5 h-5 text-blue-400" />
+      <div>
+        <p className="text-text-tertiary text-sm mb-3">All Time Stats</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Card>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-lg bg-blue-500/10">
+                <Clock className="w-5 h-5 text-blue-400" />
+              </div>
+              <span className="text-text-tertiary text-sm">Listening</span>
             </div>
-            <span className="text-text-tertiary text-sm">Listening</span>
-          </div>
-          <p className="text-3xl font-bold text-blue-400">
-            {usage ? formatDuration(usage.transcription_seconds) : '0m'}
-          </p>
-          <p className="text-text-quaternary text-sm mt-1">Total time listening</p>
-        </Card>
+            <p className="text-3xl font-bold text-blue-400">
+              {usage ? formatDuration(usage.transcription_seconds) : '0m'}
+            </p>
+            <p className="text-text-quaternary text-sm mt-1">Total time listening</p>
+          </Card>
 
-        <Card>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-green-500/10">
-              <MessageSquare className="w-5 h-5 text-green-400" />
+          <Card>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <MessageSquare className="w-5 h-5 text-green-400" />
+              </div>
+              <span className="text-text-tertiary text-sm">Understanding</span>
             </div>
-            <span className="text-text-tertiary text-sm">Understanding</span>
-          </div>
-          <p className="text-3xl font-bold text-green-400">
-            {usage ? formatNumber(usage.words_transcribed) : '0'}
-          </p>
-          <p className="text-text-quaternary text-sm mt-1">Words transcribed</p>
-        </Card>
+            <p className="text-3xl font-bold text-green-400">
+              {usage ? formatNumber(usage.words_transcribed) : '0'}
+            </p>
+            <p className="text-text-quaternary text-sm mt-1">Words transcribed</p>
+          </Card>
 
-        <Card>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-orange-500/10">
-              <BarChart3 className="w-5 h-5 text-orange-400" />
+          <Card>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <BarChart3 className="w-5 h-5 text-orange-400" />
+              </div>
+              <span className="text-text-tertiary text-sm">Insights</span>
             </div>
-            <span className="text-text-tertiary text-sm">Insights</span>
-          </div>
-          <p className="text-3xl font-bold text-orange-400">
-            {usage?.insights_gained || 0}
-          </p>
-          <p className="text-text-quaternary text-sm mt-1">Insights gained</p>
-        </Card>
+            <p className="text-3xl font-bold text-orange-400">
+              {usage?.insights_gained || 0}
+            </p>
+            <p className="text-text-quaternary text-sm mt-1">Insights gained</p>
+          </Card>
 
-        <Card>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-purple-500/10">
-              <Brain className="w-5 h-5 text-purple-400" />
+          <Card>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-lg bg-purple-500/10">
+                <Brain className="w-5 h-5 text-purple-400" />
+              </div>
+              <span className="text-text-tertiary text-sm">Memories</span>
             </div>
-            <span className="text-text-tertiary text-sm">Memories</span>
-          </div>
-          <p className="text-3xl font-bold text-purple-400">
-            {usage?.memories_created || 0}
-          </p>
-          <p className="text-text-quaternary text-sm mt-1">Memories created</p>
-        </Card>
+            <p className="text-3xl font-bold text-purple-400">
+              {usage?.memories_created || 0}
+            </p>
+            <p className="text-text-quaternary text-sm mt-1">Memories created</p>
+          </Card>
+        </div>
       </div>
     </div>
   );

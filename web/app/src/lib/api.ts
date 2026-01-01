@@ -1085,6 +1085,7 @@ import type {
   PrivateCloudSync,
   UserUsage,
   UserUsageResponse,
+  UsageStats,
   UserSubscription,
   UserSubscriptionResponse,
   Person,
@@ -1242,16 +1243,36 @@ export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
 export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly'): Promise<UserUsage | null> {
   try {
     const response = await fetchWithAuth<UserUsageResponse>(`/v1/users/me/usage?period=${period}`);
-    // Extract the relevant period's stats
-    const stats = response[period] || response.monthly || response.today;
+    console.log('getUserUsage API response:', JSON.stringify(response, null, 2));
+
+    // Extract the relevant period's stats - explicitly handle each period
+    let stats: UsageStats | undefined;
+    if (period === 'all_time') {
+      stats = response.all_time;
+    } else if (period === 'yearly') {
+      stats = response.yearly;
+    } else if (period === 'monthly') {
+      stats = response.monthly;
+    } else if (period === 'today') {
+      stats = response.today;
+    }
+
+    // Fallback to any available stats
+    if (!stats) {
+      stats = response.all_time || response.monthly || response.yearly || response.today;
+    }
+
     if (stats) {
-      return {
+      const result = {
         transcription_seconds: stats.transcription_seconds || 0,
         words_transcribed: stats.words_transcribed || 0,
         insights_gained: stats.insights_gained || 0,
         memories_created: stats.memories_created || 0,
       };
+      console.log('getUserUsage parsed result:', result);
+      return result;
     }
+    console.log('getUserUsage: No stats found in response');
     return null;
   } catch (error) {
     console.error('getUserUsage error:', error);
@@ -1265,11 +1286,15 @@ export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
     const response = await fetchWithAuth<UserSubscriptionResponse>('/v1/users/me/subscription');
-    return {
+    console.log('getUserSubscription API response:', JSON.stringify(response, null, 2));
+
+    const result = {
       plan: response.subscription?.plan || 'basic',
       status: response.subscription?.status || 'active',
       is_unlimited: response.subscription?.plan === 'unlimited',
     };
+    console.log('getUserSubscription parsed result:', result);
+    return result;
   } catch (error) {
     console.error('getUserSubscription error:', error);
     return null;
