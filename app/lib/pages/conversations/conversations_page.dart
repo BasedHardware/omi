@@ -5,8 +5,13 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
+import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
+import 'package:omi/pages/conversations/widgets/wrapped_banner.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -16,6 +21,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
+import 'widgets/goal_tracker_widget.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -34,10 +40,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void initState() {
+    super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      if (!mounted) return;
+      final conversationProvider = context.read<ConversationProvider>();
       if (conversationProvider.conversations.isEmpty) {
         await conversationProvider.getInitialConversations();
+      } else {
+        // Still check for daily summaries even if conversations are cached
+        conversationProvider.checkHasDailySummaries();
+      }
+
+      if (!mounted) return;
+
+      // Load folders for folder tabs
+      final folderProvider = context.read<FolderProvider>();
+      if (folderProvider.folders.isEmpty) {
+        await folderProvider.loadFolders();
       }
 
       // Check if we should show the app review prompt for first conversation
@@ -45,7 +64,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
       }
     });
-    super.initState();
   }
 
   void scrollToTop() {
@@ -151,6 +169,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
+            // Wrapped 2025 Banner
+            const SliverToBoxAdapter(child: WrappedBanner()),
             // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
@@ -175,7 +195,37 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            if (convoProvider.groupedConversations.isEmpty &&
+            // Goal tracker widget - before folders
+            Selector<DeveloperModeProvider, bool>(
+              selector: (context, provider) => provider.showGoalTrackerEnabled,
+              builder: (context, showGoalTrackerEnabled, child) {
+                if (!showGoalTrackerEnabled) return const SliverToBoxAdapter(child: SizedBox.shrink());
+                return const SliverToBoxAdapter(child: GoalTrackerWidget());
+              },
+            ),
+            // Folder tabs
+            Consumer2<FolderProvider, ConversationProvider>(
+              builder: (context, folderProvider, convoProvider, _) {
+                return SliverToBoxAdapter(
+                  child: FolderTabs(
+                    folders: folderProvider.folders,
+                    selectedFolderId: convoProvider.selectedFolderId,
+                    onFolderSelected: (folderId) {
+                      convoProvider.filterByFolder(folderId);
+                    },
+                    showStarredOnly: convoProvider.showStarredOnly,
+                    onStarredToggle: convoProvider.toggleStarredFilter,
+                    showDailySummaries: convoProvider.showDailySummaries,
+                    onDailySummariesToggle: convoProvider.toggleDailySummaries,
+                    hasDailySummaries: convoProvider.hasDailySummaries,
+                  ),
+                );
+              },
+            ),
+            // Show daily summaries list or conversations based on filter
+            if (convoProvider.showDailySummaries)
+              const DailySummariesList()
+            else if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
                 !convoProvider.isFetchingConversations)
               SliverToBoxAdapter(
@@ -238,8 +288,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   },
                 ),
               ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 80),
+            SliverToBoxAdapter(
+              child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100),
             ),
           ],
         ),

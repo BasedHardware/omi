@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
-import 'desktop/memory_review_sheet_desktop.dart' as desktop;
+import 'package:omi/desktop/pages/memories/widgets/desktop_memory_review_sheet.dart' as desktop;
 import 'mobile/memory_review_sheet_mobile.dart' as mobile;
 
 /// Runtime wrapper: picks the right implementation for the current platform.

@@ -159,6 +159,8 @@ abstract class DeviceConnection {
     _transportStateSubscription = null;
   }
 
+  Future<void> unpair() async {}
+
   Future<bool> ping() async {
     try {
       final result = await transport.ping();
@@ -452,6 +454,68 @@ abstract class DeviceConnection {
   }
 
   Future<int?> performGetMicGain();
+
+  Future<bool> isWifiSyncSupported() async {
+    if (await isConnected()) {
+      return await performIsWifiSyncSupported();
+    }
+    return false;
+  }
+
+  Future<bool> performIsWifiSyncSupported() async {
+    return false;
+  }
+
+  Future<bool> setupWifiSync(String ssid, String password, String serverIp, int port) async {
+    if (await isConnected()) {
+      return await performSetupWifiSync(ssid, password, serverIp, port);
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+    return false;
+  }
+
+  Future<bool> startWifiSync() async {
+    if (await isConnected()) {
+      return await performStartWifiSync();
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performStartWifiSync() async {
+    return false;
+  }
+
+  Future<bool> stopWifiSync() async {
+    if (await isConnected()) {
+      return await performStopWifiSync();
+    }
+    _showDeviceDisconnectedNotification();
+    return false;
+  }
+
+  Future<bool> performStopWifiSync() async {
+    return false;
+  }
+
+  Future<StreamSubscription?> getWifiSyncStatusListener({
+    required void Function(int status) onStatusReceived,
+  }) async {
+    if (await isConnected()) {
+      return await performGetWifiSyncStatusListener(onStatusReceived: onStatusReceived);
+    }
+    return null;
+  }
+
+  Future<StreamSubscription?> performGetWifiSyncStatusListener({
+    required void Function(int status) onStatusReceived,
+  }) async {
+    return null;
+  }
 
   void _showDeviceDisconnectedNotification() {
     NotificationService.instance.createNotification(

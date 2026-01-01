@@ -1,6 +1,6 @@
 import threading
 import uuid
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 import hashlib
 import os
 
@@ -13,6 +13,7 @@ from database import (
     chat as chat_db,
     user_usage as user_usage_db,
     notifications as notification_db,
+    daily_summaries as daily_summaries_db,
 )
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -53,8 +54,9 @@ from utils.notifications import send_notification, send_training_data_submitted_
 from utils.other import endpoints as auth
 from utils.other.storage import (
     delete_all_conversation_recordings,
-    get_user_person_speech_samples,
+    get_speech_sample_signed_urls,
     delete_user_person_speech_samples,
+    delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
 
@@ -242,7 +244,9 @@ def get_single_person(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
     if include_speech_samples:
-        person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
+        # Convert stored GCS paths to signed URLs
+        stored_paths = person.get('speech_samples', [])
+        person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return person
 
 
@@ -251,13 +255,10 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     print('get_all_people', include_speech_samples)
     people = get_people(uid)
     if include_speech_samples:
-
-        def single(person):
-            person['speech_samples'] = get_user_person_speech_samples(uid, person['id'])
-
-        threads = [threading.Thread(target=single, args=(person,)) for person in people]
-        [t.start() for t in threads]
-        [t.join() for t in threads]
+        # Convert stored GCS paths to signed URLs for each person
+        for person in people:
+            stored_paths = person.get('speech_samples', [])
+            person['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
     return people
 
 
@@ -275,6 +276,36 @@ def update_person_name(
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
+    return {'status': 'ok'}
+
+
+@router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
+def delete_person_speech_sample_endpoint(
+    person_id: str,
+    sample_index: int,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Delete a specific speech sample for a person by index."""
+    person = get_person(uid, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    speech_samples = person.get('speech_samples', [])
+    if sample_index < 0 or sample_index >= len(speech_samples):
+        raise HTTPException(status_code=404, detail="Sample not found")
+
+    path_to_delete = speech_samples[sample_index]
+    
+    # Extract filename from path for GCS deletion
+    filename = path_to_delete.split('/')[-1]
+
+    # Delete from GCS
+    delete_user_person_speech_sample(uid, person_id, filename)
+
+    # Remove from Firestore
+    from database.users import remove_person_speech_sample
+    remove_person_speech_sample(uid, person_id, path_to_delete)
+
     return {'status': 'ok'}
 
 
@@ -703,3 +734,208 @@ def get_user_subscription_endpoint(uid: str = Depends(auth.get_current_user_uid)
         memories_created_limit=memories_created_limit,
         available_plans=available_plans,
     )
+
+
+# **************************************
+# ****** Daily Summary Settings ********
+# **************************************
+
+
+class DailySummarySettingsResponse(BaseModel):
+    enabled: bool
+    hour: int  # Local hour (0-23) in user's timezone
+
+
+class DailySummarySettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    hour: Optional[int] = None  # Local hour (0-23), e.g., 22 for 10 PM, 8 for 8 AM
+
+
+@router.get('/v1/users/daily-summary-settings', tags=['v1'], response_model=DailySummarySettingsResponse)
+def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get user's daily summary notification settings.
+
+    Returns:
+        - enabled: Whether daily summary notifications are enabled (default: True)
+        - hour: Preferred hour in user's local timezone (0-23, default: 22 for 10 PM)
+    """
+    enabled = notification_db.get_daily_summary_enabled(uid)
+    local_hour = notification_db.get_daily_summary_hour_local(uid)
+
+    # Default to 22 (10 PM) local time if not set
+    if local_hour is None:
+        local_hour = notification_db.DEFAULT_DAILY_SUMMARY_HOUR_LOCAL
+
+    return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
+
+
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'])
+def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Update user's daily summary notification settings.
+
+    Parameters:
+        - enabled: Enable/disable daily summary notifications
+        - hour: Preferred hour in local timezone (0-23).
+                Examples: 22 (10 PM), 8 (8 AM), 18 (6 PM)
+
+    Note: Hour is stored as local time. The system determines when to send
+    based on the user's timezone and will send the summary at the correct local time
+    """
+    if data.enabled is not None:
+        notification_db.set_daily_summary_enabled(uid, data.enabled)
+
+    if data.hour is not None:
+        if not (0 <= data.hour <= 23):
+            raise HTTPException(status_code=400, detail="Hour must be between 0 and 23")
+
+        try:
+            notification_db.set_daily_summary_hour_local(uid, data.hour)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return {'status': 'ok'}
+
+
+class TestDailySummaryRequest(BaseModel):
+    date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
+
+
+@router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
+def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Test endpoint to manually trigger daily summary for the authenticated user.
+    This bypasses the time check and sends a summary immediately.
+    Optionally accepts a date parameter (YYYY-MM-DD) to generate summary for a specific date.
+    """
+    from datetime import datetime, time
+    import pytz
+    from utils.llm.external_integrations import generate_comprehensive_daily_summary
+    from models.conversation import Conversation
+    from utils.notifications import send_notification
+    from models.notification_message import NotificationMessage
+
+    time_zone_name = notification_db.get_user_time_zone(uid)
+    tokens = notification_db.get_all_tokens(uid)
+
+    if not tokens:
+        raise HTTPException(status_code=400, detail='No notification tokens found for user')
+
+    # Parse date or use today
+    target_date = None
+    if request and request.date:
+        try:
+            target_date = datetime.strptime(request.date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid date format. Use YYYY-MM-DD')
+
+    # Calculate date boundaries
+    if time_zone_name:
+        try:
+            user_tz = pytz.timezone(time_zone_name)
+            if target_date:
+                # Use the specified date
+                date_str = target_date.strftime('%Y-%m-%d')
+                start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
+                end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
+            else:
+                # Use today
+                now_in_user_tz = datetime.now(user_tz)
+                date_str = now_in_user_tz.strftime('%Y-%m-%d')
+                start_of_day = user_tz.localize(datetime.combine(now_in_user_tz.date(), time.min))
+                end_of_day = now_in_user_tz
+
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+    else:
+        now_utc = datetime.now(pytz.utc)
+        if target_date:
+            date_str = target_date.strftime('%Y-%m-%d')
+            start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
+            end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
+        else:
+            date_str = now_utc.strftime('%Y-%m-%d')
+            start_date_utc = datetime.combine(now_utc.date(), time.min).replace(tzinfo=pytz.utc)
+            end_date_utc = now_utc
+
+    # Get conversations for the date
+    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+
+    if not conversations_data or len(conversations_data) == 0:
+        raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
+
+    conversations = [Conversation(**convo_data) for convo_data in conversations_data]
+
+    # Generate summary (pass date range for fetching actual action items)
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+
+    # Store in database
+    summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+
+    # Send notification
+    daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
+    summary_body = summary_data.get('overview', 'Tap to see your daily summary')
+    if len(summary_body) > 150:
+        summary_body = summary_body[:147] + "..."
+
+    ai_message = NotificationMessage(
+        text=summary_body,
+        from_integration='false',
+        type='day_summary',
+        notification_type='daily_summary',
+        navigate_to=f"/daily-summary/{summary_id}",
+    )
+
+    send_notification(
+        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+    )
+
+    return {
+        'status': 'ok',
+        'message': f'Daily summary generated for {date_str}',
+        'summary_id': summary_id,
+        'conversations_count': len(conversations),
+    }
+
+
+# Daily Summaries API
+
+
+@router.get('/v1/users/daily-summaries', tags=['v1'])
+def get_daily_summaries(
+    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
+):
+    """
+    Get list of daily summaries for the authenticated user.
+    Returns summaries in reverse chronological order.
+    """
+    summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
+    return {'summaries': summaries}
+
+
+@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Get a single daily summary by ID.
+    """
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+    return summary
+
+
+@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Delete a daily summary by ID.
+    """
+    # Verify it exists first
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    daily_summaries_db.delete_daily_summary(uid, summary_id)
+    return {'status': 'ok'}

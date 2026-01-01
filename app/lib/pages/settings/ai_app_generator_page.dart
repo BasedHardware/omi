@@ -5,6 +5,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -103,7 +104,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         children: [
                           // "Try something like..." text
                           Text(
-                            'Try something like...',
+                            context.l10n.trySomethingLike,
                             style: TextStyle(
                               color: Colors.grey.shade500,
                               fontSize: 15,
@@ -166,11 +167,11 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
 
   Widget _buildGenerationProgressView(AiAppGeneratorProvider provider) {
     final steps = [
-      ('Creating plan', GenerationStep.creatingPlan),
-      ('Developing logic', GenerationStep.developingLogic),
-      ('Designing app', GenerationStep.designingApp),
-      ('Generating icon', GenerationStep.generatingIcon),
-      ('Final touches', GenerationStep.finalTouches),
+      (context.l10n.creatingPlan, GenerationStep.creatingPlan),
+      (context.l10n.developingLogic, GenerationStep.developingLogic),
+      (context.l10n.designingApp, GenerationStep.designingApp),
+      (context.l10n.generatingIconStep, GenerationStep.generatingIcon),
+      (context.l10n.finalTouches, GenerationStep.finalTouches),
     ];
 
     return SingleChildScrollView(
@@ -401,7 +402,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                                   baseColor: Colors.grey.shade600,
                                   highlightColor: Colors.grey.shade400,
                                   child: Text(
-                                    'Processing...',
+                                    context.l10n.processing,
                                     style: TextStyle(
                                       color: Colors.grey.shade500,
                                       fontSize: 12,
@@ -454,7 +455,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Features',
+                    context.l10n.features,
                     style: TextStyle(
                       color: Colors.grey.shade500,
                       fontSize: 12,
@@ -533,7 +534,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Try it',
+                    context.l10n.tryIt,
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 14,
@@ -635,8 +636,8 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         highlightColor: Colors.grey.shade400,
                         child: Text(
                           provider.state == GenerationState.generatingApp
-                              ? 'Creating your app...'
-                              : 'Generating icon...',
+                              ? context.l10n.creatingYourApp
+                              : context.l10n.generatingIcon,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -656,7 +657,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         height: 1.6,
                       ),
                       decoration: InputDecoration(
-                        hintText: 'What should we make?',
+                        hintText: context.l10n.whatShouldWeMake,
                         hintStyle: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 16,
@@ -890,7 +891,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            provider.generatedName ?? 'App Name',
+                            provider.generatedName ?? context.l10n.appName,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 20,
@@ -931,7 +932,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  provider.makePublic ? 'Public' : 'Private',
+                                  provider.makePublic ? context.l10n.publicLabel : context.l10n.privateLabel,
                                   style: const TextStyle(
                                     color: Color(0xFF8B5CF6),
                                     fontSize: 12,
@@ -976,9 +977,9 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                                 color: const Color(0xFF22C55E).withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Text(
-                                'Free',
-                                style: TextStyle(
+                              child: Text(
+                                context.l10n.free,
+                                style: const TextStyle(
                                   color: Color(0xFF22C55E),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -1047,14 +1048,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
             if (hasMemories)
               _buildFeatureRow(
                 icon: FontAwesomeIcons.fileLines,
-                description: 'Tailored Conversation Summaries',
+                description: context.l10n.tailoredConversationSummaries,
               ),
 
             // Chat feature
             if (hasChat)
               _buildFeatureRow(
                 icon: FontAwesomeIcons.comments,
-                description: 'Custom Chatbot Personality',
+                description: context.l10n.customChatbotPersonality,
               ),
           ],
         ],
@@ -1114,8 +1115,8 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
           // Public toggle
           _buildSettingRow(
             icon: FontAwesomeIcons.globe,
-            title: 'Make public',
-            subtitle: provider.makePublic ? 'Anyone can discover your app' : 'Only you can use this app',
+            title: context.l10n.makePublic,
+            subtitle: provider.makePublic ? context.l10n.anyoneCanDiscover : context.l10n.onlyYouCanUse,
             value: provider.makePublic,
             onChanged: (v) => provider.setMakePublic(v),
             activeColor: const Color(0xFF6366F1),
@@ -1129,8 +1130,8 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
           // Paid toggle
           _buildSettingRow(
             icon: FontAwesomeIcons.dollarSign,
-            title: 'Paid app',
-            subtitle: provider.isPaid ? 'Users pay to use your app' : 'Free for everyone',
+            title: context.l10n.paidApp,
+            subtitle: provider.isPaid ? context.l10n.usersPayToUse : context.l10n.freeForEveryone,
             value: provider.isPaid,
             onChanged: (v) => provider.setIsPaid(v),
             activeColor: const Color(0xFF22C55E),
@@ -1181,7 +1182,7 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                     ),
                   ),
                   Text(
-                    '/ month',
+                    context.l10n.perMonthLabel,
                     style: TextStyle(
                       color: Colors.grey.shade500,
                       fontSize: 14,
@@ -1263,10 +1264,10 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: provider.state == GenerationState.submitting
-              ? const Row(
+              ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
@@ -1274,10 +1275,10 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                         valueColor: AlwaysStoppedAnimation(Colors.white),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Text(
-                      'Creating...',
-                      style: TextStyle(
+                      context.l10n.creating,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -1285,14 +1286,14 @@ class _AiAppGeneratorPageState extends State<AiAppGeneratorPage> {
                     ),
                   ],
                 )
-              : const Row(
+              : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    FaIcon(FontAwesomeIcons.circleCheck, color: Colors.white, size: 18),
-                    SizedBox(width: 10),
+                    const FaIcon(FontAwesomeIcons.circleCheck, color: Colors.white, size: 18),
+                    const SizedBox(width: 10),
                     Text(
-                      'Create App',
-                      style: TextStyle(
+                      context.l10n.createApp,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,

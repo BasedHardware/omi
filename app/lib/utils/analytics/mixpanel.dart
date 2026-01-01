@@ -219,6 +219,11 @@ class MixpanelManager {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
   }
 
+  void languageChanged(String language) {
+    track('App Language Changed', properties: {'language': language});
+    setUserProperty('App Primary Language', language);
+  }
+
   void recordingLanguageChanged(String language) {
     track('Recording Language Changed', properties: {'language': language});
     setUserProperty('Recordings Language', language);
@@ -403,6 +408,49 @@ class MixpanelManager {
 
   void showDiscardedMemoriesToggled(bool showDiscarded) =>
       track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
+
+  // Conversation Display Settings Events
+  void conversationDisplaySettingsOpened() => track('Conversation Display Settings Opened');
+
+  void showShortConversationsToggled(bool showShort) =>
+      track('Show Short Conversations Toggled', properties: {'show_short': showShort});
+
+  void showDiscardedConversationsToggled(bool showDiscarded) =>
+      track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
+
+  void shortConversationThresholdChanged(int thresholdSeconds) => track(
+        'Short Conversation Threshold Changed',
+        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+      );
+
+  // Conversation Merge Events
+  void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
+
+  void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
+
+  void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
+        'Conversation Selected For Merge',
+        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+      );
+
+  void conversationMergeInitiated(List<String> conversationIds) => track(
+        'Conversation Merge Initiated',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
+
+  void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
+        'Conversation Merge Completed',
+        properties: {
+          'merged_conversation_id': mergedConversationId,
+          'removed_count': removedConversationIds.length,
+          'removed_conversation_ids': removedConversationIds,
+        },
+      );
+
+  void conversationMergeFailed(List<String> conversationIds) => track(
+        'Conversation Merge Failed',
+        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+      );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -667,6 +715,21 @@ class MixpanelManager {
     });
   }
 
+  // Brain Map Events
+  void brainMapOpened() => track('Brain Map Opened');
+
+  void brainMapNodeClicked(String nodeId, String label, String type) {
+    track('Brain Map Node Clicked', properties: {
+      'node_id': nodeId,
+      'label': label,
+      'type': type,
+    });
+  }
+
+  void brainMapShareClicked() => track('Brain Map Share Clicked');
+
+  void brainMapRebuilt() => track('Brain Map Rebuilt');
+  
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({
     required String conversationId,
@@ -1009,6 +1072,44 @@ class MixpanelManager {
     });
   }
 
+  // ============================================================================
+  // AUDIO PLAYBACK TRACKING
+  // ============================================================================
+
+  void audioPlaybackStarted({
+    required String conversationId,
+    int? durationSeconds,
+  }) {
+    track('Audio Playback Started', properties: {
+      'conversation_id': conversationId,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+    });
+  }
+
+  void audioPlaybackPaused({
+    required String conversationId,
+    required int positionSeconds,
+    int? durationSeconds,
+  }) {
+    track('Audio Playback Paused', properties: {
+      'conversation_id': conversationId,
+      'position_seconds': positionSeconds,
+      if (durationSeconds != null) 'duration_seconds': durationSeconds,
+      if (durationSeconds != null && durationSeconds > 0)
+        'completion_percentage': ((positionSeconds / durationSeconds) * 100).round(),
+    });
+  }
+
+  void audioPlaybackSeeked({
+    required String conversationId,
+    required int toPositionSeconds,
+  }) {
+    track('Audio Playback Seeked', properties: {
+      'conversation_id': conversationId,
+      'to_position_seconds': toPositionSeconds,
+    });
+  }
+
   void actionItemExported({
     required String actionItemId,
     required String appName,
@@ -1246,6 +1347,224 @@ class MixpanelManager {
     track('App Detail Chat Clicked', properties: {
       'app_id': appId,
       'app_name': appName,
+    });
+  }
+
+  // ============================================================================
+  // FOLDER TRACKING
+  // ============================================================================
+
+  void folderCreated({
+    required String folderId,
+    required String folderName,
+    required String icon,
+    required String color,
+  }) {
+    track('Folder Created', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+      'icon': icon,
+      'color': color,
+    });
+  }
+
+  void folderUpdated({
+    required String folderId,
+    required String folderName,
+  }) {
+    track('Folder Updated', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+    });
+  }
+
+  void folderDeleted({
+    required String folderId,
+    required String folderName,
+    required int conversationCount,
+    String? moveToFolderId,
+  }) {
+    track('Folder Deleted', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+      'conversation_count': conversationCount,
+      if (moveToFolderId != null) 'move_to_folder_id': moveToFolderId,
+      'moved_conversations': moveToFolderId != null,
+    });
+  }
+
+  void folderSelected({
+    String? folderId,
+    String? folderName,
+  }) {
+    track('Folder Selected', properties: {
+      if (folderId != null) 'folder_id': folderId,
+      if (folderName != null) 'folder_name': folderName,
+      'is_all_tab': folderId == null,
+    });
+  }
+
+  void folderContextMenuOpened({
+    required String folderId,
+    required String folderName,
+  }) {
+    track('Folder Context Menu Opened', properties: {
+      'folder_id': folderId,
+      'folder_name': folderName,
+    });
+  }
+
+  void createFolderButtonClicked() {
+    track('Create Folder Button Clicked');
+  }
+
+  void conversationDetailFolderChipClicked({
+    required String conversationId,
+    String? currentFolderId,
+  }) {
+    track('Conversation Detail Folder Chip Clicked', properties: {
+      'conversation_id': conversationId,
+      if (currentFolderId != null) 'current_folder_id': currentFolderId,
+      'has_folder': currentFolderId != null,
+    });
+  }
+
+  void conversationMovedToFolder({
+    required String conversationId,
+    String? fromFolderId,
+    String? toFolderId,
+    required String source,
+  }) {
+    track('Conversation Moved To Folder', properties: {
+      'conversation_id': conversationId,
+      if (fromFolderId != null) 'from_folder_id': fromFolderId,
+      if (toFolderId != null) 'to_folder_id': toFolderId,
+      'source': source,
+      'was_in_folder': fromFolderId != null,
+    });
+  }
+
+  void starredFilterToggled({
+    required bool enabled,
+    String? selectedFolderId,
+  }) {
+    track('Starred Filter Toggled', properties: {
+      'enabled': enabled,
+      if (selectedFolderId != null) 'selected_folder_id': selectedFolderId,
+      'has_folder_filter': selectedFolderId != null,
+    });
+  }
+
+  void conversationStarToggled({
+    required ServerConversation conversation,
+    required bool starred,
+    required String source,
+  }) {
+    var properties = getConversationEventProperties(conversation);
+    properties['starred'] = starred;
+    properties['source'] = source;
+    properties['duration_seconds'] = conversation.getDurationInSeconds();
+
+    // Get the summarized app id if available
+    if (conversation.appResults.isNotEmpty) {
+      var summarizedApp = conversation.appResults.firstOrNull;
+      if (summarizedApp != null && summarizedApp.appId != null) {
+        properties['summary_app_id'] = summarizedApp.appId!;
+      }
+    }
+
+    track('Conversation Star Toggled', properties: properties);
+  }
+
+  void omiDoubleTap({
+    required String feature,
+    Map<String, dynamic>? additionalProperties,
+  }) {
+    track('Omi Double Tap', properties: {
+      'feature': feature,
+      if (additionalProperties != null) ...additionalProperties,
+    });
+  }
+
+  // ============================================================================
+  // WRAPPED 2025 TRACKING
+  // ============================================================================
+
+  void wrappedPageOpened() {
+    track('Wrapped Page Opened');
+  }
+
+  void wrappedBannerClicked() {
+    track('Wrapped Banner Clicked');
+  }
+
+  void wrappedGenerationStarted() {
+    track('Wrapped Generation Started');
+    startTimingEvent('Wrapped Generation Completed');
+  }
+
+  void wrappedGenerationCompleted({
+    required int totalConversations,
+    required int totalMinutes,
+    required int daysActive,
+  }) {
+    track('Wrapped Generation Completed', properties: {
+      'total_conversations': totalConversations,
+      'total_minutes': totalMinutes,
+      'days_active': daysActive,
+    });
+  }
+
+  void wrappedGenerationFailed({String? error}) {
+    track('Wrapped Generation Failed', properties: {
+      if (error != null) 'error': error,
+    });
+  }
+
+  void wrappedCardViewed({
+    required String cardName,
+    required int cardIndex,
+  }) {
+    track('Wrapped Card Viewed', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+    });
+  }
+
+  void wrappedShareButtonClicked({
+    required String cardName,
+    required int cardIndex,
+  }) {
+    track('Wrapped Share Button Clicked', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+    });
+    startTimingEvent('Wrapped Shared Successfully');
+  }
+
+  void wrappedSharedSuccessfully({
+    required String cardName,
+    required int cardIndex,
+    int? fileSizeBytes,
+  }) {
+    track('Wrapped Shared Successfully', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+      if (fileSizeBytes != null) 'file_size_bytes': fileSizeBytes,
+      if (fileSizeBytes != null) 'file_size_kb': (fileSizeBytes / 1024).round(),
+      if (fileSizeBytes != null) 'file_size_mb': (fileSizeBytes / (1024 * 1024)).toStringAsFixed(2),
+    });
+  }
+
+  void wrappedShareFailed({
+    required String cardName,
+    required int cardIndex,
+    String? error,
+  }) {
+    track('Wrapped Share Failed', properties: {
+      'card_name': cardName,
+      'card_index': cardIndex,
+      if (error != null) 'error': error,
     });
   }
 }

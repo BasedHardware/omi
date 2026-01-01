@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'widgets/action_item_tile_widget.dart';
-import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/action_item_form_sheet.dart';
-import 'widgets/task_integrations_banner.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+
+enum TaskCategory { today, tomorrow, noDeadline, later }
 
 class ActionItemsPage extends StatefulWidget {
   const ActionItemsPage({super.key});
@@ -26,8 +21,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   final ScrollController _scrollController = ScrollController();
   final AppReviewService _appReviewService = AppReviewService();
 
-  // Tab state: 0 = To Do, 1 = Done, 2 = snoozed
-  int _selectedTabIndex = 0;
+  // Track indent levels for each task (task id -> indent level 0-3)
+  final Map<String, int> _indentLevels = {};
+
+  // Track custom order for each category (category -> list of item ids)
+  final Map<TaskCategory, List<String>> _categoryOrder = {};
+
+  // Track the item being hovered over during drag
+  String? _hoveredItemId;
+  bool _hoverAbove = false; // true = insert above, false = insert below
 
   @override
   bool get wantKeepAlive => true;
@@ -53,9 +55,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.dispose();
   }
 
-  // checks if it's the first action item completed
-  Future<void> _onActionItemCompleted({bool isSnoozed = false}) async {
-    MixpanelManager().actionItemCompleted(fromTab: isSnoozed ? 'Snoozed' : 'To Do');
+  void _onScroll() {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (!provider.isFetching && provider.hasMore) {
+        provider.loadMoreActionItems();
+      }
+    }
+  }
+
+  Future<void> _onActionItemCompleted() async {
+    MixpanelManager().actionItemCompleted(fromTab: 'Tasks');
 
     final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
 
@@ -68,43 +78,189 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  void _onScroll() {
-    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      if (!provider.isFetching && provider.hasMore) {
-        provider.loadMoreActionItems();
-      }
-    }
-  }
-
-  void scrollToTop() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeOutCubic,
-      );
-    }
-  }
-
-  void _showCreateActionItemSheet() {
+  void _showCreateActionItemSheet({DateTime? defaultDueDate}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const ActionItemFormSheet(),
+      builder: (context) => ActionItemFormSheet(defaultDueDate: defaultDueDate),
     );
   }
 
-  void _onTabChanged(int value) {
-    setState(() {
-      _selectedTabIndex = value;
-    });
-    HapticFeedback.selectionClick();
+  // Categorize items by deadline
+  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items, bool showCompleted) {
+    final now = DateTime.now();
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
-    // Track tab change
-    final tabName = value == 0 ? 'To Do' : (value == 1 ? 'Done' : 'Old');
-    MixpanelManager().actionItemTabChanged(tabName);
+    // Filter out old tasks without a future due date (older than 7 days)
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+    final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
+      TaskCategory.today: [],
+      TaskCategory.tomorrow: [],
+      TaskCategory.noDeadline: [],
+      TaskCategory.later: [],
+    };
+
+    for (var item in items) {
+      // Skip completed items unless showing completed
+      if (item.completed && !showCompleted) continue;
+      if (!item.completed && showCompleted) continue;
+
+      // Skip old tasks without a future due date (only for non-completed)
+      if (!showCompleted) {
+        if (item.dueAt != null) {
+          if (item.dueAt!.isBefore(sevenDaysAgo)) continue;
+        } else {
+          if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) continue;
+        }
+      }
+
+      if (item.dueAt == null) {
+        categorized[TaskCategory.noDeadline]!.add(item);
+      } else {
+        final dueDate = item.dueAt!;
+        if (dueDate.isBefore(startOfTomorrow)) {
+          categorized[TaskCategory.today]!.add(item);
+        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+          categorized[TaskCategory.tomorrow]!.add(item);
+        } else {
+          categorized[TaskCategory.later]!.add(item);
+        }
+      }
+    }
+
+    return categorized;
+  }
+
+  String _getCategoryTitle(TaskCategory category) {
+    switch (category) {
+      case TaskCategory.today:
+        return 'Today';
+      case TaskCategory.tomorrow:
+        return 'Tomorrow';
+      case TaskCategory.noDeadline:
+        return 'No Deadline';
+      case TaskCategory.later:
+        return 'Later';
+    }
+  }
+
+  DateTime? _getDefaultDueDateForCategory(TaskCategory category) {
+    final now = DateTime.now();
+    switch (category) {
+      case TaskCategory.today:
+        return DateTime(now.year, now.month, now.day, 23, 59);
+      case TaskCategory.tomorrow:
+        return DateTime(now.year, now.month, now.day + 1, 23, 59);
+      case TaskCategory.noDeadline:
+        return null;
+      case TaskCategory.later:
+        // Day after tomorrow
+        return DateTime(now.year, now.month, now.day + 2, 23, 59);
+    }
+  }
+
+  void _updateTaskCategory(ActionItemWithMetadata item, TaskCategory newCategory) {
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final newDueDate = _getDefaultDueDateForCategory(newCategory);
+    provider.updateActionItemDueDate(item, newDueDate);
+  }
+
+  int _getIndentLevel(String itemId) {
+    return _indentLevels[itemId] ?? 0;
+  }
+
+  void _incrementIndent(String itemId) {
+    setState(() {
+      final current = _indentLevels[itemId] ?? 0;
+      if (current < 3) {
+        _indentLevels[itemId] = current + 1;
+      }
+    });
+    HapticFeedback.lightImpact();
+  }
+
+  void _decrementIndent(String itemId) {
+    setState(() {
+      final current = _indentLevels[itemId] ?? 0;
+      if (current > 0) {
+        _indentLevels[itemId] = current - 1;
+      }
+    });
+    HapticFeedback.lightImpact();
+  }
+
+  // Get ordered items for a category, respecting custom order
+  List<ActionItemWithMetadata> _getOrderedItems(
+    TaskCategory category,
+    List<ActionItemWithMetadata> items,
+  ) {
+    final order = _categoryOrder[category];
+    if (order == null || order.isEmpty) {
+      return items;
+    }
+
+    // Sort items based on custom order, new items go at the end
+    final orderedItems = <ActionItemWithMetadata>[];
+    final itemMap = {for (var item in items) item.id: item};
+
+    // Add items in custom order
+    for (final id in order) {
+      if (itemMap.containsKey(id)) {
+        orderedItems.add(itemMap[id]!);
+        itemMap.remove(id);
+      }
+    }
+
+    // Add any remaining items (new ones not in custom order)
+    orderedItems.addAll(itemMap.values);
+
+    return orderedItems;
+  }
+
+  // Reorder item within category
+  void _reorderItemInCategory(
+    ActionItemWithMetadata draggedItem,
+    String targetItemId,
+    bool insertAbove,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    setState(() {
+      // Initialize category order if needed
+      if (!_categoryOrder.containsKey(category)) {
+        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
+      }
+
+      final order = _categoryOrder[category]!;
+
+      // Remove dragged item from its current position
+      order.remove(draggedItem.id);
+
+      // Find target position
+      final targetIndex = order.indexOf(targetItemId);
+      if (targetIndex != -1) {
+        // Insert above or below target
+        final insertIndex = insertAbove ? targetIndex : targetIndex + 1;
+        order.insert(insertIndex, draggedItem.id);
+      } else {
+        // Target not found, add at end
+        order.add(draggedItem.id);
+      }
+
+      // Clear hover state
+      _hoveredItemId = null;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  // Delete task with swipe
+  Future<void> _deleteTask(ActionItemWithMetadata item) async {
+    HapticFeedback.mediumImpact();
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    await provider.deleteActionItem(item);
   }
 
   @override
@@ -113,35 +269,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
-        // Get categorized items based on tab
-        final todoItems = provider.todoItems;
-        final doneItems = provider.doneItems;
-        final snoozedItems = provider.snoozedItems;
-
-        // Get current tab items
-        final currentTabItems = _selectedTabIndex == 0
-            ? todoItems
-            : _selectedTabIndex == 1
-                ? doneItems
-                : snoozedItems;
+        final showCompleted = provider.showCompletedView;
+        final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
 
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: provider.isSelectionMode ? _buildSelectionAppBar(provider, currentTabItems) : null,
-          floatingActionButton: provider.isSelectionMode
-              ? null
-              : Padding(
-                  padding: const EdgeInsets.only(bottom: 60.0),
-                  child: FloatingActionButton(
-                    heroTag: 'action_items_fab',
-                    onPressed: _showCreateActionItemSheet,
-                    backgroundColor: Colors.deepPurpleAccent,
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+          floatingActionButton: Padding(
+            padding: const EdgeInsets.only(bottom: 100.0),
+            child: FloatingActionButton(
+              heroTag: 'action_items_fab',
+              onPressed: () => _showCreateActionItemSheet(),
+              backgroundColor: Colors.deepPurpleAccent,
+              child: const Icon(Icons.add, color: Colors.white),
+            ),
+          ),
           body: RefreshIndicator(
             onRefresh: () async {
               HapticFeedback.mediumImpact();
@@ -149,683 +290,583 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             },
             color: Colors.deepPurpleAccent,
             backgroundColor: Colors.white,
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                // Main Content
-                if (provider.isLoading && provider.actionItems.isEmpty) ...[
-                  // Header shimmer
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'To-Do\'s',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[800]?.withOpacity(0.5),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Tap to edit • Long press to select • Swipe for actions',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Shimmer list
-                  const ActionItemsShimmerList(),
-                ] else if (provider.actionItems.isEmpty)
-                  SliverFillRemaining(
-                    child: _buildSmartEmptyState(provider),
-                  )
-                else
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Task Integrations Banner
-                          const TaskIntegrationsBanner(),
-
-                          // Segmented Control - Full width like action items
-                          Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1C1C1E),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final tabWidth = constraints.maxWidth / 3;
-                                return Stack(
-                                  children: [
-                                    // Animated sliding background
-                                    AnimatedPositioned(
-                                      duration: const Duration(milliseconds: 200),
-                                      curve: Curves.easeInOut,
-                                      left: _selectedTabIndex * tabWidth,
-                                      top: 0,
-                                      bottom: 0,
-                                      width: tabWidth,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF2C2C2E),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                    ),
-                                    // Tab buttons
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: GestureDetector(
-                                            onTap: () => _onTabChanged(0),
-                                            behavior: HitTestBehavior.opaque,
-                                            child: _buildTabLabel('To Do', todoItems.length),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: GestureDetector(
-                                            onTap: () => _onTabChanged(1),
-                                            behavior: HitTestBehavior.opaque,
-                                            child: _buildTabLabel('Done', doneItems.length),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: GestureDetector(
-                                            onTap: () => _onTabChanged(2),
-                                            behavior: HitTestBehavior.opaque,
-                                            child: _buildTabLabel('Old', snoozedItems.length),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                // Current Tab Items
-                if (provider.actionItems.isNotEmpty && currentTabItems.isNotEmpty)
-                  _buildTabItems(currentTabItems, provider)
-                else if (provider.actionItems.isNotEmpty && currentTabItems.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Container(
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Center(
-                          child: Text(
-                            _getEmptyTabMessage(),
-                            style: TextStyle(
-                              color: Colors.grey.shade400,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Loading shimmer for pagination
-                if (provider.isFetching || provider.isLoading)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: List.generate(
-                            3,
-                            (index) => const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 4),
-                                  child: ActionItemShimmerWidget(),
-                                )),
-                      ),
-                    ),
-                  ),
-
-                const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
-              ],
-            ),
+            child: provider.isLoading && provider.actionItems.isEmpty
+                ? _buildLoadingState()
+                : categorizedItems.values.every((l) => l.isEmpty)
+                    ? _buildEmptyState()
+                    : _buildTasksList(categorizedItems, provider),
           ),
         );
       },
     );
   }
 
-  Widget _buildTabItems(List<ActionItemWithMetadata> items, ActionItemsProvider provider) {
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          if (index < items.length) {
-            final item = items[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _buildDismissibleActionItem(
-                item: item,
-                provider: provider,
-              ),
-            );
-          }
-          return null;
-        },
-        childCount: items.length,
-      ),
+  Widget _buildLoadingState() {
+    return const Center(
+      child: CircularProgressIndicator(color: Colors.deepPurpleAccent),
     );
   }
 
-  String _getEmptyTabMessage() {
-    switch (_selectedTabIndex) {
-      case 0: // To Do
-        return '🎉 All caught up!\nNo pending action items';
-      case 1: // Done
-        return 'No completed items yet';
-      case 2: // Old
-        return '✅ No old tasks';
-      default:
-        return 'No items';
-    }
-  }
-
-  Widget _buildDismissibleActionItem({
-    required ActionItemWithMetadata item,
-    required ActionItemsProvider provider,
-  }) {
-    return Dismissible(
-      key: Key(item.id),
-      // Swipe right background - Mark as completed
-      background: provider.isSelectionMode
-          ? null
-          : Container(
-              margin: const EdgeInsets.symmetric(vertical: 2),
-              decoration: BoxDecoration(
-                color: item.completed ? Colors.orange : Colors.green,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.only(left: 20),
-              child: Icon(
-                item.completed ? Icons.undo : Icons.check,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-      // Swipe left background - Delete
-      secondaryBackground: provider.isSelectionMode
-          ? null
-          : Container(
-              margin: const EdgeInsets.symmetric(vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 20),
-              child: const Icon(
-                Icons.delete,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-      confirmDismiss: (direction) async {
-        // Disable swipe gestures when in selection mode
-        if (provider.isSelectionMode) {
-          return false;
-        }
-
-        if (direction == DismissDirection.startToEnd) {
-          // Swipe right - Toggle completion
-          await provider.updateActionItemState(item, !item.completed);
-
-          // Show feedback
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(item.completed ? 'Action item marked as incomplete' : 'Action item completed'),
-                backgroundColor: item.completed ? Colors.orange : Colors.green,
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-          return false;
-        } else {
-          // Swipe left - Show delete confirmation
-          await _deleteActionItem(item, provider);
-          return false;
-        }
-      },
-      onDismissed: (direction) async {
-        // Only called for delete action (swipe left)
-        if (direction == DismissDirection.endToStart) {
-          await _deleteActionItem(item, provider);
-        }
-      },
-      child: ActionItemTileWidget(
-        actionItem: item,
-        onToggle: (newState) {
-          provider.updateActionItemState(item, newState);
-          if (newState) {
-            _onActionItemCompleted(isSnoozed: _selectedTabIndex == 2);
-          }
-        },
-        onRefresh: () => provider.fetchActionItems(),
-        isSelectionMode: provider.isSelectionMode,
-        isSelected: provider.isItemSelected(item.id),
-        onLongPress: () => _handleItemLongPress(item, provider),
-        onSelectionToggle: () => provider.toggleItemSelection(item.id),
-        isSnoozedTab: _selectedTabIndex == 2,
-      ),
-    );
-  }
-
-  void _handleItemLongPress(ActionItemWithMetadata item, ActionItemsProvider provider) {
-    if (!provider.isSelectionMode) {
-      // Enter selection mode and select the long-pressed item
-      provider.startSelection();
-      provider.selectItem(item.id);
-      HapticFeedback.mediumImpact();
-    }
-  }
-
-  PreferredSizeWidget _buildSelectionAppBar(
-      ActionItemsProvider provider, List<ActionItemWithMetadata> currentTabItems) {
-    return AppBar(
-      backgroundColor: Colors.black.withValues(alpha: 0.05),
-      elevation: 0,
-      foregroundColor: Colors.white,
-      leading: IconButton(
-        icon: const Icon(Icons.close, size: 20),
-        onPressed: () => provider.endSelection(),
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-      ),
-      title: Text(
-        '${provider.selectedCount} selected',
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      actions: [
-        if (provider.selectedCount < currentTabItems.length)
-          IconButton(
-            icon: const FaIcon(FontAwesomeIcons.squareCheck, size: 18),
-            tooltip: 'Select all',
-            onPressed: () => provider.selectAllItemsFromTab(_selectedTabIndex),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-          ),
-        if (provider.hasSelection)
-          IconButton(
-            icon: const FaIcon(FontAwesomeIcons.trash, size: 20),
-            tooltip: 'Delete selected',
-            onPressed: () => _deleteSelectedItems(provider),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-          ),
-      ],
-    );
-  }
-
-  Future<void> _deleteSelectedItems(ActionItemsProvider provider) async {
-    final selectedCount = provider.selectedCount;
-    if (selectedCount == 0) return;
-
-    final prefs = SharedPreferencesUtil();
-
-    // Check if user has opted out of delete confirmations
-    if (!prefs.showActionItemDeleteConfirmation) {
-      // Skip confirmation and proceed with bulk deletion
-      await _performBulkDelete(provider);
-      return;
-    }
-
-    // Show confirmation dialog for bulk delete
-    final result = await OmiConfirmDialog.showWithSkipOption(
-      context,
-      title: 'Delete Selected Items',
-      message: 'Are you sure you want to delete $selectedCount selected action item${selectedCount > 1 ? 's' : ''}?',
-    );
-
-    if (result != null && result.confirmed) {
-      // Update preference if user chose to skip future confirmations
-      if (result.skipFutureConfirmations) {
-        prefs.showActionItemDeleteConfirmation = false;
-      }
-
-      await _performBulkDelete(provider);
-    }
-  }
-
-  Future<void> _performBulkDelete(ActionItemsProvider provider) async {
-    final selectedCount = provider.selectedCount;
-
-    try {
-      final success = await provider.deleteSelectedItems();
-
-      if (mounted && success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$selectedCount action item${selectedCount > 1 ? 's' : ''} deleted'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete some items'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete items'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
-    final prefs = SharedPreferencesUtil();
-
-    // Check if user has opted out of delete confirmations
-    if (!prefs.showActionItemDeleteConfirmation) {
-      // Skip confirmation and proceed with deletion
-      await _performDeleteActionItem(item, provider);
-      return;
-    }
-
-    final result = await OmiConfirmDialog.showWithSkipOption(
-      context,
-      title: 'Delete Action Item',
-      message: 'Are you sure you want to delete this action item?',
-    );
-
-    if (result?.confirmed == true) {
-      // Update preference if user chose to skip future confirmations
-      if (result!.skipFutureConfirmations) {
-        prefs.showActionItemDeleteConfirmation = false;
-      }
-
-      await _performDeleteActionItem(item, provider);
-    }
-  }
-
-  Future<void> _performDeleteActionItem(ActionItemWithMetadata item, ActionItemsProvider provider) async {
-    final success = await provider.deleteActionItem(item);
-
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Action item "${item.description}" deleted'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete action item'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildSmartEmptyState(ActionItemsProvider provider) {
+  Widget _buildEmptyState() {
     return Center(
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
-        padding: const EdgeInsets.all(32.0),
-        child: _buildFirstTimeEmptyState(),
-      ),
-    );
-  }
-
-  Widget _buildTabLabel(String label, int count) {
-    final int tabIndex = label == 'To Do' ? 0 : (label == 'Done' ? 1 : (label == 'Old' ? 2 : 2));
-    final bool isSelected = _selectedTabIndex == tabIndex;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.white : Colors.grey[500],
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.deepPurpleAccent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                Icons.check_circle_outline,
+                size: 40,
+                color: Colors.deepPurpleAccent.withOpacity(0.6),
+              ),
             ),
-          ),
-          if (count > 0) ...[
-            const SizedBox(width: 4),
-            Text(
-              '$count',
+            const SizedBox(height: 24),
+            const Text(
+              'No Tasks Yet',
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isSelected ? Colors.grey[400] : Colors.grey[600],
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Tasks from your conversations will appear here.\nTap + to create one manually.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 16,
+                height: 1.5,
               ),
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildFirstTimeEmptyState() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 96,
-          height: 96,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF8B5CF6).withOpacity(0.1),
-                const Color(0xFFA855F7).withOpacity(0.05),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(32),
-            border: Border.all(
-              color: const Color(0xFF8B5CF6).withOpacity(0.2),
-              width: 1,
-            ),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                Icons.assignment_outlined,
-                size: 40,
-                color: const Color(0xFF8B5CF6).withOpacity(0.6),
+  Widget _buildTasksList(
+    Map<TaskCategory, List<ActionItemWithMetadata>> categorizedItems,
+    ActionItemsProvider provider,
+  ) {
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 12)),
+
+        // Build each category section (skip empty ones)
+        for (final category in TaskCategory.values)
+          if ((categorizedItems[category] ?? []).isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildCategorySection(
+                category: category,
+                items: categorizedItems[category] ?? [],
+                provider: provider,
               ),
-              Positioned(
-                right: 24,
-                bottom: 24,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF10B981),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    size: 12,
-                    color: Colors.white,
+            ),
+
+        // Bottom padding
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
+  }
+
+  Widget _buildCategorySection({
+    required TaskCategory category,
+    required List<ActionItemWithMetadata> items,
+    required ActionItemsProvider provider,
+  }) {
+    final title = _getCategoryTitle(category);
+    final orderedItems = _getOrderedItems(category, items);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: DragTarget<ActionItemWithMetadata>(
+        onWillAcceptWithDetails: (details) => true,
+        onAcceptWithDetails: (details) {
+          // Only change category if dropped on empty area (not on a specific item)
+          if (_hoveredItemId == null) {
+            _updateTaskCategory(details.data, category);
+          }
+        },
+        builder: (context, candidateData, rejectedData) {
+          final isHovering = candidateData.isNotEmpty && _hoveredItemId == null;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: isHovering ? const Color(0xFF252528) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (orderedItems.isNotEmpty)
+                        Text(
+                          '${orderedItems.length}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
 
-        const SizedBox(height: 28),
+                // Drop zone for first position
+                if (orderedItems.isNotEmpty)
+                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
-        // Welcome heading
-        const Text(
-          'Ready for Action Items',
-          style: TextStyle(
-            color: Color(0xFFFFFFFF),
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.8,
-          ),
-          textAlign: TextAlign.center,
-        ),
+                // Task items
+                ...orderedItems.map((item) => _buildTaskItem(
+                      item,
+                      provider,
+                      category: category,
+                      categoryItems: orderedItems,
+                    )),
 
-        const SizedBox(height: 16),
+                // Spacing after section
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
-        // Educational description
-        const Text(
-          'Your AI will automatically extract tasks and to-dos from your conversations. They\'ll appear here when created.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Color(0xFFB0B0B0),
-            fontSize: 16,
-            height: 1.6,
-            fontWeight: FontWeight.w400,
-          ),
-        ),
+  Widget _buildFirstPositionDropZone(
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+    bool isDragging,
+  ) {
+    final isHoveredFirst = _hoveredItemId == '_first_${category.name}';
 
-        const SizedBox(height: 32),
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) {
+        // Don't accept if it's already the first item
+        if (categoryItems.isNotEmpty && details.data.id == categoryItems.first.id) {
+          return false;
+        }
+        return true;
+      },
+      onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
 
-        // Subtle feature hints
-        Container(
-          padding: const EdgeInsets.all(20),
+        // Insert at first position
+        _reorderItemToFirst(draggedItem, category, categoryItems);
+
+        // Also update category if different
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        if (_hoveredItemId != '_first_${category.name}') {
+          setState(() {
+            _hoveredItemId = '_first_${category.name}';
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredItemId == '_first_${category.name}') {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        final showIndicator = isHoveredFirst && candidateData.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: showIndicator ? 6 : (isDragging ? 20 : 4),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF2A2A2A),
-              width: 1,
+            color: showIndicator ? Colors.deepPurpleAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      },
+    );
+  }
+
+  void _reorderItemToFirst(
+    ActionItemWithMetadata draggedItem,
+    TaskCategory category,
+    List<ActionItemWithMetadata> categoryItems,
+  ) {
+    setState(() {
+      // Initialize category order if needed
+      if (!_categoryOrder.containsKey(category)) {
+        _categoryOrder[category] = categoryItems.map((i) => i.id).toList();
+      }
+
+      final order = _categoryOrder[category]!;
+
+      // Remove dragged item from its current position
+      order.remove(draggedItem.id);
+
+      // Insert at first position
+      order.insert(0, draggedItem.id);
+
+      // Clear hover state
+      _hoveredItemId = null;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  Widget _buildTaskItem(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider, {
+    required TaskCategory category,
+    required List<ActionItemWithMetadata> categoryItems,
+  }) {
+    final indentLevel = _getIndentLevel(item.id);
+    final indentWidth = indentLevel * 28.0;
+    final isHovered = _hoveredItemId == item.id;
+
+    return DragTarget<ActionItemWithMetadata>(
+      onWillAcceptWithDetails: (details) {
+        // Accept if it's a different item
+        return details.data.id != item.id;
+      },
+      onAcceptWithDetails: (details) {
+        final draggedItem = details.data;
+
+        // Reorder within category
+        _reorderItemInCategory(
+          draggedItem,
+          item.id,
+          _hoverAbove,
+          category,
+          categoryItems,
+        );
+
+        // Also update category if different
+        final draggedCategory = _getCategoryForItem(draggedItem);
+        if (draggedCategory != category) {
+          _updateTaskCategory(draggedItem, category);
+        }
+      },
+      onMove: (details) {
+        // Determine if hovering on top or bottom half
+        final RenderBox box = context.findRenderObject() as RenderBox;
+        final localPosition = box.globalToLocal(details.offset);
+        final isAbove = localPosition.dy < 20;
+
+        if (_hoveredItemId != item.id || _hoverAbove != isAbove) {
+          setState(() {
+            _hoveredItemId = item.id;
+            _hoverAbove = isAbove;
+          });
+        }
+      },
+      onLeave: (data) {
+        if (_hoveredItemId == item.id) {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drop indicator above
+            if (isHovered && _hoverAbove && candidateData.isNotEmpty)
+              Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            _buildDraggableTaskItem(item, provider, indentLevel, indentWidth),
+            // Drop indicator below
+            if (isHovered && !_hoverAbove && candidateData.isNotEmpty)
+              Container(
+                height: 2,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDraggableTaskItem(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider,
+    int indentLevel,
+    double indentWidth,
+  ) {
+    final taskContent = _buildTaskItemContent(item, provider, indentWidth);
+
+    // If at indent 0, use Dismissible for swipe-to-delete with animation
+    if (indentLevel == 0) {
+      return Dismissible(
+        key: Key('dismiss_${item.id}'),
+        direction: DismissDirection.endToStart,
+        dismissThresholds: const {DismissDirection.endToStart: 0.3},
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20.0),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.delete, color: Colors.white),
+        ),
+        onDismissed: (direction) {
+          _deleteTask(item);
+        },
+        child: LongPressDraggable<ActionItemWithMetadata>(
+          data: item,
+          delay: const Duration(milliseconds: 150),
+          hapticFeedbackOnStart: true,
+          onDragStarted: () {
+            HapticFeedback.mediumImpact();
+          },
+          onDragEnd: (details) {
+            setState(() {
+              _hoveredItemId = null;
+            });
+          },
+          feedback: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width - 64,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  _buildCheckbox(item.completed),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item.description,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF8B5CF6),
-                      shape: BoxShape.circle,
-                    ),
+          childWhenDragging: Opacity(
+            opacity: 0.3,
+            child: taskContent,
+          ),
+          child: taskContent,
+        ),
+      );
+    }
+
+    // If indented, use GestureDetector for indent changes + draggable
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity != null) {
+          if (details.primaryVelocity! > 200) {
+            _incrementIndent(item.id);
+          } else if (details.primaryVelocity! < -200) {
+            _decrementIndent(item.id);
+          }
+        }
+      },
+      child: LongPressDraggable<ActionItemWithMetadata>(
+        data: item,
+        delay: const Duration(milliseconds: 150),
+        hapticFeedbackOnStart: true,
+        onDragStarted: () {
+          HapticFeedback.mediumImpact();
+        },
+        onDragEnd: (details) {
+          setState(() {
+            _hoveredItemId = null;
+          });
+        },
+        feedback: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: MediaQuery.of(context).size.width - 64,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C2C2E),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                _buildCheckbox(item.completed),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    item.description,
+                    style: const TextStyle(color: Colors.white, fontSize: 15),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Automatically extracted from conversations',
-                      style: TextStyle(
-                        color: Color(0xFFE5E5E5),
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF8B5CF6),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Tap to edit, swipe to complete or delete',
-                      style: TextStyle(
-                        color: Color(0xFFE5E5E5),
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF8B5CF6),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Filter and organize by date ranges',
-                      style: TextStyle(
-                        color: Color(0xFFE5E5E5),
-                        fontSize: 14,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
-      ],
+        childWhenDragging: Opacity(
+          opacity: 0.3,
+          child: taskContent,
+        ),
+        child: taskContent,
+      ),
+    );
+  }
+
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
+    final now = DateTime.now();
+    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
+
+    if (item.dueAt == null) {
+      return TaskCategory.noDeadline;
+    }
+    final dueDate = item.dueAt!;
+    if (dueDate.isBefore(startOfTomorrow)) {
+      return TaskCategory.today;
+    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
+      return TaskCategory.tomorrow;
+    } else {
+      return TaskCategory.later;
+    }
+  }
+
+  Widget _buildTaskItemContent(
+    ActionItemWithMetadata item,
+    ActionItemsProvider provider,
+    double indentWidth,
+  ) {
+    final indentLevel = _getIndentLevel(item.id);
+
+    return GestureDetector(
+      onTap: () => _showEditSheet(item),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 1),
+        child: Dismissible(
+          key: Key('${item.id}_dismiss'),
+          direction: DismissDirection.none, // Disable dismiss, use swipe for indent
+          child: Padding(
+            padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 6, bottom: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Indent line
+                if (indentLevel > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: Container(
+                      width: 1.5,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[700],
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                // Checkbox
+                GestureDetector(
+                  onTap: () async {
+                    HapticFeedback.lightImpact();
+                    await provider.updateActionItemState(item, !item.completed);
+                    if (!item.completed) _onActionItemCompleted();
+                  },
+                  child: _buildCheckbox(item.completed),
+                ),
+                const SizedBox(width: 12),
+                // Task text
+                Expanded(
+                  child: Text(
+                    item.description,
+                    style: TextStyle(
+                      color: item.completed ? Colors.grey[600] : Colors.white,
+                      fontSize: 15,
+                      decoration: item.completed ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCheckbox(bool isCompleted) {
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isCompleted ? Colors.amber : Colors.grey[600]!,
+          width: 2,
+        ),
+        color: isCompleted ? Colors.amber : Colors.transparent,
+      ),
+      child: isCompleted
+          ? const Icon(Icons.check, size: 14, color: Colors.black)
+          : null,
+    );
+  }
+
+  void _showEditSheet(ActionItemWithMetadata item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ActionItemFormSheet(actionItem: item),
     );
   }
 }

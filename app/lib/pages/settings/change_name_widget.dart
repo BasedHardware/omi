@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/auth_service.dart';
 
 class ChangeNameWidget extends StatefulWidget {
@@ -44,9 +45,9 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Edit Name',
-              style: TextStyle(
+            Text(
+              context.l10n.editName,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
@@ -54,7 +55,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
             ),
             const SizedBox(height: 8),
             Text(
-              'How should Omi call you?',
+              context.l10n.howShouldOmiCallYou,
               style: TextStyle(
                 color: Colors.grey.shade500,
                 fontSize: 14,
@@ -71,7 +72,7 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
                 autofocus: true,
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 decoration: InputDecoration(
-                  hintText: 'Enter your name',
+                  hintText: context.l10n.enterYourName,
                   hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   border: InputBorder.none,
@@ -95,10 +96,10 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
                         color: const Color(0xFF2A2A2E),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Text(
-                          'Cancel',
-                          style: TextStyle(
+                          context.l10n.cancel,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -115,13 +116,13 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
                         ? null
                         : () {
                             if (nameController.text.isEmpty || nameController.text.trim().isEmpty) {
-                              AppSnackbar.showSnackbarError('Name cannot be empty');
+                              AppSnackbar.showSnackbarError(context.l10n.nameCannotBeEmpty);
                               return;
                             }
                             setState(() => isSaving = true);
                             SharedPreferencesUtil().givenName = nameController.text.trim();
                             AuthService.instance.updateGivenName(nameController.text.trim());
-                            AppSnackbar.showSnackbar('Name updated successfully!');
+                            AppSnackbar.showSnackbar(context.l10n.nameUpdatedSuccessfully);
                             Navigator.of(context).pop();
                           },
                     child: Container(
@@ -140,9 +141,9 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
                                   color: Colors.black,
                                 ),
                               )
-                            : const Text(
-                                'Save',
-                                style: TextStyle(
+                            : Text(
+                                context.l10n.save,
+                                style: const TextStyle(
                                   color: Colors.black,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
