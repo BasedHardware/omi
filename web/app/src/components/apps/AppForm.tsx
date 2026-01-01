@@ -91,6 +91,21 @@ export function AppForm({ mode, app }: AppFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Dropdown states
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Loading states
   const [isLoading, setIsLoading] = useState(true);
@@ -580,25 +595,60 @@ export function AppForm({ mode, app }: AppFormProps) {
         {/* Category */}
         <div>
           <label className="block text-sm text-text-secondary mb-2">Category *</label>
-          <div className="relative">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+          <div className="relative" ref={categoryDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsCategoryOpen(!isCategoryOpen)}
               className={cn(
-                'w-full px-4 py-3 rounded-xl appearance-none',
-                'bg-bg-secondary border border-border-secondary',
-                'text-text-primary',
-                'focus:outline-none focus:ring-2 focus:ring-accent-primary/50'
+                'w-full px-4 py-3 pr-10 rounded-xl text-left',
+                'border-2 transition-all',
+                category
+                  ? 'bg-purple-500/10 border-purple-400 text-white'
+                  : 'bg-bg-secondary border-border-secondary text-text-primary',
+                'focus:outline-none focus:border-purple-400'
               )}
             >
-              <option value="">Select a category</option>
-              {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.title}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
+              {category
+                ? categories.find(c => c.id === category)?.title || 'Select a category'
+                : 'Select a category'}
+            </button>
+            <ChevronDownIcon className={cn(
+              'w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all',
+              category ? 'text-purple-400' : 'text-text-tertiary',
+              isCategoryOpen && 'rotate-180'
+            )} />
+
+            {/* Dropdown menu */}
+            {isCategoryOpen && (
+              <div className="absolute z-50 w-full mt-2 py-2 rounded-xl bg-bg-secondary border border-border-secondary shadow-xl max-h-64 overflow-y-auto">
+                {categories.map((cat) => {
+                  const isSelected = category === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setCategory(cat.id);
+                        setIsCategoryOpen(false);
+                      }}
+                      className={cn(
+                        'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between',
+                        isSelected
+                          ? 'bg-purple-500/20 text-white'
+                          : 'text-text-primary hover:bg-bg-tertiary'
+                      )}
+                    >
+                      <span>{cat.title}</span>
+                      {isSelected && (
+                        <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -893,7 +943,12 @@ export function AppForm({ mode, app }: AppFormProps) {
         <h2 className="text-lg font-medium text-text-primary">Settings</h2>
 
         {/* Privacy Toggle */}
-        <div className="flex items-center justify-between p-4 bg-bg-secondary rounded-xl">
+        <div className={cn(
+          'flex items-center justify-between p-4 rounded-xl border-2 transition-all',
+          !isPrivate
+            ? 'bg-purple-500/10 border-purple-400'
+            : 'bg-bg-secondary border-border-secondary'
+        )}>
           <div>
             <p className="text-text-primary font-medium">Make Public</p>
             <p className="text-sm text-text-tertiary">
@@ -904,14 +959,14 @@ export function AppForm({ mode, app }: AppFormProps) {
             type="button"
             onClick={() => setIsPrivate(!isPrivate)}
             className={cn(
-              'relative w-12 h-7 rounded-full transition-colors',
-              isPrivate ? 'bg-bg-tertiary' : 'bg-accent-primary'
+              'relative w-14 h-8 rounded-full transition-all',
+              !isPrivate ? 'bg-purple-400' : 'bg-gray-600'
             )}
           >
             <div
               className={cn(
-                'absolute top-1 w-5 h-5 rounded-full bg-white transition-all',
-                isPrivate ? 'left-1' : 'left-6'
+                'absolute top-1 w-6 h-6 rounded-full bg-white transition-all shadow-md',
+                !isPrivate ? 'left-7' : 'left-1'
               )}
             />
           </button>
@@ -920,7 +975,12 @@ export function AppForm({ mode, app }: AppFormProps) {
         {/* Paid App Toggle */}
         {paymentPlans.length > 0 && (
           <>
-            <div className="flex items-center justify-between p-4 bg-bg-secondary rounded-xl">
+            <div className={cn(
+              'flex items-center justify-between p-4 rounded-xl border-2 transition-all',
+              isPaid
+                ? 'bg-purple-500/10 border-purple-400'
+                : 'bg-bg-secondary border-border-secondary'
+            )}>
               <div>
                 <p className="text-text-primary font-medium">Paid App</p>
                 <p className="text-sm text-text-tertiary">
@@ -931,14 +991,14 @@ export function AppForm({ mode, app }: AppFormProps) {
                 type="button"
                 onClick={() => setIsPaid(!isPaid)}
                 className={cn(
-                  'relative w-12 h-7 rounded-full transition-colors',
-                  isPaid ? 'bg-accent-primary' : 'bg-bg-tertiary'
+                  'relative w-14 h-8 rounded-full transition-all',
+                  isPaid ? 'bg-purple-400' : 'bg-gray-600'
                 )}
               >
                 <div
                   className={cn(
-                    'absolute top-1 w-5 h-5 rounded-full bg-white transition-all',
-                    isPaid ? 'left-6' : 'left-1'
+                    'absolute top-1 w-6 h-6 rounded-full bg-white transition-all shadow-md',
+                    isPaid ? 'left-7' : 'left-1'
                   )}
                 />
               </button>
@@ -971,25 +1031,26 @@ export function AppForm({ mode, app }: AppFormProps) {
                 {/* Payment Plan */}
                 <div>
                   <label className="block text-sm text-text-secondary mb-2">Payment Plan *</label>
-                  <div className="relative">
-                    <select
-                      value={paymentPlan}
-                      onChange={(e) => setPaymentPlan(e.target.value)}
-                      className={cn(
-                        'w-full px-4 py-3 rounded-xl appearance-none',
-                        'bg-bg-primary border border-border-secondary',
-                        'text-text-primary',
-                        'focus:outline-none focus:ring-2 focus:ring-accent-primary/50'
-                      )}
-                    >
-                      <option value="">Select a plan</option>
-                      {paymentPlans.map((plan) => (
-                        <option key={plan.id} value={plan.id}>
+                  <div className="flex gap-2">
+                    {paymentPlans.map((plan) => {
+                      const isSelected = paymentPlan === plan.id;
+                      return (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => setPaymentPlan(plan.id)}
+                          className={cn(
+                            'flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all',
+                            'border-2',
+                            isSelected
+                              ? 'bg-purple-500/20 text-white border-purple-400'
+                              : 'bg-bg-primary border-border-secondary text-text-secondary hover:border-text-tertiary'
+                          )}
+                        >
                           {plan.title}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDownIcon className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
