@@ -53,11 +53,18 @@ async function handleRequest(
       );
     }
 
-    // Forward the request to the API
+    // Check if this is a multipart form data request
+    const contentType = request.headers.get('content-type') || '';
+    const isMultipart = contentType.includes('multipart/form-data');
+
+    // Build headers - don't set Content-Type for multipart (let fetch set it with boundary)
     const headers: HeadersInit = {
       'Authorization': authHeader,
-      'Content-Type': 'application/json',
     };
+
+    if (!isMultipart && request.method !== 'GET' && request.method !== 'DELETE') {
+      headers['Content-Type'] = 'application/json';
+    }
 
     const fetchOptions: RequestInit = {
       method: request.method,
@@ -66,9 +73,15 @@ async function handleRequest(
 
     // Include body for POST/PATCH requests
     if (request.method === 'POST' || request.method === 'PATCH') {
-      const body = await request.text();
-      if (body) {
-        fetchOptions.body = body;
+      if (isMultipart) {
+        // For multipart, forward the FormData directly
+        const formData = await request.formData();
+        fetchOptions.body = formData;
+      } else {
+        const body = await request.text();
+        if (body) {
+          fetchOptions.body = body;
+        }
       }
     }
 
@@ -80,26 +93,34 @@ async function handleRequest(
     }
 
     // Get response data
-    const contentType = response.headers.get('content-type');
-    let data;
+    const responseContentType = response.headers.get('content-type');
 
-    if (contentType?.includes('application/json')) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
-
-    // Return the response with same status
-    if (typeof data === 'string') {
-      return new NextResponse(data, {
+    // Handle streaming responses (for chat)
+    if (responseContentType?.includes('text/event-stream') ||
+        responseContentType?.includes('text/plain')) {
+      const text = await response.text();
+      return new NextResponse(text, {
         status: response.status,
         headers: {
-          'Content-Type': contentType || 'text/plain',
+          'Content-Type': responseContentType || 'text/plain',
         },
       });
     }
 
-    return NextResponse.json(data, { status: response.status });
+    // Handle JSON responses
+    if (responseContentType?.includes('application/json')) {
+      const data = await response.json();
+      return NextResponse.json(data, { status: response.status });
+    }
+
+    // Default: return as text
+    const data = await response.text();
+    return new NextResponse(data, {
+      status: response.status,
+      headers: {
+        'Content-Type': responseContentType || 'text/plain',
+      },
+    });
   } catch (error) {
     console.error('Proxy error:', error);
     return NextResponse.json(

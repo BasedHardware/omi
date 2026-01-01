@@ -641,7 +641,8 @@ export async function uploadChatFiles(
 
   const formData = new FormData();
   for (const file of files) {
-    formData.append('files', file);
+    // Append with explicit filename to ensure proper handling
+    formData.append('files', file, file.name);
   }
 
   const response = await fetch(url, {
@@ -659,4 +660,102 @@ export async function uploadChatFiles(
   }
 
   return response.json();
+}
+
+/**
+ * Transcribe voice message to text
+ */
+export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
+  let token: string | null = null;
+
+  try {
+    token = await getIdToken();
+  } catch (tokenError) {
+    console.error('Failed to get auth token:', tokenError);
+    throw new Error('Failed to get authentication token');
+  }
+
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const url = `${API_BASE_URL}/v2/voice-message/transcribe`;
+
+  const formData = new FormData();
+  // API expects field name 'files' (matching mobile app)
+  formData.append('files', audioBlob, 'audio.wav');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'No error body');
+    console.error('Transcribe error:', response.status, errorText);
+    throw new Error(`Failed to transcribe audio: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.transcript || '';
+}
+
+// ============================================================================
+// Apps API
+// ============================================================================
+
+export interface App {
+  id: string;
+  name: string;
+  description: string;
+  image?: string;
+  author?: string;
+  capabilities: string[];
+  category?: string;
+  enabled: boolean;
+  deleted: boolean;
+  installs?: number;
+  rating_avg?: number;
+  rating_count?: number;
+  private?: boolean;
+}
+
+interface AppsSearchResponse {
+  apps: App[];
+}
+
+/**
+ * Get apps with optional filters
+ */
+export async function getApps(params: {
+  installed?: boolean;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<App[]> {
+  const { installed, limit = 50, offset = 0 } = params;
+
+  const queryParams = new URLSearchParams({
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+
+  if (installed !== undefined) {
+    queryParams.set('installed_apps', installed.toString());
+  }
+
+  const response = await fetchWithAuth<AppsSearchResponse>(`/v2/apps?${queryParams}`);
+  return response.apps || [];
+}
+
+/**
+ * Get chat-enabled apps (apps with 'chat' or 'persona' capability)
+ */
+export async function getChatApps(): Promise<App[]> {
+  const apps = await getApps({ installed: true });
+  return apps.filter(app =>
+    app.capabilities?.includes('chat') || app.capabilities?.includes('persona')
+  );
 }

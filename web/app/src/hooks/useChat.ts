@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   getMessages,
   sendMessageStream,
@@ -19,7 +19,7 @@ interface UseChatReturn {
   streamingText: string;
   currentThinking: string;
   error: string | null;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, fileIds?: string[]) => Promise<void>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
 }
@@ -34,8 +34,20 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   const [currentThinking, setCurrentThinking] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Track if we've loaded history
+  // Track current app ID to detect changes
+  const currentAppIdRef = useRef(appId);
+  // Track if we've loaded history for current app
   const historyLoadedRef = useRef(false);
+
+  // Reset state when app changes
+  useEffect(() => {
+    if (currentAppIdRef.current !== appId) {
+      currentAppIdRef.current = appId;
+      historyLoadedRef.current = false;
+      setMessages([]);
+      setError(null);
+    }
+  }, [appId]);
 
   /**
    * Load message history from server
@@ -61,7 +73,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   /**
    * Send a message and handle streaming response
    */
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (text: string, fileIds?: string[]) => {
     if (!text.trim() || isStreaming) return;
 
     setError(null);
@@ -121,7 +133,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
               break;
           }
         },
-        { appId }
+        { appId, fileIds }
       );
     } catch (err) {
       console.error('Failed to send message:', err);

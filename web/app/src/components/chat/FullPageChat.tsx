@@ -1,10 +1,15 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Sparkles, Trash2, Brain } from 'lucide-react';
+import { Send, Sparkles, Trash2, Brain, Paperclip, X } from 'lucide-react';
 import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
+import { VoiceRecorder, VoiceMicButton } from './VoiceRecorder';
+import { AppSelector } from './AppSelector';
+import { uploadChatFiles } from '@/lib/api';
+import type { MessageFile } from '@/types/conversation';
 import { cn } from '@/lib/utils';
 
 // Quick prompts for the chat
@@ -15,7 +20,17 @@ const quickPrompts = [
   'Summarize my recent conversations',
 ];
 
+interface FilePreviewItem {
+  file: File;
+  preview?: string;
+  uploading?: boolean;
+  uploadedId?: string;
+}
+
 export function FullPageChat() {
+  // App selection state
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+
   const {
     messages,
     isLoading,
@@ -26,18 +41,23 @@ export function FullPageChat() {
     sendMessage,
     clearHistory,
     loadHistory,
-  } = useChat();
+  } = useChat({ appId: selectedAppId || undefined });
 
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load history on mount
+  // Load history on mount and when app changes
   useEffect(() => {
     loadHistory();
-  }, [loadHistory]);
+  }, [loadHistory, selectedAppId]);
 
   // Scroll to bottom when messages change or streaming text updates
   useEffect(() => {
@@ -46,8 +66,10 @@ export function FullPageChat() {
 
   // Focus input on mount
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (!showVoiceRecorder) {
+      inputRef.current?.focus();
+    }
+  }, [showVoiceRecorder]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -57,13 +79,104 @@ export function FullPageChat() {
     }
   }, [input]);
 
+  // Handle app selection change
+  const handleAppChange = useCallback((appId: string | null) => {
+    setSelectedAppId(appId);
+    // Clear messages when switching apps - they'll reload via useEffect
+  }, []);
+
+  // Handle file selection
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Limit to MAX_FILES
+    const availableSlots = MAX_FILES - selectedFiles.length;
+    const filesToAdd = files.slice(0, availableSlots);
+
+    // Create preview items
+    const newItems: FilePreviewItem[] = await Promise.all(
+      filesToAdd.map(async (file) => {
+        let preview: string | undefined;
+        if (file.type.startsWith('image/')) {
+          preview = URL.createObjectURL(file);
+        }
+        return { file, preview, uploading: true };
+      })
+    );
+
+    setSelectedFiles((prev) => [...prev, ...newItems]);
+
+    // Upload files
+    setIsUploading(true);
+    try {
+      const uploadedFiles = await uploadChatFiles(
+        filesToAdd,
+        selectedAppId || undefined
+      );
+
+      // Update items with uploaded IDs
+      setSelectedFiles((prev) =>
+        prev.map((item) => {
+          const uploadedFile = uploadedFiles.find(
+            (f) => f.name === item.file.name
+          );
+          if (uploadedFile) {
+            return { ...item, uploading: false, uploadedId: uploadedFile.id };
+          }
+          return item;
+        })
+      );
+    } catch (err) {
+      console.error('Failed to upload files:', err);
+      // Remove failed uploads
+      setSelectedFiles((prev) =>
+        prev.filter((item) => !filesToAdd.includes(item.file))
+      );
+    } finally {
+      setIsUploading(false);
+    }
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Remove file from selection
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => {
+      const item = prev[index];
+      // Revoke object URL if it was an image
+      if (item.preview) {
+        URL.revokeObjectURL(item.preview);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // Handle voice transcript
+  const handleVoiceTranscript = (transcript: string) => {
+    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    setShowVoiceRecorder(false);
+    inputRef.current?.focus();
+  };
+
   const handleSend = async (text: string = input) => {
     if (!text.trim() || isStreaming) return;
+
+    // Get file IDs from uploaded files
+    const fileIds = selectedFiles
+      .filter((item) => item.uploadedId)
+      .map((item) => item.uploadedId as string);
+
     setInput('');
+    setSelectedFiles([]);
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-    await sendMessage(text);
+
+    await sendMessage(text, fileIds);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -83,20 +196,19 @@ export function FullPageChat() {
     }
   };
 
+  const canSend = (input.trim() || selectedFiles.some((f) => f.uploadedId)) && !isStreaming && !isUploading;
+
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-bg-tertiary bg-bg-secondary">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-purple-primary/20 flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-purple-primary" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-text-primary">Chat with Omi</h1>
-            <p className="text-sm text-text-tertiary">
-              Ask me anything about your conversations, tasks, or memories
-            </p>
-          </div>
+        <div className="flex items-center gap-4">
+          {/* App Selector */}
+          <AppSelector
+            selectedAppId={selectedAppId}
+            onSelectApp={handleAppChange}
+            disabled={isStreaming}
+          />
         </div>
         {messages.length > 0 && (
           <button
@@ -177,6 +289,24 @@ export function FullPageChat() {
                         : 'bg-bg-secondary border border-bg-tertiary text-text-primary'
                     )}
                   >
+                    {/* Show attached files if any */}
+                    {message.files && message.files.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {message.files.map((file) => (
+                          <div
+                            key={file.id}
+                            className={cn(
+                              'text-xs px-2 py-1 rounded',
+                              message.sender === 'human'
+                                ? 'bg-white/20'
+                                : 'bg-bg-tertiary'
+                            )}
+                          >
+                            {file.name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <p className="text-sm whitespace-pre-wrap leading-relaxed">
                       {message.text}
                     </p>
@@ -251,41 +381,95 @@ export function FullPageChat() {
 
       {/* Input area */}
       <div className="border-t border-bg-tertiary bg-bg-secondary">
+        {/* File preview bar */}
+        {selectedFiles.length > 0 && (
+          <FilePreview
+            files={selectedFiles}
+            onRemove={handleRemoveFile}
+            disabled={isStreaming}
+          />
+        )}
+
         <div className="max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask anything..."
-              disabled={isStreaming}
-              rows={1}
-              className={cn(
-                'flex-1 px-4 py-3 rounded-xl resize-none',
-                'bg-bg-tertiary border border-bg-quaternary',
-                'text-text-primary placeholder:text-text-quaternary',
-                'focus:outline-none focus:ring-2 focus:ring-purple-primary/50 focus:border-purple-primary/50',
-                'transition-all',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-                'h-[48px] max-h-[200px]'
+          {/* Voice recorder overlay */}
+          {showVoiceRecorder ? (
+            <div className="flex items-center justify-center py-2">
+              <VoiceRecorder
+                onTranscript={handleVoiceTranscript}
+                onClose={() => setShowVoiceRecorder(false)}
+                disabled={isStreaming}
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              {/* File attach button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isStreaming || selectedFiles.length >= MAX_FILES}
+                className={cn(
+                  'p-2 rounded-lg flex-shrink-0',
+                  'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors'
+                )}
+                title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ALLOWED_EXTENSIONS}
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              {/* Text input */}
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything..."
+                disabled={isStreaming}
+                rows={1}
+                className={cn(
+                  'flex-1 px-4 py-3 rounded-xl resize-none',
+                  'bg-bg-tertiary border border-bg-quaternary',
+                  'text-text-primary placeholder:text-text-quaternary',
+                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50 focus:border-purple-primary/50',
+                  'transition-all',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'h-[48px] max-h-[200px]'
+                )}
+              />
+
+              {/* Voice input button (shows when input is empty) */}
+              {!input.trim() && selectedFiles.length === 0 && (
+                <VoiceMicButton
+                  onClick={() => setShowVoiceRecorder(true)}
+                  disabled={isStreaming}
+                />
               )}
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isStreaming}
-              className={cn(
-                'w-[48px] h-[48px] rounded-xl flex-shrink-0',
-                'flex items-center justify-center',
-                'bg-purple-primary hover:bg-purple-secondary',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-                'transition-colors'
-              )}
-              aria-label="Send message"
-            >
-              <Send className="w-5 h-5 text-white" />
-            </button>
-          </div>
+
+              {/* Send button */}
+              <button
+                onClick={() => handleSend()}
+                disabled={!canSend}
+                className={cn(
+                  'w-[48px] h-[48px] rounded-xl flex-shrink-0',
+                  'flex items-center justify-center',
+                  'bg-purple-primary hover:bg-purple-secondary',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors'
+                )}
+                aria-label="Send message"
+              >
+                <Send className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          )}
           <p className="text-xs text-text-quaternary mt-2 text-center">
             Press Enter to send, Shift+Enter for new line
           </p>
