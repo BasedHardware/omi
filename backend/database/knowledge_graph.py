@@ -4,6 +4,7 @@ import uuid
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.api_core import exceptions as google_exceptions
 
 from ._client import db
 
@@ -238,3 +239,61 @@ def delete_knowledge_graph(uid: str) -> None:
 
     edges_ref = user_ref.collection(knowledge_edges_collection)
     _batch_delete(edges_ref)
+
+
+def cleanup_for_memory(uid: str, memory_id: str):
+    """
+    Removes a memory_id from all nodes and edges in the knowledge graph.
+    If a node or edge is no longer associated with any memories, it is deleted.
+    Also removes edges that point to a deleted node.
+    """
+    try:
+        user_ref = db.collection(users_collection).document(uid)
+        nodes_ref = user_ref.collection(knowledge_nodes_collection)
+        edges_ref = user_ref.collection(knowledge_edges_collection)
+        
+        batch = db.batch()
+        nodes_to_delete = set()
+
+        # 1. Process nodes and identify which ones to delete
+        nodes_query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
+        for doc in nodes_query.stream():
+            node_data = doc.to_dict()
+            memory_ids = node_data.get('memory_ids', [])
+            
+            if len(memory_ids) == 1 and memory_ids[0] == memory_id:
+                nodes_to_delete.add(doc.id)
+                batch.delete(doc.reference)
+            else:
+                batch.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
+        
+        # 2. Process edges, considering nodes that will be deleted
+        edges_to_process_query = edges_ref.where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
+        for doc in edges_to_process_query.stream():
+            edge_data = doc.to_dict()
+            memory_ids = edge_data.get('memory_ids', [])
+            
+            # Condition 1: Edge will have no memories left
+            # Condition 2: Edge's source or target node is being deleted
+            if (len(memory_ids) == 1 and memory_ids[0] == memory_id) or \
+               (edge_data.get('source_id') in nodes_to_delete) or \
+               (edge_data.get('target_id') in nodes_to_delete):
+                batch.delete(doc.reference)
+            else:
+                batch.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
+
+        # 3. Final pass for any other edges connected to deleted nodes (orphaned edges)
+        if nodes_to_delete:
+            source_query = edges_ref.where(filter=FieldFilter('source_id', 'in', list(nodes_to_delete)))
+            for doc in source_query.stream():
+                batch.delete(doc.reference)
+
+            target_query = edges_ref.where(filter=FieldFilter('target_id', 'in', list(nodes_to_delete)))
+            for doc in target_query.stream():
+                batch.delete(doc.reference)
+                
+        batch.commit()
+        print(f"Knowledge graph cleanup complete for memory_id: {memory_id}")
+    except (google_exceptions.GoogleAPICallError, ValueError) as e:
+        print(f"Error during knowledge graph cleanup for memory_id {memory_id}: {e}")
+        pass
