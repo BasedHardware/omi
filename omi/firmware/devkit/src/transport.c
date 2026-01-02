@@ -28,8 +28,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 #define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
-extern uint8_t file_count;
-extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
@@ -682,13 +680,6 @@ static bool use_storage = true;
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
-void update_file_size()
-{
-    file_num_array[0] = get_file_size(1);
-    file_num_array[1] = get_offset();
-    // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
-    // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
-}
 
 void pusher(void)
 {
@@ -698,22 +689,14 @@ void pusher(void)
         // Load current connection
         //
         struct bt_conn *conn = current_connection;
-        // updating the most recent file size is expensive!
-        static bool file_size_updated = true;
         static bool connection_was_true = false;
         if (conn && !connection_was_true) {
             k_msleep(100);
-            file_size_updated = false;
             connection_was_true = true;
         } else if (!conn) {
             connection_was_true = false;
         }
-        if (!file_size_updated) {
-            LOG_PRINTK("updating file size\n");
-            update_file_size();
 
-            file_size_updated = true;
-        }
         if (conn) {
             conn = bt_conn_ref(conn);
         }
@@ -728,21 +711,17 @@ void pusher(void)
 
         if (!valid && !storage_is_on) {
             bool result = false;
-            if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
+            if (get_file_size() < MAX_STORAGE_BYTES) {
                 if (is_sd_on()) {
                     result = write_to_storage();
                 }
-                k_mutex_unlock(&write_sdcard_mutex);
             }
             if (result) {
                 heartbeat_count++;
                 if (heartbeat_count == 255) {
-                    update_file_size();
                     heartbeat_count = 0;
-                    LOG_PRINTK("drawing\n");
+                    LOG_INF("heartbeat");
                 }
-            } else {
             }
         }
         if (valid) {
