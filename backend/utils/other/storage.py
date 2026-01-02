@@ -57,6 +57,8 @@ class MockBlob:
     def download_as_bytes(self):
         return b""
 
+from google.auth.exceptions import DefaultCredentialsError
+
 try:
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -64,7 +66,7 @@ try:
         storage_client = storage.Client(credentials=credentials)
     else:
         storage_client = storage.Client()
-except Exception as e:
+except (DefaultCredentialsError, ValueError, KeyError) as e:
     print(f"⚠️ Warning: Google Storage connection failed ({e}). Using MockStorageClient for local dev.")
     storage_client = MockStorageClient()
 

@@ -5,6 +5,8 @@ from typing import Dict
 
 import typesense
 
+from typesense.exceptions import ConfigError
+
 class MockTypesenseClient:
     def __init__(self):
         self.collections = MockCollections()
@@ -34,7 +36,7 @@ try:
     else:
         print("⚠️ Warning: TYPESENSE_API_KEY not set. Using MockTypesenseClient.")
         client = MockTypesenseClient()
-except Exception as e:
+except (ConfigError, ValueError, KeyError) as e:
     print(f"⚠️ Warning: Typesense init failed ({e}). Using MockTypesenseClient.")
     client = MockTypesenseClient()
 
