@@ -30,11 +30,8 @@ import type {
   AppApiKey,
 } from '@/types/apps';
 
-// Use proxy in development to avoid CORS, direct API in production
-const isDevelopment = process.env.NODE_ENV === 'development';
-const API_BASE_URL = isDevelopment
-  ? '/api/proxy'  // Next.js API route proxy
-  : (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me');
+// Always use proxy to avoid CORS (browser → proxy → api.omi.me)
+const API_BASE_URL = '/api/proxy';
 
 /**
  * Make an authenticated API request
