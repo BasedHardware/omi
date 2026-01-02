@@ -9,6 +9,8 @@ class Scopes:
     MEMORIES_WRITE = "memories:write"
     ACTION_ITEMS_READ = "action_items:read"
     ACTION_ITEMS_WRITE = "action_items:write"
+    TASKS_READ = "tasks:read"
+    TASKS_WRITE = "tasks:write"
 
 
 AVAILABLE_SCOPES = [
@@ -18,6 +20,8 @@ AVAILABLE_SCOPES = [
     Scopes.MEMORIES_WRITE,
     Scopes.ACTION_ITEMS_READ,
     Scopes.ACTION_ITEMS_WRITE,
+    Scopes.TASKS_READ,
+    Scopes.TASKS_WRITE,
 ]
 
 # Default scopes: read-only access

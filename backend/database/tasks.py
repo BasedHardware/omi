@@ -26,3 +26,19 @@ def get_task_by_action_request(action: str, request_id: str):
         return tasks[0]
 
     return None
+
+
+def get_tasks(uid: str, limit: int = 10, offset: int = 0):
+    # Tasks likely store user_uid or uid. models/task.py says 'user_uid'
+    query = (
+        db.collection('tasks')
+        .where(filter=FieldFilter('user_uid', '==', uid))
+        .order_by('created_at', direction='DESCENDING')
+        .limit(limit)
+        .offset(offset)
+    )
+    return [item.to_dict() for item in query.stream()]
+
+
+def delete_task(task_id: str):
+    db.collection('tasks').document(task_id).delete()

@@ -10,6 +10,7 @@ import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.users as users_db
+import database.tasks as tasks_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -31,6 +32,8 @@ from dependencies import (
     get_uid_with_memories_write,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
+    get_uid_with_tasks_read,
+    get_uid_with_tasks_write,
 )
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
@@ -1055,3 +1058,37 @@ def update_conversation_endpoint(
             conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
 
     return conversations_db.get_conversation(uid, conversation_id)
+
+
+# ******************************************************
+# ********************** TASKS *************************
+# ******************************************************
+
+
+@router.get("/v1/dev/user/tasks", tags=["developer"])
+def get_tasks(
+    uid: str = Depends(get_uid_with_tasks_read),
+    limit: int = 10,
+    offset: int = 0,
+):
+    """
+    Get user tasks.
+
+    - **limit**: Maximum number of tasks to return (default 10)
+    - **offset**: Number of tasks to skip
+    """
+    return tasks_db.get_tasks(uid, limit, offset)
+
+
+@router.delete("/v1/dev/user/tasks/{task_id}", tags=["developer"])
+def delete_task(
+    task_id: str,
+    uid: str = Depends(get_uid_with_tasks_write),
+):
+    """
+    Delete a task by ID.
+
+    - **task_id**: The ID of the task to delete
+    """
+    tasks_db.delete_task(task_id)
+    return {"success": True}
