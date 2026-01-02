@@ -45,7 +45,7 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 
 try:
     db = firestore.Client()
-except (DefaultCredentialsError, Exception) as e:
+except (DefaultCredentialsError, ValueError) as e:
     print(f"⚠️ Warning: Firestore connection failed ({e}). Using MockFirestore for local dev.")
     db = MockFirestore()
 

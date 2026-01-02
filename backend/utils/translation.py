@@ -131,9 +131,11 @@ class MockTranslation:
     def __init__(self, text):
         self.translated_text = text
 
+from google.auth.exceptions import DefaultCredentialsError
+
 try:
     _client = translate_v3.TranslationServiceClient()
-except Exception as e:
+except (DefaultCredentialsError, ValueError, KeyError) as e:
     print(f"⚠️ Warning: Google Translation init failed ({e}). Using MockTranslationServiceClient.")
     _client = MockTranslationServiceClient()
 

@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from typing import List
 
-from pinecone import Pinecone
+from pinecone import Pinecone, PineconeConfigurationError
 
 from models.conversation import Conversation
 from utils.llm.clients import embeddings
@@ -30,7 +30,7 @@ try:
     else:
         print("⚠️ Warning: PINECONE_API_KEY not set. Using MockIndex.")
         index = MockIndex()
-except Exception as e:
+except (PineconeConfigurationError, ValueError, KeyError) as e:
     print(f"⚠️ Warning: Pinecone init failed ({e}). Using MockIndex.")
     index = MockIndex()
 

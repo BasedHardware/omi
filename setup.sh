@@ -25,6 +25,16 @@ fi
 if [ ! -f .env ]; then
     echo "📄 Creating .env from .env.example..."
     cp .env.example .env
+    
+    # Generate secure random secrets
+    ADMIN_KEY=$(openssl rand -hex 32)
+    ENCRYPTION_SECRET=$(openssl rand -hex 32)
+    
+    # Update .env with generated secrets
+    sed -i "s/ADMIN_KEY=.*/ADMIN_KEY=$ADMIN_KEY/" .env
+    sed -i "s/ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$ENCRYPTION_SECRET/" .env
+    
+    echo "✅ Generated secure random keys for ADMIN_KEY and ENCRYPTION_SECRET."
     echo "⚠️  Action Required: Please edit the .env file and add your API keys."
     echo "   At minimum, you need: DEEPGRAM_API_KEY and OPENAI_API_KEY."
     
