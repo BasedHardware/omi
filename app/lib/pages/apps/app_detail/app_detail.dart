@@ -893,7 +893,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                               );
 
                                               if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                final uri = Uri.tryParse(app.paymentLink!.trim());
+                                                final uri = Uri.tryParse(app.paymentLink!);
                                                 if (uri == null) {
                                                   ScaffoldMessenger.of(context).showSnackBar(
                                                     const SnackBar(content: Text('Invalid payment URL')),
@@ -901,7 +901,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   return;
                                                 }
                                                 _checkPaymentStatus(app.id);
-                                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                                               } else {
                                                 await _toggleApp(app.id, true);
                                               }
@@ -1328,14 +1328,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               borderRadius: BorderRadius.circular(16.0),
                               onTap: () async {
                                 final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
-                                final uri = Uri.tryParse(rawUrl.trim());
+                                final uri = Uri.tryParse(rawUrl);
                                 if (uri == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Invalid integration URL')),
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                                 checkSetupCompleted();
                               },
                               child: Padding(
@@ -1417,14 +1417,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               );
                             } else {
                               if (app.externalIntegration!.isInstructionsUrl == true) {
-                                final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath?.trim() ?? '');
+                                final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
                                 if (uri == null) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('Invalid setup instructions URL')),
                                   );
                                   return;
                                 }
-                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
@@ -1689,7 +1689,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
       final firstStep = app.externalIntegration!.authSteps.first;
       final rawUrl = "${firstStep.url}?uid=${SharedPreferencesUtil().uid}";
-      final uri = Uri.tryParse(rawUrl.trim());
+      final uri = Uri.tryParse(rawUrl);
       if (uri == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1698,7 +1698,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         }
         return;
       }
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
     } else if (hasSetupInstructions) {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
@@ -1707,7 +1707,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         );
       } else {
         if (app.externalIntegration!.isInstructionsUrl == true) {
-          final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath?.trim() ?? '');
+          final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
           if (uri == null) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1716,7 +1716,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             }
             return;
           }
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+          await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
