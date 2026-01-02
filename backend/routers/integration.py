@@ -10,7 +10,7 @@ from dependencies import get_current_user_uid
 import database.apps as apps_db
 import database.conversations as conversations_db
 import utils.apps as apps_utils
-from utils.apps import verify_api_key, app_can_read_tasks, app_can_create_task
+from utils.apps import verify_api_key, app_can_read_tasks
 import database.redis_db as redis_db
 import database.memories as memory_db
 from database.redis_db import get_enabled_apps, r as redis_client

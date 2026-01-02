@@ -868,7 +868,6 @@ def get_capabilities_list() -> List[dict]:
         {'title': 'Summary Apps', 'id': 'memories'},
         {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
         {'title': 'Tasks', 'id': 'tasks'},
-
     ]
 
 

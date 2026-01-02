@@ -8,6 +8,9 @@ def create(task_data: dict):
     task_ref = db.collection('tasks').document(task_id)
     task_ref.set(task_data)
 
+def update(task_id: str, task_data: dict):
+    task_ref = db.collection('tasks').document(task_id)
+    task_ref.update(task_data)
 
 def get_task_by_id(task_id: str):
     doc = db.collection('tasks').document(task_id).get()

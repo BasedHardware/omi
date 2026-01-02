@@ -420,8 +420,6 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                     )
     os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
-    os.makedirs(f'_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
     img_url = upload_app_logo(file_path, data['id'])

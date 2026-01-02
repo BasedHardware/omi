@@ -280,7 +280,7 @@ Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
 /// Get all Omi-stored tasks for current user (not external service tasks)
 Future<List<Map<String, dynamic>>?> getOmiTasks({int limit = 50, int offset = 0}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/tasks?limit=$limit&offset=$offset',
+    url: '${Env.apiBaseUrl}v2/integrations/{app_id}/user/tasks'
     headers: {},
     method: 'GET',
     body: '',
