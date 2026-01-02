@@ -243,57 +243,83 @@ def delete_knowledge_graph(uid: str) -> None:
 
 def cleanup_for_memory(uid: str, memory_id: str):
     """
-    Removes a memory_id from all nodes and edges in the knowledge graph.
+    Removes a memory_id from all nodes and edges in the knowledge graph atomically.
     If a node or edge is no longer associated with any memories, it is deleted.
     Also removes edges that point to a deleted node.
+    Handles Firestore query limits and atomicity using transactions.
     """
     try:
         user_ref = db.collection(users_collection).document(uid)
-        nodes_ref = user_ref.collection(knowledge_nodes_collection)
-        edges_ref = user_ref.collection(knowledge_edges_collection)
         
-        batch = db.batch()
-        nodes_to_delete = set()
+        @firestore.transactional
+        def update_in_transaction(transaction, nodes_to_delete_ids):
+            # Fetch nodes and edges that currently contain memory_id
+            nodes_query = user_ref.collection(knowledge_nodes_collection).where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
+            edges_query = user_ref.collection(knowledge_edges_collection).where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
 
-        # 1. Process nodes and identify which ones to delete
-        nodes_query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
-        for doc in nodes_query.stream():
-            node_data = doc.to_dict()
-            memory_ids = node_data.get('memory_ids', [])
-            
-            if len(memory_ids) == 1 and memory_ids[0] == memory_id:
-                nodes_to_delete.add(doc.id)
-                batch.delete(doc.reference)
-            else:
-                batch.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
-        
-        # 2. Process edges, considering nodes that will be deleted
-        edges_to_process_query = edges_ref.where(filter=FieldFilter('memory_ids', 'array_contains', memory_id))
-        for doc in edges_to_process_query.stream():
-            edge_data = doc.to_dict()
-            memory_ids = edge_data.get('memory_ids', [])
-            
-            # Condition 1: Edge will have no memories left
-            # Condition 2: Edge's source or target node is being deleted
-            if (len(memory_ids) == 1 and memory_ids[0] == memory_id) or \
-               (edge_data.get('source_id') in nodes_to_delete) or \
-               (edge_data.get('target_id') in nodes_to_delete):
-                batch.delete(doc.reference)
-            else:
-                batch.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
+            # Fetch relevant documents within the transaction
+            nodes_docs = list(nodes_query.stream())
+            edges_docs = list(edges_query.stream())
 
-        # 3. Final pass for any other edges connected to deleted nodes (orphaned edges)
-        if nodes_to_delete:
-            source_query = edges_ref.where(filter=FieldFilter('source_id', 'in', list(nodes_to_delete)))
-            for doc in source_query.stream():
-                batch.delete(doc.reference)
+            # Track nodes that will be deleted to clean up related edges
+            nodes_fully_deleted_in_this_tx = set()
 
-            target_query = edges_ref.where(filter=FieldFilter('target_id', 'in', list(nodes_to_delete)))
-            for doc in target_query.stream():
-                batch.delete(doc.reference)
+            # Process Nodes
+            for doc in nodes_docs:
+                node_data = doc.to_dict()
+                memory_ids = node_data.get('memory_ids', [])
                 
-        batch.commit()
-        print(f"Knowledge graph cleanup complete for memory_id: {memory_id}")
-    except (google_exceptions.GoogleAPICallError, ValueError) as e:
-        print(f"Error during knowledge graph cleanup for memory_id {memory_id}: {e}")
-        pass
+                if len(memory_ids) == 1 and memory_ids[0] == memory_id:
+                    # Node will be deleted as this is its only remaining memory_id
+                    transaction.delete(doc.reference)
+                    nodes_fully_deleted_in_this_tx.add(doc.id)
+                else:
+                    # Only remove the memory_id
+                    transaction.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
+
+            # Process Edges (those explicitly linked to this memory_id)
+            for doc in edges_docs:
+                edge_data = doc.to_dict()
+                memory_ids = edge_data.get('memory_ids', [])
+                
+                if len(memory_ids) == 1 and memory_ids[0] == memory_id:
+                    # Edge will be deleted as this is its only remaining memory_id
+                    transaction.delete(doc.reference)
+                else:
+                    # Only remove the memory_id
+                    transaction.update(doc.reference, {'memory_ids': firestore.ArrayRemove([memory_id])})
+
+            # Process potentially orphaned edges (those whose source/target nodes are deleted in this transaction)
+            if nodes_fully_deleted_in_this_tx:
+                # Firestore 'in' query limit is 10, so chunk the node IDs if necessary
+                chunk_size = 10
+                nodes_chunks = [list(nodes_fully_deleted_in_this_tx)[i:i + chunk_size] for i in range(0, len(nodes_fully_deleted_in_this_tx), chunk_size)]
+
+                for chunk in nodes_chunks:
+                    # Delete edges where source node is in the chunk
+                    source_edges_query = user_ref.collection(knowledge_edges_collection).where(filter=FieldFilter('source_id', 'in', chunk))
+                    for doc in source_edges_query.stream():
+                        transaction.delete(doc.reference)
+                    
+                    # Delete edges where target node is in the chunk
+                    target_edges_query = user_ref.collection(knowledge_edges_collection).where(filter=FieldFilter('target_id', 'in', chunk))
+                    for doc in target_edges_query.stream():
+                        transaction.delete(doc.reference)
+            
+            print(f"Knowledge graph transaction complete for memory_id: {memory_id}")
+
+        # Run the transaction
+        transaction = db.transaction()
+        update_in_transaction(transaction, set()) # Pass an empty set for initial call. Nodes to delete are determined inside.
+
+    except google_exceptions.GoogleAPICallError as e:
+        print(f"ERROR: Firestore API error during KG cleanup for memory_id {memory_id}: {e}")
+        raise # Re-raise to indicate a critical failure
+
+    except ValueError as e:
+        print(f"ERROR: Data validation error during KG cleanup for memory_id {memory_id}: {e}")
+        raise # Re-raise to indicate a critical failure
+    
+    except Exception as e: # Catch any other unexpected errors
+        print(f"ERROR: Unexpected error during KG cleanup for memory_id {memory_id}: {e}")
+        raise # Re-raise to indicate a critical failure
