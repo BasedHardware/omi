@@ -37,11 +37,7 @@ class ActionType(str, Enum):
     CREATE_FACTS = "create_facts"
     READ_MEMORIES = "read_memories"
     READ_CONVERSATIONS = "read_conversations"
-    CREATE_TASK = "create_task"
     READ_TASKS = "read_tasks"
-    # UPDATE_TASK = "update_task"
-    # DELETE_TASK = "delete_task"
-
 
 class Action(BaseModel):
     action: ActionType

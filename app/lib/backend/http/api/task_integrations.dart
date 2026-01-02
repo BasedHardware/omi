@@ -294,26 +294,3 @@ Future<List<Map<String, dynamic>>?> getOmiTasks({int limit = 50, int offset = 0}
   }
   return null;
 }
-
-/// Update an Omi task
-Future<bool> updateOmiTask(String taskId, Map<String, dynamic> updates) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/tasks/$taskId',
-    headers: {},
-    method: 'PATCH',
-    body: jsonEncode(updates),
-  );
-  return response?.statusCode == 200;
-}
-
-/// Delete an Omi task
-Future<bool> deleteOmiTask(String taskId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/tasks/$taskId',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-  return response?.statusCode == 200 || response?.statusCode == 204;
-}
-

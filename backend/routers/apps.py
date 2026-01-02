@@ -418,16 +418,15 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         status_code=422,
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
-    # os.makedirs(f'_temp/apps', exist_ok=True)
-    # file_path = f"_temp/apps/{file.filename}"
-    # os.makedirs(f'_temp/apps', exist_ok=True)
-    # file_path = f"_temp/apps/{file.filename}"
-    # with open(file_path, 'wb') as f:
-    #     f.write(file.file.read())
-    # img_url = upload_app_logo(file_path, data['id'])
-    # data['image'] = img_url
-    # data['created_at'] = datetime.now(timezone.utc)
-    data['image'] = '/uploads/placeholder.png'
+    os.makedirs(f'_temp/apps', exist_ok=True)
+    file_path = f"_temp/apps/{file.filename}"
+    os.makedirs(f'_temp/apps', exist_ok=True)
+    file_path = f"_temp/apps/{file.filename}"
+    with open(file_path, 'wb') as f:
+        f.write(file.file.read())
+    img_url = upload_app_logo(file_path, data['id'])
+    data['image'] = img_url
+    data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
@@ -959,29 +958,11 @@ def get_app_capabilities():
                     'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.',
                 },
                 {
-                    'title': 'Create tasks',
-                    'id': 'create_task',
-                    'doc_url': 'https://docs.omi.me/doc/developer/apps/Tasks',
-                    'description': 'Create new tasks for the user through the OMI System.',
-                },
-                {
                     'title': 'Read tasks',
                     'id': 'read_tasks',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Tasks',
                     'description': 'Access and read all user tasks',
                 },
-                # {
-                #     'title': 'Update tasks',
-                #     'id': 'update_task',
-                #     'doc_url': 'https://docs.omi.me/doc/developer/apps/Tasks',
-                #     'description': 'update user tasks...',
-                # },
-                # {
-                #     'title': 'Delete tasks',
-                #     'id': 'delete_task',
-                #     'doc_url': 'https://docs.omi.me/doc/developer/apps/Tasks',
-                #     'description': 'Delete user tasks...',
-                # },
             ],
         },
         {

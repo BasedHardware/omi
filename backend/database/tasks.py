@@ -9,18 +9,11 @@ def create(task_data: dict):
     task_ref.set(task_data)
 
 
-def update(task_id: str, task_data: dict):
-    task_ref = db.collection('tasks').document(task_id)
-    task_ref.update(task_data)
-
 def get_task_by_id(task_id: str):
     doc = db.collection('tasks').document(task_id).get()
     if doc.exists:
         return doc.to_dict()
     return None
-
-def delete(task_id: str):
-    db.collection('tasks').document(task_id).delete()
 
 def get_tasks_by_user(user_uid: str, limit=20, offset=0):
     query = (
