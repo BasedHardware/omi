@@ -52,12 +52,15 @@ from utils.observability import log_langsmith_status
 # Log LangSmith tracing status at startup
 log_langsmith_status()
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
-else:
-    firebase_admin.initialize_app()
+try:
+    if os.environ.get('SERVICE_ACCOUNT_JSON'):
+        service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+        credentials = firebase_admin.credentials.Certificate(service_account_info)
+        firebase_admin.initialize_app(credentials)
+    else:
+        firebase_admin.initialize_app()
+except Exception as e:
+    print(f"⚠️ Warning: Firebase Admin initialization failed ({e}). Auth & DB features may not work.")
 
 app = FastAPI()
 

@@ -12,11 +12,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-if os.getenv('PINECONE_API_KEY') is not None:
-    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
-    index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
-else:
-    index = None
+class MockIndex:
+    def upsert(self, vectors, namespace):
+        print(f"Mock upsert: {len(vectors)} vectors")
+        return {"upserted_count": len(vectors)}
+    def query(self, vector, top_k, include_metadata=False, filter=None, namespace=None, include_values=False):
+        print("Mock query")
+        return {"matches": []}
+    def update(self, id, set_metadata, namespace):
+        print(f"Mock update: {id}")
+        return {}
+    def delete(self, ids, namespace):
+        print(f"Mock delete: {ids}")
+        return {}
+
+try:
+    if os.getenv('PINECONE_API_KEY'):
+        pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
+        index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
+    else:
+        print("⚠️ Warning: PINECONE_API_KEY not set. Using MockIndex.")
+        index = MockIndex()
+except Exception as e:
+    print(f"⚠️ Warning: Pinecone init failed ({e}). Using MockIndex.")
+    index = MockIndex()
 
 
 def _get_data(uid: str, conversation_id: str, vector: List[float]):
