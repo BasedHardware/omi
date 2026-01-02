@@ -160,8 +160,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         onRefresh: () async {
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-          await convoProvider.getInitialConversations();
-          return;
+          await Future.wait([
+            convoProvider.getInitialConversations(),
+            Provider.of<FolderProvider>(context, listen: false).loadFolders(),
+          ]);
         },
         color: Colors.deepPurpleAccent,
         backgroundColor: Colors.white,
