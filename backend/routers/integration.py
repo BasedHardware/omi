@@ -5,7 +5,6 @@ from typing import Optional, List, Tuple, Union
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from dependencies import get_current_user_uid
 
 import database.apps as apps_db
 import database.conversations as conversations_db
