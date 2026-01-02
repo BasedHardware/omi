@@ -1090,5 +1090,5 @@ def delete_task(
 
     - **task_id**: The ID of the task to delete
     """
-    tasks_db.delete_task(task_id)
+    tasks_db.delete_task(uid, task_id)
     return {"success": True}

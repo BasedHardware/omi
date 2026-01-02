@@ -40,5 +40,8 @@ def get_tasks(uid: str, limit: int = 10, offset: int = 0):
     return [item.to_dict() for item in query.stream()]
 
 
-def delete_task(task_id: str):
-    db.collection('tasks').document(task_id).delete()
+def delete_task(uid: str, task_id: str):
+    task_ref = db.collection('tasks').document(task_id)
+    task = task_ref.get()
+    if task.exists and task.to_dict().get('user_uid') == uid:
+        task_ref.delete()
