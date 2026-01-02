@@ -15,6 +15,7 @@
 #include "sdcard.h"
 #include "speaker.h"
 #include "transport.h"
+#include "wdog_facade.h"
 LOG_MODULE_REGISTER(button, CONFIG_LOG_DEFAULT_LEVEL);
 
 bool is_off = false;
@@ -524,6 +525,13 @@ void turnoff_all()
     set_led_green(false);
     gpio_remove_callback(d5_pin_input.port, &button_cb_data);
     gpio_pin_interrupt_configure_dt(&d5_pin_input, GPIO_INT_LEVEL_INACTIVE);
+
+    // Disable watchdog before entering system off
+    int rc = watchdog_deinit();
+    if (rc < 0) {
+        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
+    }
+
     // maybe save something here to indicate success. next time the button is pressed we should know about it
     NRF_USBD->INTENCLR = 0xFFFFFFFF;
     NRF_POWER->SYSTEMOFF = 1;

@@ -13,6 +13,7 @@
 #include "transport.h"
 #include "usb.h"
 #include "utils.h"
+#include "wdog_facade.h"
 #define BOOT_BLINK_DURATION_MS 600
 #define BOOT_PAUSE_DURATION_MS 200
 #define VBUS_DETECT (1U << 20)
@@ -144,6 +145,12 @@ int main(void)
 
     // Run the boot LED sequence
     boot_led_sequence();
+
+    // Initialize watchdog early to catch any freezes during boot
+    err = watchdog_init();
+    if (err) {
+        LOG_WRN("Watchdog init failed (err %d), continuing without watchdog", err);
+    }
 
     // Enable battery
 #ifdef CONFIG_OMI_ENABLE_BATTERY
@@ -327,6 +334,13 @@ int main(void)
     LOG_INF("Entering main loop...\n");
 
     while (1) {
+        // Task-level watchdog: only feed if pusher thread is responsive
+        if (pusher_check_and_reset_alive()) {
+            watchdog_feed();
+        } else {
+            LOG_WRN("Pusher thread not responding - skipping watchdog feed");
+        }
+
         set_led_state();
         k_msleep(500);
     }
