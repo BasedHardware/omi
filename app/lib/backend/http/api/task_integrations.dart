@@ -276,21 +276,3 @@ Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
     return null;
   }
 }
-
-/// Get all Omi-stored tasks for current user (not external service tasks)
-Future<List<Map<String, dynamic>>?> getOmiTasks({int limit = 50, int offset = 0}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/integrations/{app_id}/user/tasks'
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-
-  if (response == null) return null;
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return (jsonDecode(body) as List?)?.cast<Map<String, dynamic>>() ?? [];
-  }
-  return null;
-}
