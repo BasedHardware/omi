@@ -8,6 +8,7 @@ import pytz
 import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
+from database.redis_db import set_daily_summary_sent, has_daily_summary_been_sent
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
 from utils.llm.external_integrations import get_conversation_summary
@@ -95,6 +96,10 @@ def _send_summary_notification(user_data: tuple):
         start_date_utc = datetime.combine(now_utc.date(), time.min).replace(tzinfo=pytz.utc)
         end_date_utc = now_utc
 
+    # Check if summary already sent for this date
+    if has_daily_summary_been_sent(uid, date_str):
+        return
+
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
     if not conversations_data or len(conversations_data) == 0:
         return
@@ -133,6 +138,9 @@ def _send_summary_notification(user_data: tuple):
     send_notification(
         uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
     )
+
+    # Mark that summary was sent for this date
+    set_daily_summary_sent(uid, date_str)
 
 
 async def _send_bulk_summary_notification(users: list):
