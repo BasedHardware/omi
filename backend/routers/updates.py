@@ -267,7 +267,7 @@ def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
 
 
 @router.get("/v2/desktop/appcast.xml")
-async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
+async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern="^(macos|windows|linux)$")):
     """
     Sparkle appcast XML endpoint for auto_updater package.
     Returns Sparkle 2.0 compatible XML feed for macOS/Windows/Linux updates.
@@ -338,7 +338,7 @@ async def get_desktop_appcast_xml(platform: str = Query(default="macos", regex="
 
 
 @router.get("/v2/desktop/download/latest")
-async def download_latest_desktop_release(platform: str = Query(default="macos", regex="^(macos|windows|linux)$")):
+async def download_latest_desktop_release(platform: str = Query(default="macos", pattern="^(macos|windows|linux)$")):
     """
     Get the download URL for the latest desktop release installer.
     Redirects to the GitHub release asset download URL.

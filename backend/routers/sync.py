@@ -28,9 +28,6 @@ from utils.other.storage import (
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
 )
-
-# Audio constants
-AUDIO_SAMPLE_RATE = 16000
 from utils import encryption
 from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
 from utils.stt.vad import vad_is_empty
@@ -105,7 +102,7 @@ def parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | N
 # **********************************************
 
 
-def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_gaps: bool = True):
+def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict):
     """Pre-cache a single audio file."""
     try:
         audio_file_id = audio_file.get('id')
@@ -119,8 +116,6 @@ def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_
             audio_file_id=audio_file_id,
             timestamps=timestamps,
             pcm_to_wav_func=pcm_to_wav,
-            fill_gaps=fill_gaps,
-            sample_rate=AUDIO_SAMPLE_RATE,
         )
         print(f"Pre-cached audio file: {audio_file_id}")
     except Exception as e:
@@ -269,7 +264,7 @@ def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
     request: Request,
-    format: str = Query(default="wav", regex="^(wav|pcm)$"),
+    format: str = Query(default="wav", pattern="^(wav|pcm)$"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -315,15 +310,11 @@ def download_audio_file_endpoint(
                 audio_file_id=audio_file_id,
                 timestamps=audio_file['chunk_timestamps'],
                 pcm_to_wav_func=pcm_to_wav,
-                fill_gaps=True,
-                sample_rate=AUDIO_SAMPLE_RATE,
             )
             content_type = "audio/wav"
             extension = "wav"
         else:
-            audio_data = download_audio_chunks_and_merge(
-                uid, conversation_id, audio_file['chunk_timestamps'], fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
-            )
+            audio_data = download_audio_chunks_and_merge(uid, conversation_id, audio_file['chunk_timestamps'])
             content_type = "application/octet-stream"
             extension = "pcm"
     except FileNotFoundError:
