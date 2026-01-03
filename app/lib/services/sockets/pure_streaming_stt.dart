@@ -549,8 +549,12 @@ class PureStreamingSttSocket implements IPureSocket {
 
           final speakerId = segment.speakerId;
           final speaker = 'SPEAKER_$speakerId';
+          final personId = segment.personId;
 
-          if (segments.isEmpty || segments.last['speaker'] != speaker) {
+          // Merge with previous segment if same speaker and same person_id
+          if (segments.isEmpty ||
+              segments.last['speaker'] != speaker ||
+              segments.last['person_id'] != personId) {
             segments.add({
               'text': segment.text.trim(),
               'speaker': speaker,
@@ -558,7 +562,7 @@ class PureStreamingSttSocket implements IPureSocket {
               'is_user': false,
               'start': segment.start,
               'end': segment.end,
-              'person_id': null,
+              'person_id': personId,
             });
           } else {
             final last = segments.last;
