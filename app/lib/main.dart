@@ -50,6 +50,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
@@ -357,6 +358,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
           ChangeNotifierProvider(create: (context) => FolderProvider()),
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
+          ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
