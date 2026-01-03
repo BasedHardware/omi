@@ -30,9 +30,9 @@ if [ ! -f .env ]; then
     ADMIN_KEY=$(openssl rand -hex 32)
     ENCRYPTION_SECRET=$(openssl rand -hex 32)
     
-    # Update .env with generated secrets
-    sed -i "s/ADMIN_KEY=.*/ADMIN_KEY=$ADMIN_KEY/" .env
-    sed -i "s/ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$ENCRYPTION_SECRET/" .env
+    # Update .env with generated secrets (cross-platform compatible)
+    sed "s/ADMIN_KEY=.*/ADMIN_KEY=$ADMIN_KEY/" .env > .env.tmp && mv .env.tmp .env
+    sed "s/ENCRYPTION_SECRET=.*/ENCRYPTION_SECRET=$ENCRYPTION_SECRET/" .env > .env.tmp && mv .env.tmp .env
     
     echo "✅ Generated secure random keys for ADMIN_KEY and ENCRYPTION_SECRET."
     echo "⚠️  Action Required: Please edit the .env file and add your API keys."

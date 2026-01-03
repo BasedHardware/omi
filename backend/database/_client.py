@@ -2,10 +2,11 @@ import hashlib
 import json
 import os
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from google.cloud import firestore
 from google.auth.exceptions import DefaultCredentialsError
+from google.cloud.firestore_v1.base_query import FieldFilter, BaseCompositeFilter
 
 # Constants for local persistence
 DATA_DIR = '/app/data'
@@ -38,7 +39,6 @@ class PersistentMockFirestore:
             try:
                 os.makedirs(DATA_DIR)
             except OSError:
-                # Might fail if not permission, but inside Docker usually OK
                 pass
         try:
             with open(DB_FILE, 'w') as f:
@@ -68,16 +68,19 @@ class MockBatch:
         ref.delete()
     
     def commit(self):
-        pass # Changes happen immediately in this simple mock
+        pass 
 
 class MockCollection:
     def __init__(self, db, name, parent_doc=None):
         self.db = db
         self.name = name
-        self.parent_doc = parent_doc  # For subcollections
+        self.parent_doc = parent_doc
+        self._filters = []
+        self._limit = None
+        self._offset = 0
+        self._order_by = []
 
     def _get_data(self):
-        # Handle subcollections: parent_doc.data[col_name]
         if self.parent_doc:
             if self.name not in self.parent_doc._get_data():
                  self.parent_doc._get_data()[self.name] = {}
@@ -96,20 +99,104 @@ class MockCollection:
         doc.set(data)
         return None, doc
 
+    def _apply_filters(self, docs):
+        filtered_docs = []
+        for doc in docs:
+            data = doc._get_data()
+            if not data: continue
+            
+            match = True
+            for f in self._filters:
+                field, op, value = f
+                # Handle dot notation for nested fields
+                val = data
+                for part in field.split('.'):
+                    if isinstance(val, dict):
+                        val = val.get(part)
+                    else:
+                        val = None
+                        break
+                
+                if op == '==' and val != value: match = False
+                elif op == '!=' and val == value: match = False
+                elif op == '>' and not (val > value if val is not None else False): match = False
+                elif op == '>=' and not (val >= value if val is not None else False): match = False
+                elif op == '<' and not (val < value if val is not None else False): match = False
+                elif op == '<=' and not (val <= value if val is not None else False): match = False
+                elif op == 'in' and val not in value: match = False
+                elif op == 'array_contains' and (val is None or value not in val): match = False
+                
+                if not match: break
+            
+            if match: filtered_docs.append(doc)
+        return filtered_docs
+
     def stream(self):
-        # Return all docs in this collection
         data = self._get_data()
-        return [MockDocument(self.db, self, doc_id) for doc_id in data.keys()]
+        docs = [MockDocument(self.db, self, doc_id) for doc_id in data.keys()]
+        
+        # Filter
+        docs = self._apply_filters(docs)
+        
+        # Sort
+        for field, direction in self._order_by:
+            reverse = direction == 'DESCENDING'
+            docs.sort(key=lambda x: x._get_data().get(field, ""), reverse=reverse)
+
+        # Offset & Limit
+        if self._offset:
+            docs = docs[self._offset:]
+        if self._limit:
+            docs = docs[:self._limit]
+            
+        return docs
     
+    def get(self):
+        return [doc.get() for doc in self.stream()]
+
     def where(self, *args, **kwargs):
-        # Basic mock support for chaining, doesn't actually filter yet
+        # Support both .where("field", "==", "value") and .where(filter=FieldFilter(...))
+        if 'filter' in kwargs:
+            f = kwargs['filter']
+            if isinstance(f, FieldFilter):
+                self._filters.append((f.field.field_path, f.op, f.value))
+            elif isinstance(f, BaseCompositeFilter):
+                # Basic composite handling (AND only for now)
+                for sub_filter in f.filters:
+                    if isinstance(sub_filter, FieldFilter):
+                        self._filters.append((sub_filter.field.field_path, sub_filter.op, sub_filter.value))
+        elif len(args) == 3:
+            self._filters.append(args)
         return self
 
     def limit(self, count):
+        self._limit = count
+        return self
+    
+    def offset(self, count):
+        self._offset = count
         return self
 
-    def order_by(self, field, direction=None):
+    def order_by(self, field, direction='ASCENDING'):
+        self._order_by.append((field, direction))
         return self
+    
+    def count(self):
+        return MockCountQuery(self)
+
+class MockCountQuery:
+    def __init__(self, query):
+        self.query = query
+    
+    def get(self):
+        # Return a list containing a list containing an object with a value property
+        # Firestore count query structure: [[Aggregation(value=count)]]
+        count = len(self.query.stream())
+        return [[MockAggregation(count)]]
+
+class MockAggregation:
+    def __init__(self, value):
+        self.value = value
 
 class MockDocument:
     def __init__(self, db, collection, doc_id):
@@ -120,7 +207,7 @@ class MockDocument:
     def _get_data(self):
         col_data = self.collection._get_data()
         if self.id not in col_data:
-             return None # Does not exist
+             return None
         return col_data[self.id]
 
     def set(self, data):
@@ -144,17 +231,13 @@ class MockDocument:
             del col_data[self.id]
             self.db._save()
 
+    @property
+    def reference(self):
+        return self
+
     def collection(self, name):
-        # Subcollections require nested storage structure
-        # Simplified: storing subcollections in a special field '_collections' inside the doc data?
-        # Or simpler: Just return a dummy collection for now to prevent crashes, 
-        # as implementing deep nested persistence in one file is complex.
-        # But wait, we want persistence. 
-        # Let's try to store it in the doc data under `__collections__` key
         current = self._get_data()
         if current is None:
-             # Create doc implicitly? No, usually errors. 
-             # But for mock, let's allow it
              self.set({})
              current = self._get_data()
         
@@ -165,9 +248,8 @@ class MockDocument:
 
 class MockSubCollection(MockCollection):
     def __init__(self, db, name, storage):
-        self.db = db
-        self.name = name
-        self.storage = storage # Reference to the dict holding this collection's data
+        super().__init__(db, name) # Init base filtering/sorting
+        self.storage = storage 
 
     def _get_data(self):
         if self.name not in self.storage:
@@ -179,11 +261,10 @@ class MockSnapshot:
         self.id = doc_id
         self._data = data
         self.exists = data is not None
-        self.reference = None # Placeholder
+        self.reference = None 
 
     def to_dict(self):
         if self._data and '__collections__' in self._data:
-            # Hide internal storage
             d = self._data.copy()
             del d['__collections__']
             return d
@@ -191,13 +272,12 @@ class MockSnapshot:
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    # create google-credentials.json
     with open('google-credentials.json', 'w') as f:
         json.dump(service_account_info, f)
 
 try:
     db = firestore.Client()
-except (DefaultCredentialsError, ValueError) as e:
+except (DefaultCredentialsError, ValueError, ImportError) as e:
     print(f"⚠️ Warning: Firestore connection failed ({e}). Using PersistentMockFirestore for local dev.")
     db = PersistentMockFirestore()
 
