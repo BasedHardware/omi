@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Trash2, Check } from 'lucide-react';
+import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Trash2, Check, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionItems } from '@/hooks/useActionItems';
 import { TaskProgressCard } from './TaskProgressCard';
@@ -15,6 +15,8 @@ type ViewMode = 'hub' | 'list';
 
 export function TaskHub() {
   const [viewMode, setViewMode] = useState<ViewMode>('hub');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -43,8 +45,11 @@ export function TaskHub() {
     onDelete: removeItem,
     onUpdateDescription: updateDescription,
     onSetDueDate: setDueDate,
-    selectedIds,
-    onSelect: handleSelect,
+    // Only pass selection props when in select mode
+    ...(isSelectMode && {
+      selectedIds,
+      onSelect: handleSelect,
+    }),
   };
 
   // Handle task selection
@@ -60,14 +65,28 @@ export function TaskHub() {
     });
   }
 
-  // Clear selection
+  // Clear selection and exit select mode
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
+    setIsSelectMode(false);
   }, []);
 
-  // Handle select all
+  // Toggle select mode
+  const toggleSelectMode = useCallback(() => {
+    if (isSelectMode) {
+      // Exiting select mode - clear selection
+      setSelectedIds(new Set());
+    }
+    setIsSelectMode(!isSelectMode);
+  }, [isSelectMode]);
+
+  // Handle select all (respects search filter)
   const handleSelectAll = useCallback(() => {
-    const pendingItems = items.filter((i) => !i.completed);
+    // Filter by search query if present
+    const visibleItems = searchQuery
+      ? items.filter((i) => i.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      : items;
+    const pendingItems = visibleItems.filter((i) => !i.completed);
     if (selectedIds.size === pendingItems.length && pendingItems.length > 0) {
       // Deselect all
       setSelectedIds(new Set());
@@ -75,7 +94,7 @@ export function TaskHub() {
       // Select all pending items
       setSelectedIds(new Set(pendingItems.map((i) => i.id)));
     }
-  }, [items, selectedIds.size]);
+  }, [items, searchQuery, selectedIds.size]);
 
   // Bulk actions
   const handleBulkComplete = useCallback(async () => {
@@ -119,18 +138,41 @@ export function TaskHub() {
     [addItem]
   );
 
+  // Filter tasks based on search query
+  const filteredItems = useMemo(() => {
+    if (!searchQuery) return items;
+    const query = searchQuery.toLowerCase();
+    return items.filter((item) => item.description.toLowerCase().includes(query));
+  }, [items, searchQuery]);
+
+  // Filter grouped items based on search
+  const filteredGroupedItems = useMemo(() => {
+    if (!searchQuery) return groupedItems;
+    const query = searchQuery.toLowerCase();
+    const filterTasks = (tasks: typeof items) =>
+      tasks.filter((item) => item.description.toLowerCase().includes(query));
+    return {
+      overdue: filterTasks(groupedItems.overdue),
+      today: filterTasks(groupedItems.today),
+      tomorrow: filterTasks(groupedItems.tomorrow),
+      thisWeek: filterTasks(groupedItems.thisWeek),
+      later: filterTasks(groupedItems.later),
+      completed: filterTasks(groupedItems.completed),
+    };
+  }, [groupedItems, searchQuery]);
+
   // Filter tasks based on view mode and selected date
   const getVisibleGroups = () => {
     if (selectedDate) {
       // Filter to selected date only
       const dateStr = selectedDate.toDateString();
-      const filteredItems = items.filter((item) => {
+      const dateFilteredItems = filteredItems.filter((item) => {
         if (!item.due_at) return false;
         return new Date(item.due_at).toDateString() === dateStr;
       });
 
-      const pending = filteredItems.filter((i) => !i.completed);
-      const completed = filteredItems.filter((i) => i.completed);
+      const pending = dateFilteredItems.filter((i) => !i.completed);
+      const completed = dateFilteredItems.filter((i) => i.completed);
 
       return { pending, completed, dateLabel: selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) };
     }
@@ -183,10 +225,53 @@ export function TaskHub() {
               List
             </button>
             </div>
+
+            {/* Search */}
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tasks..."
+                className={cn(
+                  'w-full pl-9 pr-4 py-1.5 rounded-lg',
+                  'bg-bg-tertiary border border-bg-quaternary',
+                  'text-sm text-text-primary',
+                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                  'placeholder:text-text-quaternary'
+                )}
+              />
+            </div>
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {/* Select mode toggle */}
+            {filteredItems.filter((i) => !i.completed).length > 0 && (
+              <button
+                onClick={toggleSelectMode}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
+                  'transition-colors',
+                  isSelectMode
+                    ? 'bg-purple-primary/10 text-purple-primary'
+                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                )}
+              >
+                {isSelectMode ? (
+                  <>
+                    <CheckSquare className="w-4 h-4" />
+                    <span>Done</span>
+                  </>
+                ) : (
+                  <>
+                    <Square className="w-4 h-4" />
+                    <span>Select</span>
+                  </>
+                )}
+              </button>
+            )}
             <button
               onClick={refresh}
               disabled={loading}
@@ -213,9 +298,9 @@ export function TaskHub() {
           {/* Quick add */}
           <TaskQuickAdd onAdd={handleAddTask} disabled={loading} />
 
-          {/* Bulk action bar - inline like Memories */}
-          {items.filter((i) => !i.completed).length > 0 && (
-            <div className="flex items-center gap-3 pt-2 border-t border-bg-tertiary">
+          {/* Bulk action bar - only shown in select mode */}
+          {isSelectMode && (
+            <div className="flex items-center gap-3 py-2 px-3 rounded-lg bg-bg-tertiary/50">
               <button
                 onClick={handleSelectAll}
                 className={cn(
@@ -226,7 +311,7 @@ export function TaskHub() {
                     : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
                 )}
               >
-                {selectedIds.size === items.filter((i) => !i.completed).length && items.filter((i) => !i.completed).length > 0 ? (
+                {selectedIds.size === filteredItems.filter((i) => !i.completed).length && filteredItems.filter((i) => !i.completed).length > 0 ? (
                   <CheckSquare className="w-4 h-4" />
                 ) : (
                   <Square className="w-4 h-4" />
@@ -299,6 +384,21 @@ export function TaskHub() {
           {/* Task content */}
           {!loading && items.length > 0 && (
             <>
+              {/* Search filter indicator */}
+              {searchQuery && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-text-secondary">
+                    Showing tasks matching &quot;{searchQuery}&quot;
+                  </span>
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="text-xs text-purple-primary hover:underline"
+                  >
+                    Clear search
+                  </button>
+                </div>
+              )}
+
               {/* Selected date filter indicator - only in Hub view */}
               {viewMode === 'hub' && selectedDate && (
                 <div className="flex items-center justify-between">
@@ -347,41 +447,41 @@ export function TaskHub() {
                   <TaskGroup
                     title="Priority Tasks"
                     icon="🔥"
-                    tasks={groupedItems.overdue}
+                    tasks={filteredGroupedItems.overdue}
                     {...taskGroupProps}
                   />
                   <TaskGroup
                     title="Today"
                     icon="📅"
-                    tasks={groupedItems.today}
+                    tasks={filteredGroupedItems.today}
                     {...taskGroupProps}
                   />
                   <TaskGroup
                     title="Tomorrow"
                     icon="📆"
-                    tasks={groupedItems.tomorrow}
+                    tasks={filteredGroupedItems.tomorrow}
                     {...taskGroupProps}
                   />
                   <TaskGroup
                     title="This Week"
                     icon="🗓"
-                    tasks={groupedItems.thisWeek}
+                    tasks={filteredGroupedItems.thisWeek}
                     collapsible
-                    defaultCollapsed={groupedItems.thisWeek.length > 5}
+                    defaultCollapsed={filteredGroupedItems.thisWeek.length > 5}
                     {...taskGroupProps}
                   />
                   {viewMode === 'list' && (
                     <TaskGroup
                       title="Later"
                       icon="📋"
-                      tasks={groupedItems.later}
+                      tasks={filteredGroupedItems.later}
                       {...taskGroupProps}
                     />
                   )}
                   <TaskGroup
                     title="Completed"
                     icon="✓"
-                    tasks={groupedItems.completed}
+                    tasks={filteredGroupedItems.completed}
                     collapsible
                     defaultCollapsed
                     maxVisible={10}
@@ -395,7 +495,7 @@ export function TaskHub() {
 
         {/* Right Column - Dashboard (sticky sidebar) - only in Hub view */}
         {viewMode === 'hub' && (
-          <div className="w-full lg:w-[480px] lg:flex-shrink-0 p-4 lg:pl-4 lg:border-l border-bg-tertiary order-first lg:order-last space-y-4 lg:h-full lg:overflow-y-auto">
+          <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last space-y-4 lg:h-full lg:overflow-y-auto">
             {/* Loading state for dashboard */}
             {loading && items.length === 0 && (
               <div className="space-y-4">

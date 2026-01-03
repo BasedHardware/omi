@@ -30,6 +30,7 @@ export function MemoriesPage() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [highlightedMemoryId, setHighlightedMemoryId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -205,6 +206,15 @@ export function MemoriesPage() {
     });
   }, []);
 
+  // Toggle select mode
+  const toggleSelectMode = useCallback(() => {
+    if (isSelectMode) {
+      // Exiting select mode - clear selection
+      setSelectedIds(new Set());
+    }
+    setIsSelectMode(!isSelectMode);
+  }, [isSelectMode]);
+
   // Handle select all visible memories
   const handleSelectAll = useCallback(() => {
     if (selectedIds.size === filteredMemories.length) {
@@ -230,6 +240,7 @@ export function MemoriesPage() {
       const deletePromises = Array.from(selectedIds).map((id) => removeMemory(id));
       await Promise.all(deletePromises);
       setSelectedIds(new Set());
+      setIsSelectMode(false);
       setShowDeleteConfirm(false);
     } finally {
       setIsDeleting(false);
@@ -364,6 +375,32 @@ export function MemoriesPage() {
                 </>
               )}
 
+              {/* Select mode toggle */}
+              {viewMode === 'list' && filteredMemories.length > 0 && (
+                <button
+                  onClick={toggleSelectMode}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
+                    'transition-colors',
+                    isSelectMode
+                      ? 'bg-purple-primary/10 text-purple-primary'
+                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                  )}
+                >
+                  {isSelectMode ? (
+                    <>
+                      <CheckSquare className="w-4 h-4" />
+                      <span>Done</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-4 h-4" />
+                      <span>Select</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               {/* Refresh */}
               <button
                 onClick={refresh}
@@ -384,51 +421,6 @@ export function MemoriesPage() {
               </button>
             </div>
           </div>
-
-          {/* Row 2: Select All + Delete (only in list view with memories) */}
-          {viewMode === 'list' && filteredMemories.length > 0 && (
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-bg-tertiary">
-              <button
-                onClick={handleSelectAll}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                  'transition-colors',
-                  selectedIds.size > 0
-                    ? 'bg-purple-primary/10 text-purple-primary'
-                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {selectedIds.size === filteredMemories.length && filteredMemories.length > 0 ? (
-                  <CheckSquare className="w-4 h-4" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-                {selectedIds.size > 0
-                  ? `${selectedIds.size} selected`
-                  : 'Select All'}
-              </button>
-
-              {selectedIds.size > 0 && (
-                <button
-                  onClick={handleBulkDeleteClick}
-                  disabled={isDeleting}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                    'bg-error/10 text-error hover:bg-error/20',
-                    'transition-colors',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
-                  )}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  Delete
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </header>
 
@@ -441,6 +433,51 @@ export function MemoriesPage() {
               <>
                 {/* Quick add */}
                 <MemoryQuickAdd onAdd={addMemory} />
+
+                {/* Bulk action bar - only shown in select mode */}
+                {isSelectMode && (
+                  <div className="flex items-center gap-3 py-2 px-3 rounded-lg bg-bg-tertiary/50">
+                    <button
+                      onClick={handleSelectAll}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
+                        'transition-colors',
+                        selectedIds.size > 0
+                          ? 'bg-purple-primary/10 text-purple-primary'
+                          : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                      )}
+                    >
+                      {selectedIds.size === filteredMemories.length && filteredMemories.length > 0 ? (
+                        <CheckSquare className="w-4 h-4" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                      {selectedIds.size > 0
+                        ? `${selectedIds.size} selected`
+                        : 'Select All'}
+                    </button>
+
+                    {selectedIds.size > 0 && (
+                      <button
+                        onClick={handleBulkDeleteClick}
+                        disabled={isDeleting}
+                        className={cn(
+                          'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
+                          'bg-error/10 text-error hover:bg-error/20',
+                          'transition-colors',
+                          'disabled:opacity-50 disabled:cursor-not-allowed'
+                        )}
+                      >
+                        {isDeleting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Error state */}
                 {error && (
@@ -479,8 +516,9 @@ export function MemoriesPage() {
                     onAccept={acceptMemory}
                     onReject={rejectMemory}
                     highlightedMemoryId={highlightedMemoryId}
-                    selectedIds={selectedIds}
-                    onToggleSelect={handleToggleSelect}
+                    // Only pass selection props when in select mode
+                    selectedIds={isSelectMode ? selectedIds : undefined}
+                    onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
                   />
                 )}
               </>

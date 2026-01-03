@@ -96,8 +96,10 @@ export function Sidebar({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [isTemporaryExpand, setIsTemporaryExpand] = useState(false);
   const isDesktop = useIsDesktop();
   const sidebarRef = useRef<HTMLElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Load expanded state from localStorage on mount
   useEffect(() => {
@@ -106,6 +108,29 @@ export function Sidebar({
       setIsExpanded(true);
     }
   }, []);
+
+  // Click outside handler to close menu and collapse if temporary
+  useEffect(() => {
+    if (!showUserMenu || !isTemporaryExpand) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+        setIsExpanded(false);
+        setIsTemporaryExpand(false);
+      }
+    };
+
+    // Delay adding listener to avoid immediate trigger
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserMenu, isTemporaryExpand]);
 
   // Toggle expand/collapse
   const handleToggleExpand = useCallback(() => {
@@ -117,6 +142,7 @@ export function Sidebar({
       }
       return newValue;
     });
+    setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
   const handleSignOut = async () => {
@@ -267,15 +293,24 @@ export function Sidebar({
         {/* Footer - User Section with Settings Menu */}
         <div className="border-t border-white/[0.04]">
           <div className="bg-bg-primary/30">
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <button
-                onClick={() => isExpanded && setShowUserMenu(!showUserMenu)}
+                onClick={() => {
+                  if (isExpanded) {
+                    setShowUserMenu(!showUserMenu);
+                  } else {
+                    // In collapsed mode, temporarily expand sidebar and show user menu
+                    setIsExpanded(true);
+                    setIsTemporaryExpand(true);
+                    setShowUserMenu(true);
+                  }
+                }}
                 className={cn(
                   'w-full flex items-center',
                   'hover:bg-bg-tertiary/50 transition-colors',
                   isExpanded ? 'gap-3 p-4' : 'justify-center p-3'
                 )}
-                title={!isExpanded ? user?.displayName || 'User' : undefined}
+                title={!isExpanded ? 'Settings' : undefined}
               >
                 {/* Avatar */}
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
@@ -379,6 +414,10 @@ export function Sidebar({
                           href={`/settings?section=${item.id}`}
                           onClick={() => {
                             setShowUserMenu(false);
+                            if (isTemporaryExpand) {
+                              setIsExpanded(false);
+                              setIsTemporaryExpand(false);
+                            }
                             if (!isDesktop) onClose();
                           }}
                           className={cn(
