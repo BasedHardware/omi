@@ -20,55 +20,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class MockStorageClient:
-    def bucket(self, name):
-        return MockBucket(name)
-
-class MockBucket:
-    def __init__(self, name):
-        self.name = name
-    def blob(self, name):
-        return MockBlob(name, self.name)
-    def list_blobs(self, prefix=None):
-        return []
-
-class MockBlob:
-    def __init__(self, name, bucket_name):
-        self.name = name
-        self.bucket_name = bucket_name
-        self.size = 0
-        self.time_created = None
-        self.metadata = {}
-        self.cache_control = None
-    def upload_from_filename(self, filename):
-        print(f"Mock upload from filename: {filename} to {self.name}")
-    def upload_from_string(self, data, content_type=None):
-        print(f"Mock upload from string to {self.name}")
-    def download_to_filename(self, filename):
-        print(f"Mock download to {filename} from {self.name}")
-    def delete(self):
-        print(f"Mock delete {self.name}")
-    def exists(self):
-        return False
-    def generate_signed_url(self, **kwargs):
-        return f"http://localhost:8080/_mock_signed_url/{self.bucket_name}/{self.name}"
-    def reload(self):
-        pass
-    def download_as_bytes(self):
-        return b""
-
-from google.auth.exceptions import DefaultCredentialsError
-
-try:
-    if os.environ.get('SERVICE_ACCOUNT_JSON'):
-        service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-        credentials = service_account.Credentials.from_service_account_info(service_account_info)
-        storage_client = storage.Client(credentials=credentials)
-    else:
-        storage_client = storage.Client()
-except (DefaultCredentialsError, ValueError, KeyError) as e:
-    print(f"⚠️ Warning: Google Storage connection failed ({e}). Using MockStorageClient for local dev.")
-    storage_client = MockStorageClient()
+if os.environ.get('SERVICE_ACCOUNT_JSON'):
+    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    credentials = service_account.Credentials.from_service_account_info(service_account_info)
+    storage_client = storage.Client(credentials=credentials)
+else:
+    storage_client = storage.Client()
 
 speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')

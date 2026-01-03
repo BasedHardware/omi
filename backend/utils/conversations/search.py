@@ -5,40 +5,13 @@ from typing import Dict
 
 import typesense
 
-from typesense.exceptions import ConfigError
-
-class MockTypesenseClient:
-    def __init__(self):
-        self.collections = MockCollections()
-
-class MockCollections:
-    def __getitem__(self, key):
-        return MockDocuments()
-
-class MockDocuments:
-    @property
-    def documents(self):
-        return self
-
-    def search(self, params):
-        print(f"Mock search with params: {params}")
-        return {'hits': [], 'found': 0}
-
-try:
-    if os.getenv('TYPESENSE_API_KEY'):
-        client = typesense.Client(
-            {
-                'nodes': [{'host': os.getenv('TYPESENSE_HOST'), 'port': os.getenv('TYPESENSE_HOST_PORT'), 'protocol': 'https'}],
-                'api_key': os.getenv('TYPESENSE_API_KEY'),
-                'connection_timeout_seconds': 2,
-            }
-        )
-    else:
-        print("⚠️ Warning: TYPESENSE_API_KEY not set. Using MockTypesenseClient.")
-        client = MockTypesenseClient()
-except (ConfigError, ValueError, KeyError) as e:
-    print(f"⚠️ Warning: Typesense init failed ({e}). Using MockTypesenseClient.")
-    client = MockTypesenseClient()
+client = typesense.Client(
+    {
+        'nodes': [{'host': os.getenv('TYPESENSE_HOST'), 'port': os.getenv('TYPESENSE_HOST_PORT'), 'protocol': 'https'}],
+        'api_key': os.getenv('TYPESENSE_API_KEY'),
+        'connection_timeout_seconds': 2,
+    }
+)
 
 
 def search_conversations(

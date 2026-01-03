@@ -114,34 +114,8 @@ _non_lexical_utterances_pattern = re.compile(
     r'\b(' + '|'.join(re.escape(word) for word in _non_lexical_utterances) + r')\b', re.IGNORECASE
 )
 
-class MockTranslationServiceClient:
-    def detect_language(self, parent, content, mime_type):
-        print(f"Mock detect language: {content[:20]}...")
-        return MockDetectResponse()
-
-    def translate_text(self, contents, parent, mime_type, target_language_code):
-        print(f"Mock translate text to {target_language_code}")
-        return MockTranslateResponse(contents[0])
-
-class MockDetectResponse:
-    languages = []
-
-class MockTranslateResponse:
-    def __init__(self, text):
-        self.translations = [MockTranslation(text)]
-
-class MockTranslation:
-    def __init__(self, text):
-        self.translated_text = text
-
-from google.auth.exceptions import DefaultCredentialsError
-
-try:
-    _client = translate_v3.TranslationServiceClient()
-except (DefaultCredentialsError, ValueError, KeyError) as e:
-    print(f"⚠️ Warning: Google Translation init failed ({e}). Using MockTranslationServiceClient.")
-    _client = MockTranslationServiceClient()
-
+# Initialize the translation client globally
+_client = translate_v3.TranslationServiceClient()
 _parent = f"projects/{PROJECT_ID}/locations/global"
 _mime_type = "text/plain"
 
