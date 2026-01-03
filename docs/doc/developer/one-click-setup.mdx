@@ -1,0 +1,65 @@
+---
+title: 'One-Click Local Development Setup'
+description: 'Run the entire Omi backend locally with Docker, no API keys required.'
+---
+
+This guide provides instructions for setting up the Omi backend locally using Docker Compose,
+with mock services for external dependencies. This allows for a full-featured development
+environment without needing to configure cloud API keys.
+
+## Prerequisites
+
+*   **Docker Desktop:** Ensure Docker is installed and running on your system.
+    *   [Install Docker for Windows](https://docs.docker.com/desktop/install/windows-install/)
+    *   [Install Docker for Mac](https://docs.docker.com/desktop/install/mac-install/)
+    *   [Install Docker for Linux](https://docs.docker.com/desktop/install/linux-install/)
+
+## Setup
+
+Navigate to the `backend/` directory within your Omi repository:
+
+```bash
+cd projects/omi/backend
+```
+
+### Linux / macOS
+
+Run the setup script:
+
+```bash
+./setup.sh
+```
+
+### Windows (PowerShell)
+
+Open PowerShell in the `backend/` directory and run the setup script:
+
+```powershell
+./setup.ps1
+```
+
+---
+
+The setup script will:
+1.  Check for Docker and Docker Compose.
+2.  If `.env` doesn't exist, it will copy `backend/.env.example` to `backend/.env` and generate secure random keys for `ADMIN_KEY` and `ENCRYPTION_SECRET`.
+3.  Prompt you to edit `.env` to add required API keys for Deepgram and OpenAI (if you want to use real services).
+4.  Build and start all Omi services using Docker Compose.
+
+## Accessing Services
+
+Once the services are up, you can access:
+
+*   **Frontend:** `http://localhost:3000`
+*   **Backend API:** `http://localhost:8080`
+*   **Pusher Service:** `http://localhost:8081`
+
+## Data Persistence
+
+Local data (memories, tasks, etc.) for `MockFirestore` is persisted to `./data/backend/firestore_mock.json` on your host machine. Redis data is persisted to `./data/redis`. These volumes are managed by Docker.
+
+## Managing Services
+
+*   **View Logs:** `docker compose logs -f`
+*   **Stop Services:** `docker compose down`
+*   **Restart Services:** `docker compose restart`
