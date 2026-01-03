@@ -24,8 +24,14 @@ export function SearchBar({
 }: SearchBarProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isMac, setIsMac] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Detect OS for keyboard shortcut display
+  useEffect(() => {
+    setIsMac(navigator.platform.toLowerCase().includes('mac'));
+  }, []);
 
   // Handle input change with debounce
   const handleChange = useCallback(
@@ -154,7 +160,7 @@ export function SearchBar({
                 'bg-bg-tertiary text-text-quaternary text-xs'
               )}
             >
-              <kbd className="font-sans">⌘</kbd>
+              <kbd className="font-sans">{isMac ? '⌘' : 'Ctrl'}</kbd>
               <kbd className="font-sans">K</kbd>
             </motion.div>
           )}

@@ -9,6 +9,7 @@ import { TaskProgressCard } from './TaskProgressCard';
 import { MonthCalendar } from './MonthCalendar';
 import { TaskGroup, TaskGroupSkeleton } from './TaskGroup';
 import { TaskQuickAdd } from './TaskQuickAdd';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type ViewMode = 'hub' | 'list';
 
@@ -142,12 +143,14 @@ export function TaskHub() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
+      {/* Page Header */}
+      <PageHeader title="Tasks" icon={CheckSquare} />
+
+      {/* Toolbar */}
       <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
-        <div className="pt-6 pb-4 px-4">
+        <div className="py-3 px-4">
           <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-text-primary">Tasks</h1>
             {/* View mode toggle */}
             <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
             <button
@@ -204,7 +207,7 @@ export function TaskHub() {
 
       {/* Content - Two column layout for Hub view */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row">
+        <div className="h-full flex flex-col lg:flex-row max-w-6xl mx-auto">
           {/* Left Column - Tasks (scrollable) */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
           {/* Quick add */}
@@ -280,11 +283,7 @@ export function TaskHub() {
 
           {/* Empty state */}
           {isEmpty && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center py-16 text-center"
-            >
+            <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
                 <CheckSquare className="w-8 h-8 text-text-quaternary" />
               </div>
@@ -294,7 +293,7 @@ export function TaskHub() {
               <p className="text-text-tertiary text-sm max-w-xs">
                 Add a task above or they&apos;ll appear automatically from your conversations
               </p>
-            </motion.div>
+            </div>
           )}
 
           {/* Task content */}

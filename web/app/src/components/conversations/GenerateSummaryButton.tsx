@@ -35,8 +35,14 @@ export function GenerateSummaryButton({
   const [customPrompt, setCustomPrompt] = useState('');
   const [promptResult, setPromptResult] = useState<string | null>(null);
   const [testingPrompt, setTestingPrompt] = useState(false);
+  const [isMac, setIsMac] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Detect OS for keyboard shortcut display
+  useEffect(() => {
+    setIsMac(navigator.platform.toLowerCase().includes('mac'));
+  }, []);
 
   // Filter out apps that already have summaries
   const existingAppIds = new Set(existingAppResults.map(r => r.app_id));
@@ -335,7 +341,7 @@ export function GenerateSummaryButton({
                     }}
                   />
                   <p className="mt-2 text-xs text-text-quaternary">
-                    Press {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}+Enter to run
+                    Press {isMac ? '⌘' : 'Ctrl'}+Enter to run
                   </p>
                   <button
                     onClick={handleTestPrompt}

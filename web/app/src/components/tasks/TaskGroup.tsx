@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TaskCard, TaskCardSkeleton } from './TaskCard';
@@ -23,15 +22,6 @@ interface TaskGroupProps {
   onSelect?: (id: string, selected: boolean) => void;
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.03,
-    },
-  },
-};
 
 export function TaskGroup({
   title,
@@ -83,51 +73,37 @@ export function TaskGroup({
       </button>
 
       {/* Tasks */}
-      <AnimatePresence>
-        {!isCollapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="space-y-1.5"
-            >
-              {visibleTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggleComplete={onToggleComplete}
-                  onSnooze={onSnooze}
-                  onDelete={onDelete}
-                  onUpdateDescription={onUpdateDescription}
-                  onSetDueDate={onSetDueDate}
-                  isSelected={selectedIds?.has(task.id)}
-                  onSelect={onSelect}
-                />
-              ))}
+      {!isCollapsed && (
+        <div className="space-y-1.5">
+          {visibleTasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              onToggleComplete={onToggleComplete}
+              onSnooze={onSnooze}
+              onDelete={onDelete}
+              onUpdateDescription={onUpdateDescription}
+              onSetDueDate={onSetDueDate}
+              isSelected={selectedIds?.has(task.id)}
+              onSelect={onSelect}
+            />
+          ))}
 
-              {/* Show more button */}
-              {hasMore && (
-                <button
-                  onClick={() => setShowAll(true)}
-                  className={cn(
-                    'w-full py-2 text-sm text-text-tertiary',
-                    'hover:text-purple-primary transition-colors',
-                    'text-center'
-                  )}
-                >
-                  Show {tasks.length - maxVisible} more
-                </button>
+          {/* Show more button */}
+          {hasMore && (
+            <button
+              onClick={() => setShowAll(true)}
+              className={cn(
+                'w-full py-2 text-sm text-text-tertiary',
+                'hover:text-purple-primary transition-colors',
+                'text-center'
               )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            >
+              Show {tasks.length - maxVisible} more
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

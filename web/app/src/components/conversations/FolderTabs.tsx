@@ -41,13 +41,10 @@ export function FolderTabs({
 
   return (
     <div className="relative">
-      {/* Scrollable tabs container */}
+      {/* Tabs container - wraps instead of scrolling */}
       <div
         ref={scrollRef}
-        className={cn(
-          'flex items-center gap-2 overflow-x-auto scrollbar-hide',
-          'pb-1 -mb-1' // Hide scrollbar visually
-        )}
+        className="flex items-center gap-2 flex-wrap"
       >
         {/* All tab - always first */}
         <TabButton

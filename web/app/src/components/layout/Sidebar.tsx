@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -17,10 +17,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   User,
-  Globe,
-  Bell,
   Shield,
-  BarChart3,
   Puzzle,
   Code,
   Settings,
@@ -88,43 +85,44 @@ const settingsMenuItems = [
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  isExpanded: boolean;
-  isPinned: boolean;
-  onTogglePin: () => void;
-  onHoverChange: (hovered: boolean) => void;
 }
 
 export function Sidebar({
   isOpen,
   onClose,
-  isExpanded,
-  isPinned,
-  onTogglePin,
-  onHoverChange,
 }: SidebarProps) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const isDesktop = useIsDesktop();
+  const sidebarRef = useRef<HTMLElement>(null);
+
+  // Load expanded state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-expanded');
+    if (saved === 'true') {
+      setIsExpanded(true);
+    }
+  }, []);
+
+  // Toggle expand/collapse
+  const handleToggleExpand = useCallback(() => {
+    setIsExpanded((prev) => {
+      const newValue = !prev;
+      localStorage.setItem('sidebar-expanded', String(newValue));
+      if (!newValue) {
+        setShowUserMenu(false);
+      }
+      return newValue;
+    });
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
     onClose();
   };
-
-  // Handle mouse enter/leave for desktop hover
-  const handleMouseEnter = useCallback(() => {
-    if (isDesktop && !isPinned) {
-      onHoverChange(true);
-    }
-  }, [isDesktop, isPinned, onHoverChange]);
-
-  const handleMouseLeave = useCallback(() => {
-    if (isDesktop && !isPinned) {
-      onHoverChange(false);
-      setShowUserMenu(false);
-    }
-  }, [isDesktop, isPinned, onHoverChange]);
 
   // Collapsed width (icon only) vs expanded width
   const sidebarWidth = isExpanded ? 280 : 72;
@@ -145,85 +143,84 @@ export function Sidebar({
         )}
       </AnimatePresence>
 
-      {/* Sidebar - Mobile: slide in/out, Desktop: always visible but collapses */}
-      <motion.aside
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        initial={false}
-        animate={{
+      {/* Sidebar - Mobile: slide in/out, Desktop: CSS transition for width */}
+      <aside
+        ref={sidebarRef}
+        onMouseEnter={() => isDesktop && setIsHeaderHovered(true)}
+        onMouseLeave={() => isDesktop && setIsHeaderHovered(false)}
+        style={{
+          // Mobile: slide in/out
+          transform: !isDesktop ? `translateX(${isOpen ? 0 : -280}px)` : undefined,
+          // Desktop: set width directly
           width: isDesktop ? sidebarWidth : 280,
-          x: !isDesktop && !isOpen ? -280 : 0
         }}
-        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className={cn(
           'bg-bg-secondary border-r border-white/[0.04]',
           'flex flex-col flex-shrink-0',
-          // Mobile: fixed overlay
+          // Mobile: fixed overlay with slide transition
           'fixed top-0 left-0 bottom-0 z-50',
+          'transition-[transform,width] duration-150 ease-out',
           // Desktop: relative in flow
           'lg:relative lg:z-auto'
         )}
       >
         {/* Header */}
-        <div className={cn(
-          'flex items-center p-4 border-b border-white/[0.04]',
-          isExpanded ? 'justify-between' : 'justify-center'
-        )}>
-          <Link
-            href="/conversations"
+        <div className="border-b border-white/[0.04]">
+          {/* Logo row - fixed layout */}
+          <div
             className={cn(
-              'flex items-center gap-3',
-              !isExpanded && 'justify-center'
+              'flex items-center pt-7 px-4 pb-4',
+              isExpanded ? 'justify-between' : 'justify-center'
             )}
           >
-            <div className="w-10 h-10 relative flex-shrink-0">
+            <Link
+              href="/conversations"
+              className="flex items-center"
+            >
               <Image
-                src="/logo.png"
+                src="/omi-white.webp"
                 alt="Omi"
-                fill
+                width={isExpanded ? 60 : 32}
+                height={isExpanded ? 24 : 13}
                 className="object-contain"
               />
-            </div>
-            {isExpanded && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="font-display font-semibold text-lg text-text-primary"
-              >
-                Omi
-              </motion.span>
-            )}
-          </Link>
+            </Link>
 
-          {/* Pin button (desktop, expanded) / Close button (mobile) */}
-          {isDesktop ? (
-            isExpanded && (
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                onClick={onTogglePin}
-                className={cn(
-                  'p-2 rounded-lg transition-colors',
-                  isPinned
-                    ? 'bg-purple-primary/10 text-purple-primary hover:bg-purple-primary/20'
-                    : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary'
-                )}
-                title={isPinned ? 'Collapse sidebar' : 'Keep sidebar expanded'}
+            {/* Mobile close button */}
+            {!isDesktop && (
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
               >
-                {isPinned ? (
+                <X className="w-5 h-5 text-text-secondary" />
+              </button>
+            )}
+          </div>
+
+          {/* Toggle button row (desktop only) - appears on sidebar hover */}
+          {isDesktop && (
+            <div
+              className={cn(
+                'px-4 pb-3',
+                isExpanded ? 'flex justify-end' : 'flex justify-center'
+              )}
+            >
+              <button
+                onClick={handleToggleExpand}
+                className={cn(
+                  'p-2 rounded-lg transition-all duration-200',
+                  'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
+                  isHeaderHovered ? 'opacity-100' : 'opacity-0'
+                )}
+                title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+              >
+                {isExpanded ? (
                   <PanelLeftClose className="w-4 h-4" />
                 ) : (
                   <PanelLeft className="w-4 h-4" />
                 )}
-              </motion.button>
-            )
-          ) : (
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-            >
-              <X className="w-5 h-5 text-text-secondary" />
-            </button>
+              </button>
+            </div>
           )}
         </div>
 
@@ -257,13 +254,7 @@ export function Sidebar({
               >
                 <span className="flex-shrink-0">{item.icon}</span>
                 {isExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="font-medium"
-                  >
-                    {item.label}
-                  </motion.span>
+                  <span className="font-medium">{item.label}</span>
                 )}
               </Link>
             );
@@ -306,18 +297,14 @@ export function Sidebar({
                 {isExpanded && (
                   <>
                     {/* Name & email */}
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="flex-1 min-w-0 text-left"
-                    >
+                    <div className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-medium text-text-primary truncate">
                         {user?.displayName || 'User'}
                       </p>
                       <p className="text-xs text-text-quaternary truncate">
                         {user?.email}
                       </p>
-                    </motion.div>
+                    </div>
 
                     {/* Dropdown indicator */}
                     <svg
@@ -428,7 +415,7 @@ export function Sidebar({
             </div>
           </div>
         </div>
-      </motion.aside>
+      </aside>
     </>
   );
 }

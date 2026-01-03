@@ -52,6 +52,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
+import { PageHeader } from '@/components/layout/PageHeader';
 import {
   getUserLanguage,
   setUserLanguage,
@@ -3047,28 +3048,8 @@ export function SettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header with back button */}
-      <div className="relative px-6 lg:px-8 pt-6 lg:pt-8 pb-4 lg:pb-6">
-        {/* Subtle ambient glow */}
-        <div className="absolute inset-0 bg-gradient-to-b from-purple-500/[0.02] to-transparent pointer-events-none" />
-
-        <div className="relative flex items-center gap-4">
-          <button
-            onClick={() => router.back()}
-            className="p-2 rounded-xl hover:bg-white/[0.04] transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-white/50" />
-          </button>
-          <div>
-            <h1 className="text-xl lg:text-2xl font-semibold text-white/95 tracking-tight">
-              {sectionInfo.title}
-            </h1>
-            <p className="text-sm text-white/40 mt-0.5">
-              {sectionInfo.description}
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* Page Header */}
+      <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 
       {/* Main Content with optional Quick Nav */}
       <main className="flex-1 overflow-y-auto px-6 lg:px-8 pb-12">

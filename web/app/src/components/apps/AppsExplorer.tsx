@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Loader2, X, ChevronDown, Star, Plus } from 'lucide-react';
+import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getAppsGrouped,
@@ -21,6 +21,7 @@ import type {
 } from '@/types/apps';
 import { AppCard } from './AppCard';
 import { AppGridSection } from './AppGridSection';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type Tab = 'explore' | 'installed' | 'my-apps';
 
@@ -408,11 +409,12 @@ export function AppsExplorer() {
 
   return (
     <div className="min-h-full">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
-        <div className="max-w-6xl mx-auto pt-6 pb-4 px-4">
-          <h1 className="text-2xl font-bold text-text-primary mb-4">Apps</h1>
+      {/* Page Header */}
+      <PageHeader title="Apps" icon={LayoutGrid} />
 
+      {/* Sticky Toolbar */}
+      <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
+        <div className="py-4 px-4">
           {/* Tabs + Create button */}
           <div className="flex items-center gap-1 mb-4">
             {/* Tabs */}
