@@ -60,7 +60,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
     try {
       const history = await getMessages(appId);
-      setMessages(history);
+      setMessages([...history].reverse());
       historyLoadedRef.current = true;
     } catch (err) {
       console.error('Failed to load message history:', err);

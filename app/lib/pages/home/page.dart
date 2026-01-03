@@ -330,6 +330,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           break;
         case "daily-summary":
           if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Track notification opened
+            MixpanelManager().dailySummaryNotificationOpened(
+              summaryId: detailPageId,
+              date: '', // Date not available in navigate_to, will be fetched when detail page loads
+            );
+
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
                 Navigator.push(
@@ -1032,9 +1038,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: showCompleted
-                              ? Colors.deepPurple.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
+                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(

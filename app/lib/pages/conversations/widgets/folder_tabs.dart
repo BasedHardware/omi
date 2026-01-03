@@ -112,6 +112,10 @@ class _FolderTabsState extends State<FolderTabs> {
         isSelected: widget.showDailySummaries,
         skipFolderTracking: true,
         onTap: () {
+          // Track recap tab opened when toggling to true
+          if (!widget.showDailySummaries) {
+            MixpanelManager().recapTabOpened();
+          }
           widget.onDailySummariesToggle();
         },
       ),
