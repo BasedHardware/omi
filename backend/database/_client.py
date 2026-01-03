@@ -7,6 +7,7 @@ from typing import Dict, Any, List
 from google.cloud import firestore
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud.firestore_v1.base_query import FieldFilter, BaseCompositeFilter
+from firebase_admin import credentials
 
 # Constants for local persistence
 DATA_DIR = '/app/data'
@@ -57,18 +58,26 @@ class PersistentMockFirestore:
 class MockBatch:
     def __init__(self, db):
         self.db = db
-    
+        self._operations = []
+
     def set(self, ref, data):
-        ref.set(data)
-    
+        self._operations.append(('set', ref, data))
+
     def update(self, ref, data):
-        ref.update(data)
-    
+        self._operations.append(('update', ref, data))
+
     def delete(self, ref):
-        ref.delete()
-    
+        self._operations.append(('delete', ref, None))
+
     def commit(self):
-        pass 
+        for op_type, ref, data in self._operations:
+            if op_type == 'set':
+                ref.set(data)
+            elif op_type == 'update':
+                ref.update(data)
+            elif op_type == 'delete':
+                ref.delete()
+        self._operations = [] # Clear operations after commit
 
 class MockCollection:
     def __init__(self, db, name, parent_doc=None):
@@ -248,7 +257,7 @@ class MockDocument:
 
 class MockSubCollection(MockCollection):
     def __init__(self, db, name, storage):
-        super().__init__(db, name) # Init base filtering/sorting
+        super().__init__(db, name) 
         self.storage = storage 
 
     def _get_data(self):
@@ -270,16 +279,24 @@ class MockSnapshot:
             return d
         return self._data or {}
 
+# Removed: Writing SERVICE_ACCOUNT_JSON to a file
+# Initialize Firestore client directly from JSON string if available
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    with open('google-credentials.json', 'w') as f:
-        json.dump(service_account_info, f)
-
-try:
-    db = firestore.Client()
-except (DefaultCredentialsError, ValueError, ImportError) as e:
-    print(f"⚠️ Warning: Firestore connection failed ({e}). Using PersistentMockFirestore for local dev.")
-    db = PersistentMockFirestore()
+    try:
+        service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+        # Use service_account_info directly to create credentials
+        cred = credentials.Certificate(service_account_info)
+        db = firestore.Client(credentials=cred)
+    except (json.JSONDecodeError, ValueError, Exception) as e:
+        print(f"⚠️ Error initializing Firestore with SERVICE_ACCOUNT_JSON: {e}. Falling back to default/mock.")
+        db = PersistentMockFirestore()
+else:
+    try:
+        # Attempt to initialize with default credentials (e.g., gcloud auth application-default login)
+        db = firestore.Client()
+    except (DefaultCredentialsError, ValueError, Exception) as e:
+        print(f"⚠️ Warning: Firestore connection failed ({e}). Using PersistentMockFirestore for local dev.")
+        db = PersistentMockFirestore()
 
 
 def get_users_uid():
