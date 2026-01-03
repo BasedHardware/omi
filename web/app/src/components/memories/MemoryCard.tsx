@@ -114,8 +114,8 @@ export function MemoryCard({
     <motion.div
       id={`memory-${memory.id}`}
       layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: isDeleting ? 0.5 : 1, y: 0 }}
+      initial={false}
+      animate={{ opacity: isDeleting ? 0.5 : 1 }}
       exit={{ opacity: 0, x: -20 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

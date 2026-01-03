@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider } from '@/components/chat/ChatContext';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { ChatPanel } from '@/components/chat/ChatPanel';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 
 interface MainLayoutProps {
@@ -17,19 +16,6 @@ interface MainLayoutProps {
 
 export function MainLayout({ children, title, hideHeader = false }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isPinned, setIsPinned] = useLocalStorage('sidebar-pinned', false);
-  const [isHovered, setIsHovered] = useState(false);
-
-  const handleTogglePin = useCallback(() => {
-    setIsPinned((prev) => !prev);
-  }, [setIsPinned]);
-
-  const handleHoverChange = useCallback((hovered: boolean) => {
-    setIsHovered(hovered);
-  }, []);
-
-  // Sidebar is expanded if pinned OR hovered
-  const isExpanded = isPinned || isHovered;
 
   return (
     <ChatProvider>
@@ -38,10 +24,6 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <Sidebar
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
-          isExpanded={isExpanded}
-          isPinned={isPinned}
-          onTogglePin={handleTogglePin}
-          onHoverChange={handleHoverChange}
         />
 
         {/* Main content */}

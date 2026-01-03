@@ -17,11 +17,13 @@ import {
   Brain,
   Share2,
   Pencil,
+  LayoutGrid,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import { getApp, enableApp, disableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 interface AppDetailProps {
   appId: string;
@@ -152,21 +154,14 @@ export function AppDetail({ appId }: AppDetailProps) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      {/* Back button */}
-      <button
-        onClick={() => router.back()}
-        className={cn(
-          'flex items-center gap-2 text-text-secondary',
-          'hover:text-text-primary transition-colors mb-6'
-        )}
-      >
-        <ArrowLeft className="w-5 h-5" />
-        Back
-      </button>
+    <div className="flex flex-col h-full">
+      {/* Page Header */}
+      <PageHeader title="App Details" icon={LayoutGrid} showBackButton />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-6 mb-8">
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          {/* App Hero */}
+          <div className="flex flex-col sm:flex-row gap-6 mb-8">
         {/* App icon */}
         <div className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-bg-tertiary mx-auto sm:mx-0">
           {app.image ? (
@@ -455,6 +450,8 @@ export function AppDetail({ appId }: AppDetailProps) {
             </div>
           </Section>
         )}
+        </div>
+        </div>
       </div>
     </div>
   );

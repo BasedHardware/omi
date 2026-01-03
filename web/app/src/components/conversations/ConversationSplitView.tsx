@@ -20,6 +20,7 @@ import { FolderTabs, FolderTabsSkeleton, FOLDER_ALL, FOLDER_STARRED } from './Fo
 import { FolderDialog, DeleteFolderDialog } from './FolderDialog';
 import { MoveFolderDialog } from './MoveFolderDialog';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
+import { PageHeader } from '@/components/layout/PageHeader';
 import {
   mergeConversations,
   getFolders,
@@ -433,87 +434,15 @@ export function ConversationSplitView() {
   }, [selectedIds, refreshFolders, refresh]);
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left Panel: Conversation List */}
-      <div
-        style={{ width: `${panelWidth}px` }}
-        className={cn(
-          'w-full lg:w-auto flex-shrink-0',
-          'flex flex-col h-full overflow-hidden',
-          'bg-bg-primary border-r border-bg-tertiary',
-          // On mobile, hide list when conversation is selected
-          selectedId ? 'hidden lg:flex' : 'flex'
-        )}
-      >
-        {/* List Header - Fixed/Sticky, fully opaque to cover scrolling content */}
-        <div className="flex-shrink-0 pt-6 pb-4 px-4 bg-bg-secondary border-b border-bg-tertiary relative z-10">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-2xl font-bold text-text-primary">Conversations</h2>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Page Header */}
+      <PageHeader title="Conversations" icon={MessageSquare} />
 
-            {/* Select/Cancel button for merge mode */}
-            <button
-              onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-                'text-sm font-medium transition-colors',
-                isSelectionMode
-                  ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-              )}
-            >
-              {isSelectionMode ? (
-                <>
-                  <X className="w-4 h-4" />
-                  <span>Cancel</span>
-                </>
-              ) : (
-                <>
-                  <CheckSquare className="w-4 h-4" />
-                  <span>Select</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Search and Filter Row */}
-          <div className="flex items-center gap-2">
-            <SearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              onSearch={handleSearch}
-              placeholder="Search conversations..."
-              className="flex-1"
-            />
-            <DateFilter
-              selectedDate={filterDate}
-              onDateChange={handleDateFilterChange}
-            />
-          </div>
-
-          {/* Active filter indicators */}
-          {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
-            <div className="flex items-center gap-2 mt-2 text-xs text-text-tertiary">
-              {isSearching && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-bg-tertiary">
-                  <SearchIcon className="w-3 h-3" />
-                  {searchResults.length} results
-                </span>
-              )}
-              {filterDate && (
-                <span className="px-2 py-0.5 rounded bg-purple-primary/10 text-purple-primary">
-                  Filtered by date
-                </span>
-              )}
-              {selectedFolderId === FOLDER_STARRED && (
-                <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600">
-                  Showing starred only
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Folder Tabs */}
-          <div className="mt-3">
+      {/* Toolbar: Folder Tabs + Select */}
+      <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
+        <div className="flex items-center gap-4 px-6 py-3">
+          {/* Folder Tabs - takes up available space */}
+          <div className="flex-1 min-w-0">
             {foldersLoading ? (
               <FolderTabsSkeleton />
             ) : (
@@ -528,10 +457,87 @@ export function ConversationSplitView() {
               />
             )}
           </div>
-        </div>
 
-        {/* List Content - no top padding so date labels connect to header */}
-        <div className="flex-1 overflow-y-auto px-3 pb-4">
+          {/* Select/Cancel button for merge mode */}
+          <button
+            onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0',
+              'text-sm font-medium transition-colors',
+              isSelectionMode
+                ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+            )}
+          >
+            {isSelectionMode ? (
+              <>
+                <X className="w-4 h-4" />
+                <span>Cancel</span>
+              </>
+            ) : (
+              <>
+                <CheckSquare className="w-4 h-4" />
+                <span>Select</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Split Panels Container */}
+      <div className="flex flex-1 overflow-hidden max-w-7xl mx-auto w-full">
+        {/* Left Panel: Conversation List */}
+        <div
+          style={{ width: `${panelWidth}px` }}
+          className={cn(
+            'w-full lg:w-auto flex-shrink-0',
+            'flex flex-col h-full overflow-hidden',
+            'bg-bg-primary border-r border-bg-tertiary',
+            // On mobile, hide list when conversation is selected
+            selectedId ? 'hidden lg:flex' : 'flex'
+          )}
+        >
+          {/* Search and Date Filter - stays with list */}
+          <div className="flex-shrink-0 px-3 pt-4 pb-3">
+            <div className="flex items-center gap-2">
+              <SearchBar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                onSearch={handleSearch}
+                placeholder="Search conversations..."
+                className="flex-1"
+              />
+              <DateFilter
+                selectedDate={filterDate}
+                onDateChange={handleDateFilterChange}
+              />
+            </div>
+
+            {/* Active filter indicators */}
+            {(isSearching || filterDate || selectedFolderId === FOLDER_STARRED) && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-text-tertiary">
+                {isSearching && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-bg-tertiary">
+                    <SearchIcon className="w-3 h-3" />
+                    {searchResults.length} results
+                  </span>
+                )}
+                {filterDate && (
+                  <span className="px-2 py-0.5 rounded bg-purple-primary/10 text-purple-primary">
+                    Filtered by date
+                  </span>
+                )}
+                {selectedFolderId === FOLDER_STARRED && (
+                  <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-600">
+                    Showing starred only
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* List Content */}
+          <div className="flex-1 overflow-y-auto px-3 pb-4">
           {/* Loading state */}
           {isLoading && orderedKeys.length === 0 && (
             <div className="space-y-6">
@@ -609,32 +615,24 @@ export function ConversationSplitView() {
         </div>
       </div>
 
-      {/* Resize Handle */}
-      <ResizeHandle
-        onResize={handleResize}
-        onDoubleClick={handleResetWidth}
-        className="hidden lg:flex"
-      />
+        {/* Resize Handle */}
+        <ResizeHandle
+          onResize={handleResize}
+          onDoubleClick={handleResetWidth}
+          className="hidden lg:flex"
+        />
 
-      {/* Right Panel: Conversation Detail */}
-      <div
-        className={cn(
-          'flex-1 flex flex-col min-w-0 h-full overflow-hidden',
-          'bg-bg-primary',
-          // On mobile, show detail when conversation is selected
-          !selectedId ? 'hidden lg:flex' : 'flex'
-        )}
-      >
-        <AnimatePresence mode="wait">
+        {/* Right Panel: Conversation Detail */}
+        <div
+          className={cn(
+            'flex-1 flex flex-col min-w-0 h-full overflow-hidden',
+            'bg-bg-primary',
+            // On mobile, show detail when conversation is selected
+            !selectedId ? 'hidden lg:flex' : 'flex'
+          )}
+        >
           {selectedId ? (
-            <motion.div
-              key={selectedId}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="flex-1 overflow-hidden"
-            >
+            <div className="flex-1 overflow-hidden">
               <ConversationDetailPanel
                 conversationId={selectedId}
                 conversation={selectedConversation}
@@ -647,14 +645,9 @@ export function ConversationSplitView() {
                   refresh();
                 }}
               />
-            </motion.div>
+            </div>
           ) : (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex-1 flex items-center justify-center"
-            >
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mx-auto mb-4">
                   <MessageSquare className="w-8 h-8 text-text-quaternary" />
@@ -666,9 +659,9 @@ export function ConversationSplitView() {
                   Choose a conversation from the list to view details
                 </p>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
       {/* Merge Action Bar - shows when in selection mode */}

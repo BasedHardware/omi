@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useTransition } from 'react';
 import { motion } from 'framer-motion';
-import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Trash2 } from 'lucide-react';
+import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Trash2, Brain } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
@@ -10,6 +10,7 @@ import { MemoryFilters } from './MemoryFilters';
 import { MemoryQuickAdd } from './MemoryQuickAdd';
 import { KnowledgeGraph } from './KnowledgeGraph';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 type ViewMode = 'list' | 'graph';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
@@ -246,14 +247,16 @@ export function MemoriesPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header - Compact 2-row design */}
+      {/* Page Header */}
+      <PageHeader title="Memories" icon={Brain} />
+
+      {/* Toolbar */}
       <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
-        <div className="pt-6 pb-4 px-4">
-          {/* Row 1: Title + View toggle + Search + Sort + Filter + Refresh */}
+        <div className="py-3 px-4">
+          {/* Row 1: View toggle + Search + Sort + Filter + Refresh */}
           <div className="flex items-center gap-3">
-            {/* Left: Title + View toggle */}
+            {/* Left: View toggle */}
             <div className="flex items-center gap-3 flex-shrink-0">
-              <h1 className="text-xl font-bold text-text-primary">Memories</h1>
               <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
                 <button
                   onClick={() => setViewMode('list')}
@@ -431,7 +434,7 @@ export function MemoriesPage() {
 
       {/* Content - Two column layout */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row">
+        <div className="h-full flex flex-col lg:flex-row max-w-6xl mx-auto">
           {/* Left Column - Memories list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
             {viewMode === 'list' ? (

@@ -12,6 +12,7 @@ import { AppSelector } from './AppSelector';
 import { uploadChatFiles } from '@/lib/api';
 import type { MessageFile } from '@/types/conversation';
 import { cn } from '@/lib/utils';
+import { PageHeader } from '@/components/layout/PageHeader';
 
 // Quick prompts for the chat
 const quickPrompts = [
@@ -206,17 +207,17 @@ export function FullPageChat() {
 
   return (
     <div className="flex flex-col h-full bg-bg-primary">
-      {/* Header */}
-      <div className="flex items-center justify-between pt-6 pb-4 px-4 border-b border-bg-tertiary bg-bg-secondary">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-text-primary">Chat</h1>
-          {/* App Selector */}
-          <AppSelector
-            selectedAppId={selectedAppId}
-            onSelectApp={handleAppChange}
-            disabled={isStreaming}
-          />
-        </div>
+      {/* Page Header */}
+      <PageHeader title="Chat" icon={Sparkles} />
+
+      {/* Toolbar: App Selector + Clear */}
+      <div className="flex items-center justify-between px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+        {/* App Selector */}
+        <AppSelector
+          selectedAppId={selectedAppId}
+          onSelectApp={handleAppChange}
+          disabled={isStreaming}
+        />
         {messages.length > 0 && (
           <button
             onClick={() => setShowClearDialog(true)}

@@ -24,6 +24,8 @@ import type {
   CreateAppRequest,
   ThumbnailUploadResponse,
 } from '@/types/apps';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LayoutGrid } from 'lucide-react';
 
 // Icons
 function ImageIcon({ className }: { className?: string }) {
@@ -443,60 +445,51 @@ export function AppForm({ mode, app }: AppFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl mx-auto p-6 space-y-6">
-      {/* Sticky Header with Actions */}
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 py-4 bg-bg-primary/95 backdrop-blur-sm border-b border-white/[0.04]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+    <div className="flex flex-col h-full">
+      {/* Page Header */}
+      <PageHeader title={mode === 'create' ? 'Create App' : 'Edit App'} icon={LayoutGrid} showBackButton />
+
+      {/* Toolbar with Actions */}
+      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+        <div className="max-w-2xl mx-auto flex items-center justify-end gap-3">
+          {mode === 'edit' && (
             <button
               type="button"
-              onClick={() => router.back()}
-              className="p-2 rounded-lg hover:bg-bg-secondary transition-colors"
-            >
-              <ArrowLeftIcon className="w-5 h-5 text-text-secondary" />
-            </button>
-            <h1 className="text-2xl font-display font-semibold text-text-primary">
-              {mode === 'create' ? 'Create App' : 'Edit App'}
-            </h1>
-          </div>
-
-          {/* Action Buttons in Header */}
-          <div className="flex items-center gap-3">
-            {mode === 'edit' && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium',
-                  'bg-error/10 text-error',
-                  'hover:bg-error/20 transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
-                )}
-              >
-                <TrashIcon className="w-4 h-4" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={isSubmitting}
+              onClick={handleDelete}
+              disabled={isDeleting}
               className={cn(
-                'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium',
-                'bg-purple-primary text-white',
-                'hover:bg-purple-secondary transition-colors',
+                'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium',
+                'bg-error/10 text-error',
+                'hover:bg-error/20 transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
-              {isSubmitting
-                ? 'Saving...'
-                : mode === 'create'
-                  ? 'Create App'
-                  : 'Save Changes'}
+              <TrashIcon className="w-4 h-4" />
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
-          </div>
+          )}
+          <button
+            type="submit"
+            form="app-form"
+            disabled={isSubmitting}
+            className={cn(
+              'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium',
+              'bg-purple-primary text-white',
+              'hover:bg-purple-secondary transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+          >
+            {isSubmitting
+              ? 'Saving...'
+              : mode === 'create'
+                ? 'Create App'
+                : 'Save Changes'}
+          </button>
         </div>
       </div>
+
+      <form id="app-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl mx-auto p-6 space-y-6">
 
       {/* Error display */}
       {error && (
@@ -1026,6 +1019,8 @@ export function AppForm({ mode, app }: AppFormProps) {
 
       {/* Bottom padding to ensure content isn't cut off */}
       <div className="h-4" />
-    </form>
+        </div>
+      </form>
+    </div>
   );
 }
