@@ -7,14 +7,16 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ActionItemFormSheet extends StatefulWidget {
-  final ActionItemWithMetadata?
-  actionItem; // null for create, non-null for edit
+  final ActionItemWithMetadata? actionItem; // null for create, non-null for edit
   final VoidCallback? onRefresh;
+  final DateTime? defaultDueDate; // Default due date for new items
 
-  const ActionItemFormSheet({super.key, this.actionItem, this.onRefresh});
+  const ActionItemFormSheet({super.key, this.actionItem, this.onRefresh, this.defaultDueDate});
 
   bool get isEditing => actionItem != null;
 
@@ -42,7 +44,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       _textController = TextEditingController();
       _isCompleted = false;
-      _selectedDueDate = null;
+      _selectedDueDate = widget.defaultDueDate;
     }
   }
 
@@ -55,8 +57,8 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   void _saveActionItem() async {
     if (_textController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Action item description cannot be empty.'),
+        SnackBar(
+          content: Text(context.l10n.actionItemDescriptionEmpty),
           backgroundColor: Colors.red,
         ),
       );
@@ -70,8 +72,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     if (widget.isEditing) {
       // Editing existing item
       String newDescription = _textController.text.trim();
-      bool descriptionChanged =
-          newDescription != widget.actionItem!.description;
+      bool descriptionChanged = newDescription != widget.actionItem!.description;
       bool dueDateChanged = _selectedDueDate != widget.actionItem!.dueAt;
       bool completionChanged = _isCompleted != widget.actionItem!.completed;
 
@@ -81,10 +82,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Action item updated'),
+          SnackBar(
+            content: Text(context.l10n.actionItemUpdated),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -122,10 +123,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to update action item'),
+            SnackBar(
+              content: Text(context.l10n.failedToUpdateActionItem),
               backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
@@ -133,10 +134,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Action item created'),
+          SnackBar(
+            content: Text(context.l10n.actionItemCreated),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -156,20 +157,20 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
           );
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to create action item'),
+            SnackBar(
+              content: Text(context.l10n.failedToCreateActionItem),
               backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to create action item'),
+            SnackBar(
+              content: Text(context.l10n.failedToCreateActionItem),
               backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
@@ -188,16 +189,16 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Action item deleted'),
+          SnackBar(
+            content: Text(context.l10n.actionItemDeleted),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to delete action item'),
+          SnackBar(
+            content: Text(context.l10n.failedToDeleteActionItem),
             backgroundColor: Colors.red,
           ),
         );
@@ -210,9 +211,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       context: context,
       builder: (context) => DateTimePickerSheet(
         initialDateTime: _selectedDueDate,
-        minimumDate: widget.isEditing
-            ? widget.actionItem!.createdAt
-            : DateTime.now(),
+        minimumDate: widget.isEditing ? widget.actionItem!.createdAt : DateTime.now(),
       ),
     );
 
@@ -230,46 +229,11 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
   }
 
   String _formatDueDateWithTime(DateTime date) {
-    final weekdays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
-    final months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-
-    // Format date as "Wednesday, June 25"
-    final dayName = weekdays[date.weekday - 1];
-    final monthName = months[date.month - 1];
-
-    // Format time as "8:12am"
-    final hour = date.hour;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'pm' : 'am';
-    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-
-    int? year;
-    if (date.year != DateTime.now().year) {
-      year = date.year;
-    }
-
-    return '$dayName, $monthName ${date.day} ${year ?? ""} - $displayHour:$minute$period';
+    final locale = Localizations.localeOf(context).toString();
+    // Using DateFormat for localized output
+    final dateStr = DateFormat.yMMMMEEEEd(locale).format(date);
+    final timeStr = DateFormat.jm(locale).format(date);
+    return '$dateStr - $timeStr';
   }
 
   @override
@@ -328,7 +292,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      _isCompleted ? 'Completed' : 'Mark complete',
+                      _isCompleted ? context.l10n.completed : context.l10n.markComplete,
                       style: TextStyle(
                         color: Colors.grey.shade300,
                         fontSize: 14,
@@ -346,19 +310,19 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                         context: context,
                         builder: (context) => AlertDialog(
                           backgroundColor: ResponsiveHelper.backgroundSecondary,
-                          title: const Text(
-                            'Delete Action Item',
-                            style: TextStyle(color: Colors.white),
+                          title: Text(
+                            context.l10n.deleteActionItemConfirmTitle,
+                            style: const TextStyle(color: Colors.white),
                           ),
                           content: Text(
-                            'Are you sure you want to delete this action item?',
+                            context.l10n.deleteActionItemConfirmMessage,
                             style: TextStyle(color: Colors.grey.shade300),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context, false),
                               child: Text(
-                                'Cancel',
+                                context.l10n.cancel,
                                 style: TextStyle(color: Colors.grey.shade400),
                               ),
                             ),
@@ -367,9 +331,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                                 Navigator.pop(context, true); // Close dialog
                                 _deleteActionItem();
                               },
-                              child: const Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
+                              child: Text(
+                                context.l10n.delete,
+                                style: const TextStyle(color: Colors.red),
                               ),
                             ),
                           ],
@@ -395,7 +359,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
-                hintText: widget.isEditing ? null : 'What needs to be done?',
+                hintText: widget.isEditing ? null : context.l10n.actionItemDescriptionHint,
                 hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
               ),
               onSubmitted: (value) {
@@ -420,13 +384,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
-                        _selectedDueDate != null
-                            ? _formatDueDateWithTime(_selectedDueDate!)
-                            : 'Add due date',
+                        _selectedDueDate != null ? _formatDueDateWithTime(_selectedDueDate!) : context.l10n.addDueDate,
                         style: TextStyle(
-                          color: _selectedDueDate != null
-                              ? Colors.white
-                              : Colors.grey.shade500,
+                          color: _selectedDueDate != null ? Colors.white : Colors.grey.shade500,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
@@ -473,7 +433,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Press done to ${widget.isEditing ? 'save' : 'create'}',
+                        widget.isEditing ? context.l10n.pressDoneToSave : context.l10n.pressDoneToCreate,
                         style: TextStyle(
                           color: Colors.grey.shade400,
                           fontSize: 11,
@@ -526,8 +486,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? ResponsiveHelper.purplePrimary
             : isCurrentYear == true
-            ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
-            : Colors.transparent,
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+                : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(
@@ -535,12 +495,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
           year.toString(),
           style: TextStyle(
             fontSize: 14,
-            fontWeight: isSelected == true
-                ? FontWeight.bold
-                : FontWeight.normal,
-            color: isDisabled == true
-                ? ResponsiveHelper.textQuaternary
-                : ResponsiveHelper.textPrimary,
+            fontWeight: isSelected == true ? FontWeight.bold : FontWeight.normal,
+            color: isDisabled == true ? ResponsiveHelper.textQuaternary : ResponsiveHelper.textPrimary,
           ),
         ),
       ),
@@ -554,9 +510,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
     final minimumDate = widget.minimumDate ?? now;
 
     if (widget.initialDateTime != null) {
-      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate)
-          ? minimumDate
-          : widget.initialDateTime!;
+      _selectedDateTime = widget.initialDateTime!.isBefore(minimumDate) ? minimumDate : widget.initialDateTime!;
     } else {
       _selectedDateTime = now.isBefore(minimumDate) ? minimumDate : now;
     }
@@ -597,9 +551,9 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.cancel,
+                      style: const TextStyle(
                         color: ResponsiveHelper.textTertiary,
                         fontSize: 17,
                       ),
@@ -618,9 +572,9 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                   CupertinoButton(
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.pop(context, _selectedDateTime),
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.done,
+                      style: const TextStyle(
                         color: ResponsiveHelper.purplePrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -636,40 +590,13 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   CalendarDatePicker2(
-                    config: CalendarDatePicker2Config(
-                      calendarType: CalendarDatePicker2Type.single,
+                    config: getDefaultCalendarConfig(
                       firstDate: now,
                       currentDate: now,
                       lastDate: (widget.initialDateTime ?? now).add(
                         const Duration(days: 365 * 5),
                       ),
-                      disableMonthPicker: true,
                       yearBuilder: yearBuilder,
-                      selectedDayHighlightColor: ResponsiveHelper.purplePrimary,
-                      // todayHighlightColor: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                      dayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                      ),
-                      selectedDayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      todayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.purplePrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      weekdayLabelTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textTertiary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      controlsTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      disabledDayTextStyle: const TextStyle(
-                        color: ResponsiveHelper.textQuaternary,
-                      ),
                     ),
                     value: [_selectedDateTime],
                     onValueChanged: (dates) => setState(() {
@@ -696,10 +623,10 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                           size: 20,
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            "Time",
-                            style: TextStyle(
+                            context.l10n.time,
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w500,
                               color: ResponsiveHelper.textPrimary,
@@ -717,59 +644,43 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                                     colorScheme: const ColorScheme.dark(
                                       primary: ResponsiveHelper.purplePrimary,
                                       onPrimary: ResponsiveHelper.textPrimary,
-                                      surface:
-                                          ResponsiveHelper.backgroundSecondary,
+                                      surface: ResponsiveHelper.backgroundSecondary,
                                       onSurface: ResponsiveHelper.textPrimary,
                                     ),
                                     timePickerTheme: TimePickerThemeData(
-                                      backgroundColor:
-                                          ResponsiveHelper.backgroundSecondary,
-                                      hourMinuteColor:
-                                          WidgetStateColor.resolveWith(
-                                            (states) =>
-                                                states.contains(
-                                                  WidgetState.selected,
-                                                )
-                                                ? ResponsiveHelper.purplePrimary
-                                                : ResponsiveHelper
-                                                      .backgroundTertiary,
-                                          ),
-                                      hourMinuteTextColor:
-                                          ResponsiveHelper.textPrimary,
-                                      dialHandColor:
-                                          ResponsiveHelper.purplePrimary,
-                                      dialBackgroundColor:
-                                          ResponsiveHelper.backgroundTertiary,
-                                      dialTextColor:
-                                          WidgetStateColor.resolveWith(
-                                            (states) =>
-                                                states.contains(
-                                                  WidgetState.selected,
-                                                )
-                                                ? ResponsiveHelper.textPrimary
-                                                : ResponsiveHelper
-                                                      .textSecondary,
-                                          ),
-                                      entryModeIconColor:
-                                          ResponsiveHelper.textTertiary,
-                                      dayPeriodColor:
-                                          WidgetStateColor.resolveWith(
-                                            (states) =>
-                                                states.contains(
-                                                  WidgetState.selected,
-                                                )
-                                                ? ResponsiveHelper.purplePrimary
-                                                : Colors.transparent,
-                                          ),
-                                      dayPeriodTextColor:
-                                          WidgetStateColor.resolveWith(
-                                            (states) =>
-                                                states.contains(
-                                                  WidgetState.selected,
-                                                )
-                                                ? ResponsiveHelper.textPrimary
-                                                : ResponsiveHelper.textTertiary,
-                                          ),
+                                      backgroundColor: ResponsiveHelper.backgroundSecondary,
+                                      hourMinuteColor: WidgetStateColor.resolveWith(
+                                        (states) => states.contains(
+                                          WidgetState.selected,
+                                        )
+                                            ? ResponsiveHelper.purplePrimary
+                                            : ResponsiveHelper.backgroundTertiary,
+                                      ),
+                                      hourMinuteTextColor: ResponsiveHelper.textPrimary,
+                                      dialHandColor: ResponsiveHelper.purplePrimary,
+                                      dialBackgroundColor: ResponsiveHelper.backgroundTertiary,
+                                      dialTextColor: WidgetStateColor.resolveWith(
+                                        (states) => states.contains(
+                                          WidgetState.selected,
+                                        )
+                                            ? ResponsiveHelper.textPrimary
+                                            : ResponsiveHelper.textSecondary,
+                                      ),
+                                      entryModeIconColor: ResponsiveHelper.textTertiary,
+                                      dayPeriodColor: WidgetStateColor.resolveWith(
+                                        (states) => states.contains(
+                                          WidgetState.selected,
+                                        )
+                                            ? ResponsiveHelper.purplePrimary
+                                            : Colors.transparent,
+                                      ),
+                                      dayPeriodTextColor: WidgetStateColor.resolveWith(
+                                        (states) => states.contains(
+                                          WidgetState.selected,
+                                        )
+                                            ? ResponsiveHelper.textPrimary
+                                            : ResponsiveHelper.textTertiary,
+                                      ),
                                       dayPeriodBorderSide: const BorderSide(
                                         color: ResponsiveHelper.textTertiary,
                                       ),

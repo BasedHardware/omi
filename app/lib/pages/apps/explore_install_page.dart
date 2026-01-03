@@ -18,6 +18,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 import 'add_app.dart';
 
@@ -96,14 +97,14 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                     color: Colors.grey.shade600,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No apps found',
-                    style: TextStyle(fontSize: 18, color: Colors.white70),
+                  Text(
+                    context.l10n.noAppsFound,
+                    style: const TextStyle(fontSize: 18, color: Colors.white70),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Try adjusting your search or filters',
+                    context.l10n.tryAdjustingSearch,
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
                     textAlign: TextAlign.center,
                   ),
@@ -144,11 +145,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     return Selector<AppProvider, List<Map<String, dynamic>>>(
       selector: (context, provider) => provider.groupedApps,
       builder: (context, groups, child) {
-        // Filter out "Summary" (memories) section - it's accessed via conversation detail page
+        // Filter out sections that are accessed elsewhere:
+        // - "Summary" (memories) section - accessed via conversation detail page
+        // - "Chat Assistants" (chat) section - accessed via chat page drawer
         final filteredGroups = groups.where((group) {
           final capabilityMap = group['capability'] as Map<String, dynamic>?;
           final groupId = capabilityMap?['id'] as String? ?? '';
-          return groupId != 'memories';
+          return groupId != 'memories' && groupId != 'chat';
         }).toList();
 
         return SliverPadding(

@@ -893,8 +893,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                               );
 
                                               if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                final uri = Uri.tryParse(app.paymentLink!);
+                                                if (uri == null) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(content: Text('Invalid payment URL')),
+                                                  );
+                                                  return;
+                                                }
                                                 _checkPaymentStatus(app.id);
-                                                await launchUrl(Uri.parse(app.paymentLink!));
+                                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                                               } else {
                                                 await _toggleApp(app.id, true);
                                               }
@@ -1320,7 +1327,15 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16.0),
                               onTap: () async {
-                                await launchUrl(Uri.parse("${step.url}?uid=${SharedPreferencesUtil().uid}"));
+                                final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
+                                final uri = Uri.tryParse(rawUrl);
+                                if (uri == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Invalid integration URL')),
+                                  );
+                                  return;
+                                }
+                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                                 checkSetupCompleted();
                               },
                               child: Padding(
@@ -1402,7 +1417,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               );
                             } else {
                               if (app.externalIntegration!.isInstructionsUrl == true) {
-                                await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+                                final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
+                                if (uri == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Invalid setup instructions URL')),
+                                  );
+                                  return;
+                                }
+                                await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
                               } else {
                                 var m = app.externalIntegration!.setupInstructionsFilePath;
                                 routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));
@@ -1580,70 +1602,77 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       )
                     : const SizedBox.shrink(),
                 _buildPermissionsCard(app),
-                (app.ratingCount > 0 || app.reviews.isNotEmpty)
-                    ? GestureDetector(
-                        onTap: () {
-                          if (app.reviews.isNotEmpty) {
-                            // Track reviews page opened
-                            MixpanelManager().appDetailReviewsOpened(
-                              appId: app.id,
-                              reviewCount: app.reviews.length,
-                            );
+                Builder(
+                  builder: (context) {
+                    final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
+                    return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
+                        ? GestureDetector(
+                            onTap: () {
+                              if (app.reviews.isNotEmpty) {
+                                // Track reviews page opened
+                                MixpanelManager().appDetailReviewsOpened(
+                                  appId: app.id,
+                                  reviewCount: app.reviews.length,
+                                );
 
-                            routeToPage(context, ReviewsListPage(app: app));
-                          }
-                        },
-                        child: Container(
-                          key: _reviewsSectionKey,
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(16.0),
-                          margin: EdgeInsets.only(
-                            left: MediaQuery.of(context).size.width * 0.05,
-                            right: MediaQuery.of(context).size.width * 0.05,
-                            top: 12,
-                            bottom: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1F1F25).withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(16.0),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
+                                routeToPage(context, ReviewsListPage(app: app));
+                              }
+                            },
+                            child: Container(
+                              key: _reviewsSectionKey,
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(16.0),
+                              margin: EdgeInsets.only(
+                                left: MediaQuery.of(context).size.width * 0.05,
+                                right: MediaQuery.of(context).size.width * 0.05,
+                                top: 12,
+                                bottom: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1F1F25).withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(16.0),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text('Ratings & Reviews',
-                                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                                  const Spacer(),
-                                  app.reviews.isNotEmpty
-                                      ? const Icon(
-                                          Icons.arrow_forward,
-                                          size: 20,
-                                        )
-                                      : const SizedBox.shrink(),
+                                  Row(
+                                    children: [
+                                      const Text('Ratings & Reviews',
+                                          style: TextStyle(
+                                              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                                      const Spacer(),
+                                      app.reviews.isNotEmpty
+                                          ? const Icon(
+                                              Icons.arrow_forward,
+                                              size: 20,
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 20),
+                                  RatingDistributionWidget(
+                                    ratingAvg: app.ratingAvg ?? 0,
+                                    ratingCount: app.ratingCount,
+                                    reviews: app.reviews,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  RecentReviewsSection(
+                                    reviews:
+                                        app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                                    userReview: app.userReview,
+                                    app: app,
+                                    onReviewUpdated: () {
+                                      setState(() {});
+                                    },
+                                  )
                                 ],
                               ),
-                              const SizedBox(height: 20),
-                              RatingDistributionWidget(
-                                ratingAvg: app.ratingAvg ?? 0,
-                                ratingCount: app.ratingCount,
-                                reviews: app.reviews,
-                              ),
-                              const SizedBox(height: 16),
-                              RecentReviewsSection(
-                                reviews: app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
-                                userReview: app.userReview,
-                                app: app,
-                                onReviewUpdated: () {
-                                  setState(() {});
-                                },
-                              )
-                            ],
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                            ),
+                          )
+                        : const SizedBox.shrink();
+                  },
+                ),
                 // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
                 // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
                 // app.private
@@ -1666,7 +1695,17 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
       final firstStep = app.externalIntegration!.authSteps.first;
-      await launchUrl(Uri.parse("${firstStep.url}?uid=${SharedPreferencesUtil().uid}"));
+      final rawUrl = "${firstStep.url}?uid=${SharedPreferencesUtil().uid}";
+      final uri = Uri.tryParse(rawUrl);
+      if (uri == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid integration URL')),
+          );
+        }
+        return;
+      }
+      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
     } else if (hasSetupInstructions) {
       if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
         await routeToPage(
@@ -1675,7 +1714,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
         );
       } else {
         if (app.externalIntegration!.isInstructionsUrl == true) {
-          await launchUrl(Uri.parse(app.externalIntegration!.setupInstructionsFilePath ?? ''));
+          final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
+          if (uri == null) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Invalid setup instructions URL')),
+              );
+            }
+            return;
+          }
+          await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
         } else {
           var m = app.externalIntegration!.setupInstructionsFilePath;
           routeToPage(context, MarkdownViewer(title: 'Setup Instructions', markdown: m ?? ''));

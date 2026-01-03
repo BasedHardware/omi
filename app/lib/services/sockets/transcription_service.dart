@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
@@ -12,6 +13,9 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+
+import 'package:omi/services/sockets/on_device_whisper_provider.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
 export 'package:omi/utils/audio/audio_transcoder.dart';
@@ -36,7 +40,7 @@ abstract interface class ITransctiptSegmentSocketServiceListener {
 
 class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
   SpeechProfileTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language,
-      {super.source, super.customSttMode})
+      {super.source, super.customSttMode, super.onboardingMode})
       : super.create(includeSpeechProfile: false);
 }
 
@@ -74,6 +78,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool customSttMode;
   String? sttConfigId;
 
+  bool onboardingMode;
+
   TranscriptSegmentSocketService.create(
     this.sampleRate,
     this.codec,
@@ -82,6 +88,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.source,
     this.customSttMode = false,
     this.sttConfigId,
+    this.onboardingMode = false,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -93,6 +100,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (customSttMode) {
       params += '&custom_stt=enabled';
+    }
+
+    if (onboardingMode) {
+      params += '&onboarding=enabled';
     }
 
     String url =
@@ -111,6 +122,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.source,
     this.customSttMode = false,
     this.sttConfigId,
+    this.onboardingMode = false,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -149,6 +161,11 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 
   Future send(dynamic message) async {
+    _socket.send(message);
+    return;
+  }
+
+  Future sendText(String message) async {
     _socket.send(message);
     return;
   }
@@ -209,35 +226,6 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     debugPrint(event.toString());
     DebugLogManager.logInfo('transcription_socket_unhandled_message: ${event.toString()}');
-  }
-
-  @override
-  void onInternetConnectionFailed() {
-    debugPrint("onInternetConnectionFailed");
-
-    // Send notification
-    NotificationService.instance.clearNotification(3);
-    NotificationService.instance.createNotification(
-      notificationId: 3,
-      title: 'Internet Connection Lost',
-      body: 'Your device is offline. Transcription is paused until connection is restored.',
-    );
-    DebugLogManager.logEvent('internet_connection_lost', {});
-  }
-
-  @override
-  void onMaxRetriesReach() {
-    debugPrint("onMaxRetriesReach");
-
-    // Send notification
-    NotificationService.instance.clearNotification(2);
-    NotificationService.instance.createNotification(
-      notificationId: 2,
-      title: 'Connection Issue 🚨',
-      body: 'Unable to connect to the transcript service.'
-          ' Please restart the app or contact support if the problem persists.',
-    );
-    DebugLogManager.logEvent('transcription_socket_max_retries', {});
   }
 
   @override
@@ -355,7 +343,7 @@ class TranscriptSocketServiceFactory {
     if (config.provider == SttProvider.geminiLive) {
       return GeminiStreamingSttSocket(
         apiKey: config.apiKey ?? '',
-        model: config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.0-flash-live-001',
+        model: config.effectiveModel.isNotEmpty ? config.effectiveModel : 'gemini-2.5-flash-native-audio-preview-12-2025',
         language: config.effectiveLanguage,
         sampleRate: sampleRate,
         transcoder: transcoder,
@@ -408,6 +396,42 @@ class TranscriptSocketServiceFactory {
 
     // Build URL with query params for raw_binary type
     final effectiveUrl = requestType == SttRequestType.rawBinary ? _buildUrlWithParams(url, params) : url;
+
+
+
+    // Special handling for On-Device Whisper
+    if (config.provider == SttProvider.onDeviceWhisper) {
+      // Use Native iOS Speech Recognition on iOS
+      if (Platform.isIOS) {
+        return PurePollingSocket(
+          config: AudioPollingConfig(
+            bufferDuration: const Duration(seconds: 5),
+            minBufferSizeBytes: sampleRate * 2,
+            serviceId: config.provider.name,
+            transcoder: transcoder,
+          ),
+          sttProvider: OnDeviceAppleProvider(
+            language: config.language ?? 'en',
+          ),
+        );
+      }
+
+      if (config.url == null || config.url!.isEmpty) {
+        throw ArgumentError("[STTFactory] OnDeviceWhisper selected but no model path provided.");
+      }
+      return PurePollingSocket(
+        config: AudioPollingConfig(
+          bufferDuration: const Duration(seconds: 5),
+          minBufferSizeBytes: sampleRate * 2,
+          serviceId: config.provider.name,
+          transcoder: transcoder,
+        ),
+        sttProvider: OnDeviceWhisperProvider(
+          modelPath: config.url ?? '',
+          language: config.language ?? 'en',
+        ),
+      );
+    }
 
     return PurePollingSocket(
       config: AudioPollingConfig(

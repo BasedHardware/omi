@@ -8,6 +8,7 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 
 export 'package:omi/services/notifications/notification_service.dart';
 
@@ -69,7 +70,35 @@ class NotificationUtil {
       return;
     }
 
-    MyApp.navigatorKey.currentState
-        ?.pushReplacement(MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)));
+    // Check if this is a daily reflection notification
+    String? autoMessage;
+    if (DailyReflectionNotification.isReflectionPayload(payload)) {
+      autoMessage = DailyReflectionNotification.reflectionMessage;
+    }
+
+    MyApp.navigatorKey.currentState?.pushReplacement(
+      MaterialPageRoute(
+        builder: (context) => HomePageWrapper(
+          navigateToRoute: navigateTo,
+          autoMessage: autoMessage,
+        ),
+      ),
+    );
+  }
+
+  static Future<void> triggerFallNotification() async {
+    final allowed = await AwesomeNotifications().isNotificationAllowed();
+    if (!allowed) return;
+
+    await AwesomeNotifications().createNotification(
+      content: NotificationContent(
+        id: 6,
+        channelKey: 'channel',
+        actionType: ActionType.Default,
+        title: 'ouch',
+        body: 'did you fall?',
+        wakeUpScreen: true,
+      ),
+    );
   }
 }

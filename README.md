@@ -16,7 +16,8 @@ transcriptions of meetings, chats, and voice memos wherever you are.
 [![Discord Follow](https://img.shields.io/discord/1192313062041067520?label=Discord)](http://discord.omi.me) &ensp;&ensp;&ensp;
 [![Twitter Follow](https://img.shields.io/twitter/follow/kodjima33)](https://x.com/kodjima33) &ensp;&ensp;&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)&ensp;&ensp;&ensp;
-[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)
+[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi)](https://github.com/BasedHardware/Omi)&ensp;&ensp;&ensp;
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BasedHardware/omi)
 
 <h3>
 
@@ -67,7 +68,7 @@ Start speaking, you'll see Real-time transcript on [webhook.site ](https://webho
 ## In this repo:
 
 - [omi device](omi) - nRF chips, zephyr, c/c++
-- [omi glass](omiglass) esp32-s3, c/c++
+- [omi glass](omiGlass) esp32-s3, c/c++
 - [omi app](app) - flutter
 - [omi backend](backend) - python, fastapi, firebase, pinecone, redis, deepgram, speechmatic, soniox, openai-compatible apis, langchain, silero vad
 - [SDKs](sdks) - react native, swift, python

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:video_player/video_player.dart';
 
@@ -121,9 +122,9 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Title and subtitle
-                        const Text(
-                          'Omi – Your AI Companion',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.omiYourAiCompanion,
+                          style: const TextStyle(
                             color: Colors.black,
                             fontSize: 34,
                             fontWeight: FontWeight.bold,
@@ -134,7 +135,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Capture every moment. Get AI-powered\nsummaries. Never take notes again.',
+                          context.l10n.captureEveryMoment,
                           style: TextStyle(
                             color: Colors.black.withOpacity(0.7),
                             fontSize: 16,
@@ -167,9 +168,9 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text(
-                                  'Get Started',
-                                  style: TextStyle(
+                                Text(
+                                  context.l10n.getStarted,
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.w600,
                                     fontFamily: 'Manrope',

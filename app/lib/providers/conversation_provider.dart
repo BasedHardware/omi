@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/services/services.dart';
-import 'package:omi/services/wals.dart';
+import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
 
@@ -17,9 +17,13 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
-  bool showShortConversations = false; // conversations < 2 minutes
+  bool showShortConversations = false;
+  int shortConversationThreshold = 60; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
+  bool showDailySummaries = false; // filter to show daily summaries instead of conversations
+  bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedDate;
+  String? selectedFolderId;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -34,16 +38,32 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> processingConversations = [];
 
+  // Merge functionality state
+  Set<String> mergingConversationIds = {};
+  bool isSelectionModeActive = false;
+  Set<String> selectedConversationIds = {};
+  StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
+
   final AppReviewService _appReviewService = AppReviewService();
 
   bool isFetchingConversations = false;
 
   ConversationProvider() {
-    _preload();
+    _setupMergeListener();
+    _loadSettings();
   }
 
-  _preload() async {
-    // Initialization logic if needed
+  void _loadSettings() {
+    final prefs = SharedPreferencesUtil();
+    showDiscardedConversations = prefs.showDiscardedMemories;
+    showShortConversations = prefs.showShortConversations;
+    shortConversationThreshold = prefs.shortConversationThreshold;
+  }
+
+  void _setupMergeListener() {
+    _mergeCompletedSubscription = MergeNotificationHandler.onMergeCompleted.listen((event) {
+      onMergeCompleted(event.mergedConversationId, event.removedConversationIds);
+    });
   }
 
   void resetGroupedConvos() {
@@ -150,6 +170,7 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
+    SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -166,13 +187,79 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleShortConversations() {
     showShortConversations = !showShortConversations;
-    groupConversationsByDate();
+    SharedPreferencesUtil().showShortConversations = showShortConversations;
+
+    // Clear and refresh to reflect the change
+    groupedConversations = {};
+    notifyListeners();
+
+    if (previousQuery.isNotEmpty) {
+      searchConversations(previousQuery, showShimmer: true);
+    } else {
+      fetchConversations();
+    }
+  }
+
+  void setShortConversationThreshold(int seconds) {
+    shortConversationThreshold = seconds;
+    SharedPreferencesUtil().shortConversationThreshold = seconds;
+
+    // Clear and refresh to reflect the change
+    groupedConversations = {};
+    notifyListeners();
+
+    if (previousQuery.isNotEmpty) {
+      searchConversations(previousQuery, showShimmer: true);
+    } else {
+      fetchConversations();
+    }
   }
 
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
+    // Clear daily summaries filter when toggling starred
+    if (showStarredOnly) {
+      showDailySummaries = false;
+    }
     groupConversationsByDate();
     notifyListeners();
+  }
+
+  void toggleDailySummaries() {
+    showDailySummaries = !showDailySummaries;
+    // Clear other filters when showing daily summaries
+    if (showDailySummaries) {
+      showStarredOnly = false;
+      selectedFolderId = null;
+    }
+    notifyListeners();
+  }
+
+  /// Check if user has any daily summaries
+  Future<void> checkHasDailySummaries() async {
+    final summaries = await getDailySummaries(limit: 1, offset: 0);
+    hasDailySummaries = summaries.isNotEmpty;
+    notifyListeners();
+  }
+
+  /// Filter conversations by folder
+  Future<void> filterByFolder(String? folderId) async {
+    if (selectedFolderId == folderId) return;
+    selectedFolderId = folderId;
+
+    // Clear daily summaries filter when selecting a folder
+    showDailySummaries = false;
+
+    // Clear search when applying folder filter
+    previousQuery = "";
+    currentSearchPage = 0;
+    totalSearchPages = 0;
+    searchedConversations = [];
+
+    groupedConversations = {};
+    notifyListeners();
+
+    await fetchConversations();
   }
 
   void setLoadingConversations(bool value) {
@@ -258,9 +345,12 @@ class ConversationProvider extends ChangeNotifier {
 
     // completed convos
     conversations = conversations.where((m) => m.status == ConversationStatus.completed).toList();
-    if (conversations.isEmpty) {
+
+    // Only use cache when no folder filter is applied
+    if (conversations.isEmpty && selectedFolderId == null) {
       conversations = SharedPreferencesUtil().cachedConversations;
-    } else {
+    } else if (selectedFolderId == null) {
+      // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
     }
     if (searchedConversations.isEmpty) {
@@ -273,27 +363,22 @@ class ConversationProvider extends ChangeNotifier {
 
   Future getInitialConversations() async {
     await fetchConversations();
+    await checkHasDailySummaries();
   }
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
       // Filter by discarded status
-      if (showDiscardedConversations) {
-        // When showing discarded conversations, only show discarded ones
-        if (!convo.discarded) {
-          return false;
-        }
-      } else {
-        // When not showing discarded conversations, only show non-discarded ones
-        if (convo.discarded) {
-          return false;
-        }
+      // When showDiscardedConversations is true, show all conversations (including discarded)
+      // When showDiscardedConversations is false, hide discarded conversations
+      if (!showDiscardedConversations && convo.discarded) {
+        return false;
       }
 
-      // Filter out short conversations (< 2 minutes) unless explicitly showing them
+      // Filter out short conversations unless explicitly showing them
       if (!showShortConversations) {
         final durationSeconds = convo.getDurationInSeconds();
-        if (durationSeconds < 60) {
+        if (durationSeconds < shortConversationThreshold) {
           return false;
         }
       }
@@ -314,6 +399,14 @@ class ConversationProvider extends ChangeNotifier {
           return false;
         }
       }
+
+      // Filter by folder if selected
+      if (selectedFolderId != null) {
+        if (convo.folderId != selectedFolderId) {
+          return false;
+        }
+      }
+
       return true;
     }).toList();
   }
@@ -410,6 +503,7 @@ class ConversationProvider extends ChangeNotifier {
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
+      folderId: selectedFolderId,
     );
   }
 
@@ -433,6 +527,7 @@ class ConversationProvider extends ChangeNotifier {
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
+      folderId: selectedFolderId,
     );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -603,6 +698,7 @@ class ConversationProvider extends ChangeNotifier {
   void dispose() {
     _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
+    _mergeCompletedSubscription?.cancel();
     super.dispose();
   }
 
@@ -724,8 +820,167 @@ class ConversationProvider extends ChangeNotifier {
     return (date, idx);
   }
 
+  int getConversationIndexById(String id, DateTime date) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    final list = groupedConversations[normalizedDate] ?? [];
+    return list.indexWhere((c) => c.id == id);
+  }
+
   void updateSyncedConversation(ServerConversation conversation) {
     updateConversationInSortedList(conversation);
+    notifyListeners();
+  }
+
+  // ***************************************
+  // ******** MERGE FUNCTIONALITY **********
+  // ***************************************
+
+  /// Check if a conversation is currently being merged
+  /// Checks both local state and the conversation's actual status from server
+  bool isConversationMerging(String conversationId) {
+    // Check local tracking
+    if (mergingConversationIds.contains(conversationId)) {
+      return true;
+    }
+    // Check actual conversation status from server
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return false;
+
+    return conversations[idx].status == ConversationStatus.merging;
+  }
+
+  /// Enter selection mode for merge
+  void enterSelectionMode() {
+    isSelectionModeActive = true;
+    selectedConversationIds.clear();
+    MixpanelManager().conversationMergeSelectionModeEntered();
+    notifyListeners();
+  }
+
+  /// Exit selection mode and clear selections
+  void exitSelectionMode() {
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    MixpanelManager().conversationMergeSelectionModeExited();
+    notifyListeners();
+  }
+
+  List<String> markSelectedAsMergingAndExit() {
+    final idsToMerge = selectedConversationIds.toList();
+    mergingConversationIds.addAll(idsToMerge);
+    isSelectionModeActive = false;
+    selectedConversationIds.clear();
+    notifyListeners();
+    return idsToMerge;
+  }
+
+  /// Toggle selection of a conversation
+  void toggleConversationSelection(String conversationId) {
+    if (isConversationMerging(conversationId)) {
+      // Don't allow selection of conversations being merged
+      return;
+    }
+    if (selectedConversationIds.contains(conversationId)) {
+      selectedConversationIds.remove(conversationId);
+      // Auto-exit selection mode if no items remain selected
+      if (selectedConversationIds.isEmpty) {
+        isSelectionModeActive = false;
+      }
+    } else {
+      selectedConversationIds.add(conversationId);
+      MixpanelManager().conversationSelectedForMerge(conversationId, selectedConversationIds.length);
+    }
+    notifyListeners();
+  }
+
+  /// Check if a conversation is selected
+  bool isConversationSelected(String conversationId) {
+    return selectedConversationIds.contains(conversationId);
+  }
+
+  /// Get selected conversations sorted by creation date (earliest first)
+  List<ServerConversation> get selectedConversations {
+    final selected = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+    selected.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return selected;
+  }
+
+  /// Check if a conversation is eligible for merge selection
+  ///
+  /// A conversation is eligible if:
+  /// - It's not locked
+  /// - It's not currently being merged
+  ///
+  /// No time gap restrictions - user can merge any conversations they want.
+  bool isConversationEligibleForMerge(String conversationId) {
+    // Find the conversation
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return false;
+
+    final convo = conversations[idx];
+    if (convo.isLocked) return false;
+    if (mergingConversationIds.contains(conversationId)) return false;
+
+    return true;
+  }
+
+  /// Check if merge is allowed (at least 2 conversations selected)
+  bool get canMerge => selectedConversationIds.length >= 2;
+
+  /// Initiate merge of selected conversations
+  Future<MergeConversationsResponse?> initiateConversationMerge({List<String>? conversationIds}) async {
+    final idsToMerge = conversationIds ?? selectedConversationIds.toList();
+    if (idsToMerge.length < 2) return null;
+
+    // Call merge API
+    final response = await mergeConversations(idsToMerge);
+    MixpanelManager().conversationMergeInitiated(idsToMerge);
+
+    if (response == null) {
+      MixpanelManager().conversationMergeFailed(idsToMerge);
+      if (conversationIds != null) {
+        for (final id in conversationIds) {
+          mergingConversationIds.remove(id);
+        }
+        notifyListeners();
+      }
+    } else if (conversationIds == null) {
+      mergingConversationIds.addAll(idsToMerge);
+      exitSelectionMode();
+      notifyListeners();
+    }
+
+    return response;
+  }
+
+  /// Handle merge completion from FCM notification
+  Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
+    // Remove merging status for ALL involved conversations
+    mergingConversationIds.remove(mergedConversationId);
+    for (final id in removedConversationIds) {
+      mergingConversationIds.remove(id);
+    }
+
+    MixpanelManager().conversationMergeCompleted(mergedConversationId, removedConversationIds);
+
+    // Remove deleted conversations from local state
+    for (final id in removedConversationIds) {
+      conversations.removeWhere((c) => c.id == id);
+    }
+
+    // Fetch updated merged conversation
+    final mergedConvo = await getConversationById(mergedConversationId);
+    if (mergedConvo != null) {
+      final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
+      if (idx != -1) {
+        conversations[idx] = mergedConvo;
+      } else {
+        conversations.insert(0, mergedConvo);
+      }
+      conversations.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+
+    _groupConversationsByDateWithoutNotify();
     notifyListeners();
   }
 }

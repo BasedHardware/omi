@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
@@ -11,20 +13,24 @@ import 'package:flutter/material.dart';
 
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
-  List<Memory> _unreviewed = [];
   bool _loading = true;
   String _searchQuery = '';
-  MemoryCategory? _categoryFilter;
+  Set<MemoryCategory> _selectedCategories = {};
   bool _excludeInteresting = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
+  
+  // Connectivity handling for offline sync
+  ConnectivityProvider? _connectivityProvider;
+  bool _isSyncing = false;
 
   List<Memory> get memories => _memories;
-  List<Memory> get unreviewed => _unreviewed;
   bool get loading => _loading;
   String get searchQuery => _searchQuery;
-  MemoryCategory? get categoryFilter => _categoryFilter;
+  Set<MemoryCategory> get selectedCategories => _selectedCategories;
   bool get excludeInteresting => _excludeInteresting;
+  bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
+  int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
 
   List<Memory> get filteredMemories {
     return _memories.where((memory) {
@@ -37,9 +43,9 @@ class MemoriesProvider extends ChangeNotifier {
       if (_excludeInteresting) {
         // Show all categories except interesting
         categoryMatch = memory.category != MemoryCategory.interesting;
-      } else if (_categoryFilter != null) {
-        // Show only selected category
-        categoryMatch = memory.category == _categoryFilter;
+      } else if (_selectedCategories.isNotEmpty) {
+        // Show only selected categories
+        categoryMatch = _selectedCategories.contains(memory.category);
       } else {
         // Show all categories if no filter is applied
         categoryMatch = true;
@@ -65,10 +71,34 @@ class MemoriesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setCategoryFilter(MemoryCategory? category) {
-    _categoryFilter = category;
+  void toggleCategoryFilter(MemoryCategory category) async {
+    if (_selectedCategories.contains(category)) {
+      _selectedCategories.remove(category);
+    } else {
+      _selectedCategories.add(category);
+    }
     _excludeInteresting = false; // Reset exclude filter when setting a category filter
     notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('memories_filter_categories', _selectedCategories.map((e) => e.name).toList());
+  }
+
+  void clearCategoryFilter() async {
+    _selectedCategories.clear();
+    _excludeInteresting = false;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('memories_filter_categories');
+    // Clear old single filter key as well to be clean
+    await prefs.remove('memories_filter');
+  }
+
+  // Deprecated/Modified: kept as alias if needed but unused internally now
+  void setCategoryFilter(MemoryCategory? category) {
+      // Do nothing or migrate logic if called from legacy code?
+      // Assuming we are updating all call sites.
   }
 
   void _setCategories() {
@@ -80,21 +110,97 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    await _loadFilter();
     await loadMemories();
+    // Try to sync any pending memories on init
+    await syncPendingMemories();
   }
 
-  Future<void> loadMemories() async {
+  /// Set the connectivity provider to listen for connection changes
+  void setConnectivityProvider(ConnectivityProvider provider) {
+    _connectivityProvider = provider;
+    _connectivityProvider?.addListener(_onConnectivityChanged);
+  }
+
+  void _onConnectivityChanged() {
+    if (_connectivityProvider?.isConnected == true) {
+      // Connection restored, try to sync pending memories
+      syncPendingMemories();
+    }
+  }
+
+  @override
+  void dispose() {
+    _connectivityProvider?.removeListener(_onConnectivityChanged);
+    super.dispose();
+  }
+
+  Future<void> _loadFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    final filterList = prefs.getStringList('memories_filter_categories');
+    
+    if (filterList == null) {
+      _selectedCategories = {MemoryCategory.interesting, MemoryCategory.manual};
+    } else {
+      _selectedCategories = filterList
+          .map((e) => MemoryCategory.values.firstWhere(
+                (c) => c.name == e,
+                orElse: () => MemoryCategory.interesting,
+              ))
+          .toSet();
+    }
+    notifyListeners();
+  }
+
+  Future<void> loadMemories({int limit = 100}) async {
     _loading = true;
     notifyListeners();
 
-    _memories = await getMemories();
-    _unreviewed = _memories
-        .where(
-            (memory) => !memory.reviewed && memory.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1))))
-        .toList();
+    _memories = await getMemories(limit: limit);
+
+    // Merge pending memories that haven't synced yet
+    final pendingMemories = SharedPreferencesUtil().pendingMemories;
+    for (var pending in pendingMemories) {
+      if (!_memories.any((m) => m.id == pending.id)) {
+        _memories.add(pending);
+      }
+    }
 
     _loading = false;
     _setCategories();
+  }
+
+  /// Sync pending memories to server when online
+  Future<void> syncPendingMemories() async {
+    if (_isSyncing) return;
+    
+    final pendingMemories = SharedPreferencesUtil().pendingMemories;
+    if (pendingMemories.isEmpty) return;
+
+    _isSyncing = true;
+    debugPrint('MemoriesProvider: Syncing ${pendingMemories.length} pending memories...');
+
+    for (var memory in List.from(pendingMemories)) {
+      try {
+        final success = await createMemoryServer(
+          memory.content,
+          memory.visibility.name,
+          memory.category.name,
+        );
+        
+        if (success) {
+          SharedPreferencesUtil().removePendingMemory(memory.id);
+          debugPrint('MemoriesProvider: Synced memory ${memory.id}');
+        }
+      } catch (e) {
+        debugPrint('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
+        // Keep in pending list for next sync attempt
+      }
+    }
+
+    _isSyncing = false;
+    notifyListeners();
   }
 
   Memory? _lastDeletedMemory;
@@ -110,7 +216,6 @@ class MemoriesProvider extends ChangeNotifier {
     _pendingDeletionId = memory.id;
 
     _memories.remove(memory);
-    _unreviewed.remove(memory);
     _setCategories();
     notifyListeners();
 
@@ -145,10 +250,6 @@ class MemoriesProvider extends ChangeNotifier {
     _pendingDeletionId = null;
 
     _memories.add(_lastDeletedMemory!);
-    if (!_lastDeletedMemory!.reviewed &&
-        _lastDeletedMemory!.createdAt.isAfter(DateTime.now().subtract(const Duration(days: 1)))) {
-      _unreviewed.add(_lastDeletedMemory!);
-    }
 
     _setCategories();
     notifyListeners();
@@ -163,36 +264,68 @@ class MemoriesProvider extends ChangeNotifier {
     final int countBeforeDeletion = _memories.length;
     await deleteAllMemoriesServer();
     _memories.clear();
-    _unreviewed.clear();
     if (countBeforeDeletion > 0) {
       MixpanelManager().memoriesAllDeleted(countBeforeDeletion);
     }
     _setCategories();
   }
 
+  Future<void> reviewMemory(Memory memory, bool approve, String source) async {
+    await reviewMemoryServer(memory.id, approve);
+    
+    if (!approve) {
+      _memories.remove(memory);
+    } else {
+      final idx = _memories.indexWhere((m) => m.id == memory.id);
+      if (idx != -1) {
+        _memories[idx].reviewed = true;
+      }
+    }
+    
+    _setCategories();
+    notifyListeners();
+  }
+
+  /// Create a memory - works offline by saving locally first, then syncing
   Future<bool> createMemory(String content,
       [MemoryVisibility visibility = MemoryVisibility.public,
       MemoryCategory category = MemoryCategory.interesting]) async {
-    final success = await createMemoryServer(content, visibility.name, category.name);
+    // Create the memory object first
+    final newMemory = Memory(
+      id: const Uuid().v4(),
+      uid: SharedPreferencesUtil().uid,
+      content: content,
+      category: category,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      conversationId: null,
+      reviewed: false,
+      manuallyAdded: true,
+      visibility: visibility,
+    );
+
+    // Add to local list immediately (optimistic update)
+    _memories.add(newMemory);
+    _setCategories();
+    notifyListeners();
+
+    // Save to pending memories for persistence across app restarts
+    SharedPreferencesUtil().addPendingMemory(newMemory);
+
+    // Try to sync to server immediately
+    final success = await createMemoryServer(
+      content,
+      visibility.name,
+      category.name,
+    );
 
     if (success) {
-      final newMemory = Memory(
-        id: const Uuid().v4(),
-        uid: SharedPreferencesUtil().uid,
-        content: content,
-        category: category,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        conversationId: null,
-        reviewed: false,
-        manuallyAdded: true,
-        visibility: visibility,
-      );
-      _memories.add(newMemory);
-      _setCategories();
+      // Remove from pending if server sync succeeded
+      SharedPreferencesUtil().removePendingMemory(newMemory.id);
     }
 
-    return success;
+    // Return true since memory is saved locally regardless of server sync
+    return true;
   }
 
   Future<void> updateMemoryVisibility(Memory memory, MemoryVisibility visibility) async {
@@ -203,7 +336,6 @@ class MemoriesProvider extends ChangeNotifier {
       Memory memoryToUpdate = _memories[idx];
       memoryToUpdate.visibility = visibility;
       _memories[idx] = memoryToUpdate;
-      _unreviewed.removeWhere((m) => m.id == memory.id);
 
       MixpanelManager().memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
@@ -224,46 +356,11 @@ class MemoriesProvider extends ChangeNotifier {
         memory.edited = true;
         _memories[idx] = memory;
 
-        // Remove from unreviewed if it was there
-        final unreviewedIdx = _unreviewed.indexWhere((m) => m.id == memory.id);
-        if (unreviewedIdx != -1) {
-          _unreviewed.removeAt(unreviewedIdx);
-        }
-
         _setCategories();
       }
     }
 
     return success;
-  }
-
-  void reviewMemory(Memory memory, bool approved, String source) async {
-    MixpanelManager().memoryReviewed(memory, approved, source);
-
-    await reviewMemoryServer(memory.id, approved);
-
-    final idx = _memories.indexWhere((m) => m.id == memory.id);
-    if (idx != -1) {
-      memory.reviewed = true;
-      memory.userReview = approved;
-
-      if (!approved) {
-        memory.deleted = true;
-        _memories.removeAt(idx);
-        _unreviewed.remove(memory);
-        // Don't call deleteMemory again because it would be a duplicate deletion
-      } else {
-        _memories[idx] = memory;
-
-        // Remove from unreviewed list
-        final unreviewedIdx = _unreviewed.indexWhere((m) => m.id == memory.id);
-        if (unreviewedIdx != -1) {
-          _unreviewed.removeAt(unreviewedIdx);
-        }
-      }
-
-      _setCategories();
-    }
   }
 
   Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
