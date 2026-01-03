@@ -558,11 +558,11 @@ export default function CreateAppPage() {
       <div className="mx-auto mt-16 flex max-w-3xl flex-col space-y-8 px-6 py-8">
         {/* Help Section */}
         <div className="mt-4">
-          <div
-            onClick={() =>
-              window.open('https://docs.omi.me/doc/developer/apps/Introduction', '_blank')
-            }
-            className="group cursor-pointer"
+          <a
+            href="https://docs.omi.me/doc/developer/apps/Introduction"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block"
           >
             <div className="rounded-[0.5rem] border border-blue-500/20 bg-gradient-to-r from-blue-600/10 to-purple-600/10 p-6 transition-all hover:border-blue-500/40 hover:from-blue-600/20 hover:to-purple-600/20">
               <div className="flex items-center justify-center space-x-3">
@@ -600,7 +600,7 @@ export default function CreateAppPage() {
                 </svg>
               </div>
             </div>
-          </div>
+          </a>
         </div>
 
         {/* App Basic Information */}
