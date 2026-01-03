@@ -10,6 +10,8 @@ services:
       - .env
     depends_on:
       - redis
+    volumes:
+      - ./data/backend:/app/data
 
   pusher:
     build:
@@ -51,6 +53,8 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - ./data/redis:/data
 
   # Optional: Diarizer (Requires NVIDIA GPU and NVIDIA Container Toolkit)
   # diarizer:
