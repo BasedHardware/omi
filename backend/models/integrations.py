@@ -156,7 +156,7 @@ class TaskItem(BaseModel):
     description: str
     completed: bool
     created_at: Optional[datetime] = None
-    updated_at:  Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     due_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None

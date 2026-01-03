@@ -126,7 +126,7 @@ class ActionFieldsWidget extends StatelessWidget {
         return FontAwesomeIcons.solidComments;
       case 'read_memories':
         return FontAwesomeIcons.brain;
-      case 'read_tasks':    
+      case 'read_tasks':
         return FontAwesomeIcons.listCheck;
       default:
         return FontAwesomeIcons.puzzlePiece;

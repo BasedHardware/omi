@@ -1335,6 +1335,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
 
     return validated
 
+
 def app_can_read_tasks(app: dict) -> bool:
     """Check if an app can read tasks."""
     return app_has_action(app, 'read_tasks')

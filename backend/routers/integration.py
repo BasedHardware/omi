@@ -581,8 +581,8 @@ async def get_tasks_via_integration(
     authorization: Optional[str] = Header(None),
 ):
     """
-    Get all tasks (action items) for a user via integration API. 
-    Authentication is required via API key in the Authorization header. 
+    Get all tasks (action items) for a user via integration API.
+    Authentication is required via API key in the Authorization header.
 
     Optional filters:
     - **completed**: Filter by completion status (true/false/null for all)
@@ -604,7 +604,7 @@ async def get_tasks_via_integration(
         raise HTTPException(status_code=404, detail="App not found")
 
     enabled_plugins = redis_db.get_enabled_apps(uid)
-    if app_id not in enabled_plugins: 
+    if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
     if not apps_utils.app_can_read_tasks(app):
@@ -620,7 +620,7 @@ async def get_tasks_via_integration(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS. sssZ) or YYYY-MM-DD",
+                detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
             )
 
     if isinstance(end_date, str) and end_date:
@@ -643,20 +643,20 @@ async def get_tasks_via_integration(
                 due_start_date = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
             else:
                 due_start_date = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
-        except ValueError: 
+        except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid due_start_date format. Use ISO format (YYYY-MM-DDTHH: MM:SS.sssZ) or YYYY-MM-DD",
+                detail="Invalid due_start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
             )
 
-    if isinstance(due_end_date, str) and due_end_date: 
+    if isinstance(due_end_date, str) and due_end_date:
         try:
             if len(due_end_date) == 10:  # YYYY-MM-DD
-                dt = datetime. strptime(due_end_date, '%Y-%m-%d')
+                dt = datetime.strptime(due_end_date, '%Y-%m-%d')
                 due_end_date = dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
             else:
                 due_end_date = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
-        except ValueError: 
+        except ValueError:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid due_end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
@@ -675,17 +675,17 @@ async def get_tasks_via_integration(
     )
 
     task_items = []
-    for task in tasks: 
+    for task in tasks:
         try:
             if task.get('is_locked', False):
                 description = task.get('description', '')
-                task['description'] = (description[:70] + '... ') if len(description) > 70 else description
+                task['description'] = (description[:70] + '...') if len(description) > 70 else description
 
             item = integration_models.TaskItem(**task)
-            task_items. append(item)
+            task_items.append(item)
         except Exception as e:
             print(f"Error parsing task {task.get('id')}: {str(e)}")
             continue
 
-    response = integration_models. TasksResponse(tasks=task_items)
+    response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)
