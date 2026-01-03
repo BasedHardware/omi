@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
+import 'package:omi/utils/mutex.dart';
 
 import 'device_transport.dart';
 
@@ -17,6 +18,8 @@ class BleTransport extends DeviceTransport {
   List<BluetoothService> _services = [];
   DeviceTransportState _state = DeviceTransportState.disconnected;
   StreamSubscription<BluetoothConnectionState>? _bleConnectionSubscription;
+
+  final Map<String, Mutex> _writeMutexes = {};
 
   BleTransport(this._bleDevice) : _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
     _bleConnectionSubscription = _bleDevice.connectionState.listen((state) {
@@ -182,16 +185,26 @@ class BleTransport extends DeviceTransport {
 
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
-    final characteristic = await _getCharacteristic(serviceUuid, characteristicUuid);
-    if (characteristic == null) {
-      throw Exception('Characteristic not found: $serviceUuid:$characteristicUuid');
-    }
+    final key = '$serviceUuid:$characteristicUuid';
+
+    // Get or create mutex for this characteristic.
+    final mutex = _writeMutexes.putIfAbsent(key, () => Mutex());
+
+    // Acquire the mutex to prevent concurrent writes.
+    await mutex.acquire();
 
     try {
+      final characteristic = await _getCharacteristic(serviceUuid, characteristicUuid);
+      if (characteristic == null) {
+        throw Exception('Characteristic not found: $serviceUuid:$characteristicUuid');
+      }
+
       await characteristic.write(data);
     } catch (e) {
       debugPrint('BLE Transport: Failed to write characteristic: $e');
       rethrow;
+    } finally {
+      mutex.release();
     }
   }
 
