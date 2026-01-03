@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, BackgroundTasks
 from typing import Optional, List
 from datetime import datetime, timezone
+from pydantic import BaseModel
 
 import database.conversations as conversations_db
 import database.action_items as action_items_db
@@ -159,6 +160,59 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
+    return {'status': 'Ok'}
+
+
+
+class UpdateOverviewRequest(BaseModel):
+    overview: str
+
+
+class UpdateSegmentTextRequest(BaseModel):
+    text: str
+
+
+@router.patch("/v1/conversations/{conversation_id}/overview", tags=['conversations'])
+def patch_conversation_overview(
+    conversation_id: str,
+    overview: Optional[str] = Query(None),
+    data: Optional[UpdateOverviewRequest] = Body(None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+
+    final_overview = None
+    if data is not None and getattr(data, 'overview', None) is not None:
+        final_overview = data.overview
+    else:
+        final_overview = overview
+
+    if final_overview is None:
+        raise HTTPException(status_code=400, detail='Missing overview')
+
+    conversations_db.update_conversation_overview(uid, conversation_id, final_overview)
+    return {'status': 'Ok'}
+
+
+@router.patch("/v1/conversations/{conversation_id}/segments/{segment_id}/text", tags=['conversations'])
+def patch_segment_text(
+    conversation_id: str,
+    segment_id: str,
+    text: Optional[str] = Query(None),
+    data: Optional[UpdateSegmentTextRequest] = Body(None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    final_text = None
+    if data is not None and getattr(data, 'text', None) is not None:
+        final_text = data.text
+    else:
+        final_text = text
+
+    if final_text is None:
+        raise HTTPException(status_code=400, detail='Missing text')
+
+    conversations_db.update_conversation_segment_text(uid, conversation_id, segment_id, final_text)
     return {'status': 'Ok'}
 
 

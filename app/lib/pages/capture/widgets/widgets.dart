@@ -189,6 +189,9 @@ getTranscriptWidget(
   String searchQuery = '',
   int currentResultIndex = -1,
   VoidCallback? onTapWhenSearchEmpty,
+  Map<String, TextEditingController>? segmentControllers,
+  Map<String, FocusNode>? segmentFocusNodes,
+  Function(int)? onMatchCountChanged,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -221,6 +224,9 @@ getTranscriptWidget(
       searchQuery: searchQuery,
       currentResultIndex: currentResultIndex,
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,
+      segmentControllers: segmentControllers,
+      segmentFocusNodes: segmentFocusNodes,
+      onMatchCountChanged: onMatchCountChanged,
     );
   }
 

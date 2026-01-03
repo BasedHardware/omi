@@ -31,6 +31,9 @@ class TranscriptWidget extends StatefulWidget {
   final int currentResultIndex;
   final Function(ScrollController)? onScrollControllerReady;
   final VoidCallback? onTapWhenSearchEmpty;
+  final Map<String, TextEditingController>? segmentControllers;
+  final Map<String, FocusNode>? segmentFocusNodes;
+  final Function(int)? onMatchCountChanged;
 
   const TranscriptWidget({
     super.key,
@@ -49,6 +52,9 @@ class TranscriptWidget extends StatefulWidget {
     this.currentResultIndex = -1,
     this.onScrollControllerReady,
     this.onTapWhenSearchEmpty,
+    this.segmentControllers,
+    this.segmentFocusNodes,
+    this.onMatchCountChanged,
   });
 
   @override
@@ -63,6 +69,28 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // ScrollController to enable proper scrolling
   final ScrollController _scrollController = ScrollController();
+
+  // Edit state
+  String? _editingSegmentId;
+
+  bool _isEditing(String id) => _editingSegmentId == id;
+
+  void _enterEdit(String id) {
+    setState(() {
+      _editingSegmentId = id;
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.segmentFocusNodes?[id]?.requestFocus();
+    });
+  }
+
+  void _exitEdit() {
+    if (_editingSegmentId == null) return;
+    setState(() {
+      _editingSegmentId = null;
+    });
+  }
 
   // Auto-scroll state management
   bool _userHasScrolled = false;
@@ -184,9 +212,11 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     // Check if new segments were added
     if (widget.segments.length > _previousSegmentCount && !_userHasScrolled) {
       _previousSegmentCount = widget.segments.length;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToBottomGently();
-      });
+      if (_editingSegmentId == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToBottomGently();
+        });
+      }
     } else {
       _previousSegmentCount = widget.segments.length;
     }
@@ -433,6 +463,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () {
+        if (_editingSegmentId != null) {
+          final node = widget.segmentFocusNodes?[_editingSegmentId!];
+          if (node != null && node.hasFocus) return;
+          _exitEdit();
+          return;
+        }
+
         if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
           widget.onTapWhenSearchEmpty!();
         }
@@ -603,33 +640,19 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                 ),
                               ],
                             ),
-                            child: SelectionArea(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onDoubleTap: () {
+                                if (widget.searchQuery.isNotEmpty) return;
+                                _enterEdit(data.id);
+                              },
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  RichText(
-                                    textAlign: TextAlign.left,
-                                    text: TextSpan(
-                                      style: TextStyle(
-                                        letterSpacing: 0.0,
-                                        color: isUser ? Colors.white : Colors.grey.shade100,
-                                        fontSize: 15,
-                                        height: 1.4,
-                                      ),
-                                      children: widget.searchQuery.isNotEmpty
-                                          ? _highlightSearchMatchesWithKeys(
-                                              _getDecodedText(data.text),
-                                              widget.searchQuery,
-                                              segmentIdx,
-                                            )
-                                          : [
-                                              TextSpan(
-                                                text: _getDecodedText(data.text),
-                                              )
-                                            ],
-                                    ),
-                                  ),
+                                  _isEditing(data.id)
+                                      ? _buildEditor(data, isUser)
+                                      : _buildReadOnlyText(data, segmentIdx, isUser),
                                   if (data.translations.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     ...data.translations.map((translation) => Padding(
@@ -721,6 +744,57 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
             ],
           ),
         ));
+  }
+
+  Widget _buildReadOnlyText(TranscriptSegment data, int segmentIdx, bool isUser) {
+    return SelectionArea(
+      child: RichText(
+        textAlign: TextAlign.left,
+        text: TextSpan(
+          style: TextStyle(
+            letterSpacing: 0.0,
+            color: isUser ? Colors.white : Colors.grey.shade100,
+            fontSize: 15,
+            height: 1.4,
+          ),
+          children: widget.searchQuery.isNotEmpty
+              ? _highlightSearchMatchesWithKeys(
+                  _getDecodedText(data.text),
+                  widget.searchQuery,
+                  segmentIdx,
+                )
+              : [
+                  TextSpan(text: _getDecodedText(data.text)),
+                ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEditor(TranscriptSegment data, bool isUser) {
+    final controller = widget.segmentControllers![data.id]!;
+    final focusNode = widget.segmentFocusNodes![data.id]!;
+
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: TextInputType.multiline,
+      minLines: 1,
+      maxLines: null,
+      autofocus: false,
+      style: TextStyle(
+        letterSpacing: 0.0,
+        color: isUser ? Colors.white : Colors.grey.shade100,
+        fontSize: 15,
+        height: 1.4,
+      ),
+      decoration: const InputDecoration(
+        border: InputBorder.none,
+        isDense: true,
+        contentPadding: EdgeInsets.zero,
+      ),
+      onEditingComplete: _exitEdit,
+    );
   }
 
   Widget _buildTranslationNotice() {

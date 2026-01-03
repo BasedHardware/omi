@@ -82,6 +82,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   TextEditingController? titleController;
   FocusNode? titleFocusNode;
 
+  TextEditingController? overviewController;
+  FocusNode? overviewFocusNode;
+
+  Map<String, TextEditingController> segmentControllers = {};
+  Map<String, FocusNode> segmentFocusNodes = {};
+
   bool isTranscriptExpanded = false;
 
   bool canDisplaySeconds = true;
@@ -91,6 +97,40 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool editSegmentLoading = false;
 
   bool showUnassignedFloatingButton = true;
+
+  bool isEditingSummary = false;
+
+  void enterSummaryEdit() {
+    isEditingSummary = true;
+    overviewFocusNode?.requestFocus();
+    notifyListeners();
+  }
+
+  void exitSummaryEdit() {
+    isEditingSummary = false;
+    overviewFocusNode?.unfocus();
+    notifyListeners();
+  }
+
+  void toggleSummaryEdit() {
+    if (isEditingSummary) {
+      exitSummaryEdit();
+    } else {
+      enterSummaryEdit();
+    }
+  }
+
+  String? editingSegmentId;
+
+  void enterSegmentEdit(String segmentId) {
+    editingSegmentId = segmentId;
+    notifyListeners();
+  }
+
+  void exitSegmentEdit() {
+    editingSegmentId = null;
+    notifyListeners();
+  }
 
   void toggleEditSegmentLoading(bool value) {
     editSegmentLoading = value;
@@ -204,27 +244,99 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     setShowRatingUi(false);
   }
 
-  Future initConversation() async {
-    // updateLoadingState(true);
+  void _disposeControllers() {
     titleController?.dispose();
     titleFocusNode?.dispose();
+    overviewController?.dispose();
+    overviewFocusNode?.dispose();
+
+    for (var controller in segmentControllers.values) {
+      controller.dispose();
+    }
+    for (var focusNode in segmentFocusNodes.values) {
+      focusNode.dispose();
+    }
+    segmentControllers.clear();
+    segmentFocusNodes.clear();
+  }
+
+  Future initConversation() async {
+    _disposeControllers();
+
     _ratingTimer?.cancel();
     showRatingUI = false;
     hasConversationSummaryRatingSet = false;
+    isEditingSummary = false;
 
     titleController = TextEditingController();
     titleFocusNode = FocusNode();
 
+    overviewController = TextEditingController();
+    overviewFocusNode = FocusNode();
+
     showUnassignedFloatingButton = true;
 
-    titleController!.text = conversation.structured.title;
+    final originalTitle = conversation.structured.title;
+    titleController!.text = originalTitle;
     titleFocusNode!.addListener(() {
-      print('titleFocusNode focus changed');
+      debugPrint('titleFocusNode focus changed');
       if (!titleFocusNode!.hasFocus) {
-        conversation.structured.title = titleController!.text;
-        updateConversationTitle(conversation.id, titleController!.text);
+        final newTitle = titleController!.text;
+        if (originalTitle != newTitle) {
+          conversation.structured.title = newTitle;
+          updateConversationTitle(conversation.id, newTitle);
+        }
       }
     });
+
+    final summarizedApp = getSummarizedApp();
+    if (summarizedApp != null) {
+      overviewController!.text = summarizedApp.content;
+
+      String lastSavedOverview = summarizedApp.content;
+
+      overviewFocusNode!.addListener(() {
+        if (!overviewFocusNode!.hasFocus) {
+          if (isEditingSummary) {
+            exitSummaryEdit();
+          }
+
+          final newOverview = overviewController!.text;
+          if (lastSavedOverview != newOverview) {
+            // Update both the structured overview and the app result content
+            conversation.structured.overview = newOverview;
+            if (conversation.appResults.isNotEmpty) {
+              conversation.appResults[0] = AppResponse(
+                newOverview,
+                appId: conversation.appResults[0].appId,
+                id: conversation.appResults[0].id,
+              );
+            }
+            updateConversationOverview(conversation.id, newOverview);
+            lastSavedOverview = newOverview;
+            notifyListeners();
+          }
+        }
+      });
+    }
+
+    for (var segment in conversation.transcriptSegments) {
+      final controller = TextEditingController(text: segment.text);
+      final focusNode = FocusNode();
+
+      segmentControllers[segment.id] = controller;
+      segmentFocusNodes[segment.id] = focusNode;
+
+      focusNode.addListener(() {
+        if (!focusNode.hasFocus) {
+          final updatedText = controller.text;
+          if (segment.text != updatedText) {
+            segment.text = updatedText;
+            updateSegmentText(conversation.id, segment.id, updatedText);
+          }
+        }
+      });
+    }
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
@@ -322,7 +434,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (conversation.appResults.isNotEmpty) {
       return conversation.appResults[0];
     }
-    // If no appResults but we have structured overview, create a fake AppResponse
+    // If no appResults but we have overview, create synthetic response
     if (conversation.structured.overview.isNotEmpty) {
       return AppResponse(
         conversation.structured.overview,
@@ -543,6 +655,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   @override
   void dispose() {
     _ratingTimer?.cancel();
+    _disposeControllers();
     super.dispose();
   }
 }
