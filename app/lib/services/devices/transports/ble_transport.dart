@@ -236,6 +236,8 @@ class BleTransport extends DeviceTransport {
     }
     _streamControllers.clear();
 
+    _writeMutexes.clear();
+
     await _connectionStateController.close();
   }
 }
