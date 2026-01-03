@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthProvider } from '@/components/auth/AuthProvider';
+import { MobileBlockOverlay } from '@/components/layout/MobileBlockOverlay';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className="bg-bg-primary text-text-primary font-body antialiased">
+        <MobileBlockOverlay />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
