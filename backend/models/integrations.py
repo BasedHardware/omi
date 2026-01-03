@@ -151,19 +151,25 @@ class SearchConversationsResponse(BaseModel):
     per_page: int = Field(description="Number of items per page")
 
 class TaskItem(BaseModel):
+    """Task (action item) model for API responses"""
     id: str
-    user_uid: str
-    app_id: str
-    title: str
-    description: Optional[str] = None
-    status: str
-    created_at: datetime
-    updated_at: datetime
-    due_date: Optional[datetime] = None
+    description: str
+    completed: bool
+    created_at: Optional[datetime] = None
+    updated_at:  Optional[datetime] = None
+    due_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    action: Optional[str] = None
-    request_id: Optional[str] = None
+    conversation_id: Optional[str] = None
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: (
+                v.isoformat() + 'Z'
+                if v.tzinfo is None
+                else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+            )
+        }
 
 
 class TasksResponse(BaseModel):
-    tasks: List[TaskItem]
+    tasks: List[TaskItem] = Field(description="List of user tasks (action items)")
