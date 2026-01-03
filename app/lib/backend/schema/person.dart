@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
 
 final List<Color> speakerColors = [
-  Colors.white
-  // Colors.red,
-  // Colors.blue,
-  // Colors.green,
-  // Colors.yellow,
-  // Colors.purple,
-  // Colors.orange,
-  // Colors.pink,
-  // Colors.teal,
-  // Colors.cyan,
-  // Colors.amber,
+  Color(0xFF2D3748), // Dark gray-blue
+  Color(0xFF1E3A5F), // Deep blue
+  Color(0xFF2D4A3E), // Forest green
+  Color(0xFF4A3728), // Brown
+  Color(0xFF3D2E4A), // Purple
+  Color(0xFF4A3A2D), // Tan
+  Color(0xFF2E3D4A), // Steel blue
+  Color(0xFF3A2D2D), // Maroon
 ];
 
 final List<String> speakerImagePath = [
