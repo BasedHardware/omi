@@ -1,0 +1,6 @@
+pytest
+pytest-mock
+requests
+aioredis
+redis
+python-dotenv

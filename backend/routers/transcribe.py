@@ -1329,10 +1329,26 @@ async def _listen(
         nonlocal websocket_active, speaker_to_person_map
         nonlocal person_embeddings_cache, audio_ring_buffer
 
+        def _load_shared_people_into_cache(uid: str, cache: dict):
+            try:
+                shared = user_db.get_shared_people(uid)
+                for s in shared:
+                    sid = s.get('id')
+                    emb = s.get('speaker_embedding')
+                    name = s.get('name') or f"Shared-{sid}"
+                    if emb:
+                        ns_id = f"shared_{sid}"
+                        cache[ns_id] = {
+                            'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                            'name': name,
+                        }
+            except Exception as e:
+                print(f"Speaker ID: failed loading shared people: {e}", uid, session_id)
+
         if not speaker_id_enabled:
             return
 
-        # Load person embeddings
+        # Load person embeddings (own people + profiles shared with this user)
         try:
             people = user_db.get_people(uid)
             for person in people:
@@ -1342,7 +1358,11 @@ async def _listen(
                         'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                         'name': person['name'],
                     }
-            print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings", uid, session_id)
+
+            # Also load shared people (profiles other users shared with this user)
+            _load_shared_people_into_cache(uid, person_embeddings_cache)
+
+            print(f"Speaker ID: loaded {len(person_embeddings_cache)} person embeddings (including shared)", uid, session_id)
         except Exception as e:
             print(f"Speaker ID: failed to load embeddings: {e}", uid, session_id)
             return
@@ -1350,6 +1370,50 @@ async def _listen(
         if not person_embeddings_cache:
             print("Speaker ID: no stored embeddings, task disabled", uid, session_id)
             return
+
+        # Start a background listener for shared profile pubsub updates so we can refresh in real-time
+        async def _shared_profiles_listener():
+            nonlocal person_embeddings_cache
+            try:
+                import aioredis
+
+                redis_url = f"redis://{os.getenv('REDIS_DB_HOST')}:{os.getenv('REDIS_DB_PORT') or 6379}"
+                sub = await aioredis.create_redis(redis_url)
+                ch, = await sub.subscribe(f'users:{uid}:shared_profiles')
+                while websocket_active:
+                    msg = await ch.get(encoding='utf-8')
+                    if not msg:
+                        await asyncio.sleep(0.1)
+                        continue
+                    try:
+                        payload = json.loads(msg)
+                        action = payload.get('action')
+                        source_uid = payload.get('source_uid')
+                        if action == 'add':
+                            # Use embedding from payload directly to avoid DB roundtrip
+                            emb = payload.get('speaker_embedding')
+                            source_uid = payload.get('source_uid')
+                            name = payload.get('name') or f"Shared-{source_uid}"
+                            if emb and source_uid:
+                                try:
+                                    ns_id = f"shared_{source_uid}"
+                                    person_embeddings_cache[ns_id] = {
+                                        'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
+                                        'name': name,
+                                    }
+                                except Exception as e:
+                                    print(f"Failed to load embedding from payload for user {uid}, source {source_uid}: {e}")
+                        elif action == 'remove':
+                            ns_id = f"shared_{source_uid}"
+                            if ns_id in person_embeddings_cache:
+                                del person_embeddings_cache[ns_id]
+                    except Exception as e:
+                        print(f"Error processing shared profile message for user {uid}: {e}. Payload: {msg}")
+                        continue
+            except Exception as e:
+                print(f"Shared profiles listener error: {e}", uid, session_id)
+
+        shared_listener_task = asyncio.create_task(_shared_profiles_listener())
 
         # Consume loop
         while websocket_active:
@@ -1369,6 +1433,10 @@ async def _listen(
                 asyncio.create_task(_match_speaker_embedding(speaker_id, seg))
 
         print("Speaker ID task ended", uid, session_id)
+        try:
+            shared_listener_task.cancel()
+        except Exception:
+            pass
 
     async def _match_speaker_embedding(speaker_id: int, segment: dict):
         """Extract audio from ring buffer and match against stored embeddings."""
