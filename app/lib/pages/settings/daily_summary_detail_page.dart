@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -55,6 +56,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         _isLoading = false;
       });
       _animationController.forward();
+      // Track page view
+      MixpanelManager().dailySummaryDetailViewed(
+        summaryId: widget.summaryId,
+        date: widget.summary!.date,
+        source: 'direct',
+      );
       return;
     }
 
@@ -65,6 +72,14 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         _isLoading = false;
       });
       _animationController.forward();
+      // Track page view
+      if (summary != null) {
+        MixpanelManager().dailySummaryDetailViewed(
+          summaryId: widget.summaryId,
+          date: summary.date,
+          source: 'api_fetch',
+        );
+      }
     }
   }
 
@@ -82,6 +97,15 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
   Future<void> _openConversation(String? conversationId) async {
     if (conversationId == null || conversationId.isEmpty) return;
+
+    // Track conversation click
+    if (_summary != null) {
+      MixpanelManager().dailySummaryConversationClicked(
+        summaryId: widget.summaryId,
+        conversationId: conversationId,
+        source: 'daily_summary_detail',
+      );
+    }
 
     // Show loading indicator
     showDialog(
