@@ -28,8 +28,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 #define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
-extern uint8_t file_count;
-extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
@@ -553,11 +551,6 @@ static uint8_t pusher_temp_data[CODEC_OUTPUT_MAX_BYTES + NET_BUFFER_HEADER_SIZE]
 
 static bool push_to_gatt(struct bt_conn *conn)
 {
-    // Read data from ring buffer
-    if (!read_from_tx_queue()) {
-        return false;
-    }
-
     // Push each frame
     uint8_t *buffer = tx_buffer + RING_BUFFER_HEADER_SIZE;
     uint32_t offset = 0;
@@ -616,36 +609,8 @@ static bool push_to_gatt(struct bt_conn *conn)
 static uint8_t storage_temp_data[MAX_WRITE_SIZE];
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
-// bool write_to_storage(void)
-// {
-//     if (!read_from_tx_queue())
-//     {
-//         return false;
-//     }
-
-//     uint8_t *buffer = tx_buffer+2;
-//     const uint32_t packet_size = tx_buffer_size;
-//     //load into write at 400 bytes at a time. is faster
-//     memcpy(storage_temp_data + OPUS_PREFIX_LENGTH + buffer_offset, buffer, packet_size);
-//     storage_temp_data[buffer_offset] = (uint8_t)tx_buffer_size;
-
-//     buffer_offset = buffer_offset+OPUS_PADDED_LENGTH;
-//     if(buffer_offset >= OPUS_PADDED_LENGTH*5) {
-//     uint8_t *write_ptr = (uint8_t*)storage_temp_data;
-//     write_to_file(write_ptr,OPUS_PADDED_LENGTH*5);
-
-//     buffer_offset = 0;
-//     }
-
-//     return true;
-// }
-// for improving ble bandwidth
 bool write_to_storage(void)
-{ // max possible packing
-    if (!read_from_tx_queue()) {
-        return false;
-    }
-
+{
     uint8_t *buffer = tx_buffer + 2;
     uint8_t packet_size = (uint8_t) (tx_buffer_size + OPUS_PREFIX_LENGTH);
 
@@ -682,80 +647,41 @@ static bool use_storage = true;
 #define MAX_AUDIO_FILE_SIZE 300000
 static int recent_file_size_updated = 0;
 static uint8_t heartbeat_count = 0;
-void update_file_size()
-{
-    file_num_array[0] = get_file_size(1);
-    file_num_array[1] = get_offset();
-    // LOG_PRINTK("file size for file count %d %d\n",file_count,file_num_array[0]);
-    // LOG_PRINTK("offset for file count %d %d\n",file_count,file_num_array[1]);
-}
 
 void pusher(void)
 {
     k_msleep(500);
     while (1) {
-        //
-        // Load current connection
-        //
-        struct bt_conn *conn = current_connection;
-        // updating the most recent file size is expensive!
-        static bool file_size_updated = true;
-        static bool connection_was_true = false;
-        if (conn && !connection_was_true) {
-            k_msleep(100);
-            file_size_updated = false;
-            connection_was_true = true;
-        } else if (!conn) {
-            connection_was_true = false;
+        // Check if there is a new buffer
+        if (!read_from_tx_queue()) {
+            k_sleep(K_MSEC(10));
+            continue;
         }
-        if (!file_size_updated) {
-            LOG_PRINTK("updating file size\n");
-            update_file_size();
 
-            file_size_updated = true;
-        }
+        // Check BT connection and subscription
+        struct bt_conn *conn = current_connection;
+        bool is_subscribed = false;
         if (conn) {
             conn = bt_conn_ref(conn);
-        }
-        bool valid = true;
-        if (current_mtu < MINIMAL_PACKET_SIZE) {
-            valid = false;
-        } else if (!conn) {
-            valid = false;
-        } else {
-            valid = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY); // Check if subscribed
+            if (current_mtu >= MINIMAL_PACKET_SIZE) {
+                is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
+            }
         }
 
-        if (!valid && !storage_is_on) {
-            bool result = false;
-            if (file_num_array[1] < MAX_STORAGE_BYTES) {
-                k_mutex_lock(&write_sdcard_mutex, K_FOREVER);
-                if (is_sd_on()) {
-                    result = write_to_storage();
-                }
-                k_mutex_unlock(&write_sdcard_mutex);
-            }
-            if (result) {
-                heartbeat_count++;
-                if (heartbeat_count == 255) {
-                    update_file_size();
-                    heartbeat_count = 0;
-                    LOG_PRINTK("drawing\n");
-                }
-            } else {
-            }
-        }
-        if (valid) {
-            bool sent = push_to_gatt(conn);
-            if (!sent) {
-                // k_sleep(K_MSEC(50));
-            }
-        }
-        if (conn) {
+        if (conn && is_subscribed) {
+            // Push to GATT if connected and subscribed
+            push_to_gatt(conn);
             bt_conn_unref(conn);
+        } else if (!conn) {
+            // No BT connection, write to storage
+            if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                write_to_storage();
+            }
+        } else {
+            // Connected but not subscribed, just sleep (buffer will be retried)
+            if (conn) bt_conn_unref(conn);
+            k_sleep(K_MSEC(10));
         }
-
-        k_yield();
     }
 }
 extern struct bt_gatt_service storage_service;

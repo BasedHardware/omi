@@ -55,8 +55,6 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 K_THREAD_STACK_DEFINE(storage_stack, 4096);
 static struct k_thread storage_thread;
 
-extern uint8_t file_count;
-extern uint32_t file_num_array[2];
 void broadcast_storage_packet(struct k_work *work_item);
 
 static struct bt_gatt_attr storage_service_attr[] = {
@@ -103,9 +101,9 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
 {
     k_msleep(10);
     uint32_t amount[2] = {0};
-    for (int i = 0; i < 2; i++) {
-        amount[i] = file_num_array[i];
-    }
+    amount[0] = get_file_size();
+    amount[1] = get_offset();
+    LOG_INF("Storage read requested: file size %u, offset %u", amount[0], amount[1]);
     ssize_t result = bt_gatt_attr_read(conn, attr, buf, len, offset, amount, 2 * sizeof(uint32_t));
     return result;
 }
@@ -116,49 +114,41 @@ static uint16_t packet_next_index = 0;
 #define SD_BLE_SIZE 440
 static uint8_t storage_write_buffer[SD_BLE_SIZE];
 
-static uint32_t offset = 0;
+static uint32_t file_offset = 0;
 static uint8_t index = 0;
 static uint8_t current_packet_size = 0;
 static uint8_t tx_buffer_size = 0;
 static uint8_t stop_started = 0;
 static uint8_t delete_started = 0;
-static uint8_t current_read_num = 1;
 uint32_t remaining_length = 0;
 
 static int setup_storage_tx()
 {
     transport_started = (uint8_t) 0;
-    // offset = 0;
-    LOG_INF("about to transmit storage\n");
+    LOG_INF("about to transmit storage");
     k_msleep(1000);
-    int res = move_read_pointer(current_read_num);
-    if (res) {
-        LOG_INF("bad pointer");
-        transport_started = 0;
-        current_read_num = 1;
-        remaining_length = 0;
-        return -1;
+
+    uint32_t file_size = get_file_size();
+
+    // Validate offset against file size
+    if (file_offset >= file_size) {
+        LOG_ERR("Offset %u exceeds file size %u", file_offset, file_size);
+        file_offset = 0; // Reset to start
     }
 
-    LOG_INF("current read ptr %d", current_read_num);
+    remaining_length = file_size - file_offset;
 
-    remaining_length = file_num_array[current_read_num - 1];
-    if (current_read_num == file_count) {
-        remaining_length = get_file_size(file_count);
-    }
-
-    remaining_length = remaining_length - offset;
-
-    // offset=offset_;
-    LOG_INF("remaining length: %d", remaining_length);
-    LOG_INF("offset: %d", offset);
-    LOG_INF("file: %d", current_read_num);
+    LOG_INF("remaining length: %u", remaining_length);
+    LOG_INF("offset: %u", file_offset);
+    LOG_INF("file size: %u", file_size);
 
     return 0;
 }
+
 uint8_t delete_num = 0;
 uint8_t nuke_started = 0;
 static uint8_t heartbeat_count = 0;
+
 static uint8_t parse_storage_command(void *buf, uint16_t len)
 {
 
@@ -168,41 +158,30 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
     }
     const uint8_t command = ((uint8_t *) buf)[0];
     const uint8_t file_num = ((uint8_t *) buf)[1];
-    uint32_t size = 0;
+    uint32_t request_offset = 0;
     if (len == 6) {
-        size =
+        request_offset =
             ((uint8_t *) buf)[2] << 24 | ((uint8_t *) buf)[3] << 16 | ((uint8_t *) buf)[4] << 8 | ((uint8_t *) buf)[5];
     }
-    LOG_PRINTK("command successful: command: %d file: %d size: %d \n", command, file_num, size);
+    LOG_INF("command successful: command: %d file: %d offset: %u", command, file_num, request_offset);
 
-    if (file_num == 0) {
-        LOG_INF("invalid file count 0");
+    // Only support file 1 with new single-file model
+    if (file_num != 1) {
+        LOG_INF("invalid file number (only file 1 supported)");
         return INVALID_FILE_SIZE;
     }
-    if (file_num > file_count) // invalid file count
-    {
-        LOG_INF("invalid file count");
-        return INVALID_FILE_SIZE;
-        // add audio all?
-    }
+
     if (command == READ_COMMAND) // read
     {
-        uint32_t temp = file_num_array[file_num - 1];
-        if (file_num == (file_count)) {
-            LOG_INF("file_count == final file");
-            offset = size - (size % SD_BLE_SIZE); // round down to nearest SD_BLE_SIZE
-            current_read_num = file_num;
-            transport_started = 1;
-        } else if (temp == 0) {
-            LOG_INF("file size is 0");
+        uint32_t file_size = get_file_size();
+        if (request_offset >= file_size) {
+            LOG_WRN("requested offset is too large");
+            return INVALID_FILE_SIZE;
+        } else if (file_size == 0) {
+            LOG_WRN("file size is 0");
             return ZERO_FILE_SIZE;
-        } else if (size > temp) {
-            LOG_INF("requested size is too large");
-            return 5;
         } else {
-            LOG_INF("valid command, setting up ");
-            offset = size - (size % SD_BLE_SIZE);
-            current_read_num = file_num;
+            file_offset = request_offset - (request_offset % SD_BLE_SIZE);
             transport_started = 1;
         }
     } else if (command == DELETE_COMMAND) {
@@ -217,7 +196,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
     } else if (command == HEARTBEAT) {
         heartbeat_count = 0;
     } else {
-        LOG_INF("invalid command \n");
+        LOG_INF("invalid command");
         return 6;
     }
     return 0;
@@ -231,58 +210,36 @@ static ssize_t storage_write_handler(struct bt_conn *conn,
                                      uint8_t flags)
 {
     LOG_INF("about to schedule the storage");
-    LOG_INF("was sent %d  ", ((uint8_t *) buf)[0]);
+    LOG_INF("was sent %d", ((uint8_t *) buf)[0]);
 
     uint8_t result_buffer[1] = {0};
     uint8_t result = parse_storage_command(buf, len);
     result_buffer[0] = result;
     LOG_INF("length of storage write: %d", len);
-    LOG_INF("result: %d ", result);
+    LOG_INF("result: %d", result);
     bt_gatt_notify(conn, &storage_service.attrs[1], &result_buffer, 1);
     k_msleep(500);
     return len;
 }
 
-// static void write_to_gatt(struct bt_conn *conn)
-// {
-//     uint32_t id = packet_next_index++;
-//     index = 0;
-//     storage_write_buffer[0] = id & 0xFF;
-//     storage_write_buffer[1] = (id >> 8) & 0xFF;
-//     storage_write_buffer[2] = index;
-
-//     const uint32_t packet_size = MIN(remaining_length,OPUS_ENTRY_LENGTH);
-
-//     int r = read_audio_data(storage_write_buffer+FRAME_PREFIX_LENGTH,packet_size,offset);
-//     offset = offset + packet_size;
-
-//     index++;
-
-//     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer,packet_size+FRAME_PREFIX_LENGTH);
-//     if (err)
-//     {
-//         LOG_PRINTK("error writing to gatt: %d\n",err);
-//     }
-//     else
-//     {
-//     remaining_length = remaining_length - OPUS_ENTRY_LENGTH;
-//     }
-// }
-
 static void write_to_gatt(struct bt_conn *conn)
-{ // unsafe. designed for max speeds. udp?
-
+{
     uint32_t packet_size = MIN(remaining_length, SD_BLE_SIZE);
 
-    int r = read_audio_data(storage_write_buffer, packet_size, offset);
-    offset = offset + packet_size;
+    int r = read_audio_data(storage_write_buffer, packet_size, file_offset);
+    if (r < 0) {
+        LOG_ERR("Failed to read audio data: %d", r);
+        remaining_length = 0; // Stop transfer on error
+        return;
+    }
+
+    file_offset = file_offset + packet_size;
     int err = bt_gatt_notify(conn, &storage_service.attrs[1], &storage_write_buffer, packet_size);
     if (err) {
-        LOG_PRINTK("error writing to gatt: %d\n", err);
+        LOG_ERR("error writing to gatt: %d", err);
     } else {
-        remaining_length = remaining_length - SD_BLE_SIZE;
+        remaining_length = remaining_length - packet_size;
     }
-    // LOG_PRINTK("wrote to gatt %d\n",err);
 }
 
 void storage_write(void)
@@ -291,18 +248,17 @@ void storage_write(void)
         struct bt_conn *conn = get_current_connection();
 
         if (transport_started) {
-            LOG_INF("transpor started in side : %d", transport_started);
+            LOG_INF("transport started: %d", transport_started);
             setup_storage_tx();
         }
         // probably prefer to implement using work orders for delete,nuke,etc...
         if (delete_started) {
-            LOG_INF("delete:%d\n", delete_started);
-            int err = clear_audio_file(1);
-            offset = 0;
-            save_offset(offset);
+            LOG_INF("delete: %d", delete_started);
+            int err = clear_audio_directory();
+            file_offset = 0;
 
             if (err) {
-                LOG_PRINTK("error clearing\n");
+                LOG_ERR("error clearing");
             } else {
                 uint8_t result_buffer[1] = {200};
                 if (conn) {
@@ -314,48 +270,51 @@ void storage_write(void)
         }
         if (nuke_started) {
             clear_audio_directory();
-            save_offset(0);
             nuke_started = 0;
         }
         if (stop_started) {
             remaining_length = 0;
             stop_started = 0;
-            save_offset(offset);
+            save_offset(file_offset);
         }
         if (heartbeat_count == MAX_HEARTBEAT_FRAMES) {
-            LOG_PRINTK("no heartbeat sent\n");
-            save_offset(offset);
-            // k_yield();
-            // continue;
+            LOG_INF("no heartbeat sent");
+            save_offset(file_offset);
+            heartbeat_count = 0; // Reset heartbeat count
         }
 
         if (remaining_length > 0) {
             if (conn == NULL) {
                 LOG_ERR("invalid connection");
                 remaining_length = 0;
-                save_offset(offset);
-                // save offset to flash
+                save_offset(file_offset);
                 continue;
-                // k_yield();
             }
-            // LOG_PRINTK("remaining length: %d\n",remaining_length);
 
             write_to_gatt(conn);
-            heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
 
+            heartbeat_count = (heartbeat_count + 1) % (MAX_HEARTBEAT_FRAMES + 1);
+            k_msleep(100);
             transport_started = 0;
             if (remaining_length == 0) {
                 if (stop_started) {
                     stop_started = 0;
                 } else {
-                    LOG_PRINTK("done. attempting to download more files\n");
+                    LOG_INF("done. attempting to download more files");
                     uint8_t stop_result[1] = {100};
+
                     int err = bt_gatt_notify(get_current_connection(), &storage_service.attrs[1], &stop_result, 1);
-                    k_sleep(K_MSEC(10));
+                    k_msleep(10);
                 }
             }
         }
-        k_yield();
+
+        // Sleep when there's no work
+        if (remaining_length == 0 && !delete_started && !nuke_started && !stop_started) {
+            k_msleep(10);
+        } else {
+            k_yield();
+        }
     }
 }
 
