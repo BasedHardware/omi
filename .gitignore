@@ -197,3 +197,6 @@ omiGlass/.expo
 /backend/logs/
 app/.fvm/
 app/android/.kotlin/
+.playwright-mcp/
+
+CLAUDE.md

@@ -88,8 +88,12 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                         onChanged: (s) async {
                           if (s != null) {
                             if (s) {
+                              // Auto-check the box immediately when popup is triggered
+                              provider.updateLocationPermission(true);
                               var (serviceStatus, permissionStatus) = await provider.askForLocationPermissions();
                               if (!serviceStatus) {
+                                // Uncheck if service is disabled
+                                provider.updateLocationPermission(false);
                                 showDialog(
                                   context: context,
                                   builder: (ctx) {
@@ -104,42 +108,17 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                   },
                                 );
                               } else {
-                                if (permissionStatus.isGranted) {
-                                  await provider.alwaysAllowLocation();
-                                  Permission.locationAlways.onDeniedCallback(() {
-                                    showDialog(
-                                      context: context,
-                                      builder: (ctx) {
-                                        return getDialog(
-                                          context,
-                                          () => Navigator.of(context).pop(),
-                                          () => Navigator.of(context).pop(),
-                                          context.l10n.backgroundLocationDenied,
-                                          context.l10n.backgroundLocationDeniedDesc,
-                                          singleButton: true,
-                                          okButtonText: context.l10n.continueButton,
-                                        );
-                                      },
-                                    );
-                                  });
-                                  Permission.locationAlways.onGrantedCallback(() {
-                                    provider.updateLocationPermission(true);
-                                  });
-                                } else {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) {
-                                      return getDialog(
-                                        context,
-                                        () => Navigator.of(context).pop(),
-                                        () => Navigator.of(context).pop(),
-                                        context.l10n.backgroundLocationDenied,
-                                        context.l10n.backgroundLocationDeniedDesc,
-                                        singleButton: true,
-                                        okButtonText: context.l10n.continueButton,
-                                      );
-                                    },
-                                  );
+                                // Update checkbox based on actual permission status
+                                bool wasGranted = permissionStatus.isGranted;
+                                provider.updateLocationPermission(wasGranted);
+                                
+                                // Request "Always" permission (iOS may show this later)
+                                // But keep checkbox checked if "When in use" was granted
+                                await provider.alwaysAllowLocation();
+                                
+                                // If "When in use" was granted, keep it checked even if "Always" was denied
+                                if (wasGranted) {
+                                  provider.updateLocationPermission(true);
                                 }
                               }
                             } else {

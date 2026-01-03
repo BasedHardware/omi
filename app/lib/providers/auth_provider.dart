@@ -156,7 +156,16 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void _launchUrl(String url) async {
-    if (!await launchUrl(Uri.parse(url))) throw 'Could not launch $url';
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      debugPrint('Invalid URL');
+      return;
+    }
+
+    await launchUrl(
+      uri,
+      mode: LaunchMode.inAppBrowserView,
+    );
   }
 
   Future<void> linkWithGoogle() async {
