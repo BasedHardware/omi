@@ -10,6 +10,7 @@ import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
 import { uploadChatFiles } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
 interface FilePreviewItem {
   file: File;
@@ -172,6 +173,12 @@ export function ChatPanel() {
     const fileIds = selectedFiles
       .filter((item) => item.uploadedId)
       .map((item) => item.uploadedId as string);
+
+    MixpanelManager.track('Chat Message Sent', {
+      message_length: text.length,
+      has_files: fileIds.length > 0,
+      file_count: fileIds.length,
+    });
 
     setInput('');
     setSelectedFiles([]);

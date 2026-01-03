@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { getApp, enableApp, disableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
 interface AppDetailProps {
   appId: string;
@@ -93,9 +94,11 @@ export function AppDetail({ appId }: AppDetailProps) {
     try {
       if (app.enabled) {
         await disableApp(app.id);
+        MixpanelManager.track('App Disabled', { app_id: app.id });
         setApp({ ...app, enabled: false });
       } else {
         await enableApp(app.id);
+        MixpanelManager.track('App Enabled', { app_id: app.id });
         setApp({ ...app, enabled: true });
       }
     } catch (err) {

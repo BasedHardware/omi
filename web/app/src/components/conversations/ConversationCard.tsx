@@ -6,6 +6,7 @@ import { Star, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
 import type { Conversation } from '@/types/conversation';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
 
 interface ConversationCardProps {
@@ -56,12 +57,19 @@ export function ConversationCard({
     const newStarred = !isStarred;
     setIsStarred(newStarred);
     onStarToggle?.(conversation.id, newStarred);
+    MixpanelManager.track('Conversation Starred', {
+      conversation_id: conversation.id,
+      starred: newStarred,
+    });
   };
 
   const handleClick = () => {
     if (isSelectionMode && onSelect) {
       onSelect(conversation.id);
     } else {
+      MixpanelManager.track('Conversation Viewed', {
+        conversation_id: conversation.id,
+      });
       onClick?.();
     }
   };

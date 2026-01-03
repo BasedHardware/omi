@@ -19,6 +19,7 @@
     "firebase": "^11.8.1",
     "framer-motion": "^11.5.4",
     "lucide-react": "^0.438.0",
+    "mixpanel-browser": "^2.73.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
