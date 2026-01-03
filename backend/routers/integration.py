@@ -676,16 +676,12 @@ async def get_tasks_via_integration(
 
     task_items = []
     for task in tasks:
-        try:
-            if task.get('is_locked', False):
-                description = task.get('description', '')
-                task['description'] = (description[:70] + '...') if len(description) > 70 else description
-
-            item = integration_models.TaskItem(**task)
-            task_items.append(item)
-        except Exception as e:
-            print(f"Error parsing task {task.get('id')}: {str(e)}")
-            continue
+        task_data = task.copy()
+        if task_data.get('is_locked', False):
+            description = task_data.get('description', '')
+            task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
+        item = integration_models.TaskItem(**task_data)
+        task_items.append(item)
 
     response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)
