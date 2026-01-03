@@ -5,7 +5,7 @@ services:
       dockerfile: backend/Dockerfile
     restart: always
     ports:
-      - "8080:8080"
+      - "8088:8080"
     env_file:
       - .env
     depends_on:
@@ -19,7 +19,7 @@ services:
       dockerfile: backend/pusher/Dockerfile
     restart: always
     ports:
-      - "8081:8080"
+      - "8089:8080"
     env_file:
       - .env
     depends_on:
@@ -30,7 +30,7 @@ services:
       context: .
       dockerfile: web/frontend/Dockerfile
       args:
-        - API_URL=http://localhost:8080
+        - API_URL=http://localhost:8088
         - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY:-fake_key_for_build}
         - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-omi-app.firebaseapp.com}
         - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-omi-app}
@@ -40,7 +40,7 @@ services:
         - NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID:-G-ABCDEF}
     restart: always
     ports:
-      - "3000:3000"
+      - "3001:3000"
     env_file:
       - .env
     extra_hosts:
@@ -52,24 +52,6 @@ services:
     image: redis:alpine
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - ./data/redis:/data
-
-  # Optional: Diarizer (Requires NVIDIA GPU and NVIDIA Container Toolkit)
-  # diarizer:
-  #   build:
-  #     context: .
-  #     dockerfile: backend/diarizer/Dockerfile
-  #   restart: always
-  #   ports:
-  #     - "8082:8080"
-  #   env_file:
-  #     - .env
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
