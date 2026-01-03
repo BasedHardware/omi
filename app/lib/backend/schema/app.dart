@@ -339,6 +339,16 @@ class App {
 
   bool worksExternally() => hasCapability('external_integration');
 
+  bool hasTasksAccess() {
+    if (worksExternally()) {
+      final actions = externalIntegration?.actions;
+      if (actions != null) {
+        return actions.any((a) => a.action == 'read_tasks');
+      }
+    }
+    return false;
+  }
+
   bool hasConversationsAccess() {
     if (worksExternally()) {
       final actions = externalIntegration?.actions;
