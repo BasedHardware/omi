@@ -70,6 +70,8 @@ class HttpPoolManager {
         lastError = TimeoutException('Request timeout');
       } on SocketException catch (e) {
         lastError = e;
+      } on http.ClientException catch (e) {
+        lastError = e;
       } catch (e) {
         lastError = e;
         rethrow;
@@ -81,7 +83,7 @@ class HttpPoolManager {
     }
 
     if (lastResponse != null) return lastResponse;
-    throw lastError!;
+    throw lastError ?? Exception('Request failed with unknown error');
   }
 
   Future<http.StreamedResponse> sendStreaming(http.BaseRequest request) {
