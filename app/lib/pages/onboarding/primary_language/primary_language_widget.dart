@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -204,14 +206,15 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   @override
   void initState() {
     super.initState();
-    // Initialize with the user's saved primary language if available
+    // Initialize with the user's saved primary language if available, or auto-detect from device
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final savedLanguage = SharedPreferencesUtil().userPrimaryLanguage;
+      final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+
       if (savedLanguage.isNotEmpty) {
         setState(() {
           selectedLanguage = savedLanguage;
           // Find the language name for the saved language code
-          final homeProvider = Provider.of<HomeProvider>(context, listen: false);
           try {
             selectedLanguageName =
                 homeProvider.availableLanguages.entries.firstWhere((entry) => entry.value == savedLanguage).key;
@@ -220,8 +223,38 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
             selectedLanguageName = savedLanguage;
           }
         });
+      } else {
+        // Auto-detect from device system language
+        _autoSelectDeviceLanguage(homeProvider.availableLanguages);
       }
     });
+  }
+
+  void _autoSelectDeviceLanguage(Map<String, String> availableLanguages) {
+    try {
+      // Get device locale (e.g., "en_US", "ja_JP", "zh_CN")
+      final deviceLocale = Platform.localeName;
+      final languageCode = deviceLocale.split('_').first.toLowerCase();
+
+      debugPrint('Device locale: $deviceLocale, language code: $languageCode');
+
+      // Try to find a matching language in available languages
+      for (final entry in availableLanguages.entries) {
+        final availableCode = entry.value.toLowerCase();
+        // Match by language code (e.g., "en" matches "en", "ja" matches "ja")
+        if (availableCode == languageCode || availableCode.startsWith('$languageCode-')) {
+          setState(() {
+            selectedLanguage = entry.value;
+            selectedLanguageName = entry.key;
+          });
+          debugPrint('Auto-selected language: ${entry.key} (${entry.value})');
+          return;
+        }
+      }
+      debugPrint('No matching language found for device locale: $deviceLocale');
+    } catch (e) {
+      debugPrint('Error auto-detecting device language: $e');
+    }
   }
 
   void _showLanguageSelector(BuildContext context, Map<String, String> availableLanguages) {
