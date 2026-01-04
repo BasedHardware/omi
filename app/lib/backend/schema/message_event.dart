@@ -30,6 +30,10 @@ abstract class MessageEvent {
         return OnboardingQuestionAnsweredEvent.fromJson(json);
       case 'onboarding_complete':
         return OnboardingCompleteEvent.fromJson(json);
+      case 'credits_low':
+        return CreditsLowEvent.fromJson(json);
+      case 'credits_exhausted':
+        return CreditsExhaustedEvent.fromJson(json);
       default:
         // Return a generic event or throw an error if the type is unknown
         return UnknownEvent(eventType: json['type'] ?? 'unknown');
@@ -224,6 +228,37 @@ class OnboardingCompleteEvent extends MessageEvent {
       conversationId: json['conversation_id'],
       memoriesCreated: json['memories_created'] ?? 0,
       error: json['error'],
+    );
+  }
+}
+
+/// Freemium: Sent when user's credits are running low (e.g., 3 minutes remaining)
+/// Allows client to prepare on-device STT in background for seamless switch
+class CreditsLowEvent extends MessageEvent {
+  final int remainingSeconds;
+
+  CreditsLowEvent({required this.remainingSeconds}) : super(eventType: 'credits_low');
+
+  factory CreditsLowEvent.fromJson(Map<String, dynamic> json) {
+    // status_text contains remaining seconds as string
+    final remainingStr = json['status_text'] ?? '0';
+    return CreditsLowEvent(
+      remainingSeconds: int.tryParse(remainingStr) ?? 0,
+    );
+  }
+}
+
+/// Freemium: Sent when user's credits are exhausted
+/// Client should switch to on-device STT to continue conversation seamlessly
+class CreditsExhaustedEvent extends MessageEvent {
+  final String? conversationId;
+
+  CreditsExhaustedEvent({this.conversationId}) : super(eventType: 'credits_exhausted');
+
+  factory CreditsExhaustedEvent.fromJson(Map<String, dynamic> json) {
+    final convId = json['status_text'];
+    return CreditsExhaustedEvent(
+      conversationId: (convId != null && convId.toString().isNotEmpty) ? convId.toString() : null,
     );
   }
 }

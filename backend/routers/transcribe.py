@@ -77,7 +77,7 @@ from utils.stt.streaming import (
     process_audio_speechmatics,
     send_initial_file_path,
 )
-from utils.subscription import has_transcription_credits
+from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.webhooks import get_audio_bytes_webhook_seconds
@@ -94,6 +94,9 @@ router = APIRouter()
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
+
+# Freemium: Send warning when credits are low to allow seamless on-device switch
+CREDITS_LOW_THRESHOLD_SECONDS = 180  # 3 minutes - trigger background prep on client
 
 
 class AudioRingBuffer:
@@ -363,12 +366,15 @@ async def _listen(
     last_transcript_time: Optional[float] = None
     current_conversation_id = None
 
+    credits_low_warning_sent = False  # Track if we've sent the low credits warning
+
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
+        nonlocal credits_low_warning_sent
 
         while websocket_active:
-            await asyncio.sleep(60)
+            await asyncio.sleep(10)
             if not websocket_active:
                 break
 
@@ -386,22 +392,61 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            if not use_custom_stt and not has_transcription_credits(uid):
-                user_has_credits = False
-                try:
-                    await send_credit_limit_notification(uid)
-                except Exception as e:
-                    print(f"Error sending credit limit notification: {e}", uid, session_id)
+            # Freemium: Check remaining credits for auto-switch to on-device
+            remaining_seconds = get_remaining_transcription_seconds(uid)
+            print(remaining_seconds)
+            print(f"[Freemium] Credits check: remaining={remaining_seconds}s, threshold={CREDITS_LOW_THRESHOLD_SECONDS}s, warning_sent={credits_low_warning_sent}, has_credits={user_has_credits}", uid, session_id)
 
-                if current_conversation_id and current_conversation_id not in locked_conversation_ids:
-                    conversation = conversations_db.get_conversation(uid, current_conversation_id)
-                    if conversation and conversation['status'] == ConversationStatus.in_progress:
-                        conversation_id = conversation['id']
-                        print(f"Locking conversation {conversation_id} due to transcription limit.", uid, session_id)
-                        conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
-                        locked_conversation_ids.add(conversation_id)
-            elif not use_custom_stt:
+            # Pre-emptive warning at threshold (e.g., 3 minutes remaining)
+            # Allows client to prepare on-device STT in background
+            if (
+                remaining_seconds is not None
+                and remaining_seconds <= CREDITS_LOW_THRESHOLD_SECONDS
+                and remaining_seconds > 0
+                and not credits_low_warning_sent
+            ):
+                print(f"[Freemium] >>> Sending credits_low event: {remaining_seconds}s remaining", uid, session_id)
+                _send_message_event(
+                    MessageServiceStatusEvent(
+                        status="credits_low",
+                        status_text=str(remaining_seconds),
+                    )
+                )
+                credits_low_warning_sent = True
+                print(f"[Freemium] Credits low warning sent successfully", uid, session_id)
+
+            # Credits exhausted - notify for seamless switch to on-device
+            # NOTE: We don't lock the conversation anymore - client will reconnect with on-device STT
+            if remaining_seconds is not None and remaining_seconds <= 0:
+                if user_has_credits:  # Only send notification once
+                    user_has_credits = False
+                    print(f"[Freemium] >>> Sending credits_exhausted event: conversation_id={current_conversation_id}", uid, session_id)
+                    _send_message_event(
+                        MessageServiceStatusEvent(
+                            status="credits_exhausted",
+                            status_text=current_conversation_id or "",
+                        )
+                    )
+                    print(f"[Freemium] Credits exhausted event sent - client should switch to on-device STT", uid, session_id)
+
+                    try:
+                        await send_credit_limit_notification(uid)
+                        print(f"[Freemium] Push notification sent for credit limit", uid, session_id)
+                    except Exception as e:
+                        print(f"[Freemium] Error sending credit limit notification: {e}", uid, session_id)
+
+                    # Freemium: Don't lock conversation - let client reconnect with on-device STT
+                    # The conversation will continue seamlessly
+                    print(f"[Freemium] Conversation NOT locked - waiting for client reconnect with on-device STT", uid, session_id)
+            elif remaining_seconds is None or remaining_seconds > 0:
+                if not user_has_credits:
+                    print(f"[Freemium] Credits restored: remaining={remaining_seconds}s", uid, session_id)
                 user_has_credits = True
+                # Reset warning flag if credits were restored (new month, upgrade, etc.)
+                if remaining_seconds is None or remaining_seconds > CREDITS_LOW_THRESHOLD_SECONDS:
+                    if credits_low_warning_sent:
+                        print(f"[Freemium] Resetting credits_low warning flag (credits restored above threshold)", uid, session_id)
+                    credits_low_warning_sent = False
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)

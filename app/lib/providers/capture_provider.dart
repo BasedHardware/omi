@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,19 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/message_event.dart'
+    show
+        MessageEvent,
+        MessageServiceStatusEvent,
+        ConversationProcessingStartedEvent,
+        ConversationEvent,
+        LastConversationEvent,
+        SpeakerLabelSuggestionEvent,
+        TranslationEvent,
+        PhotoProcessingEvent,
+        PhotoDescribedEvent,
+        CreditsLowEvent,
+        CreditsExhaustedEvent;
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -24,6 +37,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -35,6 +49,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class CaptureProvider extends ChangeNotifier
@@ -73,6 +88,17 @@ class CaptureProvider extends ChangeNotifier
   bool get isAutoReconnecting => _isAutoReconnecting;
 
   bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
+
+  // Freemium: On-device auto-switch state
+  bool _onDeviceReady = false;
+  bool _preparingOnDevice = false;
+  bool _creditsLowWarningSent = false;
+  bool _isFreemiumMode = false;
+  CustomSttConfig? _originalSttConfig;
+
+  bool get isFreemiumMode => _isFreemiumMode;
+  bool get isPreparingOnDevice => _preparingOnDevice;
+  bool get onDeviceReady => _onDeviceReady;
 
   Timer? _reconnectTimer;
   int _reconnectCountdown = 5;
@@ -296,7 +322,10 @@ class CaptureProvider extends ChangeNotifier
   /// Called when transcription settings are changed (e.g., custom STT provider)
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
-    debugPrint("Transcription settings changed, refreshing socket connection...");
+    final config = SharedPreferencesUtil().customSttConfig;
+    debugPrint("[TranscriptionSettings] Settings changed, refreshing socket connection...");
+    debugPrint("[TranscriptionSettings] New config: provider=${config.provider}, enabled=${config.isEnabled}");
+    debugPrint("[TranscriptionSettings] Is freemium mode: $_isFreemiumMode");
 
     // Handle device recording
     if (_recordingDevice != null) {
@@ -1317,9 +1346,36 @@ class CaptureProvider extends ChangeNotifier
     }
 
     if (event is MessageServiceStatusEvent) {
+      debugPrint('[Freemium] Received MessageServiceStatusEvent: status=${event.status}, statusText=${event.statusText}');
+      
+      // Handle freemium events via status field
+      if (event.status == 'credits_low') {
+        debugPrint('[Freemium] >>> Detected credits_low status in MessageServiceStatusEvent');
+        final remainingSeconds = int.tryParse(event.statusText ?? '0') ?? 0;
+        _handleCreditsLow(remainingSeconds);
+        return;
+      }
+      if (event.status == 'credits_exhausted') {
+        debugPrint('[Freemium] >>> Detected credits_exhausted status in MessageServiceStatusEvent');
+        _handleCreditsExhausted(event.statusText);
+        return;
+      }
+
       _transcriptionServiceStatuses.add(event);
       _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
       notifyListeners();
+      return;
+    }
+
+    if (event is CreditsLowEvent) {
+      debugPrint('[Freemium] >>> Received CreditsLowEvent directly');
+      _handleCreditsLow(event.remainingSeconds);
+      return;
+    }
+
+    if (event is CreditsExhaustedEvent) {
+      debugPrint('[Freemium] >>> Received CreditsExhaustedEvent directly');
+      _handleCreditsExhausted(event.conversationId);
       return;
     }
 
@@ -1524,6 +1580,260 @@ class CaptureProvider extends ChangeNotifier
 
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
+    notifyListeners();
+  }
+
+  // ============== Freemium: On-Device Auto-Switch ==============
+
+  /// Handle credits_low: Prepare on-device STT in background
+  void _handleCreditsLow(int remainingSeconds) {
+    debugPrint('[Freemium] ========================================');
+    debugPrint('[Freemium] >>> RECEIVED credits_low EVENT');
+    debugPrint('[Freemium] Remaining seconds: $remainingSeconds');
+    debugPrint('[Freemium] Warning already sent: $_creditsLowWarningSent');
+    debugPrint('[Freemium] On-device ready: $_onDeviceReady');
+    debugPrint('[Freemium] Preparing on-device: $_preparingOnDevice');
+    debugPrint('[Freemium] ========================================');
+    
+    if (_creditsLowWarningSent) {
+      debugPrint('[Freemium] Ignoring duplicate credits_low event');
+      return;
+    }
+    _creditsLowWarningSent = true;
+
+    debugPrint('[Freemium] Starting background preparation for on-device STT...');
+    _prepareOnDeviceInBackground();
+  }
+
+  /// Handle credits_exhausted: Switch to on-device STT
+  Future<void> _handleCreditsExhausted(String? conversationId) async {
+    debugPrint('[Freemium] ========================================');
+    debugPrint('[Freemium] >>> RECEIVED credits_exhausted EVENT');
+    debugPrint('[Freemium] Conversation ID: $conversationId');
+    debugPrint('[Freemium] On-device ready: $_onDeviceReady');
+    debugPrint('[Freemium] Is freemium mode: $_isFreemiumMode');
+    debugPrint('[Freemium] Current recording device: ${_recordingDevice?.name}');
+    debugPrint('[Freemium] Recording state: $recordingState');
+    debugPrint('[Freemium] ========================================');
+
+    // Update usage provider state
+    debugPrint('[Freemium] Marking usage provider as out of credits...');
+    usageProvider?.markAsOutOfCreditsAndRefresh();
+
+    // Check codec compatibility if using device
+    if (_recordingDevice != null) {
+      final codec = await _getAudioCodec(_recordingDevice!.id);
+      debugPrint('[Freemium] Checking codec compatibility: $codec');
+      if (!TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
+        debugPrint('[Freemium] ❌ Device codec $codec not supported for on-device STT - cannot switch');
+        // Can't use freemium with this device codec - just notify user
+        notifyListeners();
+        return;
+      }
+      debugPrint('[Freemium] ✓ Codec $codec is compatible');
+    }
+
+    // Ensure on-device is ready
+    if (!_onDeviceReady) {
+      debugPrint('[Freemium] On-device not ready, preparing now...');
+      await _prepareOnDeviceInBackground();
+
+      // If still not ready (e.g., Android needs download), mark freemium mode
+      // UI can show download prompt
+      if (!_onDeviceReady && !Platform.isIOS) {
+        debugPrint('[Freemium] ❌ On-device still not ready after preparation (Android needs model download)');
+        debugPrint('[Freemium] Setting freemium mode flag for UI to show download prompt');
+        _isFreemiumMode = true;
+        notifyListeners();
+        return;
+      }
+    }
+
+    debugPrint('[Freemium] ✓ On-device is ready, proceeding with switch...');
+    // Seamless switch to on-device
+    await _switchToOnDeviceSTT();
+  }
+
+  /// Prepare on-device STT in background (no UI interruption)
+  Future<void> _prepareOnDeviceInBackground() async {
+    debugPrint('[Freemium] _prepareOnDeviceInBackground() called');
+    debugPrint('[Freemium]   _preparingOnDevice: $_preparingOnDevice');
+    debugPrint('[Freemium]   _onDeviceReady: $_onDeviceReady');
+    
+    if (_preparingOnDevice || _onDeviceReady) {
+      debugPrint('[Freemium] Skipping preparation (already preparing or ready)');
+      return;
+    }
+    _preparingOnDevice = true;
+    notifyListeners();
+
+    try {
+      debugPrint('[Freemium] Platform: iOS=${Platform.isIOS}, Android=${Platform.isAndroid}, Desktop=${PlatformService.isDesktop}');
+      
+      if (Platform.isIOS) {
+        // iOS: Apple Speech Recognition needs no setup
+        _onDeviceReady = true;
+        debugPrint('[Freemium] ✓ iOS Apple Speech ready (no setup needed)');
+      } else if (Platform.isAndroid) {
+        // Android: Check if Whisper model exists
+        debugPrint('[Freemium] Android: Checking for Whisper model...');
+        final modelPath = await _getWhisperModelPath();
+        debugPrint('[Freemium] Model path result: $modelPath');
+        if (modelPath != null && await File(modelPath).exists()) {
+          _onDeviceReady = true;
+          debugPrint('[Freemium] ✓ Android Whisper model found: $modelPath');
+        } else {
+          debugPrint('[Freemium] ✗ Android Whisper model not found');
+          _onDeviceReady = false;
+        }
+      } else if (PlatformService.isDesktop) {
+        // Desktop: Check for Whisper model
+        debugPrint('[Freemium] Desktop: Checking for Whisper model...');
+        final modelPath = await _getWhisperModelPath();
+        debugPrint('[Freemium] Model path result: $modelPath');
+        if (modelPath != null && await File(modelPath).exists()) {
+          _onDeviceReady = true;
+          debugPrint('[Freemium] ✓ Desktop Whisper model found: $modelPath');
+        } else {
+          debugPrint('[Freemium] ✗ Desktop Whisper model not found');
+          _onDeviceReady = false;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Freemium] ✗ Error preparing on-device: $e');
+      _onDeviceReady = false;
+    } finally {
+      _preparingOnDevice = false;
+      debugPrint('[Freemium] Preparation complete. _onDeviceReady: $_onDeviceReady');
+      notifyListeners();
+    }
+  }
+
+  /// Get path to existing Whisper model (if downloaded)
+  Future<String?> _getWhisperModelPath() async {
+    try {
+      final appDir = await getApplicationSupportDirectory();
+      final modelsDir = Directory('${appDir.path}/models');
+
+      if (!await modelsDir.exists()) return null;
+
+      // Check for any existing model (prefer smaller ones for performance)
+      final modelPriority = ['tiny', 'base', 'small'];
+      for (final model in modelPriority) {
+        final path = '${modelsDir.path}/ggml-$model.bin';
+        if (await File(path).exists()) {
+          return path;
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[Freemium] Error checking whisper model path: $e');
+      return null;
+    }
+  }
+
+  /// Switch current session to on-device STT
+  Future<void> _switchToOnDeviceSTT() async {
+    debugPrint('[Freemium] ========================================');
+    debugPrint('[Freemium] >>> SWITCHING TO ON-DEVICE STT');
+    debugPrint('[Freemium] ========================================');
+    
+    _isFreemiumMode = true;
+
+    // Preserve user's original config (if not already on-device)
+    final currentConfig = SharedPreferencesUtil().customSttConfig;
+    debugPrint('[Freemium] Current config provider: ${currentConfig.provider}');
+    debugPrint('[Freemium] Current config enabled: ${currentConfig.isEnabled}');
+    
+    if (!currentConfig.isEnabled || currentConfig.provider != SttProvider.onDeviceWhisper) {
+      _originalSttConfig = currentConfig;
+      debugPrint('[Freemium] ✓ Preserved original config: ${currentConfig.provider}');
+    } else {
+      debugPrint('[Freemium] Already on on-device, not preserving config');
+    }
+
+    // Build on-device config
+    debugPrint('[Freemium] Building on-device config...');
+    final onDeviceConfig = await _buildOnDeviceConfig();
+    debugPrint('[Freemium] On-device config built:');
+    debugPrint('[Freemium]   provider: ${onDeviceConfig.provider}');
+    debugPrint('[Freemium]   language: ${onDeviceConfig.language}');
+    debugPrint('[Freemium]   model: ${onDeviceConfig.model}');
+    debugPrint('[Freemium]   url (model path): ${onDeviceConfig.url}');
+
+    // Save as active config
+    debugPrint('[Freemium] Saving on-device config to SharedPreferences...');
+    await SharedPreferencesUtil().saveCustomSttConfig(onDeviceConfig);
+    debugPrint('[Freemium] ✓ Config saved');
+
+    notifyListeners();
+
+    // Reconnect socket with new config (preserves conversation)
+    debugPrint('[Freemium] Calling onTranscriptionSettingsChanged() to reconnect socket...');
+    await onTranscriptionSettingsChanged();
+
+    debugPrint('[Freemium] ========================================');
+    debugPrint('[Freemium] ✓ SWITCH TO ON-DEVICE STT COMPLETE');
+    debugPrint('[Freemium] ========================================');
+  }
+
+  /// Build CustomSttConfig for on-device transcription
+  Future<CustomSttConfig> _buildOnDeviceConfig() async {
+    final language = SharedPreferencesUtil().userPrimaryLanguage;
+
+    if (Platform.isIOS) {
+      // iOS uses Apple Speech - no model path needed
+      return CustomSttConfig(
+        provider: SttProvider.onDeviceWhisper,
+        language: language,
+        model: 'apple',
+      );
+    } else {
+      // Android/Desktop uses Whisper
+      final modelPath = await _getWhisperModelPath();
+      return CustomSttConfig(
+        provider: SttProvider.onDeviceWhisper,
+        language: language,
+        model: 'tiny',
+        url: modelPath,
+      );
+    }
+  }
+
+  /// Restore original STT config (e.g., when credits reset or user upgrades)
+  Future<void> restoreOriginalSttConfig() async {
+    if (_originalSttConfig != null) {
+      await SharedPreferencesUtil().saveCustomSttConfig(_originalSttConfig!);
+      _originalSttConfig = null;
+    } else {
+      // Reset to Omi default
+      await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
+    }
+    _isFreemiumMode = false;
+    _creditsLowWarningSent = false;
+    notifyListeners();
+  }
+
+  /// Check if credits were restored and offer to switch back to cloud
+  Future<void> checkCreditsAndResetFreemiumIfNeeded() async {
+    if (!_isFreemiumMode) return;
+
+    await usageProvider?.fetchSubscription();
+    if (usageProvider?.isOutOfCredits == false) {
+      debugPrint('[Freemium] Credits restored! Can switch back to cloud transcription.');
+      // Auto-switch back to cloud
+      await restoreOriginalSttConfig();
+      await onTranscriptionSettingsChanged();
+    }
+  }
+
+  /// Reset freemium state (call on logout or explicit reset)
+  void resetFreemiumState() {
+    _isFreemiumMode = false;
+    _creditsLowWarningSent = false;
+    _onDeviceReady = false;
+    _preparingOnDevice = false;
+    _originalSttConfig = null;
     notifyListeners();
   }
 
