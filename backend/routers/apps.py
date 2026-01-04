@@ -958,8 +958,8 @@ def get_app_capabilities():
                 {
                     'title': 'Read tasks',
                     'id': 'read_tasks',
-                    'doc_url': 'https://docs.omi.me/doc/developer/apps/Tasks',
-                    'description': 'Access and read all user tasks',
+                    'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
+                    'description': 'Access and read all user tasks (to-dos) through the OMI System. This gives the app access to all stored tasks.',
                 },
             ],
         },
