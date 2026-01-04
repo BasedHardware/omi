@@ -7,6 +7,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from database import users as users_db
+from database import knowledge_graph as kg_db
 from utils import encryption
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
@@ -223,15 +224,23 @@ def delete_memory(uid: str, memory_id: str):
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.delete()
+    
+    # Trigger cascading cleanup for the knowledge graph
+    kg_db.cleanup_for_memory(uid, memory_id)
 
 
 def delete_all_memories(uid: str):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
+    
+    # Efficiently delete all documents in the collection
     batch = db.batch()
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
+
+    # Trigger a single, efficient cleanup of the entire knowledge graph
+    kg_db.delete_knowledge_graph(uid)
 
 
 def delete_memories_for_conversation(uid: str, memory_id: str):
