@@ -23,15 +23,13 @@ class BatteryInfoWidget extends StatelessWidget {
           builder: (context, deviceProvider, child) {
             if (deviceProvider.connectedDevice != null) {
               return GestureDetector(
-                onTap: deviceProvider.connectedDevice == null
-                    ? null
-                    : () {
-                        routeToPage(
-                          context,
-                          const ConnectedDevice(),
-                        );
-                        MixpanelManager().batteryIndicatorClicked();
-                      },
+                onTap: () {
+                  routeToPage(
+                    context,
+                    const ConnectedDevice(),
+                  );
+                  MixpanelManager().batteryIndicatorClicked();
+                },
                 child: Container(
                     height: 36,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
@@ -58,7 +56,6 @@ class BatteryInfoWidget extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6.0),
-                        // Add device icon
                         SizedBox(
                           width: 16,
                           height: 16,
@@ -80,7 +77,6 @@ class BatteryInfoWidget extends StatelessWidget {
                     )),
               );
             } else if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
-              // Device is paired but disconnected
               return GestureDetector(
                 onTap: () async {
                   await routeToPage(context, const ConnectedDevice());
@@ -96,7 +92,6 @@ class BatteryInfoWidget extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // Device icon with slash line
                       SizedBox(
                         width: 16,
                         height: 16,
@@ -106,7 +101,6 @@ class BatteryInfoWidget extends StatelessWidget {
                               DeviceUtils.getDeviceImageFromBtDevice(SharedPreferencesUtil().btDevice),
                               fit: BoxFit.contain,
                             ),
-                            // Slash line across the image
                             Positioned.fill(
                               child: CustomPaint(
                                 painter: SlashLinePainter(),
@@ -187,13 +181,11 @@ class SlashLinePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    // Position the cross at the bottom right
-    final crossSize = size.width * 0.2; // Size of the cross
-    final centerX = size.width - crossSize / 2 - 2; // Bottom right positioning
+    final crossSize = size.width * 0.2; 
+    final centerX = size.width - crossSize / 2 - 2; 
     final centerY = size.height - crossSize / 2 - 2;
     final halfCrossSize = crossSize / 2;
 
-    // Draw the X (cross) - two diagonal lines
     canvas.drawLine(
       Offset(centerX - halfCrossSize, centerY - halfCrossSize),
       Offset(centerX + halfCrossSize, centerY + halfCrossSize),
