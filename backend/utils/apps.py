@@ -783,6 +783,11 @@ def app_can_create_conversation(app: dict) -> bool:
     return app_has_action(app, 'create_conversation')
 
 
+def app_can_read_tasks(app: dict) -> bool:
+    """Check if an app can read tasks."""
+    return app_has_action(app, 'read_tasks')
+
+
 def is_user_app_enabled(uid: str, app_id: str) -> bool:
     """Check if a specific app is enabled for the user based on Redis cache."""
     user_enabled_apps = set(get_enabled_apps(uid))
@@ -867,6 +872,7 @@ def get_capabilities_list() -> List[dict]:
         {'title': 'Chat Assistants', 'id': 'chat'},
         {'title': 'Summary Apps', 'id': 'memories'},
         {'title': 'Realtime Notifications', 'id': 'proactive_notification'},
+        {'title': 'Tasks', 'id': 'tasks'}, # Added Tasks capability
     ]
 
 
