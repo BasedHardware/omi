@@ -237,6 +237,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final updatedItem = await api.updateActionItem(
         item.id,
         dueAt: dueDate,
+        clearDueAt: dueDate == null, // Explicitly clear if null
       );
 
       if (updatedItem != null) {

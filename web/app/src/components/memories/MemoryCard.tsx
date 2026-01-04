@@ -120,10 +120,10 @@ export function MemoryCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'group relative rounded-xl p-4',
-        'bg-bg-tertiary border border-bg-quaternary',
+        'noise-overlay group relative rounded-xl p-4',
+        'bg-white/[0.02] border border-white/[0.06]',
         'transition-all duration-150',
-        'hover:bg-bg-quaternary/50 hover:border-purple-primary/30',
+        'hover:bg-white/[0.05] hover:border-purple-primary/30',
         needsReview && 'border-l-4 border-l-warning',
         isHighlighted && 'ring-2 ring-purple-primary bg-purple-primary/10 animate-pulse',
         isSelected && 'bg-purple-primary/5 border-purple-primary/50'

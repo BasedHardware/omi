@@ -26,44 +26,49 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
           onClose={() => setSidebarOpen(false)}
         />
 
-        {/* Main content */}
-        <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-          {/* Header - conditionally shown */}
-          {!hideHeader && (
-            <header
-              className={cn(
-                'flex-shrink-0',
-                'flex items-center gap-4 px-4 py-4 lg:px-8',
-                'bg-bg-primary/80 backdrop-blur-md',
-                'border-b border-bg-tertiary'
-              )}
-            >
-              <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+        {/* Main content area - flex row to support push/slide chat panel */}
+        <div className="flex-1 flex min-w-0 h-full overflow-hidden">
+          {/* Main content */}
+          <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+            {/* Header - conditionally shown */}
+            {!hideHeader && (
+              <header
+                className={cn(
+                  'flex-shrink-0',
+                  'flex items-center gap-4 px-4 py-4 lg:px-8',
+                  'bg-bg-primary/80 backdrop-blur-md',
+                  'border-b border-bg-tertiary'
+                )}
+              >
+                <MobileMenuButton onClick={() => setSidebarOpen(true)} />
 
-              {title && (
-                <h1 className="text-xl font-display font-semibold text-text-primary">
-                  {title}
-                </h1>
-              )}
-            </header>
-          )}
+                {title && (
+                  <h1 className="text-xl font-display font-semibold text-text-primary">
+                    {title}
+                  </h1>
+                )}
+              </header>
+            )}
 
-          {/* Mobile menu button when header is hidden */}
-          {hideHeader && (
-            <div className="lg:hidden absolute top-4 left-4 z-30">
-              <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+            {/* Mobile menu button when header is hidden */}
+            {hideHeader && (
+              <div className="lg:hidden absolute top-4 left-4 z-30">
+                <MobileMenuButton onClick={() => setSidebarOpen(true)} />
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="flex-1 overflow-hidden">
+              {children}
             </div>
-          )}
+          </main>
 
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            {children}
-          </div>
-        </main>
+          {/* Chat panel - push/slide from right */}
+          <ChatPanel />
+        </div>
 
-        {/* Chat bubble + panel */}
+        {/* Chat bubble - floating button */}
         <ChatBubble />
-        <ChatPanel />
       </div>
     </ChatProvider>
   );

@@ -74,6 +74,22 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
+def _build_webpush_config(tag: str) -> messaging.WebpushConfig:
+    """Build WebPush configuration for browser notifications."""
+    return messaging.WebpushConfig(
+        headers={
+            'Topic': tag,  # For deduplication
+            'Urgency': 'high',
+        },
+        notification=messaging.WebpushNotification(
+            icon='/logo.png',
+        ),
+        fcm_options=messaging.WebpushFCMOptions(
+            link='/',  # Default link, overridden by navigate_to in data
+        ),
+    )
+
+
 def _build_message(
     token: str,
     tag: str,
@@ -89,6 +105,7 @@ def _build_message(
         data=data,
         android=_build_android_config(tag, priority, is_data_only=(notification is None)),
         apns=_build_apns_config(tag, is_background),
+        webpush=_build_webpush_config(tag),
     )
 
 

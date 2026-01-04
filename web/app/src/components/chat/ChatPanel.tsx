@@ -208,30 +208,32 @@ export function ChatPanel() {
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Mobile backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/30 z-40 sm:hidden"
             onClick={closeChat}
           />
 
-          {/* Panel */}
+          {/* Panel - push/slide animation */}
           <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            initial={{ width: 0 }}
+            animate={{ width: 400 }}
+            exit={{ width: 0 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
-              'fixed top-0 right-0 bottom-0 z-50',
-              'w-full sm:w-[400px]',
+              'h-full flex-shrink-0 overflow-hidden',
               'bg-bg-secondary border-l border-bg-tertiary',
-              'flex flex-col',
-              'shadow-2xl'
+              'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
             )}
           >
+            <div className={cn(
+              'w-[400px] h-full flex flex-col',
+              'max-sm:w-full'
+            )}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
               <div className="flex items-center gap-3">
@@ -469,6 +471,7 @@ export function ChatPanel() {
                   </button>
                 </div>
               </div>
+            </div>
             </div>
           </motion.div>
 

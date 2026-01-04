@@ -18,7 +18,7 @@ class ConversationProvider extends ChangeNotifier {
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
   bool showShortConversations = false;
-  int shortConversationThreshold = 60; // in seconds
+  int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
   bool showDailySummaries = false; // filter to show daily summaries instead of conversations
   bool hasDailySummaries = false; // whether user has any daily summaries
