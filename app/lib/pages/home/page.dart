@@ -791,15 +791,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              // Sync icon - shows when there are pending files or a device is paired
+              // Sync icon - shows when there are pending files on device or a device is paired
               Consumer2<DeviceProvider, SyncProvider>(
                 builder: (context, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
-                  final hasPending = syncProvider.missingWals.isNotEmpty;
+                  // Only show orange indicator for files still on device (SD card or Limitless)
+                  final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  // Show sync icon if there's a paired device OR if there are pending files to sync
-                  if (device != null || hasPending) {
+                  // Show sync icon if there's a paired device OR if there are pending files on device
+                  if (device != null || hasPendingOnDevice) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
@@ -815,7 +816,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         decoration: BoxDecoration(
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orange.withValues(alpha: 0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -825,7 +826,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           size: 18,
                           color: isSyncing
                               ? Colors.deepPurpleAccent
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orangeAccent
                                   : Colors.white70,
                         ),
