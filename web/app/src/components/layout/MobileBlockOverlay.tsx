@@ -57,6 +57,16 @@ export function MobileBlockOverlay() {
 
   return (
     <div className="fixed inset-0 z-[9999] bg-bg-primary flex flex-col items-center justify-center p-6">
+      {/* Beta badge - top right corner */}
+      <a
+        href="https://feedback.omi.me"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute top-4 right-4 z-20 px-3 py-1 bg-purple-primary/20 text-purple-primary text-xs font-semibold uppercase tracking-wider rounded-full border border-purple-primary/30 hover:bg-purple-primary/30 transition-colors"
+      >
+        Beta
+      </a>
+
       {/* Background gradient effect - matches login page */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-purple-primary/5 rounded-full blur-[120px]" />

@@ -9,10 +9,11 @@ import { MemoryList, MemoryListSkeleton } from './MemoryList';
 import { MemoryFilters } from './MemoryFilters';
 import { MemoryQuickAdd } from './MemoryQuickAdd';
 import { KnowledgeGraph } from './KnowledgeGraph';
+import { TagDashboard } from './TagDashboard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 
-type ViewMode = 'list' | 'graph';
+type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -52,11 +53,10 @@ export function MemoriesPage() {
     activeCategories,
   } = useMemories();
 
-  // Calculate tag stats from memories (sample first 500 for performance)
+  // Calculate tag stats from all memories
   const tagStats = useMemo(() => {
     const tagCounts: Record<string, number> = {};
-    const sample = memories.slice(0, 500);
-    sample.forEach((memory) => {
+    memories.forEach((memory) => {
       if (memory.tags && Array.isArray(memory.tags)) {
         memory.tags.forEach((tag) => {
           tagCounts[tag] = (tagCounts[tag] || 0) + 1;
@@ -295,6 +295,19 @@ export function MemoriesPage() {
                   <Network className="w-4 h-4" />
                   Graph
                 </button>
+                <button
+                  onClick={() => setViewMode('tags')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
+                    'transition-all duration-150',
+                    viewMode === 'tags'
+                      ? 'bg-purple-primary text-white'
+                      : 'text-text-tertiary hover:text-text-primary'
+                  )}
+                >
+                  <Tag className="w-4 h-4" />
+                  Tags
+                </button>
               </div>
             </div>
 
@@ -426,7 +439,7 @@ export function MemoriesPage() {
 
       {/* Content - Two column layout */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row max-w-6xl mx-auto">
+        <div className="h-full flex flex-col lg:flex-row w-full">
           {/* Left Column - Memories list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
             {viewMode === 'list' ? (
@@ -522,8 +535,17 @@ export function MemoriesPage() {
                   />
                 )}
               </>
-            ) : (
+            ) : viewMode === 'graph' ? (
               <KnowledgeGraph onNodeSelect={handleNodeSelect} />
+            ) : (
+              <TagDashboard
+                memories={memories}
+                onTagSelect={(tags) => {
+                  // Use the first tag for filtering
+                  setSelectedTag(tags[0] || null);
+                  setViewMode('list');
+                }}
+              />
             )}
           </div>
 
@@ -594,10 +616,22 @@ export function MemoriesPage() {
                   {/* Top Tags Card */}
                   {allTags.length > 0 && (
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
-                      <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-purple-primary" />
-                        Top Tags
-                      </h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-purple-primary" />
+                          Top Tags
+                        </h3>
+                        <button
+                          onClick={() => setViewMode('tags')}
+                          className={cn(
+                            'p-1.5 rounded-md transition-colors',
+                            'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10'
+                          )}
+                          title="View tag graph"
+                        >
+                          <Network className="w-4 h-4" />
+                        </button>
+                      </div>
                       <div className="space-y-2">
                         {allTags.slice(0, 5).map(({ tag, count }) => {
                           const maxCount = allTags[0]?.count || 1;

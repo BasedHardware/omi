@@ -292,7 +292,7 @@ export function TaskHub() {
 
       {/* Content - Two column layout for Hub view */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row max-w-6xl mx-auto">
+        <div className="h-full flex flex-col lg:flex-row w-full">
           {/* Left Column - Tasks (scrollable) */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
           {/* Quick add */}

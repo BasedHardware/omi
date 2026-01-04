@@ -1,5 +1,6 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { BetaWelcomeModal } from '@/components/ui/BetaWelcomeModal';
 
 export default function AuthenticatedLayout({
   children,
@@ -9,6 +10,7 @@ export default function AuthenticatedLayout({
   return (
     <ProtectedRoute>
       <MainLayout hideHeader>{children}</MainLayout>
+      <BetaWelcomeModal />
     </ProtectedRoute>
   );
 }

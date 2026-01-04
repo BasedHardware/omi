@@ -82,7 +82,7 @@ export function ConversationCard({
       onHoverEnd={() => setIsHovered(false)}
       onClick={handleClick}
       className={cn(
-        'group relative rounded-xl cursor-pointer',
+        'noise-overlay group relative rounded-xl cursor-pointer',
         'border transition-all duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
         'p-4',
@@ -92,7 +92,7 @@ export function ConversationCard({
           // Normal selected state (viewing detail)
           : isSelected
           ? 'bg-purple-primary/10 border-purple-primary/50'
-          : 'bg-bg-tertiary border-transparent hover:bg-bg-quaternary/50 hover:border-purple-primary/30',
+          : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05] hover:border-purple-primary/30',
         // Merging state - dim the card
         isMerging && 'opacity-50 pointer-events-none'
       )}

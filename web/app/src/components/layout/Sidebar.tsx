@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MessageSquare,
-  Sparkles,
+  GanttChartSquare,
+  MessageCircle,
   LayoutGrid,
-  CheckSquare,
+  ListChecks,
+  CalendarDays,
   Brain,
   LogOut,
   Menu,
@@ -17,7 +18,6 @@ import {
   PanelLeftClose,
   PanelLeft,
   User,
-  Shield,
   Puzzle,
   Code,
   Settings,
@@ -47,14 +47,19 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    label: 'Recaps',
+    href: '/recaps',
+    icon: <CalendarDays className="w-5 h-5" />,
+  },
+  {
     label: 'Conversations',
     href: '/conversations',
-    icon: <MessageSquare className="w-5 h-5" />,
+    icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
     label: 'Chat',
     href: '/chat',
-    icon: <Sparkles className="w-5 h-5" />,
+    icon: <MessageCircle className="w-5 h-5" />,
   },
   {
     label: 'Apps',
@@ -64,7 +69,7 @@ const navItems: NavItem[] = [
   {
     label: 'Tasks',
     href: '/tasks',
-    icon: <CheckSquare className="w-5 h-5" />,
+    icon: <ListChecks className="w-5 h-5" />,
   },
   {
     label: 'Memories',
@@ -76,7 +81,6 @@ const navItems: NavItem[] = [
 // Settings menu items for user dropdown
 const settingsMenuItems = [
   { id: 'profile', label: 'Profile', icon: User },
-  { id: 'privacy', label: 'Privacy', icon: Shield },
   { id: 'integrations', label: 'Integrations', icon: Puzzle },
   { id: 'developer', label: 'Developer', icon: Code },
   { id: 'account', label: 'Account', icon: Settings },

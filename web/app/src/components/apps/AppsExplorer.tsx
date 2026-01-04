@@ -530,7 +530,7 @@ export function AppsExplorer() {
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="w-full px-6 py-6">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />

@@ -185,9 +185,9 @@ export function TaskCard({
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       className={cn(
-        'group relative rounded-xl cursor-pointer',
+        'noise-overlay group relative rounded-xl cursor-pointer',
         'border-l-4 transition-all duration-150',
-        'bg-bg-tertiary hover:bg-bg-quaternary/50',
+        'bg-white/[0.02] hover:bg-white/[0.05]',
         'p-4',
         // Left border color based on status
         task.completed
