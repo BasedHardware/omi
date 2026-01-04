@@ -208,7 +208,6 @@ export function RecapSplitView() {
               <RecapDetailPanel
                 recapId={selectedId}
                 recap={selectedRecap}
-                onDelete={handleDelete}
               />
             </motion.div>
           ) : (
