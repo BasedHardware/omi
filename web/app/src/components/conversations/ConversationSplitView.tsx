@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Search as SearchIcon, CheckSquare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -42,7 +43,9 @@ const DEFAULT_PANEL_WIDTH = 420;
 export function ConversationSplitView() {
   const { user } = useAuth();
   const { setContext } = useChat();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const urlConversationId = searchParams.get('id');
+  const [selectedId, setSelectedId] = useState<string | null>(urlConversationId);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -133,15 +136,22 @@ export function ConversationSplitView() {
     }
   }, [selectedConversation, setContext]);
 
-  // Auto-select first conversation on load
+  // Update selected ID when URL changes (e.g., navigating from recaps)
   useEffect(() => {
-    if (!selectedId && !listLoading) {
+    if (urlConversationId) {
+      setSelectedId(urlConversationId);
+    }
+  }, [urlConversationId]);
+
+  // Auto-select first conversation on load (only if no URL param)
+  useEffect(() => {
+    if (!selectedId && !urlConversationId && !listLoading) {
       const firstGroup = Object.values(groupedConversations)[0];
       if (firstGroup && firstGroup.length > 0) {
         setSelectedId(firstGroup[0].id);
       }
     }
-  }, [groupedConversations, listLoading, selectedId]);
+  }, [groupedConversations, listLoading, selectedId, urlConversationId]);
 
   // Determine if we're showing search results or regular list
   const isSearching = searchQuery.trim().length > 0;
@@ -485,7 +495,7 @@ export function ConversationSplitView() {
       </div>
 
       {/* Split Panels Container */}
-      <div className="flex flex-1 overflow-hidden max-w-7xl mx-auto w-full">
+      <div className="flex flex-1 overflow-hidden w-full">
         {/* Left Panel: Conversation List */}
         <div
           style={{ width: `${panelWidth}px` }}

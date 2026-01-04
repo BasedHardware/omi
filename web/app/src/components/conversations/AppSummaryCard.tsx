@@ -93,8 +93,8 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'p-4 rounded-xl',
-        'bg-bg-tertiary border border-bg-quaternary/50',
+        'noise-overlay p-4 rounded-xl',
+        'bg-white/[0.02] border border-white/[0.06]',
         className
       )}
     >

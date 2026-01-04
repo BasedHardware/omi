@@ -144,8 +144,36 @@ export async function getConversations(
 /**
  * Get a single conversation by ID
  */
+// Simple cache for getConversation to avoid duplicate requests
+const conversationCache = new Map<string, { data: Conversation; timestamp: number }>();
+const pendingRequests = new Map<string, Promise<Conversation>>();
+const CACHE_TTL = 60000; // 1 minute cache
+
 export async function getConversation(id: string): Promise<Conversation> {
-  return fetchWithAuth<Conversation>(`/v1/conversations/${id}`);
+  // Check cache first
+  const cached = conversationCache.get(id);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+
+  // Check if there's already a pending request for this ID (deduplicate in-flight requests)
+  const pending = pendingRequests.get(id);
+  if (pending) {
+    return pending;
+  }
+
+  // Make the request and cache it
+  const request = fetchWithAuth<Conversation>(`/v1/conversations/${id}`).then(data => {
+    conversationCache.set(id, { data, timestamp: Date.now() });
+    pendingRequests.delete(id);
+    return data;
+  }).catch(err => {
+    pendingRequests.delete(id);
+    throw err;
+  });
+
+  pendingRequests.set(id, request);
+  return request;
 }
 
 /**
@@ -1149,6 +1177,57 @@ export async function updateDailySummarySettings(settings: DailySummarySettings)
   await fetchWithAuth('/v1/users/daily-summary-settings', {
     method: 'PATCH',
     body: JSON.stringify(settings),
+  });
+}
+
+// ============================================================================
+// Daily Summaries (Recaps) API
+// ============================================================================
+
+import type { DailySummary } from '@/types/recap';
+
+export interface GetDailySummariesParams {
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Get list of daily summaries with pagination
+ */
+export async function getDailySummaries(
+  params: GetDailySummariesParams = {}
+): Promise<DailySummary[]> {
+  const { limit = 30, offset = 0 } = params;
+  const queryParams = new URLSearchParams({
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+  return fetchWithAuth<DailySummary[]>(`/v1/users/daily-summaries?${queryParams}`);
+}
+
+/**
+ * Get a single daily summary by ID
+ */
+export async function getDailySummary(id: string): Promise<DailySummary> {
+  return fetchWithAuth<DailySummary>(`/v1/users/daily-summaries/${id}`);
+}
+
+/**
+ * Delete a daily summary
+ */
+export async function deleteDailySummary(id: string): Promise<void> {
+  await fetchWithAuth(`/v1/users/daily-summaries/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Generate a test daily summary for a specific date
+ */
+export async function generateTestDailySummary(date: string): Promise<DailySummary> {
+  return fetchWithAuth<DailySummary>('/v1/users/daily-summary-settings/test', {
+    method: 'POST',
+    body: JSON.stringify({ date }),
   });
 }
 
