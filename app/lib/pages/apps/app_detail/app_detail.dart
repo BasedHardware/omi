@@ -405,6 +405,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
         description: 'This app can access your memories.',
       ));
     }
+    if (actions.any((a) => a.action == 'read_tasks')) {
+      permissionItems.add(_PermissionItem(
+        title: 'Read Tasks',
+        type: 'Access',
+        description: 'This app can access your tasks.',
+      ));
+    }
 
     // Create permissions
     if (actions.any((a) => a.action == 'create_conversation')) {

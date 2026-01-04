@@ -65,7 +65,8 @@ async def oauth_authorize(
                         permissions.append({"icon": "📖", "text": "Access and read your conversation history."})
                     elif action_type_value == ActionType.READ_MEMORIES.value:
                         permissions.append({"icon": "🔍", "text": "Access and read your stored memories."})
-
+                    elif action_type_value == ActionType.READ_TASKS.value:
+                        permissions.append({"icon": "📋", "text": "Read your tasks."})
         if (
             "proactive_notification" in app.capabilities
             and app.proactive_notification
