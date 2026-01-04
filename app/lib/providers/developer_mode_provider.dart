@@ -29,7 +29,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
-  bool showGoalTrackerEnabled = false;
+  bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
   void onConversationEventsToggled(bool value) {
@@ -101,7 +101,9 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
-    showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
+    // Goal tracker should be enabled by default
+    final savedValue = SharedPreferencesUtil().showGoalTrackerEnabled;
+    showGoalTrackerEnabled = savedValue; // Use saved value, which defaults to true
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
