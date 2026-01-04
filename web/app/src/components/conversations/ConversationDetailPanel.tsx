@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -27,7 +28,17 @@ import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
 import { usePeople } from '@/hooks/usePeople';
 import { precacheConversationAudio, getConversationAudioUrls } from '@/lib/api';
-import type { Conversation, ActionItem, AppResponse, TranscriptSegment, AudioFile } from '@/types/conversation';
+import type { Conversation, ActionItem, AppResponse, TranscriptSegment, AudioFile, Geolocation } from '@/types/conversation';
+
+// Dynamic import for Leaflet map (SSR not supported)
+const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center rounded-r-xl">
+      <MapPin className="w-8 h-8 text-text-quaternary" />
+    </div>
+  ),
+});
 
 interface ConversationDetailPanelProps {
   conversationId: string;
@@ -39,7 +50,7 @@ interface ConversationDetailPanelProps {
   onDelete?: () => void;
 }
 
-type TabId = 'summary' | 'actions' | 'transcript' | 'location';
+type TabId = 'summary' | 'actions' | 'transcript';
 
 interface Tab {
   id: TabId;
@@ -124,7 +135,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
 }
 
 /**
- * Summary tab content with app summaries
+ * Summary tab content with app summaries and optional location map
  */
 interface SummaryTabProps {
   overview: string;
@@ -133,6 +144,7 @@ interface SummaryTabProps {
   appResults: AppResponse[];
   suggestedAppIds: string[];
   onGenerateComplete?: (conversation: Conversation) => void;
+  geolocation?: Geolocation | null;
 }
 
 function SummaryTab({
@@ -142,25 +154,63 @@ function SummaryTab({
   appResults,
   suggestedAppIds,
   onGenerateComplete,
+  geolocation,
 }: SummaryTabProps) {
   const hasAppSummaries = appResults && appResults.length > 0;
   const hasSuggestedApps = suggestedAppIds && suggestedAppIds.length > 0;
+  const hasLocation = geolocation && geolocation.latitude && geolocation.longitude;
 
   return (
     <div className="space-y-6">
-      {/* Default Summary Section */}
-      <div>
-        {category && (
-          <div className="mb-3">
-            <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
-              {category}
-            </span>
+      {/* Summary Section with optional Map */}
+      {hasLocation ? (
+        <div className="noise-overlay rounded-xl overflow-hidden border border-white/[0.04]">
+          <div className="grid grid-cols-1 md:grid-cols-2 min-h-[280px]">
+            {/* Left: Overview content */}
+            <div className="p-5 pt-4">
+              {category && (
+                <div className="mb-3">
+                  <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                    {category}
+                  </span>
+                </div>
+              )}
+              <p className="text-text-secondary leading-relaxed text-lg">
+                {overview}
+              </p>
+              {geolocation.address && (
+                <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
+                  <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>{geolocation.address}</span>
+                </div>
+              )}
+            </div>
+            {/* Right: Map */}
+            <div className="relative overflow-hidden min-h-[280px] md:min-h-0">
+              <SingleLocationMap
+                latitude={geolocation.latitude}
+                longitude={geolocation.longitude}
+                address={geolocation.address}
+                height="100%"
+              />
+            </div>
           </div>
-        )}
-        <p className="text-text-secondary leading-relaxed text-lg">
-          {overview}
-        </p>
-      </div>
+        </div>
+      ) : (
+        /* Full-width overview when no location */
+        <div>
+          {category && (
+            <div className="mb-3">
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                {category}
+              </span>
+            </div>
+          )}
+          <p className="text-text-secondary leading-relaxed text-lg">
+            {overview}
+          </p>
+        </div>
+      )}
 
       {/* App Summaries Section */}
       {(hasAppSummaries || hasSuggestedApps) && (
@@ -233,70 +283,6 @@ function ActionItemsTab({ items }: { items: ActionItem[] }) {
         {items.map((item, index) => (
           <ActionItemRow key={index} item={item} />
         ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Location/Map tab content
- */
-function LocationTab({ geolocation, address }: {
-  geolocation: { latitude: number; longitude: number } | null;
-  address?: string | null;
-}) {
-  if (!geolocation) {
-    return (
-      <div className="text-center py-12 text-text-tertiary">
-        <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
-        <p>No location data available for this conversation</p>
-      </div>
-    );
-  }
-
-  const { latitude, longitude } = geolocation;
-  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.01}%2C${latitude - 0.01}%2C${longitude + 0.01}%2C${latitude + 0.01}&layer=mapnik&marker=${latitude}%2C${longitude}`;
-  const linkUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`;
-
-  return (
-    <div className="space-y-4">
-      {/* Address if available */}
-      {address && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-bg-tertiary">
-          <MapPin className="w-5 h-5 text-purple-primary flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-text-primary font-medium">Location</p>
-            <p className="text-text-secondary text-sm">{address}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Map embed */}
-      <div className="rounded-xl overflow-hidden border border-bg-tertiary">
-        <iframe
-          src={mapUrl}
-          width="100%"
-          height="300"
-          style={{ border: 0 }}
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          title="Conversation location"
-        />
-      </div>
-
-      {/* Coordinates and link */}
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-text-quaternary">
-          {latitude.toFixed(6)}, {longitude.toFixed(6)}
-        </span>
-        <a
-          href={linkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-purple-primary hover:text-purple-secondary transition-colors"
-        >
-          Open in OpenStreetMap
-        </a>
       </div>
     </div>
   );
@@ -522,12 +508,6 @@ export function ConversationDetailPanel({
       count: transcript_segments?.length || 0,
       disabled: !hasTranscript,
     },
-    {
-      id: 'location',
-      label: 'Location',
-      icon: <MapPin className="w-4 h-4" />,
-      disabled: !hasLocation,
-    },
   ];
 
   // Filter to only enabled tabs
@@ -663,6 +643,7 @@ export function ConversationDetailPanel({
                 appResults={conversation.apps_results || []}
                 suggestedAppIds={conversation.suggested_summarization_apps || []}
                 onGenerateComplete={onConversationUpdate}
+                geolocation={geolocation}
               />
             )}
 
@@ -703,13 +684,6 @@ export function ConversationDetailPanel({
                   onSeekTo={handleSeekTo}
                 />
               </div>
-            )}
-
-            {activeTab === 'location' && (
-              <LocationTab
-                geolocation={geolocation}
-                address={geolocation?.address}
-              />
             )}
           </motion.div>
         </AnimatePresence>
