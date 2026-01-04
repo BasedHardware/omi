@@ -367,14 +367,15 @@ async def _listen(
     current_conversation_id = None
 
     credits_low_warning_sent = False  # Track if we've sent the low credits warning
+    credits_exhausted_sent = False  # Track if we've sent the exhausted event (separate from user_has_credits)
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
-        nonlocal credits_low_warning_sent
+        nonlocal credits_low_warning_sent, credits_exhausted_sent
 
         while websocket_active:
-            await asyncio.sleep(10)
+            await asyncio.sleep(60)
             if not websocket_active:
                 break
 
@@ -394,8 +395,6 @@ async def _listen(
 
             # Freemium: Check remaining credits for auto-switch to on-device
             remaining_seconds = get_remaining_transcription_seconds(uid)
-            print(remaining_seconds)
-            print(f"[Freemium] Credits check: remaining={remaining_seconds}s, threshold={CREDITS_LOW_THRESHOLD_SECONDS}s, warning_sent={credits_low_warning_sent}, has_credits={user_has_credits}", uid, session_id)
 
             # Pre-emptive warning at threshold (e.g., 3 minutes remaining)
             # Allows client to prepare on-device STT in background
@@ -405,7 +404,6 @@ async def _listen(
                 and remaining_seconds > 0
                 and not credits_low_warning_sent
             ):
-                print(f"[Freemium] >>> Sending credits_low event: {remaining_seconds}s remaining", uid, session_id)
                 _send_message_event(
                     MessageServiceStatusEvent(
                         status="credits_low",
@@ -413,39 +411,29 @@ async def _listen(
                     )
                 )
                 credits_low_warning_sent = True
-                print(f"[Freemium] Credits low warning sent successfully", uid, session_id)
 
             # Credits exhausted - notify for seamless switch to on-device
             # NOTE: We don't lock the conversation anymore - client will reconnect with on-device STT
             if remaining_seconds is not None and remaining_seconds <= 0:
-                if user_has_credits:  # Only send notification once
+                if not credits_exhausted_sent:  # Use separate flag - user_has_credits may already be False at connect
+                    credits_exhausted_sent = True
                     user_has_credits = False
-                    print(f"[Freemium] >>> Sending credits_exhausted event: conversation_id={current_conversation_id}", uid, session_id)
                     _send_message_event(
                         MessageServiceStatusEvent(
                             status="credits_exhausted",
                             status_text=current_conversation_id or "",
                         )
                     )
-                    print(f"[Freemium] Credits exhausted event sent - client should switch to on-device STT", uid, session_id)
 
                     try:
                         await send_credit_limit_notification(uid)
-                        print(f"[Freemium] Push notification sent for credit limit", uid, session_id)
                     except Exception as e:
-                        print(f"[Freemium] Error sending credit limit notification: {e}", uid, session_id)
+                        print(f"Error sending credit limit notification: {e}", uid, session_id)
 
-                    # Freemium: Don't lock conversation - let client reconnect with on-device STT
-                    # The conversation will continue seamlessly
-                    print(f"[Freemium] Conversation NOT locked - waiting for client reconnect with on-device STT", uid, session_id)
             elif remaining_seconds is None or remaining_seconds > 0:
-                if not user_has_credits:
-                    print(f"[Freemium] Credits restored: remaining={remaining_seconds}s", uid, session_id)
                 user_has_credits = True
                 # Reset warning flag if credits were restored (new month, upgrade, etc.)
                 if remaining_seconds is None or remaining_seconds > CREDITS_LOW_THRESHOLD_SECONDS:
-                    if credits_low_warning_sent:
-                        print(f"[Freemium] Resetting credits_low warning flag (credits restored above threshold)", uid, session_id)
                     credits_low_warning_sent = False
 
             # Silence notification logic for basic plan users
