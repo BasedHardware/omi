@@ -454,16 +454,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  if (mounted) {
-                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<ConversationProvider>().getInitialConversations();
-                    } else {
-                      // Force refresh when internet connection is restored
-                      await ctx.read<ConversationProvider>().forceRefreshConversations();
-                    }
-                    if (ctx.read<MessageProvider>().messages.isEmpty) {
-                      await ctx.read<MessageProvider>().refreshMessages();
-                    }
+                  if (!mounted) return;
+
+                  final convoProvider = ctx.read<ConversationProvider>();
+                  final messageProvider = ctx.read<MessageProvider>();
+
+                  if (convoProvider.conversations.isEmpty) {
+                    await convoProvider.getInitialConversations();
+                  } else {
+                    // Force refresh when internet connection is restored
+                    await convoProvider.forceRefreshConversations();
+                  }
+
+                  if (messageProvider.messages.isEmpty) {
+                    await messageProvider.refreshMessages();
                   }
                 });
               });
