@@ -19,6 +19,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
@@ -26,6 +27,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shimmer/shimmer.dart';
 
 import 'markdown_message_widget.dart';
+import 'package:omi/widgets/text_selection_controls.dart';
 import 'package:omi/providers/app_provider.dart';
 
 /// Parse app_id from thinking text (format: "text|app_id:app_id")
@@ -177,6 +179,7 @@ class AIMessage extends StatefulWidget {
   final bool showTypingIndicator;
   final ServerMessage message;
   final Function(String) sendMessage;
+  final Function(String)? onAskOmi;
   final bool displayOptions;
   final App? appSender;
   final Function(ServerConversation) updateConversation;
@@ -186,6 +189,7 @@ class AIMessage extends StatefulWidget {
     super.key,
     required this.message,
     required this.sendMessage,
+    this.onAskOmi,
     required this.displayOptions,
     required this.updateConversation,
     required this.setMessageNps,
@@ -211,14 +215,20 @@ class _AIMessageState extends State<AIMessage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        buildMessageWidget(
-          widget.message,
-          widget.sendMessage,
-          widget.showTypingIndicator,
-          widget.displayOptions,
-          widget.appSender,
-          widget.updateConversation,
-          widget.setMessageNps,
+        SelectionArea(
+          contextMenuBuilder: (context, selectableRegionState) {
+            return omiSelectionMenuBuilder(context, selectableRegionState, widget.onAskOmi ?? (text) {});
+          },
+          child: buildMessageWidget(
+            widget.message,
+            widget.sendMessage,
+            widget.showTypingIndicator,
+            widget.displayOptions,
+            widget.appSender,
+            widget.updateConversation,
+            widget.setMessageNps,
+            onAskOmi: widget.onAskOmi,
+          ),
         ),
       ],
     );
@@ -232,8 +242,9 @@ Widget buildMessageWidget(
   bool displayOptions,
   App? appSender,
   Function(ServerConversation) updateConversation,
-  Function(int) sendMessageNps,
-) {
+  Function(int) sendMessageNps, {
+  Function(String)? onAskOmi,
+}) {
   if (message.memories.isNotEmpty) {
     return MemoriesMessageWidget(
         showTypingIndicator: showTypingIndicator,
@@ -242,7 +253,8 @@ Widget buildMessageWidget(
         updateConversation: updateConversation,
         message: message,
         setMessageNps: sendMessageNps,
-        date: message.createdAt);
+        date: message.createdAt,
+        onAskOmi: onAskOmi);
   } else if (message.type == MessageType.daySummary) {
     return DaySummaryWidget(
         showTypingIndicator: showTypingIndicator, messageText: message.text.decodeString, date: message.createdAt);
@@ -251,6 +263,7 @@ Widget buildMessageWidget(
       showTypingIndicator: showTypingIndicator,
       messageText: message.text.decodeString,
       sendMessage: sendMessage,
+      onAskOmi: onAskOmi,
     );
   } else {
     return NormalMessageWidget(
@@ -260,6 +273,7 @@ Widget buildMessageWidget(
       message: message,
       setMessageNps: sendMessageNps,
       createdAt: message.createdAt,
+      onAskOmi: onAskOmi,
     );
   }
 }
@@ -268,9 +282,14 @@ class InitialMessageWidget extends StatelessWidget {
   final bool showTypingIndicator;
   final String messageText;
   final Function(String) sendMessage;
+  final Function(String)? onAskOmi;
 
   const InitialMessageWidget(
-      {super.key, required this.showTypingIndicator, required this.messageText, required this.sendMessage});
+      {super.key,
+      required this.showTypingIndicator,
+      required this.messageText,
+      required this.sendMessage,
+      this.onAskOmi});
 
   @override
   Widget build(BuildContext context) {
@@ -287,7 +306,7 @@ class InitialMessageWidget extends StatelessWidget {
                   Spacer(),
                 ],
               )
-            : getMarkdownWidget(context, messageText),
+            : getMarkdownWidget(context, messageText, onAskOmi: onAskOmi),
         const SizedBox(height: 8),
         const SizedBox(height: 8),
         InitialOptionWidget(optionText: 'What did I do yesterday?', sendMessage: sendMessage),
@@ -404,6 +423,7 @@ class NormalMessageWidget extends StatefulWidget {
   final ServerMessage message;
   final Function(int) setMessageNps;
   final DateTime createdAt;
+  final Function(String)? onAskOmi;
 
   const NormalMessageWidget({
     super.key,
@@ -413,6 +433,7 @@ class NormalMessageWidget extends StatefulWidget {
     required this.setMessageNps,
     required this.createdAt,
     this.thinkings = const [],
+    this.onAskOmi,
   });
 
   @override
@@ -557,7 +578,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
             ? const SizedBox.shrink()
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: getMarkdownWidget(context, widget.messageText),
+                child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
               ),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
@@ -577,6 +598,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final ServerMessage message;
   final Function(int) setMessageNps;
   final DateTime date;
+  final Function(String)? onAskOmi;
 
   const MemoriesMessageWidget({
     super.key,
@@ -587,6 +609,7 @@ class MemoriesMessageWidget extends StatefulWidget {
     required this.message,
     required this.setMessageNps,
     required this.date,
+    this.onAskOmi,
   });
 
   @override
@@ -734,7 +757,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       Spacer(),
                     ],
                   )
-                : getMarkdownWidget(context, widget.messageText),
+                : getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -891,9 +914,9 @@ class _MessageActionBarState extends State<MessageActionBar> {
               await Clipboard.setData(ClipboardData(text: widget.messageText));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text(
-                      'Message copied to clipboard',
+                      context.l10n.messageCopied,
                       style: TextStyle(color: Colors.white, fontSize: 12.0),
                     ),
                     duration: Duration(milliseconds: 1500),
