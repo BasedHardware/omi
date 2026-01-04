@@ -43,12 +43,17 @@ from routers import (
 
 from utils.other.timeout import TimeoutMiddleware
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
-else:
-    firebase_admin.initialize_app()
+from google.auth.exceptions import DefaultCredentialsError
+
+try:
+    if os.environ.get('SERVICE_ACCOUNT_JSON'):
+        service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+        credentials = firebase_admin.credentials.Certificate(service_account_info)
+        firebase_admin.initialize_app(credentials)
+    else:
+        firebase_admin.initialize_app()
+except (DefaultCredentialsError, ValueError) as e:
+    print(f"⚠️ Warning: Firebase Admin initialization failed ({e}). Auth & DB features may not work.")
 
 app = FastAPI()
 
