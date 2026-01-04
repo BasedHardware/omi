@@ -72,10 +72,21 @@ static void boot_led_sequence(void)
     set_led_blue(false);
 }
 
+// LED blink timing: 500ms on every 5 seconds (10 cycles at 500ms each)
+#define LED_BLINK_CYCLES 10
+static uint8_t led_cycle_counter = 0;
+
 void set_led_state()
 {
-    // Recording and connected state - BLUE
+    led_cycle_counter++;
+    if (led_cycle_counter >= LED_BLINK_CYCLES) {
+        led_cycle_counter = 0;
+    }
 
+    // Only turn on status LED on the first cycle (500ms), off for remaining 4500ms
+    bool led_blink_on = (led_cycle_counter == 0);
+
+    // Charging indicator - green LED blinks when charging
     if (usb_charge) {
         is_charging = !is_charging;
         if (is_charging) {
@@ -86,20 +97,23 @@ void set_led_state()
     } else {
         set_led_green(false);
     }
+
     if (is_off) {
         set_led_red(false);
         set_led_blue(false);
         return;
     }
+
+    // Connected state - BLUE blink
     if (is_connected) {
-        set_led_blue(true);
+        set_led_blue(led_blink_on);
         set_led_red(false);
         return;
     }
 
-    // Recording but lost connection - RED
+    // Not connected - RED blink
     if (!is_connected) {
-        set_led_red(true);
+        set_led_red(led_blink_on);
         set_led_blue(false);
         return;
     }

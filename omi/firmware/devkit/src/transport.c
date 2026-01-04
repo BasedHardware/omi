@@ -32,6 +32,13 @@ struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
 uint16_t current_package_index = 0;
 
+// Custom advertising parameters - 300ms interval for power savings
+// (default BT_LE_ADV_CONN uses ~100ms which causes frequent radio activity)
+#define SLOW_ADV_PARAM BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONNECTABLE, \
+    480,   /* Min interval: 300ms (480 * 0.625ms) */ \
+    560,   /* Max interval: 350ms (560 * 0.625ms) */ \
+    NULL)
+
 //
 // Internal
 //
@@ -520,21 +527,27 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
 
 static bool read_from_tx_queue()
 {
+    // Check if there's enough data before trying to read
+    // This avoids busy-polling and excessive error logging
+    uint32_t available = ring_buf_size_get(&ring_buf);
+    if (available < (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)) {
+        // Not enough data yet - this is normal, just return silently
+        return false;
+    }
 
     // Read from ring buffer
-    // memset(tx_buffer, 0, sizeof(tx_buffer));
     tx_buffer_size =
         ring_buf_get(&ring_buf,
                      tx_buffer,
-                     (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
+                     (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE));
     if (tx_buffer_size != (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)) {
-        LOG_ERR("Failed to read from ring buffer. not enough data %d", tx_buffer_size);
+        // This should not happen if we checked size first - log it
+        LOG_ERR("Unexpected ring buffer read failure: %d", tx_buffer_size);
         return false;
     }
 
     // Adjust size
     tx_buffer_size = tx_buffer[0] + (tx_buffer[1] << 8);
-    // LOG_PRINTK("tx_buffer_size %d\n",tx_buffer_size);
 
     return true;
 }
@@ -725,7 +738,7 @@ int bt_off()
 int bt_on()
 {
     int err = bt_enable(NULL);
-    bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    bt_le_adv_start(SLOW_ADV_PARAM, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     bt_gatt_service_register(&storage_service);
     sd_on();
     mic_on();
@@ -763,12 +776,12 @@ int transport_start()
     bt_gatt_service_register(&storage_service);
     bt_gatt_service_register(&audio_service);
     bt_gatt_service_register(&dfu_service);
-    err = bt_le_adv_start(BT_LE_ADV_CONN, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
+    err = bt_le_adv_start(SLOW_ADV_PARAM, bt_ad, ARRAY_SIZE(bt_ad), bt_sd, ARRAY_SIZE(bt_sd));
     if (err) {
         LOG_ERR("Transport advertising failed to start (err %d)", err);
         return err;
     } else {
-        LOG_INF("Advertising successfully started");
+        LOG_INF("Advertising successfully started (500ms interval)");
     }
 
     int battErr = 0;
