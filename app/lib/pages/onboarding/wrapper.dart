@@ -49,9 +49,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   late Animation<double> _backgroundFadeAnimation;
   String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
+  SpeechProfileProvider? _speechProfileProvider;
 
   @override
   void initState() {
+    _speechProfileProvider = SpeechProfileProvider();
     _controller = TabController(
         length: 8, vsync: this); // Auth, Name, Lang, Permissions, Review, Welcome, FindDevices, SpeechProfile
     _controller!.addListener(() {
@@ -105,6 +107,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void dispose() {
     _controller?.dispose();
     _backgroundAnimationController.dispose();
+    _speechProfileProvider?.dispose();
     super.dispose();
   }
 
@@ -226,8 +229,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Placeholder pages - not used in new flow but kept for index consistency
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      ChangeNotifierProvider(
-        create: (context) => SpeechProfileProvider(),
+      ChangeNotifierProvider.value(
+        value: _speechProfileProvider!,
         child: SpeechProfileWidget(
           goNext: () {
             // Speech profile complete, finish onboarding
@@ -422,7 +425,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () {
-                                    if (_controller!.index > kNamePage) {
+                                    if (_controller!.index == kSpeechProfilePage) {
+                                      _speechProfileProvider?.close();
+                                      _controller!.animateTo(kUserReviewPage);
+                                    } else if (_controller!.index > kNamePage) {
                                       _controller!.animateTo(_controller!.index - 1);
                                     }
                                   },
