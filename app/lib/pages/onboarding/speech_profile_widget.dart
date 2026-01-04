@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
@@ -290,55 +292,70 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 const SizedBox(height: 20),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                                  decoration: BoxDecoration(
-                                    border: const GradientBoxBorder(
-                                      gradient: LinearGradient(colors: [
-                                        Color.fromARGB(127, 208, 208, 208),
-                                        Color.fromARGB(127, 188, 99, 121),
-                                        Color.fromARGB(127, 86, 101, 182),
-                                        Color.fromARGB(127, 126, 190, 236)
-                                      ]),
-                                      width: 2,
+                                Material(
+                                  elevation: 4,
+                                  color: Colors.transparent,
+                                  shape: const CircleBorder(),
+                                  child: Container(
+                                    height: 56,
+                                    width: 56,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF6B46C1),
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.3),
+                                          spreadRadius: 1,
+                                          blurRadius: 5,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                                     ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: TextButton(
-                                    onPressed: () async {
-                                      // Check if user has set primary language, if not, show dialog
-                                      if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
-                                        await LanguageSelectionDialog.show(context);
-                                      }
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      shape: const CircleBorder(),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(28),
+                                        onTap: () async {
+                                          HapticFeedback.mediumImpact();
+                                          // Check if user has set primary language, if not, show dialog
+                                          if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
+                                            await LanguageSelectionDialog.show(context);
+                                          }
 
-                                      await stopAllRecording();
+                                          await stopAllRecording();
 
-                                      // Initialize speech profile with phone mic as input source
-                                      // Don't pass restartDeviceRecording - we don't want to restart device recording
-                                      bool success = await provider.initialise(
-                                        usePhoneMic: true,
-                                        processConversationCallback: () {
-                                          Provider.of<CaptureProvider>(context, listen: false)
-                                              .forceProcessingCurrentConversation();
+                                          // Initialize speech profile with phone mic as input source
+                                          // Don't pass restartDeviceRecording - we don't want to restart device recording
+                                          bool success = await provider.initialise(
+                                            usePhoneMic: true,
+                                            processConversationCallback: () {
+                                              Provider.of<CaptureProvider>(context, listen: false)
+                                                  .forceProcessingCurrentConversation();
+                                            },
+                                          );
+
+                                          if (!success) {
+                                            // Initialization failed, error dialog will be shown
+                                            return;
+                                          }
+
+                                          provider.forceCompletionTimer =
+                                              Timer(Duration(seconds: provider.maxDuration), () async {
+                                            provider.finalize();
+                                          });
+
+                                          // Start question animation
+                                          _questionAnimationController.forward();
                                         },
-                                      );
-
-                                      if (!success) {
-                                        // Initialization failed, error dialog will be shown
-                                        return;
-                                      }
-
-                                      provider.forceCompletionTimer =
-                                          Timer(Duration(seconds: provider.maxDuration), () async {
-                                        provider.finalize();
-                                      });
-
-                                      // Start question animation
-                                      _questionAnimationController.forward();
-                                    },
-                                    child: Text(
-                                      context.l10n.getStarted,
-                                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                                        child: Center(
+                                          child: FaIcon(
+                                            FontAwesomeIcons.microphone,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),

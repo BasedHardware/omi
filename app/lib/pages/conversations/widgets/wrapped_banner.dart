@@ -32,6 +32,9 @@ class _WrappedBannerState extends State<WrappedBanner> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    // Hide wrapped banner for now
+    return const SizedBox.shrink();
+
     // Don't show banner if user has already viewed their wrapped
     if (SharedPreferencesUtil().hasViewedWrapped2025) {
       return const SizedBox.shrink();

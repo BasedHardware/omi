@@ -187,6 +187,21 @@ class SharedPreferencesUtil {
 
   bool get hasViewedWrapped2025 => getBool('hasViewedWrapped2025', defaultValue: false);
 
+  // Home onboarding - track completion
+  bool get hasOpenedBrainMap => getBool('hasOpenedBrainMap', defaultValue: false);
+
+  set hasOpenedBrainMap(bool value) => saveBool('hasOpenedBrainMap', value);
+
+  int get homeOnboardingViewCount => getInt('homeOnboardingViewCount', defaultValue: 0);
+
+  set homeOnboardingViewCount(int value) => saveInt('homeOnboardingViewCount', value);
+
+  void incrementHomeOnboardingViewCount() {
+    homeOnboardingViewCount = homeOnboardingViewCount + 1;
+  }
+
+  bool get isHomeOnboardingCompleted => hasOpenedBrainMap || homeOnboardingViewCount >= 10;
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled');

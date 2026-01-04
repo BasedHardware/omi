@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
@@ -363,8 +364,8 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                   ? const CircularProgressIndicator(
                                       color: Colors.white,
                                     )
-                                  : MaterialButton(
-                                      onPressed: () async {
+                                  : GestureDetector(
+                                      onTap: () async {
                                         // Check if user has set primary language, if not, show dialog
                                         if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
                                           await LanguageSelectionDialog.show(context);
@@ -410,15 +411,51 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         provider.updateStartedRecording(true);
                                         _questionAnimationController.forward();
                                       },
-                                      color: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                      child: Text(
-                                        SharedPreferencesUtil().hasSpeakerProfile ? 'Do it again' : 'Get Started',
-                                        style: const TextStyle(color: Colors.black),
+                                      child: Material(
+                                        elevation: 4,
+                                        color: Colors.transparent,
+                                        shape: const CircleBorder(),
+                                        child: Container(
+                                          height: 56,
+                                          width: 56,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF6B46C1),
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.3),
+                                                spreadRadius: 1,
+                                                blurRadius: 5,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Center(
+                                            child: FaIcon(
+                                              FontAwesomeIcons.microphone,
+                                              color: Colors.white,
+                                              size: 22,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 16),
+                              if (widget.onbording)
+                                TextButton(
+                                  onPressed: () {
+                                    routeToPage(context, const HomePageWrapper(), replace: true);
+                                  },
+                                  child: const Text(
+                                    'Skip for now',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              if (!widget.onbording) const SizedBox(height: 24),
                               SharedPreferencesUtil().hasSpeakerProfile
                                   ? TextButton(
                                       onPressed: () {

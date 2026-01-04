@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -13,6 +14,7 @@ import 'package:shimmer/shimmer.dart';
 import 'widgets/memory_edit_sheet.dart';
 import 'widgets/memory_item.dart';
 import 'widgets/memory_dialog.dart';
+import 'widgets/memories_onboarding_widget.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -311,6 +313,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                   height: 44,
                                   child: ElevatedButton(
                                     onPressed: () {
+                                      // Mark onboarding as completed when brain map is opened
+                                      if (!SharedPreferencesUtil().hasOpenedBrainMap) {
+                                        SharedPreferencesUtil().hasOpenedBrainMap = true;
+                                      }
                                       Navigator.of(context).push(
                                         MaterialPageRoute(
                                           builder: (context) => const MemoryGraphPage(),
@@ -351,6 +357,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                             ),
                           ),
                         ),
+                        // Onboarding text widget
+                        if (!SharedPreferencesUtil().isHomeOnboardingCompleted)
+                          const SliverToBoxAdapter(child: MemoriesOnboardingWidget()),
                         if (provider.filteredMemories.isEmpty)
                           SliverFillRemaining(
                             child: Center(
