@@ -12,7 +12,11 @@ interface TranscriptionProps {
   people?: Person[];
 }
 
-export default function Transcription({ transcript, externalData, people }: TranscriptionProps) {
+export default function Transcription({
+  transcript,
+  externalData,
+  people,
+}: TranscriptionProps) {
   if (transcript.length === 0 && externalData) {
     return <ExternalData externalData={externalData} />;
   } else if (transcript.length === 0 && !externalData) {

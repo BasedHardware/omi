@@ -9,7 +9,12 @@ interface TabsProps {
   showNewChat?: boolean;
 }
 
-export default function Tabs({ currentTab, setCurrentTab, onNewChat, showNewChat }: TabsProps) {
+export default function Tabs({
+  currentTab,
+  setCurrentTab,
+  onNewChat,
+  showNewChat,
+}: TabsProps) {
   return (
     <div className="mt-4 flex items-center gap-3 border-b border-zinc-800 md:mt-6">
       <div className="flex gap-1">

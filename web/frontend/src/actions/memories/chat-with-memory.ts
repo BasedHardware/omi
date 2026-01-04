@@ -19,7 +19,9 @@ export interface ChatWithMemoryResponse {
 const OPENAI_API_KEY = envConfig.OPENAI_API_KEY;
 
 if (!OPENAI_API_KEY) {
-  throw new Error('OPENAI_API_KEY is not configured. Please set it in your environment variables.');
+  throw new Error(
+    'OPENAI_API_KEY is not configured. Please set it in your environment variables.',
+  );
 }
 
 // Rough token estimation: ~4 characters per token
@@ -51,16 +53,16 @@ export default async function chatWithMemory(
   try {
     // Use gpt-4.1 which has 128k context window, or fallback to gpt-3.5-turbo-16k
     const model = 'gpt-4.1';
-    
+
     // Estimate tokens for conversation messages (reserve ~2000 tokens for system message and response)
     const conversationTokens = data.messages.reduce(
       (sum, msg) => sum + estimateTokens(msg.content),
-      0
+      0,
     );
-    
+
     // Reserve tokens: 2000 for system message overhead, 2000 for response, 2000 for conversation
     const maxTranscriptTokens = 120000 - conversationTokens - 2000 - 2000;
-    
+
     // Truncate transcript if needed
     const processedTranscript = truncateTranscript(data.transcript, maxTranscriptTokens);
 
@@ -100,13 +102,13 @@ Please answer questions based on the transcript above. Even if a question seems 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       console.error('OpenAI API error:', response.status, errorData);
-      
+
       // If context length error, try with gpt-3.5-turbo-16k as fallback
       if (errorData.error?.code === 'context_length_exceeded') {
         const fallbackModel = 'gpt-3.5-turbo-16k';
         const fallbackMaxTokens = 14000 - conversationTokens - 2000 - 2000;
         const fallbackTranscript = truncateTranscript(data.transcript, fallbackMaxTokens);
-        
+
         const fallbackSystemMessage = {
           role: 'system' as const,
           content: `You are a helpful chatbot assistant. You have access to the following conversation transcript. Use this context to answer questions accurately and helpfully.
@@ -123,35 +125,45 @@ ${fallbackTranscript}
 Please answer questions based on the transcript above. Even if a question seems unrelated, always try to find and reference relevant information from the conversation.`,
         };
 
-        const fallbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
+        const fallbackResponse = await fetch(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${OPENAI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model: fallbackModel,
+              messages: [fallbackSystemMessage, ...recentMessages],
+              temperature: 0.7,
+            }),
           },
-          body: JSON.stringify({
-            model: fallbackModel,
-            messages: [fallbackSystemMessage, ...recentMessages],
-            temperature: 0.7,
-          }),
-        });
+        );
 
         if (!fallbackResponse.ok) {
           const fallbackErrorData = await fallbackResponse.json().catch(() => ({}));
-          console.error('OpenAI API fallback error:', fallbackResponse.status, fallbackErrorData);
+          console.error(
+            'OpenAI API fallback error:',
+            fallbackResponse.status,
+            fallbackErrorData,
+          );
           return null;
         }
 
         const fallbackResult = await fallbackResponse.json();
-        const assistantMessage = fallbackResult.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+        const assistantMessage =
+          fallbackResult.choices[0]?.message?.content ||
+          'Sorry, I could not generate a response.';
         return { message: assistantMessage };
       }
-      
+
       return null;
     }
 
     const result = await response.json();
-    const assistantMessage = result.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+    const assistantMessage =
+      result.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
 
     return {
       message: assistantMessage,
@@ -161,4 +173,3 @@ Please answer questions based on the transcript above. Even if a question seems 
     return null;
   }
 }
-
