@@ -334,7 +334,7 @@ int main(void)
 #endif
 
         set_led_state();
-        k_msleep(500);
+        k_msleep(1000);
     }
 
     printk("Exiting omi...");
