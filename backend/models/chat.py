@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Any
+from typing import Dict, List, Optional, Any
 
 from pydantic import BaseModel, model_validator
 
@@ -166,6 +166,7 @@ class ResponseMessage(Message):
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
+    context: Optional[Dict[str, Any]] = None  # Page context: {type, id, title}
 
 
 class ChatSession(BaseModel):

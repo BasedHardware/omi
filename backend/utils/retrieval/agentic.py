@@ -11,7 +11,7 @@ import uuid
 import asyncio
 import contextvars
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator, Tuple, Any
+from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
 
 import database.notifications as notification_db
 
@@ -300,6 +300,7 @@ async def execute_agentic_chat_stream(
     app: Optional[App] = None,
     callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
+    context: Optional[Dict[str, Any]] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Execute an agentic chat interaction with streaming.
@@ -310,12 +311,13 @@ async def execute_agentic_chat_stream(
         app: Optional app/plugin
         callback_data: Dict to store callback data (answer, memories, etc.)
         chat_session: Optional chat session for file context
+        context: Optional page context {type, id, title}
 
     Yields:
         Formatted chunks with "data: " or "think: " prefixes
     """
-    # Build system prompt with file context
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages)
+    # Build system prompt with file context and page context
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
 
     # Get all tools
     tools = [

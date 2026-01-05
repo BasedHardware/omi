@@ -3,7 +3,7 @@ import json
 import re
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
@@ -393,7 +393,12 @@ def _get_qa_rag_prompt(
     )
 
 
-def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None, messages: List[Message] = None) -> str:
+def _get_agentic_qa_prompt(
+    uid: str,
+    app: Optional[App] = None,
+    messages: List[Message] = None,
+    context: Optional[Dict[str, Any]] = None
+) -> str:
     """
     Build the system prompt for the agentic agent.
 
@@ -401,6 +406,7 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None, messages: List[M
         uid: User ID
         app: Optional app/plugin for personalized behavior
         messages: Optional message history for file context
+        context: Optional page context {type, id, title}
 
     Returns:
         System prompt string
@@ -462,12 +468,25 @@ Use search_files_tool to reference file IDs shown above.
 
 """
 
+    # Add page context if provided
+    context_section = ""
+    if context:
+        ctx_type = context.get('type', 'item')
+        ctx_id = context.get('id', '')
+        ctx_title = context.get('title', '')
+        context_section = f"""<current_context>
+{user_name} is currently viewing: {ctx_type} - "{ctx_title}" (ID: {ctx_id})
+Use your tools to fetch details about this {ctx_type} if relevant to their question.
+</current_context>
+
+"""
+
     base_prompt = f"""<assistant_role>
 You are Omi, {user_name}'s AI mentor and advisor. Like a smart friend who actually pushes back.
 Default: helpful, honest, and concise. Talk like a real person texting.
 </assistant_role>
 
-{goal_section}{file_context_section}<current_datetime>
+{goal_section}{file_context_section}{context_section}<current_datetime>
 {user_name}'s timezone: {tz}
 Now: {current_datetime_str} ({current_datetime_iso})
 </current_datetime>
