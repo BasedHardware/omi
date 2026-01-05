@@ -62,6 +62,16 @@ async function handleRequest(
       'Authorization': authHeader,
     };
 
+    // Forward custom headers for FCM token registration
+    const appPlatform = request.headers.get('X-App-Platform');
+    const deviceIdHash = request.headers.get('X-Device-Id-Hash');
+    if (appPlatform) {
+      headers['X-App-Platform'] = appPlatform;
+    }
+    if (deviceIdHash) {
+      headers['X-Device-Id-Hash'] = deviceIdHash;
+    }
+
     if (!isMultipart && request.method !== 'GET' && request.method !== 'DELETE') {
       headers['Content-Type'] = 'application/json';
     }
