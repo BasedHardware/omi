@@ -74,18 +74,27 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
-def _build_webpush_config(tag: str) -> messaging.WebpushConfig:
-    """Build WebPush configuration for browser notifications."""
+def _build_webpush_config(
+    tag: str, title: str = None, body: str = None, link: str = '/'
+) -> messaging.WebpushConfig:
+    """Build WebPush configuration for browser notifications.
+
+    Note: WebpushNotification must explicitly include title/body because
+    browsers use webpush.notification instead of the top-level notification
+    when the webpush block is present.
+    """
     return messaging.WebpushConfig(
         headers={
             'Topic': tag,  # For deduplication
             'Urgency': 'high',
         },
         notification=messaging.WebpushNotification(
+            title=title,
+            body=body,
             icon='/logo.png',
         ),
         fcm_options=messaging.WebpushFCMOptions(
-            link='/',  # Default link, overridden by navigate_to in data
+            link=link,
         ),
     )
 
@@ -99,13 +108,19 @@ def _build_message(
     priority: str = 'normal',
 ) -> messaging.Message:
     """Build a complete FCM message with proper platform configs."""
+    # Extract title/body for webpush config (browsers need explicit values)
+    title = notification.title if notification else None
+    body = notification.body if notification else None
+    # Extract navigate_to for webpush click-through link
+    link = data.get('navigate_to', '/') if data else '/'
+
     return messaging.Message(
         token=token,
         notification=notification,
         data=data,
         android=_build_android_config(tag, priority, is_data_only=(notification is None)),
         apns=_build_apns_config(tag, is_background),
-        webpush=_build_webpush_config(tag),
+        webpush=_build_webpush_config(tag, title, body, link),
     )
 
 
