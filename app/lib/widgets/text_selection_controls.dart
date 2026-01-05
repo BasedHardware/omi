@@ -66,46 +66,28 @@ class OmiToolbarDivider extends StatelessWidget {
 Widget omiSelectionMenuBuilder(
   BuildContext context,
   dynamic delegate,
-  Function(String) onAskOmi,
-) {
+  Function(String) onAskOmi, {
+  String? selectedText,
+}) {
   final List<Widget> toolbarItems = [];
-  String text = '';
+  String text = selectedText ?? '';
   
-  if (delegate is TextSelectionDelegate) {
+  if (delegate is TextSelectionDelegate && text.isEmpty) {
     text = delegate.textEditingValue.selection.textInside(delegate.textEditingValue.text);
   }
   
   // Ask Omi
-  if (text.trim().isNotEmpty || delegate is SelectableRegionState) {
+  if (text.trim().isNotEmpty) {
     toolbarItems.add(OmiToolbarAction(
       label: 'Ask Omi',
-      onPressed: () async {
-        String queryText = text;
-        
-        if (delegate is SelectableRegionState) {
-           delegate.copySelection(SelectionChangedCause.toolbar);
-           
-           await Future.delayed(const Duration(milliseconds: 100));
-           
-           var clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-           queryText = clipboardData?.text ?? '';
-           
-           if (queryText.isEmpty) {
-              await Future.delayed(const Duration(milliseconds: 200));
-              clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-              queryText = clipboardData?.text ?? '';
-           }
-        }
-        
-        if (queryText.trim().isNotEmpty) {
-           onAskOmi(queryText);
-           delegate.hideToolbar();
-        }
+      onPressed: () {
+        onAskOmi(text);
+        delegate.hideToolbar();
       },
     ));
   }
 
-  if (text.isNotEmpty || delegate is SelectableRegionState) {
+  if (text.isNotEmpty) {
     if (toolbarItems.isNotEmpty) {
       toolbarItems.add(const OmiToolbarDivider());
     }

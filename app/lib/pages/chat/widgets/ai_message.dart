@@ -5,6 +5,7 @@ import 'package:auto_size_text/auto_size_text.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
@@ -578,7 +579,27 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
             ? const SizedBox.shrink()
             : Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                child: Builder(
+                  builder: (context) {
+                    String? selectedText;
+                    return SelectionArea(
+                      onSelectionChanged: (SelectedContent? selectedContent) {
+                        selectedText = selectedContent?.plainText;
+                      },
+                      contextMenuBuilder: (context, selectableRegionState) {
+                        return omiSelectionMenuBuilder(
+                          context,
+                          selectableRegionState,
+                          (text) {
+                            widget.onAskOmi?.call(text);
+                          },
+                          selectedText: selectedText,
+                        );
+                      },
+                      child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                    );
+                  },
+                ),
               ),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
@@ -757,7 +778,27 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                       Spacer(),
                     ],
                   )
-                : getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                : Builder(
+                    builder: (context) {
+                      String? selectedText;
+                      return SelectionArea(
+                        onSelectionChanged: (SelectedContent? selectedContent) {
+                          selectedText = selectedContent?.plainText;
+                        },
+                        contextMenuBuilder: (context, selectableRegionState) {
+                          return omiSelectionMenuBuilder(
+                            context,
+                            selectableRegionState,
+                            (text) {
+                              widget.onAskOmi?.call(text);
+                            },
+                            selectedText: selectedText,
+                          );
+                        },
+                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                      );
+                    },
+                  ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,

@@ -1,16 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
-import 'package:omi/widgets/text_selection_controls.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
-  return SelectionArea(
-    contextMenuBuilder: (context, selectableRegionState) {
-      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-        onAskOmi?.call(text);
-      });
-    },
-    child: MarkdownBody(
+  return MarkdownBody(
       data: message.trimRight(),
       selectable: false,
       styleSheet: MarkdownStyleSheet(
@@ -32,6 +25,5 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
           launchUrl(Uri.parse(href));
         }
       },
-    ),
-  );
+    );
 }
