@@ -29,6 +29,7 @@ import 'package:omi/pages/settings/delete_account.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/pages/settings/calendar_settings_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
@@ -48,6 +49,7 @@ import 'package:url_launcher/url_launcher.dart';
 enum SettingsSection {
   account,
   plansAndBilling,
+  calendarIntegration,
   shortcuts,
   developer,
   about,
@@ -242,6 +244,11 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             label: 'Plans & Billing',
             section: SettingsSection.plansAndBilling,
           ),
+          _buildNavItem(
+            icon: FontAwesomeIcons.calendar,
+            label: 'Calendar Integration',
+            section: SettingsSection.calendarIntegration,
+          ),
           if (ShortcutService.isSupported)
             _buildNavItem(
               icon: FontAwesomeIcons.keyboard,
@@ -336,6 +343,8 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         return _buildAccountContent();
       case SettingsSection.plansAndBilling:
         return _buildPlansContent();
+      case SettingsSection.calendarIntegration:
+        return _buildCalendarIntegrationContent();
       case SettingsSection.shortcuts:
         return _buildShortcutsContent();
       case SettingsSection.developer:
@@ -545,6 +554,30 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const PaymentsPage());
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCalendarIntegrationContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSettingsGroup(
+          title: 'Calendar',
+          children: [
+            _buildSettingsRow(
+              title: 'Manage Calendar Integration',
+              subtitle: 'Connect and sync your calendars with Omi',
+              onTap: () {
+                Navigator.of(context).pop();
+                MixpanelManager().pageOpened('Calendar Integration');
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const CalendarSettingsPage()),
+                );
               },
             ),
           ],
