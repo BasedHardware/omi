@@ -221,8 +221,11 @@ class ConversationProvider extends ChangeNotifier {
     if (showStarredOnly) {
       showDailySummaries = false;
     }
-    groupConversationsByDate();
+
+    // Clear and refetch conversations to get starred from server
+    groupedConversations = {};
     notifyListeners();
+    fetchConversations();
   }
 
   void toggleDailySummaries() {
@@ -504,6 +507,7 @@ class ConversationProvider extends ChangeNotifier {
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
+      starred: showStarredOnly ? true : null,
     );
   }
 
@@ -528,6 +532,7 @@ class ConversationProvider extends ChangeNotifier {
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
+      starred: showStarredOnly ? true : null,
     );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
