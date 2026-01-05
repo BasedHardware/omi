@@ -29,8 +29,10 @@ import 'package:omi/pages/settings/delete_account.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/pages/settings/people.dart';
-import 'package:omi/pages/settings/calendar_settings_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/providers/calendar_provider.dart';
+import 'package:omi/services/calendar_service.dart';
+import 'package:intl/intl.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
 import 'package:omi/pages/speech_profile/page.dart';
@@ -100,19 +102,37 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   bool _shortcutsLoading = true;
   String? _recordingFor;
 
+  // Calendar state
+  bool _showMenuBarMeetings = true;
+  bool _showEventsWithNoParticipants = false;
+
   @override
   void initState() {
     super.initState();
     _selectedSection = widget.initialSection;
     _loadShortcuts();
+    _loadCalendarSettings();
     
     // Initialize developer mode provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<DeveloperModeProvider>().initialize();
         context.read<McpProvider>().fetchKeys();
+        _initCalendarProvider();
       }
     });
+  }
+
+  void _loadCalendarSettings() {
+    _showMenuBarMeetings = SharedPreferencesUtil().showMeetingsInMenuBar;
+    _showEventsWithNoParticipants = SharedPreferencesUtil().showEventsWithNoParticipants;
+  }
+
+  void _initCalendarProvider() {
+    final provider = context.read<CalendarProvider>();
+    if (provider.isAuthorized) {
+      provider.fetchSystemCalendars();
+    }
   }
   
   Future<void> _loadShortcuts() async {
@@ -563,27 +583,418 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   }
 
   Widget _buildCalendarIntegrationContent() {
+    return Consumer<CalendarProvider>(
+      builder: (context, provider, _) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Calendar Providers Section
+            _buildSettingsGroup(
+              title: 'Calendar Providers',
+              children: [
+                _buildCalendarProviderRow(
+                  icon: FontAwesomeIcons.calendar,
+                  iconColor: const Color(0xFF5AC8FA),
+                  title: 'macOS Calendar',
+                  subtitle: 'Connect your macOS Calendar',
+                  isEnabled: provider.isAuthorized && provider.isMonitoring,
+                  onToggle: (value) async {
+                    if (value) {
+                      if (provider.isAuthorized) {
+                        SharedPreferencesUtil().calendarIntegrationEnabled = true;
+                        await provider.startMonitoring();
+                      } else {
+                        await provider.requestPermission();
+                      }
+                    } else {
+                      await provider.stopMonitoring();
+                    }
+                  },
+                ),
+                _buildCalendarProviderRow(
+                  icon: FontAwesomeIcons.google,
+                  iconColor: const Color(0xFF4285F4),
+                  title: 'Google Calendar',
+                  subtitle: 'Sync your Google account',
+                  isEnabled: false,
+                  onToggle: (value) {
+                    AppSnackbar.showSnackbar('Google Calendar integration coming soon!');
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // Settings Section
+            _buildSettingsGroup(
+              title: 'Display Options',
+              children: [
+                _buildCalendarToggleRow(
+                  title: 'Show Meetings in Menu Bar',
+                  subtitle: 'Display upcoming meetings in the menu bar',
+                  value: _showMenuBarMeetings,
+                  onChanged: (value) {
+                    setState(() => _showMenuBarMeetings = value);
+                    provider.updateShowMeetingsInMenuBar(value);
+                  },
+                ),
+                _buildCalendarToggleRow(
+                  title: 'Show Events Without Participants',
+                  subtitle: 'Include personal events with no attendees',
+                  value: _showEventsWithNoParticipants,
+                  onChanged: (value) {
+                    setState(() => _showEventsWithNoParticipants = value);
+                    provider.updateShowEventsWithNoParticipants(value);
+                  },
+                ),
+              ],
+            ),
+
+            // Upcoming Meetings Section
+            if (provider.isAuthorized) ...[
+              const SizedBox(height: 24),
+              _buildUpcomingMeetingsSection(provider),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCalendarProviderRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool isEnabled,
+    required ValueChanged<bool> onToggle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: iconColor, size: 16),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: ResponsiveHelper.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: ResponsiveHelper.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          OmiCheckbox(
+            value: isEnabled,
+            onChanged: onToggle,
+            size: 18,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarToggleRow({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: ResponsiveHelper.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: ResponsiveHelper.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          OmiCheckbox(
+            value: value,
+            onChanged: onChanged,
+            size: 18,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpcomingMeetingsSection(CalendarProvider provider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSettingsGroup(
-          title: 'Calendar',
+        Row(
           children: [
-            _buildSettingsRow(
-              title: 'Manage Calendar Integration',
-              subtitle: 'Connect and sync your calendars with Omi',
-              onTap: () {
-                Navigator.of(context).pop();
-                MixpanelManager().pageOpened('Calendar Integration');
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const CalendarSettingsPage()),
-                );
-              },
+            const Text(
+              'UPCOMING MEETINGS',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: ResponsiveHelper.textTertiary,
+                letterSpacing: 0.5,
+              ),
             ),
+            const Spacer(),
+            if (provider.upcomingMeetings.isNotEmpty)
+              TextButton(
+                onPressed: () => provider.refreshMeetings(),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Refresh',
+                  style: TextStyle(
+                    color: ResponsiveHelper.purplePrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
           ],
         ),
+        const SizedBox(height: 8),
+        if (provider.upcomingMeetings.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                width: 1,
+              ),
+            ),
+            child: const Column(
+              children: [
+                Icon(
+                  Icons.event_busy,
+                  color: ResponsiveHelper.textTertiary,
+                  size: 32,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'No upcoming meetings',
+                  style: TextStyle(
+                    color: ResponsiveHelper.textSecondary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Checking the next 7 days',
+                  style: TextStyle(
+                    color: ResponsiveHelper.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          _buildMeetingsList(provider),
       ],
     );
+  }
+
+  Widget _buildMeetingsList(CalendarProvider provider) {
+    final sortedMeetings = List<CalendarMeeting>.from(provider.upcomingMeetings)
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
+
+    final groupedMeetings = <DateTime, List<CalendarMeeting>>{};
+    for (final meeting in sortedMeetings) {
+      final dateKey = DateTime(meeting.startTime.year, meeting.startTime.month, meeting.startTime.day);
+      groupedMeetings.putIfAbsent(dateKey, () => []).add(meeting);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: groupedMeetings.entries.map((entry) {
+        final date = entry.key;
+        final meetings = entry.value;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8, top: 8),
+              child: Text(
+                _formatMeetingDateHeader(date),
+                style: const TextStyle(
+                  color: ResponsiveHelper.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                children: [
+                  for (int i = 0; i < meetings.length; i++) ...[
+                    _buildMeetingCard(meetings[i]),
+                    if (i < meetings.length - 1)
+                      Container(
+                        height: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  String _formatMeetingDateHeader(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    if (date == today) {
+      return 'Today';
+    } else if (date == tomorrow) {
+      return 'Tomorrow';
+    } else {
+      return DateFormat('EEEE, MMMM d').format(date);
+    }
+  }
+
+  Widget _buildMeetingCard(CalendarMeeting meeting) {
+    final dateFormat = DateFormat('h:mm a');
+    final duration = meeting.endTime.difference(meeting.startTime);
+    final durationString = '${duration.inMinutes} min';
+    final platformColor = _getMeetingPlatformColor(meeting.platform);
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 36,
+            decoration: BoxDecoration(
+              color: platformColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  meeting.title,
+                  style: const TextStyle(
+                    color: ResponsiveHelper.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      '${dateFormat.format(meeting.startTime)} • $durationString',
+                      style: const TextStyle(
+                        color: ResponsiveHelper.textTertiary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: platformColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        meeting.platform,
+                        style: TextStyle(
+                          color: platformColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getMeetingPlatformColor(String platform) {
+    switch (platform.toLowerCase()) {
+      case 'zoom':
+        return const Color(0xFF2D8CFF);
+      case 'google meet':
+        return const Color(0xFF00AC47);
+      case 'teams':
+        return const Color(0xFF6264A7);
+      case 'slack':
+        return const Color(0xFF4A154B);
+      default:
+        return ResponsiveHelper.purplePrimary;
+    }
   }
 
   Widget _buildShortcutsContent() {
