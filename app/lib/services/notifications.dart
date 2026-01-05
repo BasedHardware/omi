@@ -70,13 +70,12 @@ class NotificationUtil {
       return;
     }
 
-    // Check if this is a daily reflection notification
     String? autoMessage;
     if (DailyReflectionNotification.isReflectionPayload(payload)) {
       autoMessage = DailyReflectionNotification.reflectionMessage;
     }
 
-    MyApp.navigatorKey.currentState?.pushReplacement(
+    MyApp.navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (context) => HomePageWrapper(
           navigateToRoute: navigateTo,
