@@ -564,9 +564,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doubleTapAction => 'ダブルタップアクション';
 
   @override
-  String get doubleTapActionDesc => 'ダブルタップ時の動作を選択';
-
-  @override
   String get endAndProcess => '終了して会話を処理';
 
   @override
@@ -574,9 +571,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get starOngoing => '進行中の会話にスターを付ける';
-
-  @override
-  String get starOngoingDesc => '会話終了時にスターを付けるようにマーク';
 
   @override
   String get off => 'オフ';
