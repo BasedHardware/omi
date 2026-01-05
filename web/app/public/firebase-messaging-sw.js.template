@@ -65,8 +65,12 @@ self.addEventListener('notificationclick', (event) => {
       // Action item notifications
       const taskId = pathParts.length > 2 ? pathParts.pop() : null;
       targetUrl = `${self.location.origin}/tasks${taskId ? `?highlight=${taskId}` : ''}`;
+    } else if (navigateTo.startsWith('/daily-summary')) {
+      // Daily summary notifications (backend sends /daily-summary/{id})
+      const recapId = pathParts.length > 2 ? pathParts.pop() : null;
+      targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
     } else if (navigateTo.startsWith('/recaps')) {
-      // Daily summary notifications
+      // Daily summary notifications (alternative path)
       const recapId = pathParts.length > 2 ? pathParts.pop() : null;
       targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
     } else if (navigateTo.startsWith('/conversations')) {
