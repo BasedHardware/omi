@@ -20,7 +20,7 @@ interface ChatContext {
 }
 
 export interface ChatContextInfo {
-  type: 'conversation' | 'task' | 'memory' | 'general';
+  type: 'conversation' | 'task' | 'memory' | 'recap' | 'general';
   id?: string;
   title?: string;
   summary?: string;

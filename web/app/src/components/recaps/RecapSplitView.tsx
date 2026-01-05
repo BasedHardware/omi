@@ -11,6 +11,7 @@ import { RecapDetailPanel, RecapDetailPanelSkeleton } from './RecapDetailPanel';
 import { RecapCardSkeleton } from './RecapCard';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import type { DailySummary } from '@/types/recap';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 // Panel width constraints (for left list panel)
 const MIN_PANEL_WIDTH = 280;
@@ -35,6 +36,28 @@ export function RecapSplitView() {
     removeRecap,
     getRecapDetail,
   } = useRecaps();
+
+  // Chat context for passing selected recap info
+  const { setContext } = useChatContext();
+
+  // Set chat context when a recap is selected
+  useEffect(() => {
+    if (selectedRecap) {
+      setContext({
+        type: 'recap',
+        id: selectedRecap.id,
+        title: selectedRecap.headline || `Daily Recap - ${selectedRecap.date}`,
+        summary: selectedRecap.overview,
+      });
+    } else {
+      setContext(null);
+    }
+  }, [selectedRecap, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Auto-select first recap on load
   useEffect(() => {

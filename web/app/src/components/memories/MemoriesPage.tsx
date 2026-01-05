@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useTransition } from 'react';
+import { useState, useCallback, useMemo, useTransition, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
@@ -55,6 +56,34 @@ export function MemoriesPage() {
     setCategories,
     activeCategories,
   } = useMemories();
+
+  // Chat context for passing selected memory info
+  const { setContext } = useChatContext();
+
+  // Set chat context when a memory is highlighted or single selected
+  useEffect(() => {
+    const targetId = highlightedMemoryId || (selectedIds.size === 1 ? Array.from(selectedIds)[0] : null);
+    if (targetId) {
+      const memory = memories.find((m) => m.id === targetId);
+      if (memory) {
+        setContext({
+          type: 'memory',
+          id: memory.id,
+          title: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
+          summary: memory.content,
+        });
+      } else {
+        setContext(null);
+      }
+    } else {
+      setContext(null);
+    }
+  }, [highlightedMemoryId, selectedIds, memories, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Get insights data for sidebar
   const { lifeBalance, risingTags, fadingTags, summary } = useInsightsDashboard(memories);
