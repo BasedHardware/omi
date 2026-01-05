@@ -168,24 +168,30 @@ const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null
     console.log('Service Worker registered:', registration);
 
     // Wait for the service worker to be active
-    if (registration.installing) {
+    const installingWorker = registration.installing;
+    if (installingWorker) {
       await new Promise<void>((resolve) => {
-        registration.installing!.addEventListener('statechange', function handler(e) {
+        const handler = (e: Event) => {
           if ((e.target as ServiceWorker).state === 'activated') {
-            registration.installing?.removeEventListener('statechange', handler);
+            installingWorker.removeEventListener('statechange', handler);
             resolve();
           }
-        });
+        };
+        installingWorker.addEventListener('statechange', handler);
       });
-    } else if (registration.waiting) {
-      await new Promise<void>((resolve) => {
-        registration.waiting!.addEventListener('statechange', function handler(e) {
-          if ((e.target as ServiceWorker).state === 'activated') {
-            registration.waiting?.removeEventListener('statechange', handler);
-            resolve();
-          }
+    } else {
+      const waitingWorker = registration.waiting;
+      if (waitingWorker) {
+        await new Promise<void>((resolve) => {
+          const handler = (e: Event) => {
+            if ((e.target as ServiceWorker).state === 'activated') {
+              waitingWorker.removeEventListener('statechange', handler);
+              resolve();
+            }
+          };
+          waitingWorker.addEventListener('statechange', handler);
         });
-      });
+      }
     }
 
     // Also ensure the service worker is ready

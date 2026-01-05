@@ -59,27 +59,29 @@ self.addEventListener('notificationclick', (event) => {
 
   if (navigateTo) {
     // Handle different notification types and their routes
+    const pathParts = navigateTo.split('/');
+
     if (navigateTo.startsWith('/tasks')) {
       // Action item notifications
-      const taskId = navigateTo.split('/').pop();
+      const taskId = pathParts.length > 2 ? pathParts.pop() : null;
       targetUrl = `${self.location.origin}/tasks${taskId ? `?highlight=${taskId}` : ''}`;
     } else if (navigateTo.startsWith('/recaps')) {
       // Daily summary notifications
-      const recapId = navigateTo.split('/').pop();
+      const recapId = pathParts.length > 2 ? pathParts.pop() : null;
       targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
     } else if (navigateTo.startsWith('/conversations')) {
       // Merge completed notifications
       targetUrl = `${self.location.origin}${navigateTo}`;
     } else if (navigateTo.startsWith('/apps')) {
       // Plugin notifications (apps page)
-      const appId = navigateTo.split('/').pop();
+      const appId = pathParts.length > 2 ? pathParts.pop() : null;
       targetUrl = `${self.location.origin}/apps${appId ? `?id=${appId}` : ''}`;
     } else if (navigateTo.startsWith('/chat/')) {
       // Plugin chat notifications - pass app_id for capability-aware routing
       // MainLayout will check if app has 'chat' capability:
       // - If yes: open chat panel with that app
       // - If no: open notification center (notification-only apps like Bitcoin)
-      const appId = navigateTo.split('/').pop();
+      const appId = pathParts.pop();
       targetUrl = `${self.location.origin}/?chatApp=${appId}`;
     } else {
       // Default: use the navigate_to path directly
