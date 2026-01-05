@@ -359,36 +359,14 @@ def send_merge_completed_message(user_id: str, merged_conversation_id: str, remo
         merged_conversation_id: ID of the primary (merged) conversation
         removed_conversation_ids: List of secondary conversation IDs that were removed
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        print(f"No notification tokens found for user {user_id} for merge notification")
-        return
-
-    # FCM data values must be strings
+    print(f'send_merge_completed_message to user {user_id}')
     data = {
         'type': 'merge_completed',
         'merged_conversation_id': merged_conversation_id,
         'removed_conversation_ids': ','.join(removed_conversation_ids),
     }
-
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            android=messaging.AndroidConfig(priority='high'),
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-priority': '10',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
-
-        try:
-            response = messaging.send(message)
-            print(f'Merge completed message sent to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+    tag = _generate_tag(f"{user_id}:merge_completed:{merged_conversation_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
