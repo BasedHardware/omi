@@ -83,6 +83,29 @@ class ShortcutService {
     }
   }
 
+  static Future<bool> setToggleControlBarShortcut(int keyCode, int modifiers) async {
+    if (!isSupported) return false;
+    try {
+      final result = await _channel.invokeMethod('setToggleControlBarShortcut', {
+        'keyCode': keyCode,
+        'modifiers': modifiers,
+      });
+      return result == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> resetToggleControlBarShortcut() async {
+    if (!isSupported) return false;
+    try {
+      final result = await _channel.invokeMethod('resetToggleControlBarShortcut');
+      return result == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Future<bool> validateShortcut(int keyCode, int modifiers) async {
     if (!isSupported) return false;
     try {
