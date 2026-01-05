@@ -52,9 +52,12 @@ export function RecapSplitView() {
     } else {
       setContext(null);
     }
-
-    return () => setContext(null);
   }, [selectedRecap, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Auto-select first recap on load
   useEffect(() => {

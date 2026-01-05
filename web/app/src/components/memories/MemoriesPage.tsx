@@ -72,13 +72,18 @@ export function MemoriesPage() {
           title: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
           summary: memory.content,
         });
+      } else {
+        setContext(null);
       }
     } else {
       setContext(null);
     }
-
-    return () => setContext(null);
   }, [highlightedMemoryId, selectedIds, memories, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Get insights data for sidebar
   const { lifeBalance, risingTags, fadingTags, summary } = useInsightsDashboard(memories);

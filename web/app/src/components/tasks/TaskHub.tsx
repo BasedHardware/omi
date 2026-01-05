@@ -61,13 +61,18 @@ export function TaskHub() {
           title: task.description,
           summary: task.completed ? 'Completed' : `Due: ${task.due_at || 'No due date'}`,
         });
+      } else {
+        setContext(null);
       }
     } else {
       setContext(null);
     }
-
-    return () => setContext(null);
   }, [selectedIds, items, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Common props for all TaskGroup components
   const taskGroupProps = {

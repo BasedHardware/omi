@@ -580,6 +580,7 @@ export async function sendMessageStream(
       type: string;
       id?: string;
       title?: string;
+      summary?: string;
     } | null;
   }
 ): Promise<void> {
