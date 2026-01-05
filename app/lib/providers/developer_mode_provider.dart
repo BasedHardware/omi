@@ -32,6 +32,14 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
+  DeveloperModeProvider() {
+    showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
+    dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
+    transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
+    autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
+  }
+
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
     if (!value) {
