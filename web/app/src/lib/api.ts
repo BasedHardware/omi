@@ -890,7 +890,7 @@ export async function getChatApps(): Promise<App[]> {
  * Create a new app
  */
 export async function createApp(
-  data: CreateAppRequest,
+  data: CreateAppRequest & { deleted?: boolean; price?: number; thumbnails?: string[]; uid?: string },
   imageFile?: File
 ): Promise<{ app_id: string }> {
   let token: string | null = null;
@@ -1052,6 +1052,33 @@ export async function generateAppDescription(
     body: JSON.stringify({ name, description: currentDescription }),
   });
   return response.description;
+}
+
+/**
+ * Generate app description and emoji using AI
+ * Used for quick template creation (matches mobile app behavior)
+ */
+export async function generateAppDescriptionAndEmoji(
+  name: string,
+  prompt: string
+): Promise<{ description: string; emoji: string }> {
+  try {
+    const response = await fetchWithAuth<{ description: string; emoji: string }>(
+      '/v1/app/generate-description-emoji',
+      {
+        method: 'POST',
+        body: JSON.stringify({ name, prompt }),
+      }
+    );
+    return {
+      description: response.description || '',
+      emoji: response.emoji || '✨',
+    };
+  } catch {
+    // Fallback: generate description only and use default emoji
+    const description = await generateAppDescription(name, prompt);
+    return { description, emoji: '✨' };
+  }
 }
 
 /**
@@ -2067,4 +2094,80 @@ export async function reorderFolders(folderIds: string[]): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ folder_ids: folderIds }),
   });
+}
+
+// ============================================================================
+// FCM Token Registration API
+// ============================================================================
+
+const WEB_DEVICE_ID_KEY = 'omi-web-device-id';
+
+/**
+ * Get or generate a unique device ID for this browser
+ * This is used to identify the device when registering FCM tokens
+ */
+function getWebDeviceIdHash(): string {
+  if (typeof window === 'undefined') return 'server';
+
+  let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
+  if (!deviceId) {
+    // Generate a unique ID for this browser
+    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
+  }
+
+  // Create a simple hash of the device ID
+  let hash = 0;
+  for (let i = 0; i < deviceId.length; i++) {
+    const char = deviceId.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(16);
+}
+
+/**
+ * Register FCM token for push notifications
+ * This is the same endpoint used by the mobile app
+ * @param fcmToken - The FCM registration token
+ */
+export async function registerFCMToken(fcmToken: string): Promise<void> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const deviceIdHash = getWebDeviceIdHash();
+
+  await fetchWithAuth('/v1/users/fcm-token', {
+    method: 'POST',
+    headers: {
+      'X-App-Platform': 'web',
+      'X-Device-Id-Hash': deviceIdHash,
+    },
+    body: JSON.stringify({
+      fcm_token: fcmToken,
+      time_zone: timeZone,
+    }),
+  });
+}
+
+/**
+ * Unregister FCM token (called on sign out)
+ * @param fcmToken - The FCM registration token to remove
+ */
+export async function unregisterFCMToken(fcmToken: string): Promise<void> {
+  try {
+    const deviceIdHash = getWebDeviceIdHash();
+
+    await fetchWithAuth('/v1/users/fcm-token', {
+      method: 'DELETE',
+      headers: {
+        'X-App-Platform': 'web',
+        'X-Device-Id-Hash': deviceIdHash,
+      },
+      body: JSON.stringify({
+        fcm_token: fcmToken,
+      }),
+    });
+  } catch (error) {
+    // Silently fail on logout - token cleanup is best-effort
+    console.warn('Failed to unregister FCM token:', error);
+  }
 }

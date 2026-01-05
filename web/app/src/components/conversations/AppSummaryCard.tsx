@@ -55,6 +55,7 @@ interface AppSummaryCardProps {
 export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) {
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDeleted, setIsDeleted] = useState(false);
 
   // Parse content into sections
   const sections = useMemo(() => {
@@ -74,8 +75,14 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       try {
         const appInfo = await getApp(appResponse.app_id);
         setApp(appInfo);
-      } catch (error) {
-        console.error('Failed to fetch app info:', error);
+      } catch (error: unknown) {
+        // Check for 404 (deleted template) - don't log as error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('404')) {
+          setIsDeleted(true);
+        } else {
+          console.error('Failed to fetch app info:', error);
+        }
       } finally {
         setLoading(false);
       }
@@ -102,6 +109,10 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       <div className="flex items-center gap-3 mb-3">
         {loading ? (
           <div className="w-8 h-8 rounded-lg bg-bg-quaternary animate-pulse" />
+        ) : isDeleted ? (
+          <div className="w-8 h-8 rounded-lg bg-bg-quaternary flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-text-tertiary" />
+          </div>
         ) : app?.image ? (
           <img
             src={app.image}
@@ -117,11 +128,13 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
           <h4 className="text-sm font-medium text-text-primary truncate">
             {loading ? (
               <span className="text-text-tertiary">Loading...</span>
+            ) : isDeleted ? (
+              <span className="text-text-tertiary italic">Template no longer available</span>
             ) : (
               app?.name || 'App Summary'
             )}
           </h4>
-          {app?.description && (
+          {!isDeleted && app?.description && (
             <p className="text-xs text-text-tertiary truncate">
               {app.description}
             </p>

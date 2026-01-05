@@ -21,8 +21,10 @@ import {
   Puzzle,
   Code,
   Settings,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useNotificationContext } from '@/components/notifications/NotificationContext';
 import { cn } from '@/lib/utils';
 
 // Hook to detect if we're on desktop
@@ -47,14 +49,14 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    label: 'Recaps',
-    href: '/recaps',
-    icon: <CalendarDays className="w-5 h-5" />,
-  },
-  {
     label: 'Conversations',
     href: '/conversations',
     icon: <GanttChartSquare className="w-5 h-5" />,
+  },
+  {
+    label: 'Recaps',
+    href: '/recaps',
+    icon: <CalendarDays className="w-5 h-5" />,
   },
   {
     label: 'Chat',
@@ -97,6 +99,7 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
+  const { toggleNotificationCenter, unreadCount } = useNotificationContext();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
@@ -205,7 +208,7 @@ export function Sidebar({
           >
             <Link
               href="/conversations"
-              className="flex items-center"
+              className="flex items-center gap-2"
             >
               <Image
                 src="/omi-white.webp"
@@ -214,6 +217,9 @@ export function Sidebar({
                 height={isExpanded ? 24 : 13}
                 className="object-contain"
               />
+              <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+                Beta
+              </span>
             </Link>
 
             {/* Mobile close button */}
@@ -252,6 +258,46 @@ export function Sidebar({
               </button>
             </div>
           )}
+
+          {/* Notification bell */}
+          <div
+            className={cn(
+              'px-4 pb-3',
+              isExpanded ? 'flex justify-start' : 'flex justify-center'
+            )}
+          >
+            <button
+              onClick={toggleNotificationCenter}
+              className={cn(
+                'flex items-center rounded-lg transition-colors',
+                'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
+                isExpanded ? 'px-2 py-2' : 'p-2'
+              )}
+              title="Notifications"
+            >
+              <div className="relative">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span
+                    className={cn(
+                      'absolute -top-2.5 -right-2.5',
+                      'min-w-[18px] h-[18px] px-1',
+                      'flex items-center justify-center',
+                      'bg-red-500 text-white text-[10px] font-bold',
+                      'rounded-full'
+                    )}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              {isExpanded && (
+                <span className="ml-3 text-sm text-text-secondary">
+                  Notifications
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
