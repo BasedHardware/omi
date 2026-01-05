@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,7 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
@@ -22,8 +26,6 @@ import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
-import 'package:omi/pages/settings/custom_vocabulary_page.dart';
-import 'package:omi/pages/settings/daily_summary_settings_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/delete_account.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
@@ -52,6 +54,8 @@ enum SettingsSection {
   account,
   plansAndBilling,
   calendarIntegration,
+  customVocabulary,
+  dailySummary,
   shortcuts,
   developer,
   about,
@@ -106,12 +110,24 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
   bool _showMenuBarMeetings = true;
   bool _showEventsWithNoParticipants = false;
 
+  // Custom vocabulary state
+  final TextEditingController _vocabularyController = TextEditingController();
+  final Set<String> _pendingDeletions = {};
+  Timer? _deletionDebounceTimer;
+  bool _isDeletingBatch = false;
+
+  // Daily summary state
+  bool _dailySummaryLoading = true;
+  bool _dailySummaryEnabled = true;
+  int _dailySummaryHour = 22;
+
   @override
   void initState() {
     super.initState();
     _selectedSection = widget.initialSection;
     _loadShortcuts();
     _loadCalendarSettings();
+    _loadDailySummarySettings();
     
     // Initialize developer mode provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -123,6 +139,13 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     });
   }
 
+  @override
+  void dispose() {
+    _vocabularyController.dispose();
+    _deletionDebounceTimer?.cancel();
+    super.dispose();
+  }
+
   void _loadCalendarSettings() {
     _showMenuBarMeetings = SharedPreferencesUtil().showMeetingsInMenuBar;
     _showEventsWithNoParticipants = SharedPreferencesUtil().showEventsWithNoParticipants;
@@ -132,6 +155,147 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
     final provider = context.read<CalendarProvider>();
     if (provider.isAuthorized) {
       provider.fetchSystemCalendars();
+    }
+  }
+
+  Future<void> _loadDailySummarySettings() async {
+    final settings = await getDailySummarySettings();
+    if (settings != null && mounted) {
+      setState(() {
+        _dailySummaryEnabled = settings.enabled;
+        _dailySummaryHour = settings.hour;
+        _dailySummaryLoading = false;
+      });
+    } else if (mounted) {
+      setState(() => _dailySummaryLoading = false);
+    }
+  }
+
+  String _formatHourDisplay(int hour) {
+    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    return '$hour12:00 $period';
+  }
+
+  Future<void> _updateDailySummaryEnabled(bool value) async {
+    setState(() => _dailySummaryEnabled = value);
+    await setDailySummarySettings(enabled: value);
+    MixpanelManager().dailySummaryToggled(enabled: value);
+  }
+
+  Future<void> _updateDailySummaryHour(int hour) async {
+    setState(() => _dailySummaryHour = hour);
+    await setDailySummarySettings(hour: hour);
+    MixpanelManager().dailySummaryTimeChanged(hour: hour);
+  }
+
+  Future<void> _showHourPicker() async {
+    if (!_dailySummaryEnabled) return;
+
+    int tempHour = _dailySummaryHour;
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: ResponsiveHelper.backgroundSecondary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5)),
+              ),
+              title: const Text(
+                'Select Time',
+                style: TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              content: SizedBox(
+                width: 300,
+                height: 250,
+                child: ListView.builder(
+                  itemCount: 24,
+                  itemBuilder: (context, index) {
+                    final hour12 = index == 0 ? 12 : (index > 12 ? index - 12 : index);
+                    final period = index >= 12 ? 'PM' : 'AM';
+                    final isSelected = tempHour == index;
+                    return ListTile(
+                      title: Text(
+                        '$hour12:00 $period',
+                        style: TextStyle(
+                          color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textPrimary,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                      trailing: isSelected ? const Icon(Icons.check, color: ResponsiveHelper.purplePrimary) : null,
+                      onTap: () {
+                        setDialogState(() => tempHour = index);
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: ResponsiveHelper.textSecondary)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _updateDailySummaryHour(tempHour);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Done', style: TextStyle(color: ResponsiveHelper.purplePrimary, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Vocabulary methods
+  Future<void> _addVocabularyWord(UserProvider userProvider) async {
+    final input = _vocabularyController.text;
+    if (input.trim().isEmpty) return;
+
+    final words = input.split(',').map((w) => w.trim()).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return;
+
+    _vocabularyController.clear();
+    final success = await userProvider.addVocabularyWords(words);
+    if (success && mounted) {
+      context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+    }
+  }
+
+  void _queueWordDeletion(UserProvider userProvider, String word) {
+    setState(() => _pendingDeletions.add(word));
+    _deletionDebounceTimer?.cancel();
+    _deletionDebounceTimer = Timer(const Duration(seconds: 1), () {
+      _executeBatchDeletion(userProvider);
+    });
+  }
+
+  Future<void> _executeBatchDeletion(UserProvider userProvider) async {
+    if (_pendingDeletions.isEmpty) return;
+    setState(() => _isDeletingBatch = true);
+
+    final wordsToDelete = List<String>.from(_pendingDeletions);
+    bool anySuccess = false;
+
+    for (final word in wordsToDelete) {
+      final success = await userProvider.removeVocabularyWord(word);
+      if (success) anySuccess = true;
+    }
+
+    if (mounted) {
+      setState(() {
+        _pendingDeletions.clear();
+        _isDeletingBatch = false;
+      });
+      if (anySuccess) {
+        context.read<CaptureProvider>().onTranscriptionSettingsChanged();
+      }
     }
   }
   
@@ -269,6 +433,16 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
             label: 'Calendar Integration',
             section: SettingsSection.calendarIntegration,
           ),
+          _buildNavItem(
+            icon: FontAwesomeIcons.book,
+            label: 'Custom Vocabulary',
+            section: SettingsSection.customVocabulary,
+          ),
+          _buildNavItem(
+            icon: FontAwesomeIcons.bell,
+            label: 'Daily Summary',
+            section: SettingsSection.dailySummary,
+          ),
           if (ShortcutService.isSupported)
             _buildNavItem(
               icon: FontAwesomeIcons.keyboard,
@@ -365,6 +539,10 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
         return _buildPlansContent();
       case SettingsSection.calendarIntegration:
         return _buildCalendarIntegrationContent();
+      case SettingsSection.customVocabulary:
+        return _buildCustomVocabularyContent();
+      case SettingsSection.dailySummary:
+        return _buildDailySummaryContent();
       case SettingsSection.shortcuts:
         return _buildShortcutsContent();
       case SettingsSection.developer:
@@ -421,13 +599,6 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                 );
               },
             ),
-            _buildSettingsRow(
-              title: 'Custom Vocabulary',
-              onTap: () {
-                Navigator.of(context).pop();
-                routeToPage(context, const CustomVocabularyPage());
-              },
-            ),
           ],
         ),
 
@@ -450,22 +621,6 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               onTap: () {
                 Navigator.of(context).pop();
                 routeToPage(context, const UserPeoplePage());
-              },
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        // Notifications section
-        _buildSettingsGroup(
-          title: 'Notifications',
-          children: [
-            _buildSettingsRow(
-              title: 'Daily Summary',
-              onTap: () {
-                Navigator.of(context).pop();
-                routeToPage(context, const DailySummarySettingsPage());
               },
             ),
           ],
@@ -545,6 +700,349 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
               },
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomVocabularyContent() {
+    return Consumer<UserProvider>(
+      builder: (context, userProvider, _) {
+        final isDisabled = _isDeletingBatch || userProvider.isUpdatingVocabulary;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'CUSTOM VOCABULARY',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: ResponsiveHelper.textTertiary,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${userProvider.transcriptionVocabulary.length}',
+                    style: const TextStyle(
+                      color: ResponsiveHelper.textTertiary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add words that Omi should recognize during transcription.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: ResponsiveHelper.textTertiary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Input field
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: ResponsiveHelper.backgroundSecondary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: TextField(
+                            controller: _vocabularyController,
+                            enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
+                            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText: 'Enter words (comma separated)',
+                              hintStyle: TextStyle(color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6), fontSize: 14),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: userProvider.isUpdatingVocabulary && !_isDeletingBatch
+                                ? null
+                                : (_) => _addVocabularyWord(userProvider),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: userProvider.isUpdatingVocabulary ? null : () => _addVocabularyWord(userProvider),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: userProvider.isUpdatingVocabulary && !_isDeletingBatch
+                                  ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3)
+                                  : ResponsiveHelper.purplePrimary,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: userProvider.isUpdatingVocabulary && !_isDeletingBatch
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
+                                  )
+                                : const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Word chips
+                  if (userProvider.transcriptionVocabulary.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      height: 1,
+                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: userProvider.transcriptionVocabulary.map((word) {
+                        final isPendingDelete = _pendingDeletions.contains(word);
+                        return Container(
+                          padding: const EdgeInsets.only(left: 12, right: 6, top: 6, bottom: 6),
+                          decoration: BoxDecoration(
+                            color: isPendingDelete
+                                ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.2)
+                                : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                word,
+                                style: TextStyle(
+                                  color: isPendingDelete ? ResponsiveHelper.textTertiary : ResponsiveHelper.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              if (isPendingDelete)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.textTertiary),
+                                )
+                              else
+                                GestureDetector(
+                                  onTap: isDisabled ? null : () => _queueWordDeletion(userProvider, word),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.close,
+                                      color: isDisabled ? ResponsiveHelper.textTertiary : ResponsiveHelper.textSecondary,
+                                      size: 10,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDailySummaryContent() {
+    if (_dailySummaryLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'DAILY SUMMARY',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: ResponsiveHelper.textTertiary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: ResponsiveHelper.purplePrimary),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'DAILY SUMMARY',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: ResponsiveHelper.textTertiary,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              // Enable toggle
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Daily Summary',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: ResponsiveHelper.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Get a personalized summary of your conversations',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: ResponsiveHelper.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OmiCheckbox(
+                      value: _dailySummaryEnabled,
+                      onChanged: _updateDailySummaryEnabled,
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+
+              Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+              ),
+
+              // Time selector
+              Opacity(
+                opacity: _dailySummaryEnabled ? 1.0 : 0.4,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _showHourPicker,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Delivery Time',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: ResponsiveHelper.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'When to receive your daily summary',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: ResponsiveHelper.textTertiary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            _formatHourDisplay(_dailySummaryHour),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: ResponsiveHelper.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(
+                            FontAwesomeIcons.chevronRight,
+                            size: 12,
+                            color: ResponsiveHelper.textTertiary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
