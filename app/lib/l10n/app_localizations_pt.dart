@@ -573,9 +573,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get doubleTapAction => 'Ação de toque duplo';
 
   @override
-  String get doubleTapActionDesc => 'Escolha o que acontece ao tocar duas vezes';
-
-  @override
   String get endAndProcess => 'Terminar e processar';
 
   @override
@@ -583,9 +580,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get starOngoing => 'Favoritar conversa atual';
-
-  @override
-  String get starOngoingDesc => 'Marcar para salvar como favorita ao terminar';
 
   @override
   String get off => 'Desligado';

@@ -573,9 +573,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get doubleTapAction => 'डबल टैप क्रिया';
 
   @override
-  String get doubleTapActionDesc => 'चुनें कि डबल टैप होने पर क्या होता है';
-
-  @override
   String get endAndProcess => 'समाप्त करें और संसाधित करें';
 
   @override
@@ -583,9 +580,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get starOngoing => 'चल रही बातचीत को तारांकित करें';
-
-  @override
-  String get starOngoingDesc => 'समाप्त होने पर इसे पसंदीदा के रूप में सहेजने के लिए चिह्नित करें';
 
   @override
   String get off => 'बंद';
