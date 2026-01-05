@@ -196,7 +196,7 @@ export function ChatPanel() {
 
     setInput('');
     setSelectedFiles([]);
-    await sendMessage(text, fileIds);
+    await sendMessage(text, fileIds, currentContext);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -576,6 +576,11 @@ export async function sendMessageStream(
   options?: {
     appId?: string;
     fileIds?: string[];
+    context?: {
+      type: string;
+      id?: string;
+      title?: string;
+    } | null;
   }
 ): Promise<void> {
   let token: string | null = null;
@@ -607,6 +612,7 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
+      context: options?.context || null,
     }),
   });
 
