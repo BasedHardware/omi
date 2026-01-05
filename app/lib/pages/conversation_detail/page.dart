@@ -162,15 +162,25 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-      var conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      if (!mounted) return;
+
+      final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
 
+      conversationProvider.groupConversationsByDate();
+
       // Find the proper date and index for this conversation in the grouped conversations
-      var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      provider.updateConversation(widget.conversation.id, date);
+      final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
+      if (result != null) {
+        final (date, index) = result;
+        provider.updateConversation(widget.conversation.id, date);
+      } else {
+        final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
+        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+      }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
