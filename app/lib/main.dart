@@ -331,7 +331,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
                 (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
           ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
