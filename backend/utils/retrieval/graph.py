@@ -1,7 +1,7 @@
 import datetime
 import uuid
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple, AsyncGenerator
+from typing import List, Optional, AsyncGenerator
 
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
@@ -19,7 +19,7 @@ from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
-from models.chat import ChatSession, Message
+from models.chat import ChatSession, Message, PageContext
 from models.conversation import Conversation
 from models.other import Person
 from utils.llm.chat import (
@@ -111,7 +111,7 @@ class GraphState(TypedDict):
     ask_for_nps: Optional[bool]
 
     chat_session: Optional[ChatSession]
-    context: Optional[Dict[str, Any]]  # Page context: {type, id, title}
+    context: Optional[PageContext]
 
 
 def determine_conversation(state: GraphState):
@@ -498,7 +498,7 @@ async def execute_graph_chat_stream(
     cited: Optional[bool] = False,
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
-    context: Optional[Dict[str, Any]] = None,
+    context: Optional[PageContext] = None,
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
