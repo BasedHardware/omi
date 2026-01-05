@@ -92,14 +92,22 @@ def apply_vad_for_speech_profile(file_path: str):
         else:
             joined_segments.append(segment)
 
-    # trim silence out of file_path, but leave 1 sec of silence within chunks
-    trimmed_aseg = AudioSegment.empty()
-    for i, segment in enumerate(joined_segments):
-        start = segment['start'] * 1000
-        end = segment['end'] * 1000
-        trimmed_aseg += AudioSegment.from_wav(file_path)[start:end]
-        if i < len(joined_segments) - 1:
-            trimmed_aseg += AudioSegment.from_wav(file_path)[end : end + 1000]
+    # Load audio file once instead of repeatedly in the loop
+    full_audio = AudioSegment.from_wav(file_path)
 
-    # file_path.replace('.wav', '-cleaned.wav')
-    trimmed_aseg.export(file_path, format="wav")
+    try:
+        # trim silence out of file_path, but leave 1 sec of silence within chunks
+        trimmed_aseg = AudioSegment.empty()
+        for i, segment in enumerate(joined_segments):
+            start = segment['start'] * 1000
+            end = segment['end'] * 1000
+            trimmed_aseg += full_audio[start:end]
+            if i < len(joined_segments) - 1:
+                trimmed_aseg += full_audio[end : end + 1000]
+
+        # file_path.replace('.wav', '-cleaned.wav')
+        trimmed_aseg.export(file_path, format="wav")
+    finally:
+        # Explicitly free memory
+        del full_audio
+        del trimmed_aseg

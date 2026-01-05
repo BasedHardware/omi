@@ -14,6 +14,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
   bool _includeCompleted = true;
 
+  // UI filter: show completed tasks view
+  bool _showCompletedView = false;
+
   // Date range filter
   DateTime? _startDate;
   DateTime? _endDate;
@@ -33,6 +36,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isFetching => _isFetching;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
+  bool get showCompletedView => _showCompletedView;
   DateTime? get startDate => _startDate;
   DateTime? get endDate => _endDate;
   bool get hasActiveFilter => _startDate != null || _endDate != null;
@@ -233,6 +237,7 @@ class ActionItemsProvider extends ChangeNotifier {
       final updatedItem = await api.updateActionItem(
         item.id,
         dueAt: dueDate,
+        clearDueAt: dueDate == null, // Explicitly clear if null
       );
 
       if (updatedItem != null) {
@@ -342,6 +347,11 @@ class ActionItemsProvider extends ChangeNotifier {
     _includeCompleted = !_includeCompleted;
     fetchActionItems(showShimmer: true);
     // TODO: Add analytics for completed action items toggle
+  }
+
+  void toggleShowCompletedView() {
+    _showCompletedView = !_showCompletedView;
+    notifyListeners();
   }
 
   void setDateRangeFilter(DateTime? startDate, DateTime? endDate) {

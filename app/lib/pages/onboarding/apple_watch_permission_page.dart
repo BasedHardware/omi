@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class AppleWatchPermissionPage extends StatefulWidget {
@@ -8,10 +9,10 @@ class AppleWatchPermissionPage extends StatefulWidget {
   final VoidCallback? onPermissionGranted;
 
   const AppleWatchPermissionPage({
-    Key? key,
+    super.key,
     required this.connection,
     this.onPermissionGranted,
-  }) : super(key: key);
+  });
 
   @override
   State<AppleWatchPermissionPage> createState() => _AppleWatchPermissionPageState();
@@ -34,9 +35,9 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
           icon: const Icon(Icons.arrow_back, color: ResponsiveHelper.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Apple Watch Setup',
-          style: TextStyle(color: ResponsiveHelper.textPrimary),
+        title: Text(
+          context.l10n.appleWatchSetup,
+          style: const TextStyle(color: ResponsiveHelper.textPrimary),
         ),
       ),
       body: SafeArea(
@@ -67,7 +68,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
 
               // Title
               Text(
-                _permissionRequested ? 'Permission Requested!' : 'Microphone Permission',
+                _permissionRequested ? context.l10n.permissionRequestedExclaim : context.l10n.microphonePermission,
                 style: responsive.titleLarge.copyWith(
                   fontSize: 28,
                   height: 1.2,
@@ -78,9 +79,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
 
               // Instructions
               Text(
-                _permissionRequested
-                    ? 'Permission granted! Now:\n\nOpen the Omi app on your watch and tap "Continue" below'
-                    : 'We need microphone permission.\n\n1. Tap "Grant Permission"\n2. Allow on your iPhone\n3. Watch app will close\n4. Reopen and tap "Continue"',
+                _permissionRequested ? context.l10n.permissionGrantedNow : context.l10n.needMicrophonePermission,
                 style: responsive.bodyLarge.copyWith(
                   height: 1.6,
                 ),
@@ -113,9 +112,9 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const Text(
-                            'Grant Permission',
-                            style: TextStyle(
+                        : Text(
+                            context.l10n.grantPermissionButton,
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
                             ),
@@ -137,9 +136,9 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Continue',
-                      style: TextStyle(
+                    child: Text(
+                      context.l10n.continueButton,
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
@@ -155,9 +154,9 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                     foregroundColor: ResponsiveHelper.purplePrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   ),
-                  child: const Text(
-                    'Need Help?',
-                    style: TextStyle(
+                  child: Text(
+                    context.l10n.needHelp,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                     ),
@@ -191,7 +190,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
       });
 
       AppSnackbar.showSnackbar(
-        'Error requesting permission: $e',
+        context.l10n.errorRequestingPermission(e.toString()),
         duration: const Duration(seconds: 3),
       );
     }
@@ -203,7 +202,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
 
       if (recordingStarted) {
         AppSnackbar.showSnackbar(
-          'Recording started successfully!',
+          context.l10n.recordingStartedSuccessfully,
           duration: const Duration(seconds: 3),
         );
 
@@ -211,13 +210,13 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
         Navigator.of(context).pop();
       } else {
         AppSnackbar.showSnackbar(
-          'Permission not granted yet. Please make sure you allowed microphone access and reopened the app on your watch.',
+          context.l10n.permissionNotGrantedYet,
           duration: const Duration(seconds: 5),
         );
       }
     } catch (e) {
       AppSnackbar.showSnackbar(
-        'Error starting recording: $e',
+        context.l10n.errorStartingRecording(e.toString()),
         duration: const Duration(seconds: 3),
       );
     }
@@ -234,17 +233,11 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
           borderRadius: BorderRadius.circular(16),
         ),
         title: Text(
-          'Need Help?',
+          context.l10n.needHelp,
           style: responsive.titleLarge.copyWith(fontSize: 20),
         ),
         content: Text(
-          'Troubleshooting:\n\n'
-          '1. Ensure Omi is installed on your watch\n'
-          '2. Open the Omi app on your watch\n'
-          '3. Look for the permission popup\n'
-          '4. Tap "Allow" when prompted\n'
-          '5. App on your watch will close - reopen it\n'
-          '6. Come back and tap "Continue" on your iPhone',
+          context.l10n.troubleshootingSteps,
           style: responsive.bodyMedium,
         ),
         actions: [
@@ -254,9 +247,9 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               foregroundColor: ResponsiveHelper.purplePrimary,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text(
-              'Got it',
-              style: TextStyle(fontWeight: FontWeight.w500),
+            child: Text(
+              context.l10n.gotIt,
+              style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ),
         ],

@@ -172,10 +172,20 @@ class SharedPreferencesUtil {
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
 
-  // Daily grade widget on homepage - default is false (experimental feature)
-  set showDailyGradeEnabled(bool value) => saveBool('showDailyGradeEnabled', value);
+  // Goal tracker widget on homepage - default is true (experimental feature)
+  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
 
-  bool get showDailyGradeEnabled => getBool('showDailyGradeEnabled', defaultValue: false);
+  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
+
+  // Daily reflection notification at 9 PM - default is true (enabled)
+  set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
+
+  bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
+
+  // Wrapped 2025 - track if user has viewed their wrapped
+  set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
+
+  bool get hasViewedWrapped2025 => getBool('hasViewedWrapped2025', defaultValue: false);
 
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
@@ -270,9 +280,9 @@ class SharedPreferencesUtil {
 
   // Short conversation threshold in seconds - default is 60 (1 minute)
   // Options: 60 (1 min), 120 (2 min), 180 (3 min), 240 (4 min), 300 (5 min)
-  int get shortConversationThreshold => getInt('shortConversationThreshold', defaultValue: 60);
+  int get shortConversationThreshold => getInt('v2/shortConversationThreshold', defaultValue: 0);
 
-  set shortConversationThreshold(int value) => saveInt('shortConversationThreshold', value);
+  set shortConversationThreshold(int value) => saveInt('v2/shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
   bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -17,8 +18,10 @@ class ConversationProvider extends ChangeNotifier {
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
   bool showShortConversations = false;
-  int shortConversationThreshold = 60; // in seconds
+  int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
+  bool showDailySummaries = false; // filter to show daily summaries instead of conversations
+  bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedDate;
   String? selectedFolderId;
 
@@ -214,7 +217,31 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
-    groupConversationsByDate();
+    // Clear daily summaries filter when toggling starred
+    if (showStarredOnly) {
+      showDailySummaries = false;
+    }
+
+    // Clear and refetch conversations to get starred from server
+    groupedConversations = {};
+    notifyListeners();
+    fetchConversations();
+  }
+
+  void toggleDailySummaries() {
+    showDailySummaries = !showDailySummaries;
+    // Clear other filters when showing daily summaries
+    if (showDailySummaries) {
+      showStarredOnly = false;
+      selectedFolderId = null;
+    }
+    notifyListeners();
+  }
+
+  /// Check if user has any daily summaries
+  Future<void> checkHasDailySummaries() async {
+    final summaries = await getDailySummaries(limit: 1, offset: 0);
+    hasDailySummaries = summaries.isNotEmpty;
     notifyListeners();
   }
 
@@ -222,6 +249,9 @@ class ConversationProvider extends ChangeNotifier {
   Future<void> filterByFolder(String? folderId) async {
     if (selectedFolderId == folderId) return;
     selectedFolderId = folderId;
+
+    // Clear daily summaries filter when selecting a folder
+    showDailySummaries = false;
 
     // Clear search when applying folder filter
     previousQuery = "";
@@ -336,6 +366,7 @@ class ConversationProvider extends ChangeNotifier {
 
   Future getInitialConversations() async {
     await fetchConversations();
+    await checkHasDailySummaries();
   }
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
@@ -476,6 +507,7 @@ class ConversationProvider extends ChangeNotifier {
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
+      starred: showStarredOnly ? true : null,
     );
   }
 
@@ -500,6 +532,7 @@ class ConversationProvider extends ChangeNotifier {
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
+      starred: showStarredOnly ? true : null,
     );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -782,14 +815,16 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  (DateTime, int) getConversationDateAndIndex(ServerConversation conversation) {
-    var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+  (DateTime, int)? getConversationDateAndIndex(ServerConversation conversation) {
+    final effectiveDate = conversation.startedAt ?? conversation.createdAt;
+    final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+
     final list = groupedConversations[date];
-    if (list == null) {
-      return (date, -1);
-    }
-    var idx = list.indexWhere((element) => element.id == conversation.id);
+    if (list == null) return null;
+
+    final idx = list.indexWhere((e) => e.id == conversation.id);
+    if (idx == -1) return null;
+
     return (date, idx);
   }
 
@@ -882,14 +917,10 @@ class ConversationProvider extends ChangeNotifier {
       return true;
     }
     // Check actual conversation status from server
-    final convo = conversations.firstWhere(
-      (c) => c.id == conversationId,
-      orElse: () => conversations.isNotEmpty ? conversations.first : conversations.first,
-    );
-    if (convo.id == conversationId && convo.status == ConversationStatus.merging) {
-      return true;
-    }
-    return false;
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return false;
+
+    return conversations[idx].status == ConversationStatus.merging;
   }
 
   /// Enter selection mode for merge
@@ -957,19 +988,12 @@ class ConversationProvider extends ChangeNotifier {
   /// No time gap restrictions - user can merge any conversations they want.
   bool isConversationEligibleForMerge(String conversationId) {
     // Find the conversation
-    final convo = conversations.firstWhere(
-      (c) => c.id == conversationId,
-      orElse: () => conversations.first,
-    );
-    if (convo.id != conversationId) return false;
+    final idx = conversations.indexWhere((c) => c.id == conversationId);
+    if (idx == -1) return false;
 
-    if (convo.isLocked) {
-      return false;
-    }
-
-    if (mergingConversationIds.contains(conversationId)) {
-      return false;
-    }
+    final convo = conversations[idx];
+    if (convo.isLocked) return false;
+    if (mergingConversationIds.contains(conversationId)) return false;
 
     return true;
   }

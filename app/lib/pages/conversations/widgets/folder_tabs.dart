@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -16,6 +17,9 @@ class FolderTabs extends StatefulWidget {
   final Function(String?) onFolderSelected;
   final bool showStarredOnly;
   final VoidCallback onStarredToggle;
+  final bool showDailySummaries;
+  final VoidCallback onDailySummariesToggle;
+  final bool hasDailySummaries;
 
   const FolderTabs({
     super.key,
@@ -24,6 +28,9 @@ class FolderTabs extends StatefulWidget {
     required this.onFolderSelected,
     required this.showStarredOnly,
     required this.onStarredToggle,
+    required this.showDailySummaries,
+    required this.onDailySummariesToggle,
+    required this.hasDailySummaries,
   });
 
   @override
@@ -34,21 +41,26 @@ class _FolderTabsState extends State<FolderTabs> {
   final ScrollController _scrollController = ScrollController();
   String? _previousSelectedFolderId;
   bool _previousShowStarredOnly = false;
+  bool _previousShowDailySummaries = false;
 
   @override
   void initState() {
     super.initState();
     _previousSelectedFolderId = widget.selectedFolderId;
     _previousShowStarredOnly = widget.showStarredOnly;
+    _previousShowDailySummaries = widget.showDailySummaries;
   }
 
   @override
   void didUpdateWidget(FolderTabs oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Auto-scroll to top when selection changes
-    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
+    if (widget.selectedFolderId != _previousSelectedFolderId ||
+        widget.showStarredOnly != _previousShowStarredOnly ||
+        widget.showDailySummaries != _previousShowDailySummaries) {
       _previousSelectedFolderId = widget.selectedFolderId;
       _previousShowStarredOnly = widget.showStarredOnly;
+      _previousShowDailySummaries = widget.showDailySummaries;
       _scrollToStart();
     }
   }
@@ -90,6 +102,26 @@ class _FolderTabsState extends State<FolderTabs> {
     );
   }
 
+  Widget _buildDailySummariesTab() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _FolderTab(
+        label: 'Recap',
+        icon: '🕐',
+        color: Colors.green,
+        isSelected: widget.showDailySummaries,
+        skipFolderTracking: true,
+        onTap: () {
+          // Track recap tab opened when toggling to true
+          if (!widget.showDailySummaries) {
+            MixpanelManager().recapTabOpened();
+          }
+          widget.onDailySummariesToggle();
+        },
+      ),
+    );
+  }
+
   Widget _buildFolderTab(Folder folder) {
     final isSelected = widget.selectedFolderId == folder.id;
     return Padding(
@@ -109,23 +141,39 @@ class _FolderTabsState extends State<FolderTabs> {
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: selected item comes first (after "All" and "Starred")
+    // Build ordered list of tabs: All, Recap (if available), Starred, folders
     final List<Widget> tabs = [];
 
-    // "All" tab always first
+    // "All" tab always first - clears all filters when clicked
     tabs.add(_FolderTab(
       label: 'All',
-      isSelected: widget.selectedFolderId == null,
-      onTap: () => widget.onFolderSelected(null),
+      isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !widget.showDailySummaries,
+      onTap: () {
+        // Clear folder filter
+        widget.onFolderSelected(null);
+        // Clear starred filter if active
+        if (widget.showStarredOnly) {
+          widget.onStarredToggle();
+        }
+        // Clear daily summaries filter if active
+        if (widget.showDailySummaries) {
+          widget.onDailySummariesToggle();
+        }
+      },
     ));
     tabs.add(const SizedBox(width: 8));
 
-    // Starred always second (right after "All")
+    // Daily Summaries tab second (after All, before Starred) - only show if user has summaries
+    if (widget.hasDailySummaries) {
+      tabs.add(_buildDailySummariesTab());
+    }
+
+    // Starred tab
     tabs.add(_buildStarredTab());
 
     // If a folder is selected, show it first (after Starred)
     final selectedFolder = widget.selectedFolderId != null
-        ? widget.folders.where((f) => f.id == widget.selectedFolderId).firstOrNull
+        ? widget.folders.firstWhereOrNull((f) => f.id == widget.selectedFolderId)
         : null;
     if (selectedFolder != null) {
       tabs.add(_buildFolderTab(selectedFolder));

@@ -4,7 +4,9 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/providers/locale_provider.dart';
 
 class LanguageSettingsPage extends StatefulWidget {
   const LanguageSettingsPage({super.key});
@@ -20,15 +22,16 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     HomeProvider homeProvider,
     UserProvider userProvider,
     CaptureProvider captureProvider,
+    LocaleProvider localeProvider,
   ) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
             .firstWhere(
               (element) => element.value == homeProvider.userPrimaryLanguage,
-              orElse: () => const MapEntry('Not set', ''),
+              orElse: () => MapEntry(context.l10n.notSet, ''),
             )
             .key
-        : 'Not set';
+        : context.l10n.notSet;
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
     final isAutoTranslationEnabled = !userProvider.singleLanguageMode;
@@ -41,8 +44,68 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
       ),
       child: Column(
         children: [
+          // App Language Row
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _showAppLanguageSelectionSheet(localeProvider),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2A2A2E),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: FaIcon(
+                      FontAwesomeIcons.mobileScreen,
+                      color: Colors.grey.shade400,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.appLanguage,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        localeProvider.locale != null
+                            ? LocaleProvider.getDisplayName(localeProvider.locale!)
+                            : context.l10n.systemDefault,
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FaIcon(
+                  FontAwesomeIcons.chevronRight,
+                  color: Colors.grey.shade600,
+                  size: 14,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Divider(height: 1, color: Colors.grey.shade800),
+          ),
           // Primary Language Row
           GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: _isUpdatingLanguage ? null : () => _showLanguageSelectionSheet(homeProvider, captureProvider),
             child: Row(
               children: [
@@ -66,9 +129,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Primary Language',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.primaryLanguage,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -132,9 +195,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Automatic Translation',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.automaticTranslation,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
@@ -142,7 +205,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Detect 10+ languages',
+                      context.l10n.detectLanguages,
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 13,
@@ -179,6 +242,72 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     );
   }
 
+  void _showAppLanguageSelectionSheet(LocaleProvider localeProvider) {
+    final supportedLocales = LocaleProvider.supportedLocales;
+    final currentLocale = localeProvider.locale;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3C3C43),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                context.l10n.appLanguage,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  physics: const ClampingScrollPhysics(),
+                  itemCount: supportedLocales.length,
+                  itemBuilder: (context, index) {
+                    final locale = supportedLocales[index];
+                    final isSelected = currentLocale?.languageCode == locale.languageCode;
+                    return ListTile(
+                      title: Text(
+                        LocaleProvider.getDisplayName(locale),
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : const Color(0xFF8E8E93),
+                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.w400,
+                        ),
+                      ),
+                      trailing: isSelected ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                      onTap: () {
+                        localeProvider.setLocale(locale);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _showLanguageSelectionSheet(HomeProvider homeProvider, CaptureProvider captureProvider) {
     final languages = homeProvider.availableLanguages;
     String currentLanguage = homeProvider.userPrimaryLanguage;
@@ -210,9 +339,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const Text(
-                      'Select Language',
-                      style: TextStyle(
+                    Text(
+                      context.l10n.selectLanguage,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
@@ -249,6 +378,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                                       final success = await homeProvider.updateUserPrimaryLanguage(entry.value);
                                       if (success) {
                                         captureProvider.onRecordProfileSettingChanged();
+                                        MixpanelManager().languageChanged(entry.value);
                                       }
                                     } finally {
                                       if (mounted) {
@@ -285,9 +415,9 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
           icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Language',
-          style: TextStyle(
+        title: Text(
+          context.l10n.languageTitle,
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -295,15 +425,15 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         ),
         centerTitle: true,
       ),
-      body: Consumer3<HomeProvider, UserProvider, CaptureProvider>(
-        builder: (context, homeProvider, userProvider, captureProvider, _) {
+      body: Consumer4<HomeProvider, UserProvider, CaptureProvider, LocaleProvider>(
+        builder: (context, homeProvider, userProvider, captureProvider, localeProvider, _) {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 16),
-                _buildLanguageCard(homeProvider, userProvider, captureProvider),
+                _buildLanguageCard(homeProvider, userProvider, captureProvider, localeProvider),
                 const SizedBox(height: 32),
               ],
             ),

@@ -74,6 +74,31 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
+def _build_webpush_config(
+    tag: str, title: str = None, body: str = None, link: str = '/'
+) -> messaging.WebpushConfig:
+    """Build WebPush configuration for browser notifications.
+
+    Note: WebpushNotification must explicitly include title/body because
+    browsers use webpush.notification instead of the top-level notification
+    when the webpush block is present.
+    """
+    return messaging.WebpushConfig(
+        headers={
+            'Topic': tag,  # For deduplication
+            'Urgency': 'high',
+        },
+        notification=messaging.WebpushNotification(
+            title=title,
+            body=body,
+            icon='/logo.png',
+        ),
+        fcm_options=messaging.WebpushFCMOptions(
+            link=link,
+        ),
+    )
+
+
 def _build_message(
     token: str,
     tag: str,
@@ -83,12 +108,19 @@ def _build_message(
     priority: str = 'normal',
 ) -> messaging.Message:
     """Build a complete FCM message with proper platform configs."""
+    # Extract title/body for webpush config (browsers need explicit values)
+    title = notification.title if notification else None
+    body = notification.body if notification else None
+    # Extract navigate_to for webpush click-through link
+    link = data.get('navigate_to', '/') if data else '/'
+
     return messaging.Message(
         token=token,
         notification=notification,
         data=data,
         android=_build_android_config(tag, priority, is_data_only=(notification is None)),
         apns=_build_apns_config(tag, is_background),
+        webpush=_build_webpush_config(tag, title, body, link),
     )
 
 
@@ -342,36 +374,14 @@ def send_merge_completed_message(user_id: str, merged_conversation_id: str, remo
         merged_conversation_id: ID of the primary (merged) conversation
         removed_conversation_ids: List of secondary conversation IDs that were removed
     """
-    tokens = notification_db.get_all_tokens(user_id)
-    if not tokens:
-        print(f"No notification tokens found for user {user_id} for merge notification")
-        return
-
-    # FCM data values must be strings
+    print(f'send_merge_completed_message to user {user_id}')
     data = {
         'type': 'merge_completed',
         'merged_conversation_id': merged_conversation_id,
         'removed_conversation_ids': ','.join(removed_conversation_ids),
     }
-
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            android=messaging.AndroidConfig(priority='high'),
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-priority': '10',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
-
-        try:
-            response = messaging.send(message)
-            print(f'Merge completed message sent to device: {response}')
-        except Exception as e:
-            _handle_send_error(e, token)
+    tag = _generate_tag(f"{user_id}:merge_completed:{merged_conversation_id}")
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):

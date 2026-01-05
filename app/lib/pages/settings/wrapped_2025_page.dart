@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/backend/http/api/wrapped.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/wrapped_2025_share_templates.dart' as templates;
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:path_provider/path_provider.dart';
@@ -55,6 +56,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
   void initState() {
     super.initState();
     MixpanelManager().wrappedPageOpened();
+    SharedPreferencesUtil().hasViewedWrapped2025 = true;
     _loadWrappedStatus();
     _pageController.addListener(_onPageChanged);
   }

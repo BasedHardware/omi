@@ -21,6 +21,13 @@ CRITICAL CONTEXT:
 • If you can identify actual names from the conversation with high confidence (>90%), use those names
 • If unsure about names, use natural phrasing like "{user_name} discussed...", "{user_name} learned...", "{user_name}'s colleague mentioned..."
 
+IDENTITY RULES (CRITICAL):
+• Never create new family members without EXPLICIT evidence ("This is my daughter Sarah", "My son's name is...")
+• Recognize nicknames - don't create new people (common nicknames like "Buddy", "Junior" are likely existing family members)
+• Verify name spellings against existing memories before creating new entries
+• Never use "User" - always use {user_name}
+• If uncertain about a person's identity, DO NOT extract the memory
+
 WORKFLOW:
 1. FIRST: Read the ENTIRE conversation to understand context and identify who is speaking
 2. SECOND: Identify actual names of people mentioned or speaking (use these instead of "Speaker X")
@@ -127,16 +134,77 @@ STRICT EXCLUSION RULES - DO NOT extract if memory is:
 ❌ "Uses a computer for work" (if user is a software engineer)
 ❌ "Has meetings regularly" (if user is in a corporate job)
 
-CRITICAL DEDUPLICATION RULES:
-• DO NOT extract memories >90% similar to existing memories listed below
-• Check both the content AND the context
-• Consider semantic similarity, not just exact word matches
-• If unsure whether something is duplicate, treat it as duplicate (DON'T extract)
+**Skills - Prefer Achievements Over Tool Lists:**
+✅ "{user_name} uses Python for data analysis and automation scripts" (specific use case)
+✅ "{user_name} built a real-time notification system using WebSockets and Redis" (shows applied expertise)
+✅ "{user_name} created an automated pipeline that reduced deployment time by 80%" (specific achievement)
+❌ "{user_name} knows programming" (too vague - which languages? for what?)
+❌ "{user_name} has technical skills" (meaningless without specifics)
+
+BANNED LANGUAGE - DO NOT USE:
+• Hedging words: "likely", "possibly", "seems to", "appears to", "may be", "might"
+• Filler phrases: "indicating a...", "suggesting a...", "reflecting a...", "showcasing"
+• Transient verbs: "is working on", "is building", "is developing", "is testing", "is focusing on"
+• Org change verbs: "is merging", "is reorganizing", "is restructuring", "plans to"
+
+If you find yourself using these words, the memory is too uncertain or transient - DO NOT extract.
+
+NEVER EXTRACT (Absolute Rules):
+1. **NEWS & ANNOUNCEMENTS**: Product releases, acquisitions, feature launches, company news
+   ❌ "Company X acquired startup Y" / "OpenAI released a new model" / "Apple announced..."
+
+2. **GENERAL KNOWLEDGE**: Science facts, geography, statistics not about the user
+   ❌ "Light travels at 186,000 miles per second" / "Certain plants are toxic to pets"
+
+3. **PRODUCT DOCUMENTATION**: How features work, product capabilities, technical specs
+   ❌ "Feature X enables automated workflows" / "The API can process documents"
+
+4. **CUSTOMER/COMPANY FACTS**: Unless user is directly involved with specific outcome
+   ❌ "Acme Corp is evaluating new software" / "BigCo delayed their rollout"
+
+5. **INTERNAL METRICS**: Survey rates, deal sizes, percentages, team statistics
+   ❌ "Team survey response rate is 83%" / "Average deal size is $30K"
+
+6. **ORG RESTRUCTURING**: Team moves, role changes, temporary assignments
+   ❌ "{user_name} is merging teams" / "The marketing team is moving to..."
+
+7. **COLLEAGUE FACTS WITHOUT RELATIONSHIP**: Must state how they relate to user
+   ❌ "Alex is a senior engineer at the company" (no relationship to user)
+   ✅ "Alex reports to {user_name} and leads the backend team" (relationship stated)
+
+8. **GENERIC RELATIONSHIPS**: "Has a friend named X" without meaningful context
+   ❌ "{user_name} has a friend named Mike" (no context = useless)
+   ✅ "Mike is {user_name}'s running partner who they train with for marathons" (specific context)
+
+CRITICAL DEDUPLICATION & UPDATES RULES:
+• You are provided with a large list of existing memories. SCAN IT COMPLETELY.
+• ABSOLUTELY FORBIDDEN to add a memory if it is IDENTICAL or SEMANTICALLY REDUNDANT to an existing one.
+  - Existing: "Likes coffee" -> New: "Enjoys drinking coffee" => REJECT (Redundant)
+
+• EXCEPTION FOR UPDATES / CHANGES:
+  - If a new memory CONTRADICTS or UPDATES an existing one, YOU MUST ADD IT.
+  - Existing: "Likes ice cream" -> New: "Hates ice cream" => ADD IT (Update/Change)
+  - Existing: "Works at Google" -> New: "Left Google and joined OpenAI" => ADD IT (Update)
+
+• PRIORITIZE capturing changes in state, preferences, or relationships.
+• If unsure whether something is a duplicate or an update, favor adding it if it adds new specificity or changes the context.
 
 Examples of DUPLICATES (DO NOT extract):
 - "Loves Italian food" (existing) vs "Enjoys pasta and pizza" → DUPLICATE
 - "Works at Google" (existing) vs "Employed by Google as engineer" → DUPLICATE
-- "Friend named John who is a designer" (existing) vs "Has a designer friend John" → DUPLICATE
+
+CONSOLIDATION CHECK (Before Creating New Memory):
+When you're about to extract a memory about a topic that already has existing memories:
+1. CHECK: Does a memory about this topic/person already exist?
+2. IF YES: Is new info significant enough to warrant separate memory, or would it fragment the topic?
+3. PREFER: Fewer, richer memories over many fragmented ones about the same subject
+
+Example - if existing memories already include:
+- "{user_name} uses AWS for cloud hosting"
+- "{user_name} deploys apps on AWS"
+
+DON'T add: "{user_name} uses AWS Lambda" (fragmented, same topic)
+Instead: Skip it - the system will consolidate. Avoid creating more fragments about the same topic.
 
 FORMAT REQUIREMENTS:
 • Maximum 15 words per memory (strict limit)
@@ -171,6 +239,32 @@ Examples of BAD memory format:
 ❌ "They talked about the project and decided to do it tomorrow" (unclear who, what project, time ref)
 ❌ "Someone mentioned that interesting fact about those people" (completely vague)
 
+ADDITIONAL BAD EXAMPLES:
+
+**Transient/Temporary (will be outdated):**
+❌ "{user_name} is working on a new app"
+❌ "{user_name} is focusing on Q4 initiatives"
+❌ "{user_name} is mentoring a junior developer"
+❌ "{user_name} got access to a beta feature"
+❌ "{user_name} is using app version 2.0.3"
+
+**Not About User (just mentioned in conversation):**
+❌ "Sarah is a marine biologist" (unrelated person mentioned)
+❌ "Company X acquired startup Y" (news)
+❌ "The new AI model supports video input" (tech news)
+❌ "Acme Corp delayed their launch" (customer fact, not about user)
+❌ "Water boils at 100 degrees Celsius" (general knowledge)
+
+**Identity Issues (Hallucination/Duplication):**
+❌ Creating "Arman" when "Armaan" already exists in memories (same person, different spelling)
+❌ "{user_name} has a daughter named Tuesday" (likely mishearing "choose day" or similar)
+❌ "{user_name} has a son named Bobby" when existing memory says son is "Robert" (same person)
+
+**Too Vague (Missing Specifics):**
+❌ "{user_name} has a strong interest in technology" (what kind? be specific)
+❌ "{user_name} learned something interesting" (what did they learn?)
+❌ "{user_name} has experience with programming" (too broad, lacks detail)
+
 CRITICAL - Name Resolution:
 • Read the ENTIRE conversation first to map out who is speaking
 • Look for explicit name introductions ("Hi, I'm Sarah", "This is John")
@@ -178,6 +272,15 @@ CRITICAL - Name Resolution:
 • If you identify a name with >90% confidence, use it
 • If uncertain about names but know roles/relationships, use those ("colleague", "friend", "manager")
 • NEVER use "Speaker 0/1/2" in final memories
+
+LOGIC CHECK (Sanity Test):
+Before extracting, verify the fact is logically possible:
+• Age math: Don't claim 40 years work experience for someone who appears to be ~40 years old
+• Family consistency: Don't create children that contradict existing family structure
+• Location consistency: Don't claim multiple contradictory home locations
+• Career consistency: Don't claim conflicting job titles or employers simultaneously
+
+If a fact seems mathematically impossible or contradicts existing memories, DO NOT extract.
 
 BEFORE YOU OUTPUT - MANDATORY DOUBLE-CHECK:
 For EACH memory you're about to extract, verify it does NOT match these patterns:

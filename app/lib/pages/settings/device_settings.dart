@@ -7,12 +7,14 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +36,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
 
+  // WiFi sync state
+  bool _isWifiSupported = false;
+  String? _wifiSsid;
+  String? _wifiPassword;
+
   Timer? _debounce;
   Timer? _micGainDebounce;
 
@@ -43,6 +50,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (connection == null) {
       return Future.value(null);
     }
+    return await connection.disconnect();
+  }
+
+  Future _bleUnpairDevice(BtDevice btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    await connection.unpair();
     return await connection.disconnect();
   }
 
@@ -110,6 +126,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             setState(() {
               _isMicGainLoaded = true; // Loaded, but no value, use default
             });
+          }
+        }
+
+        final wifiSupported = await connection.isWifiSyncSupported();
+        if (mounted) {
+          setState(() {
+            _isWifiSupported = wifiSupported;
+          });
+
+          if (wifiSupported) {
+            final walService = ServiceManager.instance().wal;
+            final syncs = walService.getSyncs();
+            final credentials = syncs.sdcard.getWifiCredentials();
+            if (mounted && credentials != null) {
+              setState(() {
+                _wifiSsid = credentials['ssid'];
+                _wifiPassword = credentials['password'];
+              });
+            }
           }
         }
       }
@@ -255,7 +290,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         children: [
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.microchip,
-            title: 'Device Name',
+            title: context.l10n.deviceName,
             chipValue: deviceName,
             copyValue: deviceName,
             showChevron: false,
@@ -263,7 +298,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.fingerprint,
-            title: 'Device ID',
+            title: context.l10n.deviceId,
             chipValue: truncateId(deviceId),
             copyValue: deviceId,
             showChevron: false,
@@ -271,14 +306,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.download,
-            title: 'Firmware',
+            title: context.l10n.firmware,
             chipValue: device?.firmwareRevision ?? '1.0.2',
             onTap: () => routeToPage(context, FirmwareUpdate(device: device)),
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.sdCard,
-            title: 'SD Card Sync',
+            title: context.l10n.sdCardSync,
             onTap: () {
               if (!provider.isDeviceStorageSupport) {
                 showDialog(
@@ -287,8 +322,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     context,
                     () => Navigator.of(context).pop(),
                     () {},
-                    'V2 undetected',
-                    'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
+                    context.l10n.v2Undetected,
+                    context.l10n.v2UndetectedMessage,
                     singleButton: true,
                   ),
                 );
@@ -317,7 +352,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         children: [
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.gears,
-            title: 'Hardware Revision',
+            title: context.l10n.hardwareRevision,
             chipValue: hardwareRevision,
             copyValue: hardwareRevision,
             showChevron: false,
@@ -325,7 +360,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.hashtag,
-            title: 'Model Number',
+            title: context.l10n.modelNumber,
             chipValue: modelNumber,
             copyValue: modelNumber,
             showChevron: false,
@@ -333,7 +368,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.industry,
-            title: 'Manufacturer',
+            title: context.l10n.manufacturer,
             chipValue: manufacturer,
             copyValue: manufacturer,
             showChevron: false,
@@ -346,13 +381,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   String _getDoubleTapActionLabel(int action) {
     switch (action) {
       case 0:
-        return 'End Conversation';
+        return context.l10n.endConversation;
       case 1:
-        return 'Pause/Resume';
+        return context.l10n.pauseResume;
       case 2:
-        return 'Star Conversation';
+        return context.l10n.starConversation;
       default:
-        return 'End Conversation';
+        return context.l10n.endConversation;
     }
   }
 
@@ -381,27 +416,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const Text(
-                    'Double Tap Action',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.doubleTapAction,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Choose what happens when you double tap',
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 13,
-                    ),
-                  ),
                   const SizedBox(height: 16),
                   ListTile(
-                    title: const Text(
-                      'End & Process Conversation',
-                      style: TextStyle(
+                    title: Text(
+                      context.l10n.endAndProcess,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w400,
                       ),
@@ -413,9 +440,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     },
                   ),
                   ListTile(
-                    title: const Text(
-                      'Pause/Resume Recording',
-                      style: TextStyle(
+                    title: Text(
+                      context.l10n.pauseResumeRecording,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w400,
                       ),
@@ -427,18 +454,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     },
                   ),
                   ListTile(
-                    title: const Text(
-                      'Star Ongoing Conversation',
-                      style: TextStyle(
+                    title: Text(
+                      context.l10n.starOngoing,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Mark to star when conversation ends',
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
                       ),
                     ),
                     trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
@@ -485,9 +505,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'LED Brightness',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.ledBrightness,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -543,8 +563,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Off', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                        Text('Max', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        Text(context.l10n.off, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        Text(context.l10n.max, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -574,16 +594,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             }
 
             String getGainDescription(int level) {
-              const descriptions = [
-                'Microphone is muted',
-                'Very quiet - for loud environments',
-                'Quiet - for moderate noise',
-                'Neutral - balanced recording',
-                'Slightly boosted - normal use',
-                'Boosted - for quiet environments',
-                'High - for distant or soft voices',
-                'Very high - for very quiet sources',
-                'Maximum - use with caution',
+              final descriptions = [
+                context.l10n.micGainDescMuted,
+                context.l10n.micGainDescLow,
+                context.l10n.micGainDescModerate,
+                context.l10n.micGainDescNeutral,
+                context.l10n.micGainDescSlightlyBoosted,
+                context.l10n.micGainDescBoosted,
+                context.l10n.micGainDescHigh,
+                context.l10n.micGainDescVeryHigh,
+                context.l10n.micGainDescMax,
               ];
               return level >= 0 && level < descriptions.length ? descriptions[level] : '';
             }
@@ -608,9 +628,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Mic Gain',
-                          style: TextStyle(
+                        Text(
+                          context.l10n.micGain,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
@@ -674,15 +694,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Mute', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                        Text('Max', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        Text(context.l10n.mute, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        Text(context.l10n.max, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 20),
                     Row(
                       children: [
                         Expanded(
-                          child: _buildPresetButton('Quiet', 2, currentLevel, () {
+                          child: _buildPresetButton(context.l10n.quiet, 2, currentLevel, () {
                             setSheetState(() {});
                             setState(() => _micGain = 2.0);
                             _updateMicGain(2.0);
@@ -690,7 +710,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: _buildPresetButton('Normal', 4, currentLevel, () {
+                          child: _buildPresetButton(context.l10n.normal, 4, currentLevel, () {
                             setSheetState(() {});
                             setState(() => _micGain = 4.0);
                             _updateMicGain(4.0);
@@ -698,7 +718,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: _buildPresetButton('High', 6, currentLevel, () {
+                          child: _buildPresetButton(context.l10n.high, 6, currentLevel, () {
                             setSheetState(() {});
                             setState(() => _micGain = 6.0);
                             _updateMicGain(6.0);
@@ -714,6 +734,29 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           },
         );
       },
+    );
+  }
+
+  void _showWifiSyncSheet() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => WifiSyncSettingsPage(
+          initialSsid: _wifiSsid,
+          initialPassword: _wifiPassword,
+          onCredentialsSaved: (ssid, password) {
+            setState(() {
+              _wifiSsid = ssid;
+              _wifiPassword = password;
+            });
+          },
+          onCredentialsCleared: () {
+            setState(() {
+              _wifiSsid = null;
+              _wifiPassword = null;
+            });
+          },
+        ),
+      ),
     );
   }
 
@@ -763,7 +806,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           // Double Tap
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,
-            title: 'Double Tap',
+            title: context.l10n.doubleTap,
             chipValue: _getDoubleTapActionLabel(doubleTapAction),
             onTap: _showDoubleTapActionSheet,
           ),
@@ -772,7 +815,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.lightbulb,
-              title: 'LED Brightness',
+              title: context.l10n.ledBrightness,
               chipValue: '${_dimRatio.round()}%',
               onTap: _showBrightnessSheet,
             ),
@@ -782,9 +825,19 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.microphone,
-              title: 'Mic Gain',
+              title: context.l10n.micGain,
               chipValue: _getMicGainLabel(_micGain.round()),
               onTap: _showMicGainSheet,
+            ),
+          ],
+          // WiFi Sync
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.wifi,
+              title: 'WiFi Sync',
+              chipValue: _wifiSsid != null ? 'Configured' : 'Not Set',
+              onTap: _showWifiSyncSheet,
             ),
           ],
         ],
@@ -832,10 +885,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     child: FaIcon(FontAwesomeIcons.circleQuestion, color: Color(0xFF8E8E93), size: 20),
                   ),
                   const SizedBox(width: 16),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Charging Issues',
-                      style: TextStyle(
+                      context.l10n.chargingIssues,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,
@@ -868,7 +921,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Your Omi has been disconnected 😔')),
+                    SnackBar(content: Text(context.l10n.deviceDisconnectedMessage)),
                   );
                 }
               },
@@ -883,9 +936,69 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      provider.connectedDevice == null ? 'Unpair Device' : 'Disconnect Device',
+                      provider.connectedDevice == null ? context.l10n.unpairDevice : context.l10n.disconnectDevice,
                       style: const TextStyle(
                         color: Colors.redAccent,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          // Unpair Device - only for Limitless devices
+          if (provider.isConnected && provider.connectedDevice?.type == DeviceType.limitless) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            GestureDetector(
+              onTap: () async {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.of(context).pop(),
+                    () async {
+                      Navigator.of(context).pop();
+                      await SharedPreferencesUtil()
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                      SharedPreferencesUtil().deviceName = '';
+                      if (provider.connectedDevice != null) {
+                        await _bleUnpairDevice(provider.connectedDevice!);
+                      }
+                      provider.setIsConnected(false);
+                      provider.setConnectedDevice(null);
+                      provider.updateConnectingStatus(false);
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(context.l10n.deviceUnpairedMessage),
+                            duration: const Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    },
+                    context.l10n.unpairDialogTitle,
+                    context.l10n.unpairDialogMessage,
+                    okButtonText: 'Unpair',
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      context.l10n.unpairAndForget,
+                      style: const TextStyle(
+                        color: Colors.orange,
                         fontSize: 17,
                         fontWeight: FontWeight.w400,
                       ),
@@ -921,9 +1034,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'Device Not Connected',
-            style: TextStyle(
+          Text(
+            context.l10n.deviceNotConnected,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -931,7 +1044,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Connect your Omi device to access\ndevice settings and customization',
+            context.l10n.connectDeviceMessage,
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.grey.shade500,
@@ -956,9 +1069,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
             onPressed: () => Navigator.of(context).pop(),
           ),
-          title: const Text(
-            'Device Settings',
-            style: TextStyle(
+          title: Text(
+            context.l10n.deviceSettings,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -978,13 +1091,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ],
               if (provider.isConnected) ...[
                 const SizedBox(height: 16),
-                _buildSectionHeader('Device Information'),
-                _buildDeviceInfoSection(provider.pairedDevice, provider),
-                const SizedBox(height: 32),
-                _buildSectionHeader('Customization'),
+                _buildSectionHeader(context.l10n.customizationSection),
                 _buildCustomizationSection(),
                 const SizedBox(height: 32),
-                _buildSectionHeader('Hardware'),
+                _buildSectionHeader(context.l10n.deviceInfoSection),
+                _buildDeviceInfoSection(provider.pairedDevice, provider),
+                const SizedBox(height: 32),
+                _buildSectionHeader(context.l10n.hardwareSection),
                 _buildHardwareInfoSection(provider.pairedDevice),
                 const SizedBox(height: 32),
               ],

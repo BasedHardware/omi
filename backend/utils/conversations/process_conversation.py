@@ -3,6 +3,7 @@ import random
 import re
 import threading
 import uuid
+import logging
 from datetime import timezone, timedelta, datetime
 from typing import Union, Tuple, List, Optional
 
@@ -48,6 +49,7 @@ from utils.analytics import record_usage
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.trends import trends_extractor
+from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
     retrieve_metadata_from_message,
@@ -313,6 +315,25 @@ def _trigger_apps(
     [t.join() for t in threads]
 
 
+def _update_goal_progress(uid: str, conversation: Conversation):
+    """Extract and update goal progress from conversation text."""
+    try:
+        # Get conversation text
+        text = ""
+        if conversation.structured and conversation.structured.overview:
+            text = conversation.structured.overview
+        elif conversation.transcript_segments:
+            text = " ".join([s.text for s in conversation.transcript_segments[:20]])
+        
+        if not text or len(text) < 10:
+            return
+        
+        # Use utility function to extract and update goal progress
+        extract_and_update_goal_progress(uid, text)
+    except Exception as e:
+        print(f"[GOAL] Error updating progress: {e}")
+
+
 def _extract_memories(uid: str, conversation: Conversation):
     # TODO: maybe instead (once they can edit them) we should not tie it this hard
     memories_db.delete_memories_for_conversation(uid, conversation.id)
@@ -346,6 +367,23 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
+        
+        try:
+            from utils.llm.knowledge_graph import extract_knowledge_from_memory
+            from database import users as users_db
+            
+            user = users_db.get_user_store_recording_permission(uid)
+            user_name = user.get('name', 'User') if user else 'User'
+            
+            from database.memories import set_memory_kg_extracted
+            
+            for memory_db_obj in parsed_memories:
+                if memory_db_obj.kg_extracted:
+                    continue
+                extract_knowledge_from_memory(uid, memory_db_obj.content, memory_db_obj.id, user_name)
+                set_memory_kg_extracted(uid, memory_db_obj.id)
+        except Exception:
+            logging.exception("Error extracting knowledge graph from memory.")
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
@@ -566,6 +604,7 @@ def process_conversation(
         threading.Thread(target=_extract_memories, args=(uid, conversation)).start()
         threading.Thread(target=_extract_trends, args=(uid, conversation)).start()
         threading.Thread(target=_save_action_items, args=(uid, conversation)).start()
+        threading.Thread(target=_update_goal_progress, args=(uid, conversation)).start()
 
     # Create audio files from chunks if private cloud sync was enabled
     if not is_reprocess and conversation.private_cloud_sync_enabled:

@@ -17,6 +17,7 @@ import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -1070,6 +1071,99 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
 
                   const SizedBox(height: 32),
 
+                  // Knowledge Graph Section
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: const Color(0xFF1C1C1E),
+                          title: const Text('Delete Knowledge Graph?', style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                            'This will delete all derived knowledge graph data (nodes and connections). Your original memories will remain safe. The graph will be rebuilt over time or upon next request.',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(ctx).pop();
+                                try {
+                                  // Call delete endpoint
+                                  await KnowledgeGraphApi.deleteKnowledgeGraph();
+                                  AppSnackbar.showSnackbar('Knowledge Graph deleted successfully');
+                                } catch (e) {
+                                  AppSnackbar.showSnackbarError('Failed to delete graph: $e');
+                                }
+                              },
+                              child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2E),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.trash,
+                                color: Colors.redAccent.shade100,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Delete Knowledge Graph',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Clear all nodes and connections',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: Colors.grey.shade600,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
                   // Developer API Keys Section
                   const DeveloperApiKeysSection(),
 
@@ -1561,13 +1655,25 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),
                         ),
-                        // Daily Grade
+                        // Goal Tracker
                         _buildExperimentalItem(
-                          title: 'Daily Grade',
-                          description: 'Show daily grade card on homepage',
-                          icon: FontAwesomeIcons.chartLine,
-                          value: provider.showDailyGradeEnabled,
-                          onChanged: provider.onShowDailyGradeChanged,
+                          title: 'Goal Tracker',
+                          description: 'Track your personal goals on homepage',
+                          icon: FontAwesomeIcons.bullseye,
+                          value: provider.showGoalTrackerEnabled,
+                          onChanged: provider.onShowGoalTrackerChanged,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Daily Reflection
+                        _buildExperimentalItem(
+                          title: 'Daily Reflection',
+                          description: 'Get a 9 PM reminder to reflect on your day',
+                          icon: FontAwesomeIcons.moon,
+                          value: provider.dailyReflectionEnabled,
+                          onChanged: provider.onDailyReflectionChanged,
                         ),
                       ],
                     ),

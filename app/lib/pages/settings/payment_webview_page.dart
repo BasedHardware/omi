@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class PaymentWebViewPage extends StatefulWidget {
@@ -62,7 +63,7 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(widget.title ?? 'Complete Your Upgrade'),
+        title: Text(widget.title ?? context.l10n.completeYourUpgrade),
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(

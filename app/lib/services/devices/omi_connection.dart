@@ -608,4 +608,91 @@ class OmiDeviceConnection extends DeviceConnection {
 
     return deviceInfo;
   }
+
+  @override
+  Future<bool> performIsWifiSyncSupported() async {
+    final features = await getFeatures();
+    return (features & OmiFeatures.wifi) != 0;
+  }
+
+  @override
+  Future<bool> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+    try {
+      // Format: [0x01][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port_high][port_low]
+      final List<int> command = [];
+
+      command.add(0x01);
+
+      // SSID
+      final ssidBytes = ssid.codeUnits;
+      command.add(ssidBytes.length);
+      command.addAll(ssidBytes);
+
+      // Password
+      final passwordBytes = password.codeUnits;
+      command.add(passwordBytes.length);
+      command.addAll(passwordBytes);
+
+      // Server IP
+      final ipBytes = serverIp.codeUnits;
+      command.add(ipBytes.length);
+      command.addAll(ipBytes);
+
+      // Port (big endian - high byte first)
+      command.add((port >> 8) & 0xFF);
+      command.add(port & 0xFF);
+
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
+
+      return true;
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error setting up WiFi sync: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performStartWifiSync() async {
+    try {
+      // Send WIFI_START command (0x02)
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, [0x02]);
+      return true;
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error starting WiFi sync: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performStopWifiSync() async {
+    try {
+      // Send WIFI_SHUTDOWN command (0x03)
+      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, [0x03]);
+      return true;
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error stopping WiFi sync: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<StreamSubscription?> performGetWifiSyncStatusListener({
+    required void Function(int status) onStatusReceived,
+  }) async {
+    try {
+      final stream = transport.getCharacteristicStream(storageDataStreamServiceUuid, storageWifiCharacteristicUuid);
+
+      final subscription = stream.listen((value) {
+        if (value.isNotEmpty) {
+          final status = value[0];
+          onStatusReceived(status);
+        }
+      });
+
+      return subscription;
+    } catch (e) {
+      debugPrint('OmiDeviceConnection: Error setting up WiFi status listener: $e');
+      return null;
+    }
+  }
 }
