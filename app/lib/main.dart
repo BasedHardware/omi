@@ -193,8 +193,8 @@ void main() {
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
         WindowOptions windowOptions = const WindowOptions(
-          size: Size(1440, 900),
-          minimumSize: Size(1000, 650),
+          size: Size(1300, 800),
+          minimumSize: Size(1100, 700),
           center: true,
           title: "Omi",
           titleBarStyle: TitleBarStyle.hidden,
