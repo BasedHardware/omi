@@ -105,6 +105,11 @@ function getNotificationRoute(notification: OmiNotification): string {
     return taskId ? `/tasks?highlight=${taskId}` : '/tasks';
   }
 
+  if (navigateTo.startsWith('/daily-summary')) {
+    const recapId = navigateTo.split('/').pop();
+    return recapId ? `/recaps?id=${recapId}` : '/recaps';
+  }
+
   if (navigateTo.startsWith('/recaps')) {
     const recapId = navigateTo.split('/').pop();
     return recapId ? `/recaps?id=${recapId}` : '/recaps';
