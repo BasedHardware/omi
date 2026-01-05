@@ -11,7 +11,7 @@ import uuid
 import asyncio
 import contextvars
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Any, Tuple
 
 import database.notifications as notification_db
 

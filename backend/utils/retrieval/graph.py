@@ -1,7 +1,7 @@
 import datetime
 import uuid
 import asyncio
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Tuple
 
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
