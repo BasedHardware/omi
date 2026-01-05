@@ -834,6 +834,72 @@ class ConversationProvider extends ChangeNotifier {
     return list.indexWhere((c) => c.id == id);
   }
 
+  /// Get adjacent conversation in display order (across date groups).
+  /// [direction]: 1 for older (next in list), -1 for newer (previous in list).
+  /// Returns null if at the boundary (no more conversations in that direction).
+  ({ServerConversation conversation, DateTime date})? getAdjacentConversation(
+    String currentConversationId,
+    DateTime currentDate,
+    int direction,
+  ) {
+    if (groupedConversations.isEmpty) return null;
+
+    // Get sorted date keys (newest first, matching display order)
+    final sortedDates = groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+    if (sortedDates.isEmpty) return null;
+
+    // Normalize current date
+    final normalizedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
+    final dateIndex = sortedDates.indexWhere(
+      (d) => d.year == normalizedDate.year && d.month == normalizedDate.month && d.day == normalizedDate.day,
+    );
+    if (dateIndex == -1) return null;
+
+    final currentDayList = groupedConversations[sortedDates[dateIndex]] ?? [];
+    final convoIndexInDay = currentDayList.indexWhere((c) => c.id == currentConversationId);
+    if (convoIndexInDay == -1) return null;
+
+    if (direction == 1) {
+      // Moving to older conversation (next in list)
+      if (convoIndexInDay < currentDayList.length - 1) {
+        // There's a next item in the same day
+        return (
+          conversation: currentDayList[convoIndexInDay + 1],
+          date: sortedDates[dateIndex],
+        );
+      } else {
+        // Need to move to the next older day (next date index since dates are sorted newest first)
+        if (dateIndex < sortedDates.length - 1) {
+          final nextDate = sortedDates[dateIndex + 1];
+          final nextDayList = groupedConversations[nextDate] ?? [];
+          if (nextDayList.isNotEmpty) {
+            return (conversation: nextDayList.first, date: nextDate);
+          }
+        }
+      }
+    } else if (direction == -1) {
+      // Moving to newer conversation (previous in list)
+      if (convoIndexInDay > 0) {
+        // There's a previous item in the same day
+        return (
+          conversation: currentDayList[convoIndexInDay - 1],
+          date: sortedDates[dateIndex],
+        );
+      } else {
+        // Need to move to the next newer day (previous date index since dates are sorted newest first)
+        if (dateIndex > 0) {
+          final prevDate = sortedDates[dateIndex - 1];
+          final prevDayList = groupedConversations[prevDate] ?? [];
+          if (prevDayList.isNotEmpty) {
+            return (conversation: prevDayList.last, date: prevDate);
+          }
+        }
+      }
+    }
+
+    return null; // At the boundary
+  }
+
   void updateSyncedConversation(ServerConversation conversation) {
     updateConversationInSortedList(conversation);
     notifyListeners();
