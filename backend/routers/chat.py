@@ -168,7 +168,8 @@ def send_message(
         callback_data = {}
         # Using the new agentic system via graph routing
         async for chunk in execute_graph_chat_stream(
-            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session
+            uid, messages, app, cited=True, callback_data=callback_data, chat_session=chat_session,
+            context=data.context
         ):
             if chunk:
                 msg = chunk.replace("\n", "__CRLF__")
@@ -180,8 +181,8 @@ def send_message(
                     ai_message_dict = ai_message.dict()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
-                    data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-                    yield f"done: {data}\n\n"
+                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                    yield f"done: {encoded_response}\n\n"
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
