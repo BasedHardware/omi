@@ -642,18 +642,13 @@ getPhoneMicRecordingButton(BuildContext context, VoidCallback toggleRecordingCb,
 }
 
 Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
-  // FIXME, this has to be a single one always, and also a conversation obj
+  // Only show at most 1 processing widget on homepage
   if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
-  return SliverList(
-    delegate: SliverChildBuilderDelegate(
-      (context, index) {
-        var pm = conversations[index];
-        return ProcessingConversationWidget(conversation: pm);
-      },
-      childCount: conversations.length,
-    ),
+  // Show only the first (most recent) processing conversation
+  return SliverToBoxAdapter(
+    child: ProcessingConversationWidget(conversation: conversations.first),
   );
 }
 
