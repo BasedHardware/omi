@@ -399,8 +399,8 @@ export function AppsExplorer() {
 
     if (activeTab === 'installed') {
       // Check cache first
-      if (appsCache.installedApps && appsCache.installedApps.length > 0) {
-        setInstalledApps(appsCache.installedApps);
+      if (isCacheValid('installedApps')) {
+        setInstalledApps(appsCache.installedApps!);
         setIsLoading(false);
         if (isCacheStale()) {
           loadInstalled(true);
@@ -435,8 +435,8 @@ export function AppsExplorer() {
 
     if (activeTab === 'my-apps') {
       // Check cache first
-      if (appsCache.myApps && appsCache.myApps.length > 0) {
-        setMyApps(appsCache.myApps);
+      if (isCacheValid('myApps')) {
+        setMyApps(appsCache.myApps!);
         setIsLoading(false);
         if (isCacheStale()) {
           loadMyApps(true);

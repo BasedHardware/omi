@@ -128,18 +128,16 @@ export function useConversations(
           return dateB.getTime() - dateA.getTime();
         });
 
-        const newConversations = append
-          ? [...conversations, ...sorted]
-          : sorted;
-
-        setConversations(newConversations);
-
-        // Check if there are more to load
+        // Use functional update to avoid conversations in dependency array
         const hasMoreData = data.length === limit;
         setHasMore(hasMoreData);
 
-        // Save to cache
-        setToCache(key, newConversations, currentOffset, hasMoreData);
+        setConversations(prev => {
+          const newConversations = append ? [...prev, ...sorted] : sorted;
+          // Save to cache
+          setToCache(key, newConversations, currentOffset, hasMoreData);
+          return newConversations;
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load conversations');
         console.error('Failed to fetch conversations:', err);
@@ -149,7 +147,7 @@ export function useConversations(
       }
     },
     // Only depend on primitive values, not objects
-    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId, conversations]
+    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId]
   );
 
   // Initial fetch and refetch when filter params change
