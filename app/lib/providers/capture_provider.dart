@@ -215,6 +215,8 @@ class CaptureProvider extends ChangeNotifier
   DateTime? _voiceCommandSession;
   List<List<int>> _commandBytes = [];
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
+  Timer? _voiceCommandTimeoutTimer; // 30s auto-end timer for voice questions
+  bool _voiceSessionStartedByLegacyLongPress = false; // Track if session was started by legacy long press (3) vs new toggle (1), TODO: remove this flag later
 
   StreamSubscription? _storageStream;
 
@@ -418,27 +420,26 @@ class CaptureProvider extends ChangeNotifier
     }
   }
 
-  // Just incase the ble connection get loss
-  void _watchVoiceCommands(String deviceId, DateTime session) {
-    Timer.periodic(const Duration(seconds: 3), (t) async {
-      debugPrint("voice command watch");
-      if (session != _voiceCommandSession) {
-        t.cancel();
-        return;
-      }
-      var value = await _getBleButtonState(deviceId);
-      if (value.isEmpty || value.length < 4) return;
-      var buttonState = ByteData.view(Uint8List.fromList(value.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
-      debugPrint("watch device button $buttonState");
-
-      // Force process
-      if (buttonState == 5 && session == _voiceCommandSession) {
-        _voiceCommandSession = null; // end session
-        var data = List<List<int>>.from(_commandBytes);
-        _commandBytes = [];
-        _processVoiceCommandBytes(deviceId, data);
+  // Start a 15s timeout timer for voice commands - auto-ends if user forgets to tap again
+  void _startVoiceCommandTimeout(String deviceId) {
+    _voiceCommandTimeoutTimer?.cancel();
+    _voiceCommandTimeoutTimer = Timer(const Duration(seconds: 15), () {
+      debugPrint("Voice command timeout - auto-ending session after 15s");
+      if (_voiceCommandSession != null) {
+        _endVoiceCommandSession(deviceId);
       }
     });
+  }
+
+  // End voice command session and process the collected audio
+  void _endVoiceCommandSession(String deviceId) {
+    _voiceCommandTimeoutTimer?.cancel();
+    _voiceCommandTimeoutTimer = null;
+    _voiceCommandSession = null;
+    _voiceSessionStartedByLegacyLongPress = false; // Reset flag
+    var data = List<List<int>>.from(_commandBytes);
+    _commandBytes = [];
+    _processVoiceCommandBytes(deviceId, data);
   }
 
   Future streamButton(String deviceId) async {
@@ -506,20 +507,41 @@ class CaptureProvider extends ChangeNotifier
         return;
       }
 
-      // start long press (for voice commands)
+      // Single tap (buttonState == 1) - toggle voice question mode
+      // Tap once to start, tap again to end
+      if (buttonState == 1) {
+        debugPrint("Single tap detected");
+        if (_voiceCommandSession == null) {
+          // Start voice question session (new toggle mode)
+          debugPrint("Starting voice question session (toggle mode)");
+          _voiceCommandSession = DateTime.now();
+          _commandBytes = [];
+          _voiceSessionStartedByLegacyLongPress = false; // New toggle mode
+          _startVoiceCommandTimeout(deviceId);
+          _playSpeakerHaptic(deviceId, 1);
+        } else if (!_voiceSessionStartedByLegacyLongPress) {
+          // Only end on second tap if session was started by toggle mode (not legacy)
+          debugPrint("Ending voice question session (toggle mode)");
+          _endVoiceCommandSession(deviceId);
+        }
+        return;
+      }
+
+      // Legacy support: start long press (for voice commands) - older firmware
       if (buttonState == 3 && _voiceCommandSession == null) {
+        debugPrint("Legacy: Long press start detected");
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
-        _watchVoiceCommands(deviceId, _voiceCommandSession!);
+        _voiceSessionStartedByLegacyLongPress = true; // Legacy hold-to-talk mode
+        _startVoiceCommandTimeout(deviceId);
         _playSpeakerHaptic(deviceId, 1);
       }
 
-      // release (end voice command)
-      if (buttonState == 5 && _voiceCommandSession != null) {
-        _voiceCommandSession = null; // end session
-        var data = List<List<int>>.from(_commandBytes);
-        _commandBytes = [];
-        _processVoiceCommandBytes(deviceId, data);
+      // Legacy support: release (end voice command) - older firmware
+      // Only end on release if session was started by legacy long press (buttonState 3)
+      if (buttonState == 5 && _voiceCommandSession != null && _voiceSessionStartedByLegacyLongPress) {
+        debugPrint("Legacy: Release detected - ending voice command");
+        _endVoiceCommandSession(deviceId);
       }
     });
   }
