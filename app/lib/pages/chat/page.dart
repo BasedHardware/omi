@@ -48,6 +48,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
+  bool _allowKeyboardFocus = true;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -512,10 +513,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       ? VoiceRecorderWidget(
                                           onTranscriptReady: (transcript) {
                                             setState(() {
+                                              _allowKeyboardFocus = false;
                                               textController.text = transcript;
                                               _showVoiceRecorder = false;
                                               context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
                                             });
+
+                                            // Make absolutely sure
+                                            FocusManager.instance.primaryFocus?.unfocus();
                                           },
                                           onClose: () {
                                             setState(() {
@@ -534,6 +539,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             enabled: true,
                                             controller: textController,
                                             focusNode: textFieldFocusNode,
+                                            canRequestFocus: _allowKeyboardFocus,
+                                            onTap: () {
+                                              setState(() {
+                                                _allowKeyboardFocus = true;
+                                              });
+                                            },
                                             obscureText: false,
                                             textAlign: TextAlign.start,
                                             textAlignVertical: TextAlignVertical.center,
