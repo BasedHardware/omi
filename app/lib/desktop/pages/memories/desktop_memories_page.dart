@@ -134,42 +134,42 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
   Future<void> _handleRefresh() async {
     final provider = context.read<MemoriesProvider>();
     await provider.init();
-
+    
+    // Sync the UI filter state with provider
+    // Desktop page uses single-category filters, so clear provider's multi-category filter
+    // and apply the current desktop filter
     _applyFilter(_currentFilter);
-
-
   }
 
   void _applyFilter(FilterOption option) {
     setState(() {
       _currentFilter = option;
-
-      switch (option) {
-        case FilterOption.interesting:
-          _filterByCategory(MemoryCategory.interesting);
-          MixpanelManager().memoriesFiltered('interesting');
-          break;
-        case FilterOption.system:
-          _filterByCategory(MemoryCategory.system);
-          MixpanelManager().memoriesFiltered('system');
-          break;
-        case FilterOption.manual:
-          _filterByCategory(MemoryCategory.manual);
-          MixpanelManager().memoriesFiltered('manual');
-          break;
-        case FilterOption.all:
-          _filterByCategory(null);
-          MixpanelManager().memoriesFiltered('all');
-          break;
-      }
     });
-  }
 
-  void _filterByCategory(MemoryCategory? category) {
-    setState(() {
-      _selectedCategory = category;
-    });
-    context.read<MemoriesProvider>().setCategoryFilter(category);
+    final provider = context.read<MemoriesProvider>();
+    provider.clearCategoryFilter();
+
+    switch (option) {
+      case FilterOption.interesting:
+        _selectedCategory = MemoryCategory.interesting;
+        provider.toggleCategoryFilter(MemoryCategory.interesting);
+        MixpanelManager().memoriesFiltered('interesting');
+        break;
+      case FilterOption.system:
+        _selectedCategory = MemoryCategory.system;
+        provider.toggleCategoryFilter(MemoryCategory.system);
+        MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.manual:
+        _selectedCategory = MemoryCategory.manual;
+        provider.toggleCategoryFilter(MemoryCategory.manual);
+        MixpanelManager().memoriesFiltered('manual');
+        break;
+      case FilterOption.all:
+        _selectedCategory = null;
+        MixpanelManager().memoriesFiltered('all');
+        break;
+    }
   }
 
   Future<void> _handleReload() async {
