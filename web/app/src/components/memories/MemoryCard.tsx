@@ -9,7 +9,6 @@ import {
   Pencil,
   Trash2,
   Check,
-  X,
   Lock,
   ThumbsUp,
   ThumbsDown,
@@ -62,15 +61,22 @@ export function MemoryCard({
   const [editContent, setEditContent] = useState(memory.content);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Check if content needs truncation (roughly 2 lines worth at ~120 chars/line)
+  const needsTruncation = memory.content.length > 200;
 
   const categoryInfo = categoryConfig[memory.category];
   const needsReview = !memory.reviewed && memory.user_review === null;
 
   useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.select();
+      // Auto-resize to fit content
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
     }
   }, [isEditing]);
 
@@ -171,64 +177,56 @@ export function MemoryCard({
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {isEditing ? (
-            <div className="space-y-2">
-              <textarea
-                ref={inputRef}
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSaveEdit();
-                  } else if (e.key === 'Escape') {
-                    handleCancelEdit();
-                  }
-                }}
-                className={cn(
-                  'w-full px-3 py-2 rounded-lg resize-none',
-                  'bg-bg-secondary border border-bg-quaternary',
-                  'text-sm text-text-primary',
-                  'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                  'placeholder:text-text-quaternary'
-                )}
-                rows={3}
-                placeholder="Enter memory content..."
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={handleCancelEdit}
-                  className={cn(
-                    'p-1.5 rounded-md',
-                    'text-text-tertiary hover:text-text-primary',
-                    'hover:bg-bg-tertiary transition-colors'
-                  )}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className={cn(
-                    'p-1.5 rounded-md',
-                    'text-success hover:text-success',
-                    'hover:bg-success/10 transition-colors'
-                  )}
-                >
-                  <Check className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p
-              onDoubleClick={() => setIsEditing(true)}
-              title="Double-click to edit"
+            <textarea
+              ref={textareaRef}
+              value={editContent}
+              onChange={(e) => {
+                setEditContent(e.target.value);
+                // Auto-resize as user types
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
+              onBlur={handleSaveEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSaveEdit();
+                } else if (e.key === 'Escape') {
+                  handleCancelEdit();
+                }
+              }}
               className={cn(
-                'text-sm text-text-primary leading-relaxed',
-                'cursor-text select-none',
-                'hover:bg-bg-quaternary/30 rounded px-1 -mx-1 transition-colors'
+                'w-full text-sm bg-bg-secondary border border-purple-primary/50',
+                'rounded px-2 py-1.5 resize-none overflow-hidden',
+                'text-text-primary outline-none leading-relaxed',
+                'focus:ring-1 focus:ring-purple-primary/30'
               )}
-            >
-              {memory.content}
-            </p>
+              placeholder="Enter memory content..."
+              rows={1}
+            />
+          ) : (
+            <div>
+              <p
+                onDoubleClick={() => setIsEditing(true)}
+                title="Double-click to edit"
+                className={cn(
+                  'text-sm text-text-primary leading-relaxed',
+                  'cursor-text select-none',
+                  'hover:bg-bg-quaternary/30 rounded px-1 -mx-1 transition-colors',
+                  !isExpanded && needsTruncation && 'line-clamp-2'
+                )}
+              >
+                {memory.content}
+              </p>
+              {needsTruncation && (
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="text-xs text-text-quaternary hover:text-purple-primary mt-1 transition-colors"
+                >
+                  {isExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
           )}
 
           {/* Metadata row */}

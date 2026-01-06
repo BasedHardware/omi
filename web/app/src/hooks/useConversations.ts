@@ -5,6 +5,38 @@ import { getConversations, GetConversationsParams } from '@/lib/api';
 import type { Conversation, GroupedConversations } from '@/types/conversation';
 import { formatRelativeDate } from '@/lib/utils';
 
+// Module-level cache that persists across component mounts
+interface CacheEntry {
+  conversations: Conversation[];
+  offset: number;
+  hasMore: boolean;
+  timestamp: number;
+}
+
+const conversationCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCacheKey(folderId?: string, startDate?: Date, endDate?: Date): string {
+  const parts = [
+    folderId || 'all',
+    startDate?.toISOString().split('T')[0] || '',
+    endDate?.toISOString().split('T')[0] || '',
+  ];
+  return parts.join('|');
+}
+
+function getFromCache(key: string): CacheEntry | null {
+  return conversationCache.get(key) || null;
+}
+
+function setToCache(key: string, conversations: Conversation[], offset: number, hasMore: boolean): void {
+  conversationCache.set(key, { conversations, offset, hasMore, timestamp: Date.now() });
+}
+
+function isCacheStale(entry: CacheEntry): boolean {
+  return Date.now() - entry.timestamp > CACHE_TTL;
+}
+
 interface UseConversationsOptions extends GetConversationsParams {
   enabled?: boolean;
 }
@@ -27,16 +59,23 @@ export function useConversations(
 ): UseConversationsReturn {
   const { enabled = true, limit = 50, ...params } = options;
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Get cache key and check for cached data
+  const cacheKey = getCacheKey(params.folderId, params.startDate, params.endDate);
+  const cachedEntry = getFromCache(cacheKey);
+
+  const [conversations, setConversations] = useState<Conversation[]>(cachedEntry?.conversations || []);
+  const [loading, setLoading] = useState(!cachedEntry); // Only show loading if no cache
   const [error, setError] = useState<string | null>(null);
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(cachedEntry?.offset || 0);
+  const [hasMore, setHasMore] = useState(cachedEntry?.hasMore ?? true);
 
   // Track previous params to detect changes
   const prevStartDate = useRef(params.startDate?.getTime());
   const prevEndDate = useRef(params.endDate?.getTime());
   const prevFolderId = useRef(params.folderId);
+
+  // Track if a fetch is in progress to prevent concurrent fetches
+  const fetchingRef = useRef(false);
 
   // Group conversations by date
   const groupedConversations: GroupedConversations = conversations.reduce(
@@ -56,11 +95,20 @@ export function useConversations(
 
   // Fetch conversations
   const fetchConversations = useCallback(
-    async (currentOffset: number, append: boolean = false) => {
+    async (currentOffset: number, append: boolean = false, backgroundRefresh: boolean = false) => {
       if (!enabled) return;
 
+      // Prevent concurrent fetches
+      if (fetchingRef.current) return;
+      fetchingRef.current = true;
+
+      const key = getCacheKey(params.folderId, params.startDate, params.endDate);
+
       try {
-        setLoading(true);
+        // Only show loading spinner if not a background refresh and no cached data
+        if (!backgroundRefresh) {
+          setLoading(true);
+        }
         setError(null);
 
         const data = await getConversations({
@@ -80,23 +128,28 @@ export function useConversations(
           return dateB.getTime() - dateA.getTime();
         });
 
-        if (append) {
-          setConversations((prev) => [...prev, ...sorted]);
-        } else {
-          setConversations(sorted);
-        }
+        const newConversations = append
+          ? [...conversations, ...sorted]
+          : sorted;
+
+        setConversations(newConversations);
 
         // Check if there are more to load
-        setHasMore(data.length === limit);
+        const hasMoreData = data.length === limit;
+        setHasMore(hasMoreData);
+
+        // Save to cache
+        setToCache(key, newConversations, currentOffset, hasMoreData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load conversations');
         console.error('Failed to fetch conversations:', err);
       } finally {
         setLoading(false);
+        fetchingRef.current = false;
       }
     },
     // Only depend on primitive values, not objects
-    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId]
+    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId, conversations]
   );
 
   // Initial fetch and refetch when filter params change
@@ -110,11 +163,36 @@ export function useConversations(
     prevEndDate.current = params.endDate?.getTime();
     prevFolderId.current = params.folderId;
 
-    // Fetch if filter params changed or this is initial load
-    if (startDateChanged || endDateChanged || folderIdChanged || conversations.length === 0) {
+    const key = getCacheKey(params.folderId, params.startDate, params.endDate);
+    const cached = getFromCache(key);
+
+    // If filter params changed, check cache for new filter
+    if (startDateChanged || endDateChanged || folderIdChanged) {
+      if (cached) {
+        // Load from cache immediately
+        setConversations(cached.conversations);
+        setOffset(cached.offset);
+        setHasMore(cached.hasMore);
+        setLoading(false);
+
+        // If cache is stale, do background refresh
+        if (isCacheStale(cached)) {
+          fetchConversations(0, false, true);
+        }
+      } else {
+        // No cache, do normal fetch
+        setOffset(0);
+        setHasMore(true);
+        fetchConversations(0, false);
+      }
+    } else if (conversations.length === 0 && !cached) {
+      // Initial load with no cache
       setOffset(0);
       setHasMore(true);
       fetchConversations(0, false);
+    } else if (cached && isCacheStale(cached)) {
+      // Have cached data but it's stale, do background refresh
+      fetchConversations(0, false, true);
     }
   }, [params.startDate, params.endDate, params.folderId, fetchConversations]);
 
