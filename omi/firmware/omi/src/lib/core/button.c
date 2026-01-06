@@ -417,7 +417,7 @@ void turnoff_all()
         return;
     }
 #ifdef CONFIG_OMI_ENABLE_WIFI
-    wifi_turn_off();
+    // wifi_turn_off();
 #endif
     rc = watchdog_deinit();
     if (rc < 0) {

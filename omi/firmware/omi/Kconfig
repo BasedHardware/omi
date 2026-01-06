@@ -68,5 +68,100 @@ config OMI_ENABLE_WIFI
     help
         "Enable the WiFi support to sync audio data over TCP."
     default n
+config SOFTAP_SAMPLE_DHCPV4_SERVER
+	bool "DHCPv4 server"
+	select NET_DHCPV4_SERVER
+	default y
+	help
+	  Enable this to configure DHCPV4 server settings.
 
+config SOFTAP_SAMPLE_DHCPV4_POOL_START
+	string "Start address of DHCPv4 pool"
+	default "192.168.1.2"
+	help
+	  Set the start IP address of DHCPv4 pool.
+
+config SOFTAP_SAMPLE_REG_DOMAIN
+	string "The ISO/IEC alpha2 country code"
+	default "00"
+	help
+	  Set the ISO/IEC alpha2 country code for the country in
+	  which the device is currently operating.
+	  For world regulatory, use "00".
+
+choice SOFTAP_SAMPLE_FREQUENCY_BAND
+	prompt "Wi-Fi frequency band for SoftAp"
+	default SOFTAP_SAMPLE_2_4GHz
+
+config SOFTAP_SAMPLE_2_4GHz
+	bool "2.4 GHz band"
+	help
+	  Enable this option if the SoftAP should operate in the 2.4 GHz band.
+
+config SOFTAP_SAMPLE_5GHz
+	bool "5 GHz band"
+	help
+	  Enable this option if the SoftAP should operate in the 5 GHz band.
+	  Ensure that you have the appropriate regulatory settings configured.
+endchoice
+
+config SOFTAP_SAMPLE_CHANNEL
+	int "SoftAP channel"
+	range 1 255
+	default 1 if SOFTAP_SAMPLE_2_4GHz
+	default 36 if SOFTAP_SAMPLE_5GHz
+	help
+	  Set the Wi-Fi channel on which the SoftAP will operate.
+
+config SOFTAP_SAMPLE_SSID
+	string "SoftAP SSID"
+	default "Myssid"
+	help
+	  Set the SSID (Service Set Identifier) for the SoftAP.
+	  This is the name that will be broadcasted for client(s) to connect.
+
+choice  SOFTAP_SAMPLE_KEY_MGMT_SELECT
+	prompt "Security option for SoftAP"
+	default SOFTAP_SAMPLE_KEY_MGMT_WPA2
+
+config SOFTAP_SAMPLE_KEY_MGMT_NONE
+	bool "Open security"
+	help
+	  Enable for open security
+
+config SOFTAP_SAMPLE_KEY_MGMT_WPA2
+	bool "WPA2 security"
+	help
+	  Enable for WPA2 security
+
+config SOFTAP_SAMPLE_KEY_MGMT_WPA2_256
+	bool "WPA2 SHA 256 security"
+	help
+	  Enable for WPA2-PSK-256 security.
+
+config SOFTAP_SAMPLE_KEY_MGMT_WPA3
+	bool "WPA3 security"
+	help
+	  Enable for WPA3 security.
+endchoice
+
+config SOFTAP_SAMPLE_PASSWORD
+	string "Passphrase (WPA2) or password (WPA3)"
+	default "Mypassword"
+	help
+	  Set the password for SoftAP.
+
+config SOFTAP_SAMPLE_MAX_STATIONS
+	int "Maximum number of stations"
+	# Experimental support for one, but in future support for up to 8 (nRF70 limitation)
+	range 1 1
+	default 1
+	help
+	  Set the maximum number of stations allowed to connect to the SoftAP.
+
+config SOFTAP_SAMPLE_START_WIFI_THREAD_STACK_SIZE
+	int "Stack size for Wi-Fi start thread"
+	default 4096
+	help
+	  Set the stack size for the Wi-Fi start thread.
 endmenu
