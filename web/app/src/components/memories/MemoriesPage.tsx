@@ -89,7 +89,7 @@ export function MemoriesPage() {
   const deferredMemories = useDeferredValue(memories);
 
   // Get insights data for sidebar - uses deferred memories to not block UI
-  const { lifeBalance, risingTags, fadingTags, summary } = useInsightsDashboard(deferredMemories);
+  const { lifeBalance, risingTags, fadingTags } = useInsightsDashboard(deferredMemories);
 
   // Calculate tag stats from all memories
   const tagStats = useMemo(() => {

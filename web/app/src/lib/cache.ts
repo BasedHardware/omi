@@ -230,7 +230,7 @@ export const cacheKeys = {
   conversation: (id: string) => `conversation:${id}`,
 
   memories: (categories: string[]) =>
-    `memories:${categories.length === 0 ? 'all' : categories.sort().join(',')}`,
+    `memories:${categories.length === 0 ? 'all' : [...categories].sort().join(',')}`,
 
   memory: (id: string) => `memory:${id}`,
 
