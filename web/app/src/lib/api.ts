@@ -1926,14 +1926,19 @@ export function getAudioStreamUrl(
  * @param conversationId - The conversation ID
  */
 export async function getConversationAudioUrls(
-  conversationId: string
+  conversationId: string,
+  signal?: AbortSignal
 ): Promise<AudioFileUrlInfo[]> {
   try {
     const response = await fetchWithAuth<{ audio_files: AudioFileUrlInfo[] }>(
-      `/v1/sync/audio/${conversationId}/urls`
+      `/v1/sync/audio/${conversationId}/urls`,
+      { signal }
     );
     return response.audio_files || [];
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return []; // Silently return empty for aborted requests
+    }
     console.error('Error fetching audio URLs:', error);
     return [];
   }
@@ -1945,13 +1950,18 @@ export async function getConversationAudioUrls(
  * @param conversationId - The conversation ID
  */
 export async function precacheConversationAudio(
-  conversationId: string
+  conversationId: string,
+  signal?: AbortSignal
 ): Promise<void> {
   try {
     await fetchWithAuth(`/v1/sync/audio/${conversationId}/precache`, {
       method: 'POST',
+      signal,
     });
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return; // Silently return for aborted requests
+    }
     console.error('Error pre-caching audio:', error);
   }
 }

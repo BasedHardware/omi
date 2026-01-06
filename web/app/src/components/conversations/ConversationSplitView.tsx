@@ -255,6 +255,7 @@ export function ConversationSplitView() {
   // Handle date filter change
   const handleDateFilterChange = useCallback((date: Date | null) => {
     setFilterDate(date);
+    setSelectedId(null); // Reset selection to auto-select first from new results
     // Clear search when changing date filter
     if (searchQuery) {
       setSearchQuery('');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { ExternalLink } from 'lucide-react';
@@ -35,12 +35,32 @@ interface SingleLocationMapProps {
 // Component to set view and handle container resize
 function SetView({ latitude, longitude }: { latitude: number; longitude: number }) {
   const map = useMap();
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    map.setView([latitude, longitude], 15);
+    isMountedRef.current = true;
+
+    // Stop any ongoing animations before setting view
+    map.stop();
+    map.setView([latitude, longitude], 15, { animate: false });
+
     // Small delay to ensure container is properly sized
-    const timeout = setTimeout(() => map.invalidateSize(), 100);
-    return () => clearTimeout(timeout);
+    const timeout = setTimeout(() => {
+      if (isMountedRef.current) {
+        map.invalidateSize();
+      }
+    }, 100);
+
+    return () => {
+      isMountedRef.current = false;
+      clearTimeout(timeout);
+      // Stop animations on unmount to prevent errors
+      try {
+        map.stop();
+      } catch {
+        // Ignore - map already disposed
+      }
+    };
   }, [map, latitude, longitude]);
 
   return null;

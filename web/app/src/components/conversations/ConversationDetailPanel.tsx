@@ -414,7 +414,8 @@ export function ConversationDetailPanel({
 
   useEffect(() => {
     if (!conversation) return;
-    let cancelled = false;
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
     async function checkAudioAvailability() {
       // Helper to map audio URLs to AudioFile format
@@ -430,8 +431,8 @@ export function ConversationDetailPanel({
         setAudioAvailable(true);
 
         // Try to get URLs immediately (might already be cached)
-        const cachedUrls = await getConversationAudioUrls(conversationId);
-        if (cancelled) return;
+        const cachedUrls = await getConversationAudioUrls(conversationId, signal);
+        if (signal.aborted) return;
 
         // Check if we got valid signed URLs
         if (cachedUrls && cachedUrls.length > 0 && cachedUrls[0].signed_url) {
@@ -440,12 +441,12 @@ export function ConversationDetailPanel({
         }
 
         // URLs not cached - trigger precache and wait
-        await precacheConversationAudio(conversationId);
-        if (cancelled) return;
+        await precacheConversationAudio(conversationId, signal);
+        if (signal.aborted) return;
 
         // Fetch signed URLs after precaching
-        const audioUrls = await getConversationAudioUrls(conversationId);
-        if (cancelled) return;
+        const audioUrls = await getConversationAudioUrls(conversationId, signal);
+        if (signal.aborted) return;
 
         if (audioUrls && audioUrls.length > 0) {
           setFetchedAudioFiles(mapAudioUrls(audioUrls));
@@ -455,13 +456,13 @@ export function ConversationDetailPanel({
 
       // Otherwise, try to fetch audio URLs with retries
       for (let attempt = 0; attempt < 3; attempt++) {
-        if (cancelled) return;
+        if (signal.aborted) return;
         if (attempt > 0) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        const audioUrls = await getConversationAudioUrls(conversationId);
-        if (cancelled) return;
+        const audioUrls = await getConversationAudioUrls(conversationId, signal);
+        if (signal.aborted) return;
 
         if (audioUrls && audioUrls.length > 0) {
           setAudioAvailable(true);
@@ -473,7 +474,7 @@ export function ConversationDetailPanel({
     }
 
     checkAudioAvailability();
-    return () => { cancelled = true; };
+    return () => abortController.abort();
   }, [conversationId, conversation, hasAudioFiles]);
 
   const handleAudioTimeUpdate = useCallback((time: number) => {
