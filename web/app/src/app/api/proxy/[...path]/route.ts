@@ -120,7 +120,25 @@ async function handleRequest(
     // Handle JSON responses
     if (responseContentType?.includes('application/json')) {
       const data = await response.json();
-      return NextResponse.json(data, { status: response.status });
+
+      // Add Cache-Control headers for static/rarely-changing endpoints
+      const cacheHeaders: HeadersInit = {};
+      if (
+        path.includes('app-categories') ||
+        path.includes('app-capabilities') ||
+        path.includes('app/plans')
+      ) {
+        // Static reference data - cache for 1 hour
+        cacheHeaders['Cache-Control'] = 'public, max-age=3600, stale-while-revalidate=86400';
+      } else if (path.includes('folders') && request.method === 'GET') {
+        // User folders - cache briefly with revalidation
+        cacheHeaders['Cache-Control'] = 'private, max-age=60, stale-while-revalidate=300';
+      }
+
+      return NextResponse.json(data, {
+        status: response.status,
+        headers: cacheHeaders,
+      });
     }
 
     // Default: return as text

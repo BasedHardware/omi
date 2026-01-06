@@ -12,6 +12,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { useChat } from '@/components/chat/ChatContext';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { DateGroup, DateGroupSkeleton } from './DateGroup';
+import { VirtualizedConversationList } from './VirtualizedConversationList';
 import { ConversationDetailPanel } from './ConversationDetailPanel';
 import { SearchBar } from './SearchBar';
 import { DateFilter } from './DateFilter';
@@ -211,9 +212,9 @@ export function ConversationSplitView() {
     }
   }, [listLoading, folderSwitching]);
 
-  const handleConversationClick = (conversation: Conversation) => {
+  const handleConversationClick = useCallback((conversation: Conversation) => {
     setSelectedId(conversation.id);
-  };
+  }, []);
 
   // Handle star toggle
   const handleStarToggle = useCallback(async (id: string, starred: boolean) => {
@@ -548,83 +549,65 @@ export function ConversationSplitView() {
           </div>
 
           {/* List Content */}
-          <div className="flex-1 overflow-y-auto px-3 pb-4">
-          {/* Loading state */}
-          {isLoading && orderedKeys.length === 0 && (
-            <div className="space-y-6">
-              <DateGroupSkeleton count={3} />
-              <DateGroupSkeleton count={2} />
-            </div>
-          )}
-
-          {/* Error state */}
-          {listError && !isSearching && (
-            <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
-              {listError}
-            </div>
-          )}
-
-          {/* Empty state */}
-          {isEmpty && !listError && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-12 h-12 rounded-xl bg-bg-tertiary flex items-center justify-center mb-3">
-                {isSearching ? (
-                  <SearchIcon className="w-6 h-6 text-text-quaternary" />
-                ) : (
-                  <MessageSquare className="w-6 h-6 text-text-quaternary" />
-                )}
+          <div className="flex-1 overflow-hidden px-3 pb-4">
+            {/* Loading state */}
+            {isLoading && orderedKeys.length === 0 && (
+              <div className="space-y-6">
+                <DateGroupSkeleton count={3} />
+                <DateGroupSkeleton count={2} />
               </div>
-              <p className="text-text-tertiary text-sm">
-                {isSearching
-                  ? 'No conversations found'
-                  : filterDate
-                  ? 'No conversations on this date'
-                  : selectedFolderId === FOLDER_STARRED
-                  ? 'No starred conversations'
-                  : selectedFolderId !== FOLDER_ALL
-                  ? 'No conversations in this folder'
-                  : 'No conversations yet'}
-              </p>
-            </div>
-          )}
+            )}
 
-          {/* Conversation groups */}
-          {orderedKeys.length > 0 && (
-            <div className="space-y-6">
-              {orderedKeys.map((dateKey) => (
-                <DateGroup
-                  key={dateKey}
-                  dateLabel={dateKey}
-                  conversations={displayedConversations[dateKey]}
-                  onConversationClick={handleConversationClick}
-                  onStarToggle={handleStarToggle}
-                  selectedId={selectedId}
-                  compact={false}
-                  isSelectionMode={isSelectionMode}
-                  selectedIds={selectedIds}
-                  onSelect={toggleSelection}
-                  mergingIds={mergingIds}
-                />
-              ))}
+            {/* Error state */}
+            {listError && !isSearching && (
+              <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
+                {listError}
+              </div>
+            )}
 
-              {/* Load more - only for regular list, not search */}
-              {!isSearching && hasMore && (
-                <button
-                  onClick={loadMore}
-                  disabled={listLoading}
-                  className={cn(
-                    'w-full py-2 text-sm text-text-tertiary',
-                    'hover:text-text-secondary transition-colors',
-                    listLoading && 'opacity-50'
+            {/* Empty state */}
+            {isEmpty && !listError && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-12 h-12 rounded-xl bg-bg-tertiary flex items-center justify-center mb-3">
+                  {isSearching ? (
+                    <SearchIcon className="w-6 h-6 text-text-quaternary" />
+                  ) : (
+                    <MessageSquare className="w-6 h-6 text-text-quaternary" />
                   )}
-                >
-                  {listLoading ? 'Loading...' : 'Load more'}
-                </button>
-              )}
-            </div>
-          )}
+                </div>
+                <p className="text-text-tertiary text-sm">
+                  {isSearching
+                    ? 'No conversations found'
+                    : filterDate
+                    ? 'No conversations on this date'
+                    : selectedFolderId === FOLDER_STARRED
+                    ? 'No starred conversations'
+                    : selectedFolderId !== FOLDER_ALL
+                    ? 'No conversations in this folder'
+                    : 'No conversations yet'}
+                </p>
+              </div>
+            )}
+
+            {/* Virtualized conversation list */}
+            {orderedKeys.length > 0 && (
+              <VirtualizedConversationList
+                groupedConversations={displayedConversations}
+                orderedKeys={orderedKeys}
+                onConversationClick={handleConversationClick}
+                onStarToggle={handleStarToggle}
+                selectedId={selectedId}
+                isSelectionMode={isSelectionMode}
+                selectedIds={selectedIds}
+                onSelect={toggleSelection}
+                mergingIds={mergingIds}
+                hasMore={!isSearching && hasMore}
+                onLoadMore={loadMore}
+                loading={listLoading}
+              />
+            )}
+          </div>
         </div>
-      </div>
 
         {/* Resize Handle */}
         <ResizeHandle

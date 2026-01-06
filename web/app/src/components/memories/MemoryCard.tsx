@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Lightbulb,
@@ -46,7 +46,7 @@ const categoryConfig: Record<MemoryCategory, { icon: React.ReactNode; label: str
   },
 };
 
-export function MemoryCard({
+export const MemoryCard = memo(function MemoryCard({
   memory,
   onEdit,
   onDelete,
@@ -366,4 +366,4 @@ export function MemoryCard({
       </div>
     </motion.div>
   );
-}
+});

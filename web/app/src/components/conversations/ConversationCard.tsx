@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ interface ConversationCardProps {
   isMerging?: boolean;
 }
 
-export function ConversationCard({
+export const ConversationCard = memo(function ConversationCard({
   conversation,
   onClick,
   onStarToggle,
@@ -225,7 +225,7 @@ export function ConversationCard({
       )}
     </motion.div>
   );
-}
+});
 
 // Skeleton loader for conversation cards - matches compact layout
 export function ConversationCardSkeleton() {
