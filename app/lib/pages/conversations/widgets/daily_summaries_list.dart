@@ -191,6 +191,17 @@ class _DailySummariesListState extends State<DailySummariesList> {
     final day = int.tryParse(parts[2]) ?? 1;
 
     final date = DateTime(year, month, day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    // Check for Today and Yesterday
+    if (date.year == today.year && date.month == today.month && date.day == today.day) {
+      return 'Today';
+    }
+    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+      return 'Yesterday';
+    }
 
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
