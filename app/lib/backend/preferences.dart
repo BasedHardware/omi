@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/models/custom_stt_config.dart';
@@ -171,6 +172,21 @@ class SharedPreferencesUtil {
 
   bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
 
+  // Goal tracker widget on homepage - default is true (experimental feature)
+  set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
+
+  bool get showGoalTrackerEnabled => getBool('showGoalTrackerEnabled', defaultValue: true);
+
+  // Daily reflection notification at 9 PM - default is true (enabled)
+  set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
+
+  bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
+
+  // Wrapped 2025 - track if user has viewed their wrapped
+  set hasViewedWrapped2025(bool value) => saveBool('hasViewedWrapped2025', value);
+
+  bool get hasViewedWrapped2025 => getBool('hasViewedWrapped2025', defaultValue: false);
+
   set conversationEventsToggled(bool value) => saveBool('conversationEventsToggled', value);
 
   bool get conversationEventsToggled => getBool('conversationEventsToggled');
@@ -264,9 +280,9 @@ class SharedPreferencesUtil {
 
   // Short conversation threshold in seconds - default is 60 (1 minute)
   // Options: 60 (1 min), 120 (2 min), 180 (3 min), 240 (4 min), 300 (5 min)
-  int get shortConversationThreshold => getInt('shortConversationThreshold', defaultValue: 60);
+  int get shortConversationThreshold => getInt('v2/shortConversationThreshold', defaultValue: 0);
 
-  set shortConversationThreshold(int value) => saveInt('shortConversationThreshold', value);
+  set shortConversationThreshold(int value) => saveInt('v2/shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
   bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');
@@ -377,6 +393,33 @@ class SharedPreferencesUtil {
   set cachedMessages(List<ServerMessage> value) {
     final List<String> messages = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedMessages', messages);
+  }
+
+  // Pending memories - memories created offline that need to be synced
+  List<Memory> get pendingMemories {
+    final memories = getStringList('pendingMemories');
+    return memories.map((e) => Memory.fromJson(jsonDecode(e))).toList();
+  }
+
+  set pendingMemories(List<Memory> value) {
+    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    saveStringList('pendingMemories', memories);
+  }
+
+  void addPendingMemory(Memory memory) {
+    final List<Memory> memories = pendingMemories;
+    memories.add(memory);
+    pendingMemories = memories;
+  }
+
+  void removePendingMemory(String memoryId) {
+    final List<Memory> memories = pendingMemories;
+    memories.removeWhere((m) => m.id == memoryId);
+    pendingMemories = memories;
+  }
+
+  void clearPendingMemories() {
+    saveStringList('pendingMemories', []);
   }
 
   List<Person> get cachedPeople {

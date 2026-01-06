@@ -70,10 +70,14 @@ class _FCMNotificationService implements NotificationInterface {
         debug: false);
 
     debugPrint('initializeNotifications: $initialized');
+    
+// Reset badge to clear existing badge count if any
+    int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
+if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
 
   @override
-  void showNotification({
+  Future<void> showNotification({
     required int id,
     required String title,
     required String body,
@@ -81,7 +85,11 @@ class _FCMNotificationService implements NotificationInterface {
     bool wakeUpScreen = false,
     NotificationSchedule? schedule,
     NotificationLayout layout = NotificationLayout.Default,
-  }) {
+  }) async {
+    final allowed = await _awesomeNotifications.isNotificationAllowed();
+    if (!allowed) {
+      return;
+    }
     _awesomeNotifications.createNotification(
       content: NotificationContent(
         id: id,

@@ -11,7 +11,7 @@ import uuid
 import asyncio
 import contextvars
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator, Tuple, Any
+from typing import List, Optional, AsyncGenerator, Any, Tuple
 
 import database.notifications as notification_db
 
@@ -25,7 +25,7 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
-from models.chat import Message, ChatSession
+from models.chat import Message, ChatSession, PageContext
 from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
@@ -51,6 +51,7 @@ from utils.retrieval.tools import (
     create_github_issue_tool,
     close_github_issue_tool,
     search_files_tool,
+    manage_daily_summary_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -102,6 +103,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
         'get_omi_product_info_tool': 'Looking up product info',
+        'manage_daily_summary_tool': 'Updating notification settings',
     }
 
     # Try exact match first
@@ -240,6 +242,7 @@ def execute_agentic_chat(
         create_github_issue_tool,
         close_github_issue_tool,
         search_files_tool,
+        manage_daily_summary_tool,
     ]
 
     # Load tools from enabled apps
@@ -297,6 +300,7 @@ async def execute_agentic_chat_stream(
     app: Optional[App] = None,
     callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
+    context: Optional[PageContext] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Execute an agentic chat interaction with streaming.
@@ -307,12 +311,13 @@ async def execute_agentic_chat_stream(
         app: Optional app/plugin
         callback_data: Dict to store callback data (answer, memories, etc.)
         chat_session: Optional chat session for file context
+        context: Optional page context (type, id, title)
 
     Yields:
         Formatted chunks with "data: " or "think: " prefixes
     """
-    # Build system prompt with file context
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages)
+    # Build system prompt with file context and page context
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
 
     # Get all tools
     tools = [
@@ -339,6 +344,7 @@ async def execute_agentic_chat_stream(
         create_github_issue_tool,
         close_github_issue_tool,
         search_files_tool,
+        manage_daily_summary_tool,
     ]
 
     # Load tools from enabled apps

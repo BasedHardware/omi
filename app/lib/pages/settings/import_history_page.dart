@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:omi/backend/http/api/imports.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ImportHistoryPage extends StatefulWidget {
   const ImportHistoryPage({super.key});
@@ -110,7 +111,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Could not access the selected file'),
+              content: Text(context.l10n.couldNotAccessFile),
               backgroundColor: Colors.red.shade700,
             ),
           );
@@ -139,12 +140,12 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
+              content: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 12),
+                  const Icon(Icons.check_circle, color: Colors.white),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text('Import started! You\'ll be notified when it\'s complete.'),
+                    child: Text(context.l10n.importStarted),
                   ),
                 ],
               ),
@@ -158,11 +159,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
+              content: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Failed to start import. Please try again.')),
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(context.l10n.failedToStartImport)),
                 ],
               ),
               backgroundColor: Colors.red.shade700,
@@ -215,11 +216,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400)),
+            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -230,13 +231,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          backgroundColor: Color(0xFF1F1F25),
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1F1F25),
           content: Row(
             children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(width: 16),
-              Text('Deleting...', style: TextStyle(color: Colors.white)),
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(width: 16),
+              Text(context.l10n.deleting, style: const TextStyle(color: Colors.white)),
             ],
           ),
         ),

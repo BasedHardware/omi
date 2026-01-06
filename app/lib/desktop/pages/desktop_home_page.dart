@@ -5,18 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/desktop/pages/onboarding/desktop_onboarding_wrapper.dart';
-import 'package:omi/desktop/pages/settings/desktop_about_page.dart';
-import 'package:omi/desktop/pages/settings/desktop_developer_page.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/settings/calendar_settings_page.dart';
-import 'package:omi/desktop/pages/settings/desktop_profile_page.dart';
+import 'package:omi/desktop/pages/settings/desktop_settings_modal.dart';
 import 'package:omi/desktop/pages/settings/desktop_shortcuts_page.dart';
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/services/shortcut_service.dart';
-import 'package:omi/services/auth_service.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'apps/desktop_apps_page.dart';
@@ -38,7 +33,6 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
@@ -46,7 +40,6 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:intercom_flutter/intercom_flutter.dart';
 import '../../pages/conversations/sync_page.dart';
-import 'home/widgets/battery_info_widget.dart';
 
 enum MacWindowButtonType { close, minimize, maximize }
 
@@ -99,19 +92,8 @@ class _MacWindowButtonState extends State<_MacWindowButton> {
           width: 12,
           height: 12,
           decoration: BoxDecoration(
-            color: _isHovered ? _getButtonColor() : const Color(0xFFFFFFFF).withOpacity(0.07),
+            color: _getButtonColor(),
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: _isHovered ? _getButtonColor().withOpacity(0.8) : const Color(0xFFD0D0D0),
-              width: 0.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 1,
-                offset: const Offset(0, 0.5),
-              ),
-            ],
           ),
           child: _isHovered
               ? Icon(
@@ -142,7 +124,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
   PageController? _controller;
   late AnimationController _sidebarAnimationController;
   late Animation<double> _sidebarSlideAnimation;
-  final GlobalKey _profileCardKey = GlobalKey();
 
   // State for Get Omi Widget
   bool _showGetOmiWidget = true;
@@ -471,59 +452,40 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           child: Opacity(
             opacity: _sidebarSlideAnimation.value,
             child: Container(
-              width: responsive.sidebarWidth(baseWidth: 280),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.85),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-                border: const Border(
-                  right: BorderSide(
-                    color: ResponsiveHelper.backgroundTertiary,
-                    width: 1,
-                  ),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(2, 0),
-                  ),
-                ],
+              width: responsive.sidebarWidth(baseWidth: 230),
+              decoration: const BoxDecoration(
+                color: Colors.transparent,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // macOS window controls at top
-                  _buildWindowControls(),
+                  // macOS window controls + Logo section
+                  _buildLogoSection(),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
 
                   // Main navigation section
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Main navigation items
                           _buildNavItem(
-                            icon: FontAwesomeIcons.inbox,
+                            icon: FontAwesomeIcons.house,
                             label: 'Conversations',
                             index: 0,
                             isSelected: homeProvider.selectedIndex == 0,
                             onTap: () => _navigateToIndex(0, homeProvider),
                           ),
-                          const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: FontAwesomeIcons.solidMessage,
+                            icon: FontAwesomeIcons.solidComments,
                             label: 'Chat',
                             index: 1,
                             isSelected: homeProvider.selectedIndex == 1,
                             onTap: () => _navigateToIndex(1, homeProvider),
                           ),
-                          const SizedBox(height: 4),
                           _buildNavItem(
                             icon: FontAwesomeIcons.brain,
                             label: 'Memories',
@@ -531,17 +493,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                             isSelected: homeProvider.selectedIndex == 2,
                             onTap: () => _navigateToIndex(2, homeProvider),
                           ),
-                          const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: FontAwesomeIcons.listCheck,
+                            icon: FontAwesomeIcons.squareCheck,
                             label: 'Actions',
                             index: 3,
                             isSelected: homeProvider.selectedIndex == 3,
                             onTap: () => _navigateToIndex(3, homeProvider),
                           ),
-                          const SizedBox(height: 4),
                           _buildNavItem(
-                            icon: FontAwesomeIcons.store,
+                            icon: FontAwesomeIcons.gripVertical,
                             label: 'Apps',
                             index: 4,
                             isSelected: homeProvider.selectedIndex == 4,
@@ -553,67 +513,67 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                           // Subscription upgrade banner
                           _buildSubscriptionBanner(),
 
-                          // Get Omi Device widget and spacer
+                          // Get Omi Device widget
                           if (_showGetOmiWidget) ...[
                             const SizedBox(height: 12),
                             _buildGetOmiWidget(),
                           ],
-
-                          const SizedBox(height: 12),
-
-                          // Profile card at bottom
-                          _buildProfileCard(),
 
                           // Sync notification when available
                           Consumer2<ConversationProvider, SyncProvider>(
                               builder: (context, convoProvider, syncProvider, child) {
                             if (homeProvider.selectedIndex == 0 && syncProvider.missingWalsInSeconds >= 120) {
                               return Container(
-                                margin: const EdgeInsets.fromLTRB(0, 8, 0, 16),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: () {
-                                      routeToPage(context, const SyncPage());
-                                    },
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: ResponsiveHelper.purplePrimary.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
-                                          width: 1,
-                                        ),
-                                      ),
-                                      child: const Row(
-                                        children: [
-                                          Icon(
-                                            Icons.download_rounded,
-                                            color: ResponsiveHelper.purplePrimary,
-                                            size: 16,
-                                          ),
-                                          SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              'Sync Available',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                                color: ResponsiveHelper.textPrimary,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                margin: const EdgeInsets.only(top: 12),
+                                child: _buildSecondaryNavItem(
+                                  icon: Icons.download_rounded,
+                                  label: 'Sync Available',
+                                  onTap: () => routeToPage(context, const SyncPage()),
+                                  showAccent: true,
                                 ),
                               );
                             }
                             return const SizedBox.shrink();
                           }),
+
+                          const SizedBox(height: 16),
+
+                          // Divider before secondary items
+                          Container(
+                            height: 1,
+                            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Secondary navigation items (same style as main nav)
+                          _buildBottomNavItem(
+                            icon: FontAwesomeIcons.gear,
+                            label: 'Settings',
+                                    onTap: () {
+                              MixpanelManager().pageOpened('Settings');
+                              DesktopSettingsModal.show(context);
+                            },
+                          ),
+                          _buildBottomNavItem(
+                            icon: FontAwesomeIcons.gift,
+                            label: 'Refer a Friend',
+                            onTap: () {
+                              MixpanelManager().pageOpened('Refer a Friend');
+                              launchUrl(Uri.parse('https://affiliate.omi.me'));
+                            },
+                          ),
+                          _buildBottomNavItem(
+                            icon: FontAwesomeIcons.circleQuestion,
+                            label: 'Help',
+                            onTap: () {
+                              if (PlatformService.isIntercomSupported) {
+                                Intercom.instance.displayHelpCenter();
+                              }
+                            },
+                          ),
+
+                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
@@ -627,6 +587,193 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
+  Widget _buildLogoSection() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 32, 20, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Window controls row
+          Row(
+            children: [
+              _buildMacWindowButton(
+                type: MacWindowButtonType.close,
+                onTap: () async => await windowManager.close(),
+              ),
+              const SizedBox(width: 8),
+              _buildMacWindowButton(
+                type: MacWindowButtonType.minimize,
+                onTap: () async => await windowManager.minimize(),
+              ),
+              const SizedBox(width: 8),
+              _buildMacWindowButton(
+                type: MacWindowButtonType.maximize,
+                onTap: () async {
+                  bool isMaximized = await windowManager.isMaximized();
+                  if (isMaximized) {
+                    await windowManager.unmaximize();
+                  } else {
+                    await windowManager.maximize();
+                  }
+                },
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 36),
+
+          // Logo and brand name
+          Row(
+            children: [
+              // Omi logo icon
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                ),
+                child: Assets.images.herologo.image(
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Brand name
+              const Text(
+                'Omi',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: ResponsiveHelper.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Pro badge (shows for unlimited users)
+              Consumer<UsageProvider>(
+                builder: (context, usageProvider, child) {
+                  final isUnlimited = usageProvider.subscription?.subscription.plan == PlanType.unlimited;
+                  if (!isUnlimited) return const SizedBox.shrink();
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                        color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
+                                          width: 1,
+                                        ),
+                                      ),
+                    child: const Text(
+                      'Pro',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: ResponsiveHelper.purplePrimary,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecondaryNavItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool showAccent = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: showAccent ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.1) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: showAccent
+                ? Border.all(
+                    color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
+                    width: 1,
+                  )
+                : null,
+          ),
+          child: Row(
+                                        children: [
+                                          Icon(
+                icon,
+                color: showAccent ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+                                            size: 16,
+                                          ),
+              const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                  label,
+                                              style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    color: showAccent ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+          ),
+        ),
+      ),
+                              );
+                            }
+
+  // Bottom nav items with same style as main navigation
+  Widget _buildBottomNavItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: ResponsiveHelper.textTertiary,
+                  size: 17,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: ResponsiveHelper.textSecondary,
+                    ),
+                    ),
+                  ),
+                ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildNavItem({
     required IconData icon,
     required String label,
@@ -635,11 +782,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     required VoidCallback onTap,
   }) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 1),
-      child: Stack(
-        children: [
-          // Navigation item with full container
-          Material(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: Material(
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
@@ -647,19 +791,20 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                     .bottomNavigationTabClicked(['Conversations', 'Chat', 'Memories', 'Actions', 'Apps'][index]);
                 onTap();
               },
-              borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                 decoration: BoxDecoration(
-                  color: isSelected ? ResponsiveHelper.backgroundTertiary.withOpacity(0.8) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
+              color: isSelected ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8) : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
                     Icon(
                       icon,
-                      color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
-                      size: 18,
+                  color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
+                  size: 17,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -676,25 +821,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                 ),
               ),
             ),
-          ),
-          // Selection accent line spanning full item height
-          if (isSelected)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(
-                width: 5,
-                decoration: const BoxDecoration(
-                  color: ResponsiveHelper.purplePrimary,
-                  borderRadius: BorderRadius.only(
-                    topRight: Radius.circular(8),
-                    bottomRight: Radius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -732,47 +858,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
     );
   }
 
-  Widget _buildWindowControls() {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.fromLTRB(24, 16, 16, 0),
-      child: Row(
-        children: [
-          // Close button
-          _buildMacWindowButton(
-            type: MacWindowButtonType.close,
-            onTap: () async {
-              await windowManager.close();
-            },
-          ),
-          const SizedBox(width: 8),
-
-          // Minimize button
-          _buildMacWindowButton(
-            type: MacWindowButtonType.minimize,
-            onTap: () async {
-              await windowManager.minimize();
-            },
-          ),
-          const SizedBox(width: 8),
-
-          // Maximize/Restore button
-          _buildMacWindowButton(
-            type: MacWindowButtonType.maximize,
-            onTap: () async {
-              bool isMaximized = await windowManager.isMaximized();
-              if (isMaximized) {
-                await windowManager.unmaximize();
-              } else {
-                await windowManager.maximize();
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMacWindowButton({
     required MacWindowButtonType type,
     required VoidCallback onTap,
@@ -804,28 +889,35 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
               MixpanelManager().pageOpened('Plan & Usage');
               routeToPage(context, const UsagePage(showUpgradeDialog: true));
             },
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             child: Ink(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ResponsiveHelper.purplePrimary,
+                    ResponsiveHelper.purpleAccent,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    FontAwesomeIcons.crown,
-                    color: Colors.black,
-                    size: 14,
+                    FontAwesomeIcons.bolt,
+                    color: Colors.white,
+                    size: 13,
                   ),
-                  SizedBox(width: 10),
+                  SizedBox(width: 8),
                   Text(
-                    'Upgrade to Unlimited',
+                    'Upgrade to Pro',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -846,10 +938,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
           return const SizedBox.shrink();
         }
 
-        return AspectRatio(
-          aspectRatio: 3 / 2,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -861,421 +951,78 @@ class _DesktopHomePageState extends State<DesktopHomePage> with WidgetsBindingOb
                   }
                 },
                 child: Container(
+                padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(20),
+                  color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
-                  child: Stack(
+                child: Row(
                     children: [
-                      // Left side - Text and button with padding
-                      Padding(
-                        padding: const EdgeInsets.all(16),
+                    // Omi device image
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Assets.images.omiWithRopeNoPadding.image(
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Text content
+                    Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            const Expanded(
-                              child: SizedBox.expand(),
-                            ),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                             const Text(
-                              'Wearable ChatGPT',
+                            'Get Omi Device',
                               style: TextStyle(
-                                fontSize: 28,
+                              fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: ResponsiveHelper.textPrimary,
-                                height: 1.2,
-                              ),
+                              color: ResponsiveHelper.textPrimary,
                             ),
-                            const SizedBox(height: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(24),
-                                  ),
-                                  child: const Text(
-                                    'Order Now',
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Right side - Image positioned with no padding
-                      Positioned(
-                        right: 0,
-                        child: SizedBox(
-                          height: 130,
-                          child: Assets.images.omiWithRopeNoPadding.image(
-                            fit: BoxFit.contain,
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Wearable AI companion',
+                                    style: TextStyle(
+                              fontSize: 11,
+                              color: ResponsiveHelper.textTertiary.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
                         ),
-                      ),
+                    ),
                       // Close button for unlimited users
                       if (isUnlimited)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: IconButton(
-                            icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 18),
-                            style: IconButton.styleFrom(
-                              backgroundColor: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
-                              padding: EdgeInsets.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            onPressed: () {
+                      GestureDetector(
+                        onTap: () {
                               setState(() {
                                 _showGetOmiWidget = false;
                               });
                               SharedPreferencesUtil().showGetOmiCard = false;
                             },
-                            tooltip: 'Hide this card',
-                          ),
+                        child: Icon(
+                          Icons.close,
+                          color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
+                          size: 16,
                         ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildProfileCard() {
-    final userName = SharedPreferencesUtil().givenName;
-    final userEmail = SharedPreferencesUtil().email;
-
-    return Container(
-      key: _profileCardKey,
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showProfilePopup(context),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        userName.isNotEmpty ? userName : 'User',
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        userEmail.isNotEmpty ? userEmail : 'No email set',
-                        style: const TextStyle(
-                          color: ResponsiveHelper.textTertiary,
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Chevron icon
+                    if (!isUnlimited)
                 const Icon(
-                  FontAwesomeIcons.chevronUp,
-                  color: ResponsiveHelper.textSecondary,
+                        FontAwesomeIcons.chevronRight,
+                        color: ResponsiveHelper.textTertiary,
                   size: 12,
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  void _showProfilePopup(BuildContext context) {
-    final RenderBox? profileCardBox = _profileCardKey.currentContext?.findRenderObject() as RenderBox?;
-    if (profileCardBox == null) return;
-
-    final Offset profileCardPosition = profileCardBox.localToGlobal(Offset.zero);
-    final Size profileCardSize = profileCardBox.size;
-
-    // Calculate profile card width - exact same width as the profile card
-    final profileCardWidth = profileCardSize.width;
-
-    // Menu height estimate (profile header + dividers + 8 menu items)
-    const double menuHeight = 360.0;
-    const double gap = 8.0; // Gap between popup and profile card
-
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        profileCardPosition.dx, // Left edge aligned with profile card
-        profileCardPosition.dy - menuHeight - gap, // Position above the profile card (menuHeight + gap pixels up)
-        profileCardPosition.dx + profileCardWidth, // Right edge aligned with profile card
-        profileCardPosition.dy - gap, // Bottom edge positioned gap pixels above profile card top
-      ),
-      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.95),
-      elevation: 12,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      // Add custom animation for bottom-up slide
-      popUpAnimationStyle: const AnimationStyle(
-        duration: Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-      ),
-      items: [
-        // Profile header
-        PopupMenuItem<String>(
-          enabled: false,
-          padding: EdgeInsets.zero,
-          child: _buildProfileHeader(profileCardWidth),
-        ),
-
-        // Divider
-        PopupMenuItem<String>(
-          enabled: false,
-          height: 1,
-          padding: EdgeInsets.zero,
-          child: Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          ),
-        ),
-
-        // Settings options
-        _buildPopupMenuItem('profile', Icons.person, 'Profile', profileCardWidth),
-        _buildPopupMenuItem('usage', FontAwesomeIcons.chartBar, 'Plan & Usage', profileCardWidth),
-        _buildPopupMenuItem('calendar', FontAwesomeIcons.calendar, 'Calendar Integration', profileCardWidth),
-        if (ShortcutService.isSupported)
-          _buildPopupMenuItem('shortcuts', Icons.keyboard, 'Keyboard Shortcuts', profileCardWidth),
-        _buildPopupMenuItem('developer', Icons.code, 'Developer Mode', profileCardWidth),
-        _buildPopupMenuItem('about', Icons.info_outline, 'About Omi', profileCardWidth),
-
-        // Divider before sign out
-        PopupMenuItem<String>(
-          enabled: false,
-          height: 1,
-          padding: EdgeInsets.zero,
-          child: Container(
-            height: 1,
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-          ),
-        ),
-
-        _buildPopupMenuItem('signout', Icons.logout, 'Sign Out', profileCardWidth, isDestructive: true),
-      ],
-    ).then((String? result) {
-      if (result != null) {
-        _handleProfileMenuSelection(result);
-      }
-    });
-  }
-
-  Widget _buildProfileHeader(double width) {
-    final userName = SharedPreferencesUtil().givenName;
-    final userEmail = SharedPreferencesUtil().email;
-
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  userName.isNotEmpty ? userName : 'User',
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  userEmail.isNotEmpty ? userEmail : 'No email set',
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textTertiary,
-                    fontSize: 12,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _buildPopupMenuItem(String value, IconData icon, String title, double width,
-      {bool isDestructive = false}) {
-    return PopupMenuItem<String>(
-      value: value,
-      padding: EdgeInsets.zero,
-      child: Container(
-        width: width,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: isDestructive ? Colors.red.shade400 : ResponsiveHelper.textSecondary,
-              size: 18,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: isDestructive ? Colors.red.shade400 : ResponsiveHelper.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _handleProfileMenuSelection(String value) {
-    switch (value) {
-      case 'profile':
-        MixpanelManager().pageOpened('Settings');
-        routeToPage(context, const DesktopProfilePage());
-        break;
-      case 'usage':
-        MixpanelManager().pageOpened('Plan & Usage');
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const UsagePage(),
           ),
         );
-        break;
-      case 'calendar':
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const CalendarSettingsPage(),
-          ),
-        );
-        break;
-      case 'shortcuts':
-        routeToPage(context, const DesktopShortcutsPage());
-        break;
-      case 'developer':
-        routeToPage(context, const DesktopDeveloperSettingsPage());
-        break;
-      case 'help':
-        if (PlatformService.isIntercomSupported) {
-          Intercom.instance.displayHelpCenter();
-        }
-        break;
-      case 'about':
-        routeToPage(context, const DesktopAboutOmiPage());
-        break;
-      case 'signout':
-        _showSignOutDialog();
-        break;
-    }
-  }
-
-  void _showSignOutDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ResponsiveHelper.backgroundSecondary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'Sign Out?',
-          style: TextStyle(
-            color: ResponsiveHelper.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: const Text(
-          'Are you sure you want to sign out?',
-          style: TextStyle(
-            color: ResponsiveHelper.textSecondary,
-            fontSize: 14,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                color: ResponsiveHelper.textSecondary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              await SharedPreferencesUtil().clear();
-              Navigator.of(context).pop();
-              await AuthService.instance.signOut();
-              if (mounted) {
-                routeToPage(context, const DesktopOnboardingWrapper(), replace: true);
-              }
-            },
-            child: Text(
-              'Sign Out',
-              style: TextStyle(
-                color: Colors.red.shade400,
-              ),
-            ),
-          ),
-        ],
-      ),
+      },
     );
   }
 

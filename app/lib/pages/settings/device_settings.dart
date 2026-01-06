@@ -1,21 +1,24 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:gradient_borders/gradient_borders.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -33,6 +36,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
 
+  // WiFi sync state
+  bool _isWifiSupported = false;
+  String? _wifiSsid;
+  String? _wifiPassword;
+
   Timer? _debounce;
   Timer? _micGainDebounce;
 
@@ -42,6 +50,15 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (connection == null) {
       return Future.value(null);
     }
+    return await connection.disconnect();
+  }
+
+  Future _bleUnpairDevice(BtDevice btDevice) async {
+    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
+    if (connection == null) {
+      return Future.value(null);
+    }
+    await connection.unpair();
     return await connection.disconnect();
   }
 
@@ -111,6 +128,25 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             });
           }
         }
+
+        final wifiSupported = await connection.isWifiSyncSupported();
+        if (mounted) {
+          setState(() {
+            _isWifiSupported = wifiSupported;
+          });
+
+          if (wifiSupported) {
+            final walService = ServiceManager.instance().wal;
+            final syncs = walService.getSyncs();
+            final credentials = syncs.sdcard.getWifiCredentials();
+            if (mounted && credentials != null) {
+              setState(() {
+                _wifiSsid = credentials['ssid'];
+                _wifiPassword = credentials['password'];
+              });
+            }
+          }
+        }
       }
     }
   }
@@ -131,525 +167,595 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<DeviceProvider>(builder: (context, provider, child) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        appBar: AppBar(
-          title: const Text('Device Settings'),
-          backgroundColor: Theme.of(context).colorScheme.primary,
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(4.0),
-          child: ListView(
-            children: [
-              Stack(
-                children: [
-                  Column(
-                    children: deviceSettingsWidgets(provider.pairedDevice, context),
-                  ),
-                  if (!provider.isConnected)
-                    ClipRRect(
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(
-                          sigmaX: 3.0,
-                          sigmaY: 3.0,
-                        ),
-                        child: Container(
-                          height: 410,
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(top: 10),
-                          decoration: BoxDecoration(
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                spreadRadius: 5,
-                                blurRadius: 7,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'Connect your device to\naccess these settings',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                height: 1.3,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (provider.isConnected)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      child: Text(
-                        'Customization',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    _buildDoubleTapSetting(),
-                    _buildDimmingControl(),
-                    _buildMicGainControl(),
-                  ],
-                ),
-              GestureDetector(
-                onTap: () async {
-                  await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
-                },
-                child: const ListTile(
-                  title: Text('Issues charging the device?'),
-                  subtitle: Text('Tap to see the guide'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: provider.isConnected
-            ? Padding(
-                padding: const EdgeInsets.only(bottom: 70, left: 30, right: 30),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  decoration: BoxDecoration(
-                    border: const GradientBoxBorder(
-                      gradient: LinearGradient(colors: [
-                        Color.fromARGB(127, 208, 208, 208),
-                        Color.fromARGB(127, 188, 99, 121),
-                        Color.fromARGB(127, 86, 101, 182),
-                        Color.fromARGB(127, 126, 190, 236)
-                      ]),
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: TextButton(
-                    onPressed: () async {
-                      await SharedPreferencesUtil()
-                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
-                      SharedPreferencesUtil().deviceName = '';
-                      if (provider.connectedDevice != null) {
-                        await _bleDisconnectDevice(provider.connectedDevice!);
-                      }
-                      provider.setIsConnected(false);
-                      provider.setConnectedDevice(null);
-                      provider.updateConnectingStatus(false);
-                      Navigator.of(context).pop();
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content:
-                            Text('Your Omi is ${provider.connectedDevice == null ? "unpaired" : "disconnected"}  😔'),
-                      ));
-                      MixpanelManager().disconnectFriendClicked();
-                    },
-                    child: Text(
-                      provider.connectedDevice == null ? "Unpair" : "Disconnect",
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-                ),
-              )
-            : const SizedBox(),
-      );
-    });
-  }
-
-  Widget _buildDoubleTapSetting() {
-    int currentAction = SharedPreferencesUtil().doubleTapAction;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade800, width: 1),
-      ),
+  Widget _buildSectionHeader(String title, {String? subtitle}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Double Tap Action',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+          Text(
+            title,
+            style: const TextStyle(
               color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Choose what happens when you double tap the device button',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-              height: 1.3,
+          if (subtitle != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Colors.grey.shade400,
+                fontSize: 14,
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          // Option 0: End & Process Conversation
-          _buildDoubleTapOption(
-            icon: Icons.stop,
-            title: 'End & Process Conversation',
-            isSelected: currentAction == 0,
-            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 0),
-          ),
-          const SizedBox(height: 8),
-          // Option 1: Pause/Resume Recording
-          _buildDoubleTapOption(
-            icon: Icons.pause,
-            title: 'Pause/Resume Recording',
-            isSelected: currentAction == 1,
-            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 1),
-          ),
-          const SizedBox(height: 8),
-          // Option 2: Star Ongoing Conversation
-          _buildDoubleTapOption(
-            icon: FontAwesomeIcons.star,
-            title: 'Star Ongoing Conversation',
-            subtitle: 'Mark to star when conversation ends',
-            isSelected: currentAction == 2,
-            onTap: () => setState(() => SharedPreferencesUtil().doubleTapAction = 2),
-            iconColor: Colors.amber,
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildDoubleTapOption({
+  Widget _buildProfileStyleItem({
     required IconData icon,
     required String title,
-    String? subtitle,
-    required bool isSelected,
-    required VoidCallback onTap,
-    Color? iconColor,
+    String? chipValue,
+    String? copyValue,
+    VoidCallback? onTap,
+    bool showChevron = true,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurple.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected ? Border.all(color: Colors.deepPurple, width: 1) : null,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: iconColor ?? (isSelected ? Colors.white : Colors.grey.shade400),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isSelected ? Colors.white : Colors.grey.shade300,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
-                ],
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w400,
               ),
             ),
-            if (isSelected)
-              const Icon(
-                Icons.check_circle,
-                size: 18,
-                color: Colors.deepPurple,
+          ),
+          if (chipValue != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2E),
+                borderRadius: BorderRadius.circular(100),
               ),
+              child: Text(
+                chipValue,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            if (showChevron) const SizedBox(width: 8),
           ],
-        ),
+          if (showChevron)
+            const Icon(
+              Icons.chevron_right,
+              color: Color(0xFF3C3C43),
+              size: 20,
+            ),
+        ],
       ),
     );
-  }
 
-  Widget _buildDimmingControl() {
-    if (!_isDimRatioLoaded) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_hasDimmingFeature == false) {
-      return const ListTile(
-        title: Text('Dimming'),
-        subtitle: Text('This feature is not available on your device.'),
+    if (copyValue != null) {
+      return GestureDetector(
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: copyValue));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$title copied to clipboard')),
+          );
+        },
+        child: content,
       );
     }
 
-    return ListTile(
-      title: const Text('Dimming'),
-      subtitle: Slider(
-        value: _dimRatio,
-        min: 0,
-        max: 100,
-        divisions: 100,
-        activeColor: Colors.white,
-        inactiveColor: Colors.grey,
-        label: '${_dimRatio.round()}%',
-        onChanged: (double value) {
-          if (!(_debounce?.isActive ?? false)) {
-            _debounce = Timer(const Duration(milliseconds: 300), () {
-              _updateDimRatio(value);
-            });
-          }
-          setState(() {
-            _dimRatio = value;
-          });
-        },
-        onChangeEnd: (double value) {
-          _debounce?.cancel();
-          _updateDimRatio(value);
-        },
-      ),
-    );
+    if (onTap != null) {
+      return GestureDetector(onTap: onTap, child: content);
+    }
+    return content;
   }
 
-  Widget _buildMicGainControl() {
-    if (!_isMicGainLoaded) {
-      return const Center(child: CircularProgressIndicator());
-    }
+  Widget _buildDeviceInfoSection(BtDevice? device, DeviceProvider provider) {
+    final deviceName = device?.name ?? 'Omi DevKit';
+    final deviceId = device?.id ?? '12AB34CD:56EF78GH';
 
-    if (_hasMicGainFeature == false) {
-      return const ListTile(
-        title: Text('Mic Gain'),
-        subtitle: Text('This feature is not available on your device.'),
-      );
+    String truncateId(String id) {
+      if (id.length > 10) {
+        return '${id.substring(0, 4)}•••${id.substring(id.length - 4)}';
+      }
+      return id;
     }
-
-    // Map gain level to label and description
-    String getGainLabel(int level) {
-      const labels = [
-        'Mute', // Level 0
-        '-20dB', // Level 1
-        '-10dB', // Level 2
-        '+0dB', // Level 3
-        '+6dB', // Level 4
-        '+10dB', // Level 5
-        '+20dB', // Level 6 (default)
-        '+30dB', // Level 7
-        '+40dB', // Level 8
-      ];
-      return level >= 0 && level < labels.length ? labels[level] : '';
-    }
-
-    String getGainDescription(int level) {
-      const descriptions = [
-        'Microphone is muted', // Level 0
-        'Very quiet - for loud environments', // Level 1
-        'Quiet - for moderate noise', // Level 2
-        'Neutral - balanced recording', // Level 3
-        'Slightly boosted - normal use', // Level 4
-        'Boosted - for quiet environments', // Level 5
-        'High - for distant or soft voices', // Level 6 (default)
-        'Very high - for very quiet sources', // Level 7
-        'Maximum - use with caution', // Level 8
-      ];
-      return level >= 0 && level < descriptions.length ? descriptions[level] : '';
-    }
-
-    final currentLevel = _micGain.round();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade800, width: 1),
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Mic Gain',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      currentLevel == 0 ? Icons.mic_off : Icons.mic,
-                      size: 16,
-                      color: Colors.grey.shade400,
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.microchip,
+            title: context.l10n.deviceName,
+            chipValue: deviceName,
+            copyValue: deviceName,
+            showChevron: false,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.fingerprint,
+            title: context.l10n.deviceId,
+            chipValue: truncateId(deviceId),
+            copyValue: deviceId,
+            showChevron: false,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.download,
+            title: context.l10n.firmware,
+            chipValue: device?.firmwareRevision ?? '1.0.2',
+            onTap: () => routeToPage(context, FirmwareUpdate(device: device)),
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.sdCard,
+            title: context.l10n.sdCardSync,
+            onTap: () {
+              if (!provider.isDeviceStorageSupport) {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.of(context).pop(),
+                    () {},
+                    context.l10n.v2Undetected,
+                    context.l10n.v2UndetectedMessage,
+                    singleButton: true,
+                  ),
+                );
+              } else {
+                var page = const SyncPage();
+                routeToPage(context, page);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHardwareInfoSection(BtDevice? device) {
+    final hardwareRevision = device?.hardwareRevision ?? 'XIAO';
+    final modelNumber = device?.modelNumber ?? 'Omi DevKit';
+    final manufacturer = device?.manufacturerName ?? 'Based Hardware';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.gears,
+            title: context.l10n.hardwareRevision,
+            chipValue: hardwareRevision,
+            copyValue: hardwareRevision,
+            showChevron: false,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.hashtag,
+            title: context.l10n.modelNumber,
+            chipValue: modelNumber,
+            copyValue: modelNumber,
+            showChevron: false,
+          ),
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.industry,
+            title: context.l10n.manufacturer,
+            chipValue: manufacturer,
+            copyValue: manufacturer,
+            showChevron: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getDoubleTapActionLabel(int action) {
+    switch (action) {
+      case 0:
+        return context.l10n.endConversation;
+      case 1:
+        return context.l10n.pauseResume;
+      case 2:
+        return context.l10n.starConversation;
+      default:
+        return context.l10n.endConversation;
+    }
+  }
+
+  void _showDoubleTapActionSheet() {
+    int currentAction = SharedPreferencesUtil().doubleTapAction;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 16),
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3C3C43),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      getGainLabel(currentLevel),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade300,
+                  ),
+                  Text(
+                    context.l10n.doubleTapAction,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ListTile(
+                    title: Text(
+                      context.l10n.endAndProcess,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
+                    trailing: currentAction == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    onTap: () {
+                      setState(() => SharedPreferencesUtil().doubleTapAction = 0);
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                  ListTile(
+                    title: Text(
+                      context.l10n.pauseResumeRecording,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    trailing: currentAction == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    onTap: () {
+                      setState(() => SharedPreferencesUtil().doubleTapAction = 1);
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                  ListTile(
+                    title: Text(
+                      context.l10n.starOngoing,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+                    onTap: () {
+                      setState(() => SharedPreferencesUtil().doubleTapAction = 2);
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showBrightnessSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3C3C43),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          context.l10n.ledBrightness,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${_dimRatio.round()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.grey.shade800,
+                        thumbColor: Colors.white,
+                        overlayColor: Colors.white.withOpacity(0.1),
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 12,
+                          elevation: 2,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+                        trackHeight: 6,
+                      ),
+                      child: Slider(
+                        value: _dimRatio,
+                        min: 0,
+                        max: 100,
+                        divisions: 100,
+                        onChanged: (double value) {
+                          setSheetState(() {});
+                          setState(() {
+                            _dimRatio = value;
+                          });
+                          if (!(_debounce?.isActive ?? false)) {
+                            _debounce = Timer(const Duration(milliseconds: 300), () {
+                              _updateDimRatio(value);
+                            });
+                          }
+                        },
+                        onChangeEnd: (double value) {
+                          _debounce?.cancel();
+                          _updateDimRatio(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(context.l10n.off, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        Text(context.l10n.max, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
+            );
+          },
+        );
+      },
+    );
+  }
 
-          // Current level description
-          Text(
-            getGainDescription(currentLevel),
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade400,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 20),
+  void _showMicGainSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            String getGainLabel(int level) {
+              const labels = ['Mute', '-20dB', '-10dB', '+0dB', '+6dB', '+10dB', '+20dB', '+30dB', '+40dB'];
+              return level >= 0 && level < labels.length ? labels[level] : '';
+            }
 
-          // Slider with level markers
-          Stack(
-            children: [
-              // Level markers
-              Positioned.fill(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: List.generate(9, (index) {
-                    final isActive = index == currentLevel;
-                    return Container(
-                      width: 2,
-                      height: 8,
+            String getGainDescription(int level) {
+              final descriptions = [
+                context.l10n.micGainDescMuted,
+                context.l10n.micGainDescLow,
+                context.l10n.micGainDescModerate,
+                context.l10n.micGainDescNeutral,
+                context.l10n.micGainDescSlightlyBoosted,
+                context.l10n.micGainDescBoosted,
+                context.l10n.micGainDescHigh,
+                context.l10n.micGainDescVeryHigh,
+                context.l10n.micGainDescMax,
+              ];
+              return level >= 0 && level < descriptions.length ? descriptions[level] : '';
+            }
+
+            final currentLevel = _micGain.round();
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      width: 36,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: isActive ? Colors.white : Colors.grey.shade700,
-                        borderRadius: BorderRadius.circular(1),
+                        color: const Color(0xFF3C3C43),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    );
-                  }),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          context.l10n.micGain,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          getGainLabel(currentLevel),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      getGainDescription(currentLevel),
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SliderTheme(
+                      data: SliderThemeData(
+                        activeTrackColor: Colors.white,
+                        inactiveTrackColor: Colors.grey.shade800,
+                        thumbColor: Colors.white,
+                        overlayColor: Colors.white.withOpacity(0.1),
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 12,
+                          elevation: 2,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+                        trackHeight: 6,
+                      ),
+                      child: Slider(
+                        value: _micGain,
+                        min: 0,
+                        max: 8,
+                        divisions: 8,
+                        onChanged: (double value) {
+                          setSheetState(() {});
+                          setState(() {
+                            _micGain = value;
+                          });
+                          if (!(_micGainDebounce?.isActive ?? false)) {
+                            _micGainDebounce = Timer(const Duration(milliseconds: 300), () {
+                              _updateMicGain(value);
+                            });
+                          }
+                        },
+                        onChangeEnd: (double value) {
+                          _micGainDebounce?.cancel();
+                          _updateMicGain(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(context.l10n.mute, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                        Text(context.l10n.max, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildPresetButton(context.l10n.quiet, 2, currentLevel, () {
+                            setSheetState(() {});
+                            setState(() => _micGain = 2.0);
+                            _updateMicGain(2.0);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildPresetButton(context.l10n.normal, 4, currentLevel, () {
+                            setSheetState(() {});
+                            setState(() => _micGain = 4.0);
+                            _updateMicGain(4.0);
+                          }),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildPresetButton(context.l10n.high, 6, currentLevel, () {
+                            setSheetState(() {});
+                            setState(() => _micGain = 6.0);
+                            _updateMicGain(6.0);
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
-              // Slider
-              SliderTheme(
-                data: SliderThemeData(
-                  activeTrackColor: Colors.white,
-                  inactiveTrackColor: Colors.grey.shade800,
-                  thumbColor: Colors.white,
-                  overlayColor: Colors.white.withOpacity(0.1),
-                  thumbShape: const RoundSliderThumbShape(
-                    enabledThumbRadius: 10,
-                    elevation: 2,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-                  trackHeight: 4,
-                ),
-                child: Slider(
-                  value: _micGain,
-                  min: 0,
-                  max: 8,
-                  divisions: 8,
-                  onChanged: (double value) {
-                    if (!(_micGainDebounce?.isActive ?? false)) {
-                      _micGainDebounce = Timer(const Duration(milliseconds: 300), () {
-                        _updateMicGain(value);
-                      });
-                    }
-                    setState(() {
-                      _micGain = value;
-                    });
-                  },
-                  onChangeEnd: (double value) {
-                    _micGainDebounce?.cancel();
-                    _updateMicGain(value);
-                  },
-                ),
-              ),
-            ],
-          ),
+            );
+          },
+        );
+      },
+    );
+  }
 
-          // Level labels
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Mute',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-                Text(
-                  '+6dB',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-                Text(
-                  'Max',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Quick presets
-          Row(
-            children: [
-              Expanded(
-                child: _buildPresetButton('Quiet', 2, currentLevel, () {
-                  setState(() => _micGain = 2.0);
-                  _updateMicGain(2.0);
-                }),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildPresetButton('Normal', 4, currentLevel, () {
-                  setState(() => _micGain = 4.0);
-                  _updateMicGain(4.0);
-                }),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildPresetButton('High', 6, currentLevel, () {
-                  setState(() => _micGain = 6.0);
-                  _updateMicGain(6.0);
-                }),
-              ),
-            ],
-          ),
-        ],
+  void _showWifiSyncSheet() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => WifiSyncSettingsPage(
+          initialSsid: _wifiSsid,
+          initialPassword: _wifiPassword,
+          onCredentialsSaved: (ssid, password) {
+            setState(() {
+              _wifiSsid = ssid;
+              _wifiPassword = password;
+            });
+          },
+          onCredentialsCleared: () {
+            setState(() {
+              _wifiSsid = null;
+              _wifiPassword = null;
+            });
+          },
+        ),
       ),
     );
   }
@@ -659,95 +765,348 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? Colors.white.withOpacity(0.1) : const Color(0xFF2A2A2E),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? Colors.white.withOpacity(0.8) : Colors.transparent,
-            width: 1.5,
+            color: isSelected ? Colors.white.withOpacity(0.5) : Colors.transparent,
+            width: 1,
           ),
         ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? Colors.white : Colors.grey.shade400,
-              ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              color: isSelected ? Colors.white : Colors.grey.shade400,
             ),
-          ],
+          ),
         ),
       ),
     );
   }
-}
 
-List<Widget> deviceSettingsWidgets(BtDevice? device, BuildContext context) {
-  var provider = Provider.of<DeviceProvider>(context, listen: true);
+  String _getMicGainLabel(int level) {
+    const labels = ['Mute', '-20dB', '-10dB', '+0dB', '+6dB', '+10dB', '+20dB', '+30dB', '+40dB'];
+    return level >= 0 && level < labels.length ? labels[level] : '';
+  }
 
-  return [
-    ListTile(
-      title: const Text('Device Name'),
-      subtitle: Text(device?.name ?? 'Omi DevKit'),
-    ),
-    ListTile(
-      title: const Text('Device ID'),
-      subtitle: Text(device?.id ?? '12AB34CD:56EF78GH'),
-    ),
-    GestureDetector(
-      onTap: () {
-        routeToPage(context, FirmwareUpdate(device: device));
-      },
-      child: ListTile(
-        title: const Text('Update Latest Version'),
-        subtitle: Text('Current: ${device?.firmwareRevision ?? '1.0.2'}'),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-        ),
+  Widget _buildCustomizationSection() {
+    final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
       ),
-    ),
-    GestureDetector(
-      onTap: () {
-        if (!provider.isDeviceStorageSupport) {
-          showDialog(
-            context: context,
-            builder: (c) => getDialog(
-              context,
-              () => Navigator.of(context).pop(),
-              () => {},
-              'V2 undetected',
-              'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.',
-              singleButton: true,
+      child: Column(
+        children: [
+          // Double Tap
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.handPointer,
+            title: context.l10n.doubleTap,
+            chipValue: _getDoubleTapActionLabel(doubleTapAction),
+            onTap: _showDoubleTapActionSheet,
+          ),
+          // LED Brightness
+          if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.lightbulb,
+              title: context.l10n.ledBrightness,
+              chipValue: '${_dimRatio.round()}%',
+              onTap: _showBrightnessSheet,
             ),
-          );
-        } else {
-          var page = const SyncPage();
-          routeToPage(context, page);
-        }
-      },
-      child: const ListTile(
-        title: Text('SD Card Sync'),
-        subtitle: Text('Import audio files from SD Card'),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-        ),
+          ],
+          // Mic Gain
+          if (_isMicGainLoaded && _hasMicGainFeature == true) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.microphone,
+              title: context.l10n.micGain,
+              chipValue: _getMicGainLabel(_micGain.round()),
+              onTap: _showMicGainSheet,
+            ),
+          ],
+          // WiFi Sync
+          if (_isWifiSupported) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.wifi,
+              title: 'WiFi Sync',
+              chipValue: _wifiSsid != null ? 'Configured' : 'Not Set',
+              onTap: _showWifiSyncSheet,
+            ),
+          ],
+        ],
       ),
-    ),
-    ListTile(
-      title: const Text('Hardware Revision'),
-      subtitle: Text(device?.hardwareRevision ?? 'XIAO'),
-    ),
-    ListTile(
-      title: const Text('Model Number'),
-      subtitle: Text(device?.modelNumber ?? 'Omi DevKit'),
-    ),
-    ListTile(
-      title: const Text('Manufacturer Name'),
-      subtitle: Text(device?.manufacturerName ?? 'Based Hardware'),
-    ),
-  ];
+    );
+  }
+
+  Widget _buildActionsSection(DeviceProvider provider) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          // Charging Help
+          GestureDetector(
+            onTap: () async {
+              if (PlatformService.isIntercomSupported) {
+                await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
+              } else {
+                // Fallback to web URL for desktop platforms
+                final deviceName = provider.pairedDevice?.name ?? 'DevKit1';
+                String url;
+                if (deviceName == 'Omi DevKit 2') {
+                  url = 'https://www.omi.me/pages/charging-devkit2';
+                } else if (deviceName == 'Omi') {
+                  url = 'https://www.omi.me/pages/charging-omi';
+                } else {
+                  url = 'https://www.omi.me/pages/charging';
+                }
+                final uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: FaIcon(FontAwesomeIcons.circleQuestion, color: Color(0xFF8E8E93), size: 20),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      context.l10n.chargingIssues,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: Color(0xFF3C3C43),
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (provider.isConnected) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            // Disconnect
+            GestureDetector(
+              onTap: () async {
+                await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                SharedPreferencesUtil().deviceName = '';
+                if (provider.connectedDevice != null) {
+                  await _bleDisconnectDevice(provider.connectedDevice!);
+                }
+                provider.setIsConnected(false);
+                provider.setConnectedDevice(null);
+                provider.updateConnectingStatus(false);
+                MixpanelManager().disconnectFriendClicked();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.l10n.deviceDisconnectedMessage)),
+                  );
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.redAccent, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      provider.connectedDevice == null ? context.l10n.unpairDevice : context.l10n.disconnectDevice,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          // Unpair Device - only for Limitless devices
+          if (provider.isConnected && provider.connectedDevice?.type == DeviceType.limitless) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            GestureDetector(
+              onTap: () async {
+                showDialog(
+                  context: context,
+                  builder: (c) => getDialog(
+                    context,
+                    () => Navigator.of(context).pop(),
+                    () async {
+                      Navigator.of(context).pop();
+                      await SharedPreferencesUtil()
+                          .btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
+                      SharedPreferencesUtil().deviceName = '';
+                      if (provider.connectedDevice != null) {
+                        await _bleUnpairDevice(provider.connectedDevice!);
+                      }
+                      provider.setIsConnected(false);
+                      provider.setConnectedDevice(null);
+                      provider.updateConnectingStatus(false);
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(context.l10n.deviceUnpairedMessage),
+                            duration: const Duration(seconds: 5),
+                          ),
+                        );
+                      }
+                    },
+                    context.l10n.unpairDialogTitle,
+                    context.l10n.unpairDialogMessage,
+                    okButtonText: 'Unpair',
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(
+                      context.l10n.unpairAndForget,
+                      style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDisconnectedOverlay() {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2A2E),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(
+              child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.grey.shade500, size: 24),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            context.l10n.deviceNotConnected,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            context.l10n.connectDeviceMessage,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<DeviceProvider>(builder: (context, provider, child) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0D0D0D),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0D0D0D),
+          elevation: 0,
+          leading: IconButton(
+            icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text(
+            context.l10n.deviceSettings,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!provider.isConnected) ...[
+                const SizedBox(height: 16),
+                _buildDisconnectedOverlay(),
+                const SizedBox(height: 32),
+              ],
+              if (provider.isConnected) ...[
+                const SizedBox(height: 16),
+                _buildSectionHeader(context.l10n.customizationSection),
+                _buildCustomizationSection(),
+                const SizedBox(height: 32),
+                _buildSectionHeader(context.l10n.deviceInfoSection),
+                _buildDeviceInfoSection(provider.pairedDevice, provider),
+                const SizedBox(height: 32),
+                _buildSectionHeader(context.l10n.hardwareSection),
+                _buildHardwareInfoSection(provider.pairedDevice),
+                const SizedBox(height: 32),
+              ],
+              _buildActionsSection(provider),
+              const SizedBox(height: 48),
+            ],
+          ),
+        ),
+      );
+    });
+  }
 }

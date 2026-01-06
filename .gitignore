@@ -92,6 +92,7 @@ dist/
 # Web specific
 **/web/**/build/
 **/web/.dart_tool/
+web/app/public/firebase-messaging-sw.js
 
 # Miscellaneous
 !app/pubspec.lock
@@ -197,3 +198,6 @@ omiGlass/.expo
 /backend/logs/
 app/.fvm/
 app/android/.kotlin/
+.playwright-mcp/
+
+CLAUDE.md

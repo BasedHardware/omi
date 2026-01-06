@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/base_provider.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
@@ -28,6 +29,8 @@ class DeveloperModeProvider extends BaseProvider {
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
+  bool showGoalTrackerEnabled = true; // Default to true
+  bool dailyReflectionEnabled = true;
 
   void onConversationEventsToggled(bool value) {
     conversationEventsToggled = value;
@@ -98,6 +101,8 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
+    showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
+    dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
     audioBytesToggled = SharedPreferencesUtil().audioBytesToggled;
@@ -192,6 +197,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.devModeJoanFollowUpEnabled = followUpQuestionEnabled;
     prefs.transcriptionDiagnosticEnabled = transcriptionDiagnosticEnabled;
     prefs.autoCreateSpeakersEnabled = autoCreateSpeakersEnabled;
+    prefs.showGoalTrackerEnabled = showGoalTrackerEnabled;
 
     MixpanelManager().settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
@@ -219,6 +225,26 @@ class DeveloperModeProvider extends BaseProvider {
 
   void onAutoCreateSpeakersChanged(var value) {
     autoCreateSpeakersEnabled = value;
+    notifyListeners();
+  }
+
+  void onShowGoalTrackerChanged(var value) {
+    showGoalTrackerEnabled = value;
+    SharedPreferencesUtil().showGoalTrackerEnabled = value; // Save immediately
+    notifyListeners();
+  }
+
+  void onDailyReflectionChanged(var value) {
+    dailyReflectionEnabled = value;
+    SharedPreferencesUtil().dailyReflectionEnabled = value; // Save immediately
+    
+    // Schedule or cancel the notification based on the setting
+    if (value) {
+      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+    } else {
+      DailyReflectionNotification.cancelNotification();
+    }
+    
     notifyListeners();
   }
 }

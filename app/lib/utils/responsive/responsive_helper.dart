@@ -142,11 +142,11 @@ class ResponsiveHelper {
   // Premium sidebar width calculation
   double sidebarWidth({double baseWidth = 320}) {
     if (_isSmallScreen) {
-      return widthPercent(26).clamp(220, 280);
+      return widthPercent(24).clamp(200, 250);
     } else if (_isMediumScreen) {
-      return widthPercent(24).clamp(280, 320);
+      return widthPercent(22).clamp(220, 280);
     } else {
-      return baseWidth.clamp(300, 380);
+      return baseWidth.clamp(220, 320);
     }
   }
 

@@ -1,100 +1,77 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:uuid/uuid.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/chat/select_text_screen.dart';
+import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
-import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:omi/widgets/extensions/string.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-
-import 'widgets/message_action_menu.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
+  final String? autoMessage;
 
   const ChatPage({
     super.key,
     this.isPivotBottom = false,
+    this.autoMessage,
   });
 
   @override
   State<ChatPage> createState() => ChatPageState();
 }
 
-class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
-  bool isScrollingDown = false;
-
   bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
+  bool _hasInitialScrolled = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  final GlobalKey _appButtonKey = GlobalKey();
+
+  // Track which app is pending deletion confirmation
+  String? _pendingDeleteAppId;
+  String? _selectedContext;
 
   @override
   bool get wantKeepAlive => true;
 
+  bool _allowSpacer = false;
+
   @override
   void initState() {
     apps = prefs.appsList;
-    scrollController = ScrollController();
+    scrollController = ScrollController(initialScrollOffset: 1e9);
     textFieldFocusNode = FocusNode();
     textController.addListener(() {
       setState(() {});
     });
 
-    scrollController.addListener(() {
-      if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
-        if (!isScrollingDown) {
-          isScrollingDown = true;
-          setState(() {});
-          Future.delayed(const Duration(seconds: 5), () {
-            if (isScrollingDown) {
-              isScrollingDown = false;
-              if (mounted) {
-                setState(() {});
-              }
-            }
-          });
-        }
-      }
-
-      if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
-        if (isScrollingDown) {
-          isScrollingDown = false;
-          setState(() {});
-        }
-      }
-    });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
       if (provider.messages.isEmpty) {
@@ -102,12 +79,43 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
-      scrollToBottom();
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted && !_showVoiceRecorder && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
+          }
+        });
+      }
+      // Handle auto-message from notification (e.g., daily reflection or goal advice)
+      // This sends a message FROM Omi AI, not from the user
+      if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
+        // Wait for messages to load first, then add auto-message
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (mounted) {
+            setState(() {
+              _allowSpacer = true;
+            });
+            final aiMessage = ServerMessage(
+              const Uuid().v4(),
+              DateTime.now(),
+              widget.autoMessage!,
+              MessageSender.ai,
+              MessageType.text,
+              null,
+              false,
+              [],
+              [],
+              [],
+              askForNps: false,
+            );
+            context.read<MessageProvider>().addMessage(aiMessage);
+            // Scroll after the message is added and rendered
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                scrollToBottom();
+              }
+            });
           }
         });
       }
@@ -133,7 +141,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          // endDrawer: _buildSessionsDrawer(context),
+          endDrawer: _buildChatAppsEndDrawer(context),
+          onEndDrawerChanged: (isOpened) {
+            if (isOpened) {
+              // Unfocus text field when drawer opens
+              textFieldFocusNode.unfocus();
+            }
+          },
           body: GestureDetector(
             onTap: () {
               // Hide keyboard when tapping outside textfield
@@ -158,16 +172,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           ],
                         )
                       : provider.isClearingChat
-                          ? const Column(
+                          ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                CircularProgressIndicator(
+                                const CircularProgressIndicator(
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Text(
-                                  "Deleting your messages from Omi's memory...",
-                                  style: TextStyle(color: Colors.white),
+                                  context.l10n.deletingMessages,
+                                  style: const TextStyle(color: Colors.white),
                                 ),
                               ],
                             )
@@ -177,155 +191,91 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     padding: const EdgeInsets.only(bottom: 32.0),
                                     child: Text(
                                         connectivityProvider.isConnected
-                                            ? 'No messages yet!\nWhy don\'t you start a conversation?'
-                                            : 'Please check your internet connection and try again',
+                                            ? context.l10n.noMessagesYet
+                                            : context.l10n.noInternetConnection,
                                         textAlign: TextAlign.center,
                                         style: const TextStyle(color: Colors.white)),
                                   ),
                                 )
-                              : ListView.builder(
-                                  shrinkWrap: false,
-                                  reverse: true,
-                                  controller: scrollController,
-                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                                  itemCount: provider.messages.length,
-                                  itemBuilder: (context, chatIndex) {
-                                    final message = provider.messages[chatIndex];
-                                    double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        textSelectionTheme: TextSelectionThemeData(
+                                          selectionColor: Colors.white.withOpacity(0.3),
+                                          selectionHandleColor: Colors.blue,
+                                        ),
+                                      ),
+                                      child: ListView.builder(
+                                        shrinkWrap: false,
+                                        reverse: false,
+                                        controller: scrollController,
+                                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                        itemCount: provider.messages.length,
+                                        itemBuilder: (context, chatIndex) {
+                                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                            _hasInitialScrolled = true;
+                                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                                              if (scrollController.hasClients) {
+                                                scrollController.jumpTo(scrollController.position.maxScrollExtent);
+                                              }
+                                            });
+                                          }
 
-                                    double bottomPadding = chatIndex == 0 ? 16 : 0;
-                                    return GestureDetector(
-                                      onLongPress: () {
-                                        showModalBottomSheet(
-                                          context: context,
-                                          shape: const RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.vertical(
-                                              top: Radius.circular(20),
-                                            ),
-                                          ),
-                                          builder: (context) => MessageActionMenu(
-                                            message: message.text.decodeString,
-                                            onCopy: () async {
-                                              MixpanelManager()
-                                                  .track('Chat Message Copied', properties: {'message': message.text});
-                                              await Clipboard.setData(ClipboardData(text: message.text.decodeString));
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'Message copied to clipboard.',
-                                                      style: TextStyle(
-                                                        color: Color.fromARGB(255, 255, 255, 255),
-                                                        fontSize: 12.0,
-                                                      ),
-                                                    ),
-                                                    duration: Duration(milliseconds: 2000),
-                                                  ),
-                                                );
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                            onSelectText: () {
-                                              MixpanelManager().track('Chat Message Text Selected',
-                                                  properties: {'message': message.text});
-                                              routeToPage(context, SelectTextScreen(message: message));
-                                            },
-                                            onShare: () {
-                                              MixpanelManager()
-                                                  .track('Chat Message Shared', properties: {'message': message.text});
-                                              Share.share(
-                                                '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
-                                                subject: 'Chat with Omi',
-                                              );
-                                              Navigator.pop(context);
-                                            },
-                                            onThumbsUp: message.sender == MessageSender.ai && message.askForNps
-                                                ? () {
-                                                    provider.setMessageNps(message, 1);
-                                                    Navigator.pop(context);
-                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                                  }
-                                                : null,
-                                            onThumbsDown: message.sender == MessageSender.ai && message.askForNps
-                                                ? () {
-                                                    provider.setMessageNps(message, 0);
-                                                    Navigator.pop(context);
-                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                                  }
-                                                : null,
-                                            onReport: () {
-                                              if (message.sender == MessageSender.human) {
-                                                Navigator.pop(context);
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'You cannot report your own messages.',
-                                                      style: TextStyle(
-                                                        color: Color.fromARGB(255, 255, 255, 255),
-                                                        fontSize: 12.0,
-                                                      ),
-                                                    ),
-                                                    duration: Duration(milliseconds: 2000),
-                                                  ),
-                                                );
-                                                return;
-                                              }
-                                              showDialog(
-                                                context: context,
-                                                builder: (context) {
-                                                  return getDialog(
-                                                    context,
-                                                    () {
-                                                      Navigator.of(context).pop();
-                                                    },
-                                                    () {
-                                                      MixpanelManager().track('Chat Message Reported',
-                                                          properties: {'message': message.text});
-                                                      Navigator.of(context).pop();
-                                                      Navigator.of(context).pop();
-                                                      context.read<MessageProvider>().removeLocalMessage(message.id);
-                                                      reportMessageServer(message.id);
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        const SnackBar(
-                                                          content: Text(
-                                                            'Message reported successfully.',
-                                                            style: TextStyle(
-                                                              color: Color.fromARGB(255, 255, 255, 255),
-                                                              fontSize: 12.0,
-                                                            ),
-                                                          ),
-                                                          duration: Duration(milliseconds: 2000),
+                                          final message = provider.messages[chatIndex];
+                                          double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                          double bottomPadding = chatIndex == 0 ? 16 : 0;
+                                          
+                                          return Padding(
+                                            key: ValueKey(message.id),
+                                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                            child: message.sender == MessageSender.ai
+                                                ? Builder(builder: (context) {
+                                                    final child = AIMessage(
+                                                      showTypingIndicator: provider.showTypingIndicator &&
+                                                          chatIndex == provider.messages.length - 1,
+                                                      message: message,
+                                                      sendMessage: _sendMessageUtil,
+                                                      onAskOmi: (text) {
+                                                        setState(() {
+                                                          _selectedContext = text;
+                                                        });
+                                                        textFieldFocusNode.requestFocus();
+                                                      },
+                                                      displayOptions: provider.messages.length <= 1 &&
+                                                          provider.messageSenderApp(message.appId)?.isNotPersona() ==
+                                                              true,
+                                                      appSender: provider.messageSenderApp(message.appId),
+                                                      updateConversation: (ServerConversation conversation) {
+                                                        context
+                                                            .read<ConversationProvider>()
+                                                            .updateConversation(conversation);
+                                                      },
+                                                      setMessageNps: (int value) {
+                                                        provider.setMessageNps(message, value);
+                                                      },
+                                                    );
+                                                    
+                                                    // Dynamic spacer logic
+                                                    if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                      return Container(
+                                                        constraints: BoxConstraints(
+                                                          minHeight: MediaQuery.of(context).size.height * 0.5,
                                                         ),
+                                                        alignment: Alignment.topLeft,
+                                                        child: child,
                                                       );
-                                                    },
-                                                    'Report Message',
-                                                    'Are you sure you want to report this message?',
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          ),
-                                        );
-                                      },
-                                      child: Padding(
-                                        key: ValueKey(message.id),
-                                        padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                        child: message.sender == MessageSender.ai
-                                            ? AIMessage(
-                                                showTypingIndicator: provider.showTypingIndicator && chatIndex == 0,
-                                                message: message,
-                                                sendMessage: _sendMessageUtil,
-                                                displayOptions: provider.messages.length <= 1 &&
-                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
-                                                appSender: provider.messageSenderApp(message.appId),
-                                                updateConversation: (ServerConversation conversation) {
-                                                  context.read<ConversationProvider>().updateConversation(conversation);
-                                                },
-                                                setMessageNps: (int value) {
-                                                  provider.setMessageNps(message, value);
-                                                },
-                                              )
-                                            : HumanMessage(message: message),
+                                                    }
+                                                    return child;
+                                                  })
+                                                : HumanMessage(message: message, onAskOmi: (text) {
+                                                    setState(() {
+                                                      _selectedContext = text;
+                                                    });
+                                                    textFieldFocusNode.requestFocus();
+                                                  }),
+                                          );
+                                        },
                                       ),
                                     );
                                   },
@@ -444,59 +394,121 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           }
                         }),
                         // Send bar
-                        Padding(
-                          padding: EdgeInsets.only(
-                            left: 8,
-                            right: 8,
-                            top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                            bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 10 : 40),
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2F),
-                              borderRadius: BorderRadius.circular(32),
+                        SafeArea(
+                          bottom: !widget.isPivotBottom,
+                          maintainBottomViewPadding: false,
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              left: 8,
+                              right: 8,
+                              top: provider.selectedFiles.isNotEmpty ? 0 : 8,
+                              bottom: widget.isPivotBottom
+                                  ? 20
+                                  : (textFieldFocusNode.hasFocus &&
+                                          (textController.text.length > 40 ||
+                                              textController.text.contains('\n'))
+                                      ? 0
+                                      : 10),
                             ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                // Plus button
-                                if (shouldShowMenuButton())
-                                  GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      FocusScope.of(context).unfocus();
-                                      if (provider.selectedFiles.length > 3) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('You can only upload 4 files at a time'),
-                                            duration: Duration(seconds: 2),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2F),
+                                borderRadius: BorderRadius.circular(32),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  // Plus button
+                                  if (shouldShowMenuButton())
+                                    GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.lightImpact();
+                                        FocusScope.of(context).unfocus();
+                                        if (provider.selectedFiles.length > 3) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(context.l10n.maxFilesLimit),
+                                              duration: const Duration(seconds: 2),
+                                            ),
+                                          );
+                                          return;
+                                        }
+                                        _showIOSStyleActionSheet(context);
+                                      },
+                                      child: Container(
+                                        height: 44,
+                                        width: 44,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF3C3C43),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Center(
+                                          child: FaIcon(
+                                            FontAwesomeIcons.plus,
+                                            color: provider.selectedFiles.length > 3
+                                                ? Colors.grey
+                                                : Colors.white,
+                                            size: 18,
                                           ),
-                                        );
-                                        return;
-                                      }
-                                      _showIOSStyleActionSheet(context);
-                                    },
-                                    child: Container(
-                                      height: 44,
-                                      width: 44,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF3C3C43),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Center(
-                                        child: FaIcon(
-                                          FontAwesomeIcons.plus,
-                                          color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
-                                          size: 18,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                const SizedBox(width: 12),
-                                // Text field
-                                Expanded(
-                                  child: _showVoiceRecorder
+                                  const SizedBox(width: 12),
+                                  // Text field
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (_selectedContext != null && !_showVoiceRecorder)
+                                          Padding(
+                                            padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
+                                            child: Container(
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF1f1f25),
+                                                borderRadius: BorderRadius.circular(16),
+                                              ),
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12, vertical: 8),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Padding(
+                                                    padding: EdgeInsets.only(top: 1),
+                                                    child: Icon(Icons.subdirectory_arrow_right,
+                                                        size: 14, color: Colors.blue),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Flexible(
+                                                    child: Text(
+                                                      _selectedContext!.length > 25
+                                                          ? '${_selectedContext!.substring(0, 25)}...'
+                                                          : _selectedContext!,
+                                                      style: const TextStyle(
+                                                        color: Colors.blue,
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w500,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  GestureDetector(
+                                                    onTap: () {
+                                                      setState(() {
+                                                        _selectedContext = null;
+                                                      });
+                                                    },
+                                                    child: const Icon(Icons.close,
+                                                        size: 14, color: Colors.blue),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        _showVoiceRecorder
                                       ? VoiceRecorderWidget(
                                           onTranscriptReady: (transcript) {
                                             setState(() {
@@ -511,94 +523,105 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                             });
                                           },
                                         )
-                                      : TextField(
-                                          enabled: true,
-                                          controller: textController,
-                                          focusNode: textFieldFocusNode,
-                                          obscureText: false,
-                                          textAlign: TextAlign.start,
-                                          textAlignVertical: TextAlignVertical.center,
-                                          decoration: const InputDecoration(
-                                            hintText: 'Ask anything',
-                                            hintStyle: TextStyle(fontSize: 16.0, color: Colors.grey),
-                                            focusedBorder: InputBorder.none,
-                                            enabledBorder: InputBorder.none,
-                                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                                            isDense: true,
-                                          ),
-                                          minLines: 1,
-                                          maxLines: 10,
-                                          keyboardType: TextInputType.multiline,
-                                          textCapitalization: TextCapitalization.sentences,
-                                          style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
-                                        ),
-                                ),
-                                // Microphone button
-                                if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
-                                  GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      FocusScope.of(context).unfocus();
-                                      setState(() {
-                                        _showVoiceRecorder = true;
-                                      });
-                                    },
-                                    child: Container(
-                                      height: 44,
-                                      width: 44,
-                                      alignment: Alignment.center,
-                                      child: const FaIcon(
-                                        FontAwesomeIcons.microphone,
-                                        color: Colors.grey,
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                                // Send button - only show when there's text
-                                if (shouldShowSendButton(provider))
-                                  ValueListenableBuilder<TextEditingValue>(
-                                    valueListenable: textController,
-                                    builder: (context, value, child) {
-                                      bool hasText = value.text.trim().isNotEmpty;
-                                      if (!hasText) return const SizedBox.shrink();
-
-                                      bool canSend = hasText &&
-                                          !provider.sendingMessage &&
-                                          !provider.isUploadingFiles &&
-                                          connectivityProvider.isConnected;
-
-                                      return GestureDetector(
-                                        onTap: canSend
-                                            ? () {
-                                                HapticFeedback.mediumImpact();
-                                                String message = textController.text.trim();
-                                                if (message.isEmpty) return;
-                                                _sendMessageUtil(message);
-                                              }
-                                            : null,
-                                        child: Container(
-                                          height: 44,
-                                          width: 44,
-                                          decoration: const BoxDecoration(
-                                            color: Colors.white,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Center(
-                                            child: FaIcon(
-                                              FontAwesomeIcons.arrowUp,
-                                              color: Color(0xFF1f1f25),
-                                              size: 18,
+                                      : Theme(
+                                          data: Theme.of(context).copyWith(
+                                            textSelectionTheme: TextSelectionThemeData(
+                                              selectionColor: Colors.grey.withOpacity(0.4),
+                                              selectionHandleColor: Colors.white,
                                             ),
                                           ),
+                                          child: TextField(
+                                            enabled: true,
+                                            controller: textController,
+                                            focusNode: textFieldFocusNode,
+                                            obscureText: false,
+                                            textAlign: TextAlign.start,
+                                            textAlignVertical: TextAlignVertical.center,
+                                            decoration: InputDecoration(
+                                              hintText: context.l10n.askAnything,
+                                              hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                              focusedBorder: InputBorder.none,
+                                              enabledBorder: InputBorder.none,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                                              isDense: true,
+                                            ),
+                                            minLines: 1,
+                                            maxLines: 10,
+                                            keyboardType: TextInputType.multiline,
+                                            textCapitalization: TextCapitalization.sentences,
+                                            style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
+                                          ),
                                         ),
-                                      );
-                                    },
+                                      ],
+                                    ),
                                   ),
-                              ],
+                                  // Microphone button
+                                  if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
+                                    GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.lightImpact();
+                                        FocusScope.of(context).unfocus();
+                                        setState(() {
+                                          _showVoiceRecorder = true;
+                                        });
+                                      },
+                                      child: Container(
+                                        height: 44,
+                                        width: 44,
+                                        alignment: Alignment.center,
+                                        child: const FaIcon(
+                                          FontAwesomeIcons.microphone,
+                                          color: Colors.grey,
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+                                  // Send button - only show when there's text
+                                  if (shouldShowSendButton(provider))
+                                    ValueListenableBuilder<TextEditingValue>(
+                                      valueListenable: textController,
+                                      builder: (context, value, child) {
+                                        bool hasText = value.text.trim().isNotEmpty;
+                                        if (!hasText) return const SizedBox.shrink();
+
+                                        bool canSend = hasText &&
+                                            !provider.sendingMessage &&
+                                            !provider.isUploadingFiles &&
+                                            connectivityProvider.isConnected;
+
+                                        return GestureDetector(
+                                          onTap: canSend
+                                              ? () {
+                                                  HapticFeedback.mediumImpact();
+                                                  String message = textController.text.trim();
+                                                  if (message.isEmpty) return;
+                                                  _sendMessageUtil(message);
+                                                }
+                                              : null,
+                                          child: Container(
+                                            height: 44,
+                                            width: 44,
+                                            decoration: const BoxDecoration(
+                                              color: Colors.white,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Center(
+                                              child: FaIcon(
+                                                FontAwesomeIcons.arrowUp,
+                                                color: Color(0xFF1f1f25),
+                                                size: 18,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        )
+                      ]
                     );
                   }),
                 ),
@@ -611,17 +634,26 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   _sendMessageUtil(String text) {
+    String? currentContext = _selectedContext;
+    setState(() {
+      _allowSpacer = true;
+      _selectedContext = null;
+    });
+
     // Remove focus from text field
-    textFieldFocusNode.unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    if (currentContext != null) {
+      text = 'Context: "$currentContext"\n\n$text';
+    }
 
     var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
     provider.addMessageLocally(text);
     textController.clear();
 
-    // Scroll to align user's message to top of screen
-    Future.delayed(const Duration(milliseconds: 100), () {
-      scrollToBottom();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) scrollToBottomOnSend();
     });
 
     provider.sendMessageStreamToServer(text);
@@ -640,19 +672,80 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
   }
 
-  void _moveListToBottom() {
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (scrollController.hasClients) {
+  void scrollToBottomOnSend() {
+    if (!scrollController.hasClients) return;
+
+    // Wait for the new message to be added to the widget tree
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!scrollController.hasClients) return;
+      
+      final currentPosition = scrollController.position.pixels;
+      final maxExtent = scrollController.position.maxScrollExtent;
+      final distance = (maxExtent - currentPosition).abs();
+      
+      // If user is very far from bottom, just jump instantly
+      if (distance > 1000) {
+        scrollController.jumpTo(maxExtent);
+        // After jump, check once more after layout settles
+        _ensureAtBottom(delayMs: 100);
+      } else if (distance > 300) {
+        // Medium distance - smooth but quick animation
         scrollController.animateTo(
-          0.0,
+          maxExtent,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOut,
+        ).then((_) => _ensureAtBottom(delayMs: 50));
+      } else {
+        // Already near bottom - gentle animation
+        scrollController.animateTo(
+          maxExtent,
           duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        ).then((_) => _ensureAtBottom(delayMs: 50));
+      }
+    });
+  }
+
+  void _ensureAtBottom({int delayMs = 50}) {
+    Future.delayed(Duration(milliseconds: delayMs), () {
+      if (!scrollController.hasClients) return;
+      
+      final current = scrollController.position.pixels;
+      final max = scrollController.position.maxScrollExtent;
+      
+      // Only adjust if we're noticeably not at bottom (more than 20 pixels off)
+      if (max - current > 20) {
+        scrollController.animateTo(
+          max,
+          duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
-  scrollToBottom() => _moveListToBottom();
+  void scrollToBottom({bool animated = false}) {
+    if (!scrollController.hasClients) return;
+
+    final position = scrollController.position;
+    final target = position.maxScrollExtent;
+    final distance = (target - position.pixels).abs();
+
+    if (distance > 350) {
+      scrollController.jumpTo(target);
+      return;
+    }
+
+    if (animated) {
+      scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      scrollController.jumpTo(target);
+    }
+  }
 
   void _handleAppSelection(String? val, AppProvider provider) {
     if (val == null || val == provider.selectedChatAppId) {
@@ -668,9 +761,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       return;
     }
 
-    // enable apps - navigate back to home and show apps page
+    // enable apps - navigate to chat capability apps page
     if (val == 'enable') {
-      _navigateToAppsPage();
+      _navigateToChatAppsPage();
       return;
     }
 
@@ -691,24 +784,58 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
             context.read<MessageProvider>().clearChat();
             Navigator.of(context).pop();
           }
-        }, "Clear Chat?", "Are you sure you want to clear the chat? This action cannot be undone.");
+        }, "Clear Chat?", context.l10n.clearChatConfirm);
       },
     );
   }
 
-  void _navigateToAppsPage() {
+  Future<void> _navigateToChatAppsPage() async {
     if (!mounted) return;
 
     MixpanelManager().pageOpened('Chat Apps');
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => const HomePageWrapper(navigateToRoute: '/apps'),
+    // Navigate to chat capability apps page
+    await routeToPage(
+      context,
+      CapabilityAppsPage(
+        capability: AppCapability(id: 'chat', title: 'Chat Assistants'),
+        apps: const [],
       ),
     );
+
+    // Refresh chat apps when returning from the page
+    if (mounted) {
+      _refreshChatAppsFromLocal();
+    }
+  }
+
+  void _refreshChatAppsFromLocal() {
+    // Get enabled chat apps from local AppProvider immediately
+    final appProvider = context.read<AppProvider>();
+    final messageProvider = context.read<MessageProvider>();
+
+    // Filter apps that are enabled and work with chat
+    final localChatApps = appProvider.apps.where((app) => app.enabled && app.worksWithChat()).toList();
+
+    // Update immediately with local data
+    messageProvider.setChatApps(localChatApps);
+  }
+
+  Future<void> _handleAppUninstall(String appId, AppProvider appProvider, MessageProvider messageProvider) async {
+    if (!mounted) return;
+
+    // Immediately remove from local chat apps list for instant visual feedback
+    messageProvider.removeChatApp(appId);
+
+    // Disable the app on server (runs in background)
+    appProvider.toggleApp(appId, false, null);
   }
 
   void _selectApp(String appId, AppProvider appProvider) async {
     if (!mounted) return;
+
+    setState(() {
+      _allowSpacer = false;
+    });
 
     // Mark that we're no longer on initial load to prevent auto-focus
     _isInitialLoad = false;
@@ -736,6 +863,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Get the selected app and send initial message if needed
     var app = appProvider.getSelectedApp();
     if (messageProvider.messages.isEmpty) {
+      setState(() {
+        _allowSpacer = true;
+      });
       messageProvider.sendInitialAppMessage(app);
     }
   }
@@ -744,26 +874,52 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     return AppBar(
       backgroundColor: Theme.of(context).colorScheme.surface,
       elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
-        onPressed: () => Navigator.of(context).pop(),
+      leading: Container(
+        width: 36,
+        height: 36,
+        margin: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(0.3),
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+          onPressed: () {
+            HapticFeedback.mediumImpact();
+            Navigator.of(context).pop();
+          },
+        ),
       ),
       title: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
-          return _buildAppSelection(context, appProvider);
+          return _buildSelectedAppDisplay(context, appProvider);
         },
       ),
       centerTitle: true,
-      actions: const [
-        // IconButton(
-        //   icon: const Icon(Icons.history, color: Colors.white),
-        //   onPressed: () {
-        //     HapticFeedback.mediumImpact();
-        //     // Dismiss keyboard before opening drawer
-        //     FocusScope.of(context).unfocus();
-        //     scaffoldKey.currentState?.openEndDrawer();
-        //   },
-        // ),
+      actions: [
+        Container(
+          width: 36,
+          height: 36,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            color: Colors.grey.withOpacity(0.3),
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.extension, color: Colors.white, size: 18),
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              // Dismiss keyboard before opening drawer
+              FocusScope.of(context).unfocus();
+              // Use post-frame callback to ensure scaffold state is ready
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                scaffoldKey.currentState?.openEndDrawer();
+              });
+            },
+          ),
+        ),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -784,169 +940,275 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
   }
 
-  void _showAppsMenu(BuildContext ctx, AppProvider appProvider) {
-    final renderBox = _appButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+  Widget _buildSelectedAppDisplay(BuildContext context, AppProvider provider) {
+    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
 
-    final overlay = Overlay.of(ctx, rootOverlay: true);
-
-    final buttonOffset = renderBox.localToGlobal(Offset.zero);
-    final buttonSize = renderBox.size;
-    final screenSize = MediaQuery.of(ctx).size;
-
-    const double menuWidth = 260;
-    const double maxMenuHeight = 250;
-
-    double desiredTop = buttonOffset.dy + buttonSize.height + 8;
-    if ((desiredTop + maxMenuHeight) > screenSize.height) {
-      desiredTop = buttonOffset.dy - maxMenuHeight - 8;
-      if (desiredTop < 0) desiredTop = 8;
-    }
-
-    late OverlayEntry entry;
-
-    final controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
+        const SizedBox(width: 8),
+        Container(
+          constraints: const BoxConstraints(maxWidth: 140),
+          child: Text(
+            selectedApp != null ? selectedApp.getName() : "Omi",
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
-    final curved = CurvedAnimation(parent: controller, curve: Curves.easeOut);
+  }
 
-    entry = OverlayEntry(
-      builder: (context) {
-        return Consumer<MessageProvider>(
-          builder: (context, msgProvider, _) {
-            return Stack(
+  Widget _buildChatAppsEndDrawer(BuildContext context) {
+    return Drawer(
+      backgroundColor: const Color(0xFF1F1F25),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          bottomLeft: Radius.circular(20),
+        ),
+      ),
+      child: SafeArea(
+        child: Consumer2<MessageProvider, AppProvider>(
+          builder: (context, messageProvider, appProvider, child) {
+            final chatApps = messageProvider.chatApps;
+            final selectedAppId = appProvider.selectedChatAppId;
+            final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: () {
-                      controller.reverse().then((_) => entry.remove());
-                    },
-                    child: Container(color: Colors.transparent),
-                  ),
-                ),
-                Positioned(
-                  left: buttonOffset.dx + (buttonSize.width - menuWidth) / 2,
-                  top: desiredTop,
-                  child: AnimatedBuilder(
-                    animation: curved,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: curved.value,
-                        alignment: Alignment.topCenter,
-                        child: Opacity(
-                          opacity: curved.value,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Material(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(12),
-                      elevation: 8,
-                      child: SizedBox(
-                        width: menuWidth,
-                        height: maxMenuHeight,
-                        child: PullDownMenu(
-                          items: [
-                            PullDownMenuItem(
-                              title: 'Clear Chat',
-                              iconWidget: const Icon(Icons.delete, color: Colors.redAccent, size: 16),
-                              onTap: () {
-                                controller.reverse().then((_) {
-                                  entry.remove();
-                                  _handleAppSelection('clear_chat', appProvider);
-                                });
-                              },
-                            ),
-                            PullDownMenuItem(
-                              title: 'Enable Apps',
-                              iconWidget: const Icon(Icons.arrow_forward_ios, color: Colors.white60, size: 16),
-                              onTap: () {
-                                controller.reverse().then((_) {
-                                  entry.remove();
-                                  _handleAppSelection('enable', appProvider);
-                                });
-                              },
-                            ),
-                            PullDownMenuItem(
-                              title: 'Omi',
-                              iconWidget: _getOmiAvatar(),
-                              onTap: () {
-                                controller.reverse().then((_) {
-                                  entry.remove();
-                                  _handleAppSelection('no_selected', appProvider);
-                                });
-                              },
-                              subtitle:
-                                  msgProvider.chatApps.firstWhereOrNull((a) => a.id == appProvider.selectedChatAppId) ==
-                                          null
-                                      ? 'Selected'
-                                      : null,
-                            ),
-                            ...msgProvider.chatApps.map(
-                              (app) => PullDownMenuItem(
-                                title: app.getName(),
-                                iconWidget: _getAppAvatar(app),
-                                onTap: () {
-                                  controller.reverse().then((_) {
-                                    entry.remove();
-                                    _handleAppSelection(app.id, appProvider);
-                                  });
-                                },
-                                subtitle: appProvider.selectedChatAppId == app.id ? 'Selected' : null,
-                              ),
-                            )
-                          ],
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Chat Apps',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
+                      IconButton(
+                        icon: const Padding(
+                          padding: EdgeInsets.only(left: 2, top: 1),
+                          child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                // Actions
+                ListTile(
+                  leading: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
+                  ),
+                  title: const Text(
+                    'Clear Chat',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 16),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _handleAppSelection('clear_chat', appProvider);
+                  },
+                ),
+                ListTile(
+                  leading: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
+                  ),
+                  title: const Text(
+                    'Enable Apps',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  trailing: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
+                  ),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    _navigateToChatAppsPage();
+                  },
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 20, 8),
+                  child: Text(
+                    'Select App',
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
+                  ),
+                ),
+                // App list
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      // Omi option
+                      _buildDrawerAppItem(
+                        avatar: _getOmiAvatar(),
+                        name: 'Omi',
+                        isSelected: isOmiSelected,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _handleAppSelection('no_selected', appProvider);
+                        },
+                      ),
+                      // Enabled chat apps
+                      ...chatApps.map((app) => _buildDrawerAppItem(
+                            avatar: _getAppAvatar(app),
+                            name: app.getName(),
+                            isSelected: selectedAppId == app.id,
+                            appId: app.id,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              _handleAppSelection(app.id, appProvider);
+                            },
+                            onConfirmDelete: selectedAppId != app.id
+                                ? () => _handleAppUninstall(app.id, appProvider, messageProvider)
+                                : null,
+                          )),
+                      if (chatApps.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            'No chat apps enabled.\nTap "Enable Apps" to add some.',
+                            style: TextStyle(color: Colors.white38, fontSize: 14),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ],
             );
           },
-        );
-      },
+        ),
+      ),
     );
-
-    overlay.insert(entry);
-    controller.forward();
   }
 
-  Widget _buildAppSelection(BuildContext context, AppProvider provider) {
-    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+  Widget _buildDrawerAppItem({
+    required Widget avatar,
+    required String name,
+    required bool isSelected,
+    required VoidCallback onTap,
+    String? appId,
+    VoidCallback? onConfirmDelete,
+  }) {
+    final bool isPendingDelete = appId != null && _pendingDeleteAppId == appId;
 
-    return GestureDetector(
-      key: _appButtonKey,
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        _showAppsMenu(context, provider);
-      },
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-          const SizedBox(width: 8),
-          Container(
-            constraints: const BoxConstraints(maxWidth: 100),
-            child: Text(
-              selectedApp != null ? selectedApp.getName() : "Omi",
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              overflow: TextOverflow.fade,
+    if (isPendingDelete) {
+      // Show inline confirmation buttons - match ListTile height (56px)
+      return Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            avatar,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                name,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          const SizedBox(
-            width: 16,
-            child: Icon(Icons.keyboard_arrow_down, color: Colors.white60, size: 16),
-          ),
-        ],
+            const SizedBox(width: 8),
+            // Cancel button (white)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = null;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Disable button (red)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = null;
+                });
+                onConfirmDelete?.call();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'Disable',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListTile(
+      leading: avatar,
+      title: Text(
+        name,
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        overflow: TextOverflow.ellipsis,
       ),
+      trailing: isSelected
+          ? const Padding(
+              padding: EdgeInsets.only(left: 2, top: 1),
+              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
+            )
+          : appId != null && onConfirmDelete != null
+              ? GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _pendingDeleteAppId = appId;
+                    });
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 2, top: 1),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+                  ),
+                )
+              : null,
+      selected: isSelected,
+      selectedTileColor: Colors.white.withOpacity(0.1),
+      onTap: onTap,
     );
   }
 

@@ -1,66 +1,30 @@
 import asyncio
-import json
-from datetime import datetime, timezone
-from typing import List, Dict, Optional, Callable
+import time
 import uuid
+from typing import Callable, Dict, List, Optional
 
-import database.conversations as conversations_db
-import database.memories as memories_db
-from models.conversation import ConversationStatus, ConversationSource
-from models.memories import MemoryDB, MemoryCategory
 from utils.llm.clients import llm_mini
 
-
 ONBOARDING_QUESTIONS = [
-    {
-        'question': "What should I call you?",
-        'category': 'name'
-    },
-    {
-        'question': "Where do you live?",
-        'category': 'location'
-    },
-    {
-        'question': "What do you do for work?",
-        'category': 'work'
-    },
-    {
-        'question': "What kind of work or projects are you passionate about?",
-        'category': 'work_passion'
-    },
-    {
-        'question': "What are some hobbies or interests you enjoy outside of work?",
-        'category': 'hobbies'
-    },
-    {
-        'question': "What's something you'd love to have more time for?",
-        'category': 'time_wishes'
-    },
-    {
-        'question': "What's a challenge you're currently working through?",
-        'category': 'current_challenges'
-    },
-    {
-        'question': "What is your long-term goal?",
-        'category': 'long_term_goal'
-    },
-    {
-        'question': "How do you hope I can help you in your daily life?",
-        'category': 'omi_expectations'
-    },
-    {
-        'question': "What's on your mind for today or this week?",
-        'category': 'immediate_focus'
-    },
+    {'question': "How old are you?", 'category': 'age'},
+    {'question': "Where do you live?", 'category': 'location'},
+    {'question': "What do you do for work?", 'category': 'work'},
+    {'question': "What is your long-term goal?", 'category': 'long_term_goal'},
+    {'question': "What are your goals this month?", 'category': 'monthly_goals'},
+    {'question': "What do you have planned for today?", 'category': 'daily_plans'},
 ]
 
 
 class OnboardingHandler:
     """Handles onboarding question flow via websocket"""
 
-    def __init__(self, uid: str, send_message: Callable):
+    # Special speaker ID for Omi question segments (use 99 to avoid conflicts with real speakers)
+    OMI_SPEAKER_ID = 99
+
+    def __init__(self, uid: str, send_message: Callable, stream_transcript: Optional[Callable] = None):
         self.uid = uid
         self.send_message = send_message
+        self.stream_transcript = stream_transcript  # Callback to inject segments into transcript stream
         self.questions = ONBOARDING_QUESTIONS.copy()
         self.current_question_index = 0
         self.answers: List[Dict] = []
@@ -68,6 +32,8 @@ class OnboardingHandler:
         self.silence_timer: Optional[asyncio.Task] = None
         self.is_checking_answer = False
         self.completed = False
+        self.start_time: Optional[float] = None  # Track when onboarding started
+        self.last_segment_end: float = 0.0  # Track end time for question segment timing
 
     @property
     def current_question(self) -> Optional[Dict]:
@@ -75,13 +41,55 @@ class OnboardingHandler:
             return self.questions[self.current_question_index]
         return None
 
+    def _get_elapsed_time(self) -> float:
+        """Get elapsed time since onboarding started."""
+        if self.start_time is None:
+            self.start_time = time.time()
+        return time.time() - self.start_time
+
+    def _create_question_segment(self) -> Optional[Dict]:
+        """Create a transcript segment for the current question."""
+        if not self.current_question:
+            return None
+
+        # Question segment starts after last segment ended, with small gap
+        start_time = self.last_segment_end + 0.5 if self.last_segment_end > 0 else 0.0
+        # Estimate end time based on question length (rough: 150 words per minute)
+        words = len(self.current_question['question'].split())
+        duration = max(1.0, words / 2.5)  # At least 1 second
+        end_time = start_time + duration
+
+        return {
+            'id': str(uuid.uuid4()),
+            'text': self.current_question['question'],
+            'start': start_time,
+            'end': end_time,
+            'speaker': f'SPEAKER_{self.OMI_SPEAKER_ID}',  # Use consistent format with STT output
+            'speaker_id': self.OMI_SPEAKER_ID,
+            'is_user': False,
+            'person_id': None,
+        }
+
+    def update_segment_timing(self, segments: List[dict]):
+        """Update timing tracking based on received segments."""
+        for segment in segments:
+            end_time = segment.get('end', 0)
+            if end_time > self.last_segment_end:
+                self.last_segment_end = end_time
+
     def on_segments_received(self, segments: List[dict]):
         """Called when new transcript segments are received"""
         if self.completed or self.is_checking_answer:
             return
 
-        # Accumulate transcript for current question
-        new_text = ' '.join(s.get('text', '') for s in segments).strip()
+        # Update timing tracking
+        self.update_segment_timing(segments)
+
+        # Accumulate transcript for current question (ignore Omi segments)
+        new_text = ' '.join(
+            s.get('text', '') for s in segments
+            if s.get('speaker_id') != self.OMI_SPEAKER_ID
+        ).strip()
         if new_text:
             if self.current_transcript:
                 self.current_transcript += ' ' + new_text
@@ -92,7 +100,7 @@ class OnboardingHandler:
         if self.silence_timer:
             self.silence_timer.cancel()
 
-        # Start new silence timer (4 seconds)
+        # Start new silence timer (2 seconds)
         self.silence_timer = asyncio.create_task(self._silence_check())
 
     async def _silence_check(self):
@@ -119,17 +127,22 @@ class OnboardingHandler:
 
         # Record that this question was skipped
         if self.current_question:
-            self.answers.append({
-                'question': self.current_question['question'],
-                'answer': self.current_transcript.strip() if self.current_transcript.strip() else '[skipped]',
-                'category': self.current_question['category'],
-                'skipped': True,
-            })
+            self.answers.append(
+                {
+                    'question': self.current_question['question'],
+                    'answer': self.current_transcript.strip() if self.current_transcript.strip() else '[skipped]',
+                    'category': self.current_question['category'],
+                    'skipped': True,
+                }
+            )
 
         # Send event to app
-        await self._send_event('question_skipped', {
-            'question_index': self.current_question_index,
-        })
+        await self._send_event(
+            'question_skipped',
+            {
+                'question_index': self.current_question_index,
+            },
+        )
 
         # Move to next question
         self.current_question_index += 1
@@ -160,17 +173,22 @@ class OnboardingHandler:
 
             if answered:
                 # Save answer
-                self.answers.append({
-                    'question': question,
-                    'answer': transcript,
-                    'category': self.current_question['category'],
-                })
+                self.answers.append(
+                    {
+                        'question': question,
+                        'answer': transcript,
+                        'category': self.current_question['category'],
+                    }
+                )
 
                 # Send event to app
-                await self._send_event('question_answered', {
-                    'question_index': self.current_question_index,
-                    'answered': True,
-                })
+                await self._send_event(
+                    'question_answered',
+                    {
+                        'question_index': self.current_question_index,
+                        'answered': True,
+                    },
+                )
 
                 # Move to next question
                 self.current_question_index += 1
@@ -206,131 +224,41 @@ Reply with only "yes" or "no"."""
         await self.send_message(event)
 
     async def send_current_question(self):
-        """Send current question to client"""
+        """Send current question to client and inject as transcript segment"""
         if self.current_question:
-            await self._send_event('onboarding_question', {
-                'question': self.current_question['question'],
-                'question_index': self.current_question_index,
-                'total_questions': len(self.questions),
-            })
+            # Create and inject question segment into transcript stream
+            question_segment = self._create_question_segment()
+            if question_segment and self.stream_transcript:
+                self.stream_transcript([question_segment])
+                # Update last_segment_end to account for the question segment
+                self.last_segment_end = question_segment['end']
+
+            await self._send_event(
+                'onboarding_question',
+                {
+                    'question': self.current_question['question'],
+                    'question_index': self.current_question_index,
+                    'total_questions': len(self.questions),
+                    'question_segment_id': question_segment['id'] if question_segment else None,
+                },
+            )
 
     async def _complete_onboarding(self):
-        """Create conversation and memories when all questions answered"""
+        """Signal completion when all questions answered.
+
+        The conversation is already being created/updated by the normal
+        transcription flow in transcribe.py. We just signal completion
+        so the client can finalize the speech profile and trigger
+        conversation processing.
+        """
         self.completed = True
 
-        try:
-            conversation_id = await self._create_conversation()
-            await self._create_memories(conversation_id)
-
-            await self._send_event('onboarding_complete', {
-                'conversation_id': conversation_id,
-                'memories_created': len(self.answers),
-            })
-        except Exception as e:
-            print(f"Error completing onboarding: {e}")
-            await self._send_event('onboarding_complete', {'error': str(e)})
-
-    async def _create_conversation(self) -> str:
-        """Create onboarding conversation in database"""
-        conversation_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc)
-
-        # Build transcript segments
-        transcript_segments = []
-        current_time = 0.0
-
-        for qa in self.answers:
-            transcript_segments.append({
-                'text': qa['question'],
-                'speaker': 'SPEAKER_00',
-                'speaker_id': 0,
-                'is_user': False,
-                'start': current_time,
-                'end': current_time + 2.0,
-            })
-            current_time += 2.0
-
-            transcript_segments.append({
-                'text': qa['answer'],
-                'speaker': 'SPEAKER_01',
-                'speaker_id': 1,
-                'is_user': True,
-                'start': current_time,
-                'end': current_time + 5.0,
-            })
-            current_time += 5.0
-
-        overview = await self._generate_overview()
-
-        conversation_data = {
-            'id': conversation_id,
-            'created_at': now,
-            'started_at': now,
-            'finished_at': now,
-            'source': ConversationSource.onboarding.value,
-            'language': 'en',
-            'structured': {
-                'title': 'Getting to Know You',
-                'overview': overview,
-                'emoji': '👋',
-                'category': 'personal',
-                'action_items': [],
-                'events': [],
+        await self._send_event(
+            'onboarding_complete',
+            {
+                'answers_count': len(self.answers),
             },
-            'transcript_segments': transcript_segments,
-            'plugins_results': [],
-            'apps_results': [],
-            'geolocation': None,
-            'photos': [],
-            'status': ConversationStatus.completed.value,
-            'discarded': False,
-        }
-
-        conversations_db.upsert_conversation(self.uid, conversation_data)
-        return conversation_id
-
-    async def _generate_overview(self) -> str:
-        """Generate overview using LLM"""
-        try:
-            summary_parts = [f"Q: {qa['question']}\nA: {qa['answer']}" for qa in self.answers]
-            prompt = f"""Based on these onboarding Q&A, write a brief 1-2 sentence overview:
-
-{chr(10).join(summary_parts)}
-
-Return ONLY the overview text."""
-
-            response = await asyncio.to_thread(llm_mini.invoke, prompt)
-            return response.content.strip()
-        except:
-            return "Onboarding conversation where the user shared personal information and goals."
-
-    async def _create_memories(self, conversation_id: str):
-        """Create memories from answers"""
-        now = datetime.now(timezone.utc)
-
-        for qa in self.answers:
-            # Skip creating memories for skipped questions with no real answer
-            if qa.get('skipped') and qa.get('answer') == '[skipped]':
-                continue
-
-            memory_data = MemoryDB(
-                id=str(uuid.uuid4()),
-                uid=self.uid,
-                content=f"{qa['question']} - {qa['answer']}",
-                category=MemoryCategory.interesting,
-                created_at=now,
-                updated_at=now,
-                conversation_id=conversation_id,
-                reviewed=False,
-                manually_added=False,
-                visibility='private',
-            )
-            memory_data.scoring = MemoryDB.calculate_score(memory_data)
-
-            try:
-                memories_db.create_memory(self.uid, memory_data.dict())
-            except Exception as e:
-                print(f"Error creating memory: {e}")
+        )
 
     def cleanup(self):
         """Cleanup resources"""

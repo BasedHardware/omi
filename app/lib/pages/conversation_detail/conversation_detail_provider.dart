@@ -142,17 +142,17 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   void updateConversation(String conversationId, DateTime date) {
-    selectedDate = date;
     final list = conversationProvider?.groupedConversations[date];
     if (list != null) {
       final conv = list.firstWhereOrNull((c) => c.id == conversationId);
       if (conv != null) {
+        selectedDate = date;
         _cachedConversationId = conv.id;
         _cachedConversation = conv;
+        appResponseExpanded = List.filled(conv.appResults.length, false);
+        notifyListeners();
       }
     }
-    appResponseExpanded = List.filled(conversation.appResults.length, false);
-    notifyListeners();
   }
 
   void updateEventState(bool state, int i) {
@@ -483,6 +483,27 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
     notifyListeners();
+  }
+
+  Future<void> refreshConversation() async {
+    try {
+      final updatedConversation = await getConversationById(conversation.id);
+      if (updatedConversation != null) {
+        _cachedConversation = updatedConversation;
+        conversationProvider?.updateConversation(updatedConversation);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error refreshing conversation: $e');
+    }
+  }
+
+  void updateFolderIdLocally(String? newFolderId) {
+    if (_cachedConversation != null) {
+      _cachedConversation!.folderId = newFolderId;
+      conversationProvider?.updateConversation(_cachedConversation!);
+      notifyListeners();
+    }
   }
 
   String? _preferredSummarizationAppId;

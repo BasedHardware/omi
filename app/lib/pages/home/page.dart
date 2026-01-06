@@ -19,8 +19,12 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -29,27 +33,32 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
 import 'package:upgrader/upgrader.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/pages/home/widgets/sync_bottom_sheet.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
-  const HomePageWrapper({super.key, this.navigateToRoute});
+  final String? autoMessage;
+  const HomePageWrapper({super.key, this.navigateToRoute, this.autoMessage});
 
   @override
   State<HomePageWrapper> createState() => _HomePageWrapperState();
@@ -57,6 +66,7 @@ class HomePageWrapper extends StatefulWidget {
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
   String? _navigateToRoute;
+  String? _autoMessage;
 
   @override
   void initState() {
@@ -67,21 +77,28 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
+
+        // Schedule daily reflection notification if enabled
+        if (SharedPreferencesUtil().dailyReflectionEnabled) {
+          DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
+        }
       }
     });
     _navigateToRoute = widget.navigateToRoute;
+    _autoMessage = widget.autoMessage;
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    return HomePage(navigateToRoute: _navigateToRoute, autoMessage: _autoMessage);
   }
 }
 
 class HomePage extends StatefulWidget {
   final String? navigateToRoute;
-  const HomePage({super.key, this.navigateToRoute});
+  final String? autoMessage;
+  const HomePage({super.key, this.navigateToRoute, this.autoMessage});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -275,12 +292,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             }
           }
           // Navigate to chat page directly since it's no longer in the tab bar
+          // If there's an auto-message (e.g., from daily reflection notification), send it
+          final autoMessageToSend = widget.autoMessage;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ChatPage(isPivotBottom: false),
+                  builder: (context) => ChatPage(
+                    isPivotBottom: false,
+                    autoMessage: autoMessageToSend,
+                  ),
                 ),
               );
             }
@@ -335,6 +357,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
             });
           }
+          break;
+                  case "daily-summary":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Track notification opened
+            MixpanelManager().dailySummaryNotificationOpened(
+              summaryId: detailPageId,
+              date: '', // Date not available in navigate_to, will be fetched when detail page loads
+            );
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailySummaryDetailPage(summaryId: detailPageId!),
+                  ),
+                );
+              }
+            });
+          }
+break;
+        case "wrapped":
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const Wrapped2025Page(),
+                ),
+              );
+            }
+          });
           break;
         default:
       }
@@ -430,16 +484,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  if (mounted) {
-                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<ConversationProvider>().getInitialConversations();
-                    } else {
-                      // Force refresh when internet connection is restored
-                      await ctx.read<ConversationProvider>().forceRefreshConversations();
-                    }
-                    if (ctx.read<MessageProvider>().messages.isEmpty) {
-                      await ctx.read<MessageProvider>().refreshMessages();
-                    }
+                  if (!mounted) return;
+
+                  final convoProvider = ctx.read<ConversationProvider>();
+                  final messageProvider = ctx.read<MessageProvider>();
+
+                  if (convoProvider.conversations.isEmpty) {
+                    await convoProvider.getInitialConversations();
+                  } else {
+                    // Force refresh when internet connection is restored
+                    await convoProvider.forceRefreshConversations();
+                  }
+
+                  if (messageProvider.messages.isEmpty) {
+                    await messageProvider.refreshMessages();
                   }
                 });
               });
@@ -673,25 +731,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                         );
                                       },
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(28),
+                                          borderRadius: BorderRadius.circular(32),
                                           color: Colors.deepPurple,
                                         ),
-                                        child: const Row(
+                                        child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(
+                                            const Icon(
                                               FontAwesomeIcons.solidComment,
-                                              size: 20,
+                                              size: 22,
                                               color: Colors.white,
                                             ),
-                                            SizedBox(width: 8),
+                                            const SizedBox(width: 10),
                                             Text(
-                                              'Ask Omi',
-                                              style: TextStyle(
+                                              context.l10n.askOmi,
+                                              style: const TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 16,
+                                                fontSize: 17,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -767,18 +825,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              // Sync icon for Limitless devices
+              // Sync icon - shows when there are pending files on device or a device is paired
               Consumer2<DeviceProvider, SyncProvider>(
                 builder: (context, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
-                  final hasPending = syncProvider.missingWals.isNotEmpty;
+                  // Only show orange indicator for files still on device (SD card or Limitless)
+                  final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  if (device != null && device.type == DeviceType.limitless) {
+                  // Show sync icon if there's a paired device OR if there are pending files on device
+                  if (device != null || hasPendingOnDevice) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
-                        SyncBottomSheet.show(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SyncPage()),
+                        );
                       },
                       child: Container(
                         width: 36,
@@ -787,7 +850,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         decoration: BoxDecoration(
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orange.withValues(alpha: 0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -797,7 +860,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           size: 18,
                           color: isSyncing
                               ? Colors.deepPurpleAccent
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orangeAccent
                                   : Colors.white70,
                         ),
@@ -876,12 +939,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 context: context,
                                 builder: (BuildContext context) {
                                   return Container(
-                                    height: 300,
+                                    height: 420,
                                     padding: const EdgeInsets.only(top: 6.0),
                                     margin: EdgeInsets.only(
                                       bottom: MediaQuery.of(context).viewInsets.bottom,
                                     ),
-                                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                                    color: const Color(0xFF1F1F25),
                                     child: SafeArea(
                                       top: false,
                                       child: Column(
@@ -904,9 +967,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 CupertinoButton(
                                                   padding: EdgeInsets.zero,
                                                   onPressed: () => Navigator.of(context).pop(),
-                                                  child: const Text(
-                                                    'Cancel',
-                                                    style: TextStyle(
+                                                  child: Text(
+                                                    context.l10n.cancel,
+                                                    style: const TextStyle(
                                                       color: Colors.white,
                                                       fontSize: 16,
                                                     ),
@@ -924,9 +987,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                       MixpanelManager().calendarFilterApplied(selectedDate);
                                                     }
                                                   },
-                                                  child: const Text(
-                                                    'Done',
-                                                    style: TextStyle(
+                                                  child: Text(
+                                                    context.l10n.done,
+                                                    style: const TextStyle(
                                                       color: Colors.deepPurple,
                                                       fontSize: 16,
                                                       fontWeight: FontWeight.w600,
@@ -938,15 +1001,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                           ),
                                           // Date picker
                                           Expanded(
-                                            child: Container(
-                                              color: const Color(0xFF1F1F25),
-                                              child: CupertinoDatePicker(
-                                                mode: CupertinoDatePickerMode.date,
-                                                initialDateTime: DateTime.now(),
-                                                minimumDate: DateTime(2020),
-                                                maximumDate: DateTime.now(),
-                                                onDateTimeChanged: (DateTime newDate) {
-                                                  selectedDate = newDate;
+                                            child: Material(
+                                              color: ResponsiveHelper.backgroundSecondary,
+                                              child: CalendarDatePicker2(
+                                                config: getDefaultCalendarConfig(
+                                                  firstDate: DateTime(2020),
+                                                  lastDate: DateTime.now(),
+                                                  currentDate: DateTime.now(),
+                                                ),
+                                                value: [selectedDate],
+                                                onValueChanged: (dates) {
+                                                  if (dates.isNotEmpty) {
+                                                    selectedDate = dates[0];
+                                                  }
                                                 },
                                               ),
                                             ),
@@ -962,26 +1029,63 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Star filter button
+                    ],
+                  );
+                },
+              ),
+              // Action items page buttons - export and completed toggle
+              Consumer2<HomeProvider, ActionItemsProvider>(
+                builder: (context, homeProvider, actionItemsProvider, _) {
+                  if (homeProvider.selectedIndex != 1) {
+                    return const SizedBox.shrink();
+                  }
+                  final showCompleted = actionItemsProvider.showCompletedView;
+                  return Row(
+                    children: [
+                      // Export button
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1F1F25),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(
+                            Icons.ios_share,
+                            size: 18,
+                            color: Colors.white70,
+                          ),
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => const TaskIntegrationsPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Completed toggle
                       Container(
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: convoProvider.showStarredOnly
-                              ? Colors.amber.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
+                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
                           padding: EdgeInsets.zero,
                           icon: Icon(
-                            convoProvider.showStarredOnly ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
-                            size: 16,
-                            color: convoProvider.showStarredOnly ? Colors.amber : Colors.white70,
+                            showCompleted ? Icons.check_circle : Icons.check_circle_outline,
+                            size: 18,
+                            color: showCompleted ? Colors.white : Colors.white70,
                           ),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            convoProvider.toggleStarredFilter();
+                            actionItemsProvider.toggleShowCompletedView();
                           },
                         ),
                       ),

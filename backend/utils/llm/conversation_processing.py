@@ -18,6 +18,156 @@ from models.conversation import (
 from .clients import llm_mini, parser, llm_high, llm_medium_experiment
 
 
+# =============================================
+#            FOLDER ASSIGNMENT
+# =============================================
+
+
+class FolderAssignment(BaseModel):
+    """Model for AI folder assignment response."""
+
+    folder_id: str = Field(description="The ID of the best matching folder for this conversation")
+    confidence: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="Confidence score for folder assignment (0.0 to 1.0)"
+    )
+    reasoning: str = Field(default="", description="Brief explanation of why this folder was chosen")
+
+
+def build_folders_context(folders: List[dict]) -> str:
+    """
+    Build context string for LLM folder assignment using natural language descriptions.
+
+    Each folder's description explains what conversations belong in it,
+    allowing the AI to match based on intent rather than keywords.
+    """
+    if not folders:
+        return "No folders available. Use default assignment."
+
+    lines = []
+    for folder in folders:
+        folder_id = folder.get('id', '')
+        name = folder.get('name', '')
+        description = folder.get('description', '')
+        is_default = folder.get('is_default', False)
+
+        # Format: folder_id | "Folder Name" → Description
+        if description:
+            line = f'- {folder_id} | "{name}" → {description}'
+        else:
+            line = f'- {folder_id} | "{name}"'
+
+        if is_default:
+            line += " (DEFAULT - use when no other folder matches)"
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+def assign_conversation_to_folder(
+    transcript: str,
+    title: str,
+    overview: str,
+    category: str,
+    user_folders: List[dict],
+) -> Tuple[Optional[str], float, str]:
+    """
+    Use AI to assign a conversation to the most appropriate folder.
+
+    Args:
+        transcript: The conversation transcript
+        title: The conversation title
+        overview: The conversation overview/summary
+        category: The conversation category
+        user_folders: List of user's folders with id, name, description, is_default
+
+    Returns:
+        Tuple of (folder_id, confidence, reasoning)
+        Returns (None, 0.0, reason) if assignment fails or confidence is too low
+    """
+    if not user_folders:
+        return None, 0.0, "No folders available"
+
+    folders_context = build_folders_context(user_folders)
+
+    # Find default folder for fallback
+    default_folder = next((f for f in user_folders if f.get('is_default')), None)
+    default_folder_id = default_folder.get('id') if default_folder else None
+
+    # Build conversation context
+    conversation_context = f"""
+Title: {title}
+Category: {category}
+Overview: {overview}
+
+Transcript excerpt (first 500 chars):
+{transcript[:500] if transcript else 'No transcript'}
+""".strip()
+
+    prompt_text = '''You are an expert at organizing conversations into folders.
+
+The user has organized their folders with descriptions that explain what belongs in each:
+
+{folders_context}
+
+Based on the **primary topic and intent** of the conversation below, choose the folder whose description best matches.
+
+CONVERSATION:
+{conversation_context}
+
+DECISION PROCESS:
+1. What is the main subject being discussed?
+2. Which folder description aligns best with this subject?
+3. If multiple folders could apply, choose based on the **primary purpose** of the conversation
+4. If no folder clearly matches (confidence < 0.5), use the DEFAULT folder
+
+Example reasoning:
+- A conversation about "meeting with trainer to plan an AI fitness app" could match both Health and Technology
+- Since the primary purpose is building an app, Technology is the better match
+
+Provide:
+- folder_id: The ID of the best matching folder (from the list above)
+- confidence: A score from 0.0 to 1.0 indicating match strength
+  * 0.8-1.0: Clear match - conversation clearly fits the folder description
+  * 0.5-0.8: Reasonable match - conversation relates to the folder description
+  * Below 0.5: Weak match - use the DEFAULT folder instead
+- reasoning: Brief explanation of your choice
+
+{format_instructions}'''
+
+    folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
+    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    chain = prompt | llm_mini | folder_parser
+
+    try:
+        response: FolderAssignment = chain.invoke(
+            {
+                'folders_context': folders_context,
+                'conversation_context': conversation_context,
+                'format_instructions': folder_parser.get_format_instructions(),
+            }
+        )
+
+        # Validate the folder_id exists
+        valid_folder_ids = {f.get('id') for f in user_folders}
+        if response.folder_id not in valid_folder_ids:
+            return default_folder_id, 0.3, f"Invalid folder ID returned, using default"
+
+        # If confidence is too low, use default folder
+        if response.confidence < 0.5 and default_folder_id:
+            return (
+                default_folder_id,
+                response.confidence,
+                f"Low confidence ({response.confidence:.2f}), using default folder",
+            )
+
+        return response.folder_id, response.confidence, response.reasoning
+
+    except Exception as e:
+        print(f'Error assigning conversation to folder: {e}')
+        return default_folder_id, 0.0, f"Error: {str(e)}"
+
+
 class DiscardConversation(BaseModel):
     discard: bool = Field(description="If the conversation should be discarded or not")
 
@@ -162,9 +312,30 @@ CALENDAR MEETING CONTEXT:
             items_list
         )
 
-    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract high-quality, actionable tasks from the provided content.
+    prompt_text = '''You are an expert action item extractor. Your sole purpose is to identify and extract actionable tasks from the provided content.
 
     The content language is {language_code}. Use the same language {language_code} for your response.
+
+    EXPLICIT TASK/REMINDER REQUESTS (HIGHEST PRIORITY)
+
+    When the primary user OR someone speaking to them uses these patterns, ALWAYS extract the task:
+    - "Remind me to X" / "Remember to X" → EXTRACT "X"
+    - "Don't forget to X" / "Don't let me forget X" → EXTRACT "X"
+    - "Add task X" / "Create task X" / "Make a task for X" → EXTRACT "X"
+    - "Note to self: X" / "Mental note: X" → EXTRACT "X"
+    - "Task: X" / "Todo: X" / "To do: X" → EXTRACT "X"
+    - "I need to remember to X" → EXTRACT "X"
+    - "Put X on my list" / "Add X to my tasks" → EXTRACT "X"
+    - "Set a reminder for X" / "Can you remind me X" → EXTRACT "X"
+    - "You need to X" / "You should X" / "Make sure you X" (said TO the user) → EXTRACT "X"
+
+    These explicit requests bypass importance/timing filters. If someone explicitly asks for a reminder or task, extract it.
+
+    Examples:
+    - User says "Remind me to buy milk" → Extract "Buy milk"
+    - Someone tells user "Don't forget to call your mom" → Extract "Call mom"
+    - User says "Add task pick up dry cleaning" → Extract "Pick up dry cleaning"
+    - User says "Note to self, check tire pressure" → Extract "Check tire pressure"
 
     CRITICAL: If CALENDAR MEETING CONTEXT is provided with participant names, you MUST use those names:
     - The conversation DEFINITELY happened between the named participants
@@ -192,13 +363,15 @@ CALENDAR MEETING CONTEXT:
 
     WORKFLOW:
     1. FIRST: Read the ENTIRE conversation carefully to understand the full context
-    2. SECOND: Identify all topics, people, places, or things being discussed
-    3. THIRD: Filter aggressively - is the user ALREADY doing this? If yes, SKIP IT
-    4. FOURTH: Ask - "Is this truly important enough to remind a busy person?" If no, SKIP IT
-    5. FIFTH: Extract ONLY action items that passed steps 3 & 4, using specific names/details
-    6. SIXTH: Extract timing information separately and put it in the due_at field
-    7. SEVENTH: Clean the description - remove ALL time references and vague words
-    8. EIGHTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
+    2. SECOND: Check for EXPLICIT task requests (remind me, add task, don't forget, etc.) - ALWAYS extract these
+    3. THIRD: For IMPLICIT tasks - be extremely aggressive with filtering:
+       - Is the user ALREADY doing this? SKIP IT
+       - Is this truly important enough to remind a busy person? If ANY doubt, SKIP IT
+       - Would missing this have real consequences? If not obvious, SKIP IT
+       - Better to extract 0 implicit tasks than flood the user with noise
+    4. FOURTH: Extract timing information separately and put it in the due_at field
+    5. FIFTH: Clean the description - remove ALL time references and vague words
+    6. SIXTH: Final check - description should be timeless and specific (e.g., "Buy groceries" NOT "buy them by tomorrow")
 
     CRITICAL CONTEXT:
     • These action items are primarily for the PRIMARY USER who is having/recording this conversation
@@ -209,11 +382,11 @@ CALENDAR MEETING CONTEXT:
       - It's super crucial for the primary user to track it
       - The primary user needs to follow up on it
 
-    QUALITY OVER QUANTITY:
-    • Better to have 0 action items than to flood the user with unnecessary ones
-    • Only extract action items that are truly important and need tracking
-    • When in doubt, DON'T extract - be conservative and selective
-    • Think: "Would a busy person want to be reminded of this?"
+    BALANCE QUALITY AND USER INTENT:
+    • For EXPLICIT requests (remind me, add task, don't forget, etc.) - ALWAYS extract
+    • For IMPLICIT tasks inferred from conversation - be very selective, better to extract 0 than flood the user
+    • Think: "Did the user ask for this reminder, or am I guessing they need it?"
+    • If the user explicitly asked for a task/reminder, respect their request even if it seems trivial
 
     STRICT FILTERING RULES - Include ONLY tasks that meet ALL these criteria:
 
@@ -232,32 +405,39 @@ CALENDAR MEETING CONTEXT:
 
     2. **Concrete Action**: The task describes a specific, actionable next step (not vague intentions)
 
-    3. **Timing Signal**: The task includes a timing cue:
+    3. **Timing Signal** (NOT required for explicit task requests):
        - Explicit dates or times
        - Relative timing ("tomorrow", "next week", "by Friday", "this month")
        - Urgency markers ("urgent", "ASAP", "high priority")
+       - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
-    4. **Real Importance**: The task has genuine consequences if missed:
+    4. **Real Importance** (NOT required for explicit task requests):
        - Financial impact (bills, payments, purchases, invoices)
        - Health/safety concerns (appointments, medications, safety checks)
        - Hard deadlines (submissions, filings, registrations)
        - Explicit stress if missed (stated by speakers)
        - Critical dependencies (primary user blocked without it)
        - Commitments to other people (meetings, deliverables, promises)
+       - NOTE: Skip this requirement if user explicitly asked for a reminder/task
 
-    5. **NOT Already Being Done**: The user is NOT currently actively working on it:
-       - If user says "I am working on X" or "I am doing X right now" → DON'T extract
-       - If user says "I am in the middle of X" → DON'T extract
-       - If user says "currently doing X" → DON'T extract
-       - Only extract if it's something they NEED TO DO in the future, not something they're ALREADY doing
+    5. **Future Intent or Deadline**: Extract tasks that the user INTENDS to do or has a deadline for:
+       - "I want to X" → EXTRACT (user stated intention, needs reminder)
+       - "I need to X by [date]" → EXTRACT (deadline that could be forgotten)
+       - "Today I will X" → EXTRACT (daily goal, needs tracking)
+       - "This week/month I want to X" → EXTRACT (time-bound goal)
+       
+       Only skip if user is ACTIVELY doing something RIGHT NOW:
+       - "I am currently in the middle of X" → Skip (actively doing it this moment)
+       - "Right now I'm doing X" → Skip (immediate present action)
 
-       Examples of what NOT to extract:
-       - ❌ "I am working on the budget report. Need to finish it by Friday" → User is ALREADY working on it, they know the deadline
-       - ❌ "Currently debugging the login issue" → User is actively doing it
-       - ❌ "I'm preparing for the presentation tomorrow" → User is already aware and doing it
-       - ✅ "Need to call the plumber tomorrow about the leak" → User is NOT doing it yet, needs reminder
-       - ✅ "Have to submit tax documents by March 31st" → Clear future deadline that needs tracking
-       - ✅ "Doctor said to schedule follow-up in 2 weeks" → Easy to forget, needs reminder
+       Examples:
+       - ✅ "Today, I want to complete the onboarding experience" → EXTRACT (stated goal with deadline)
+       - ✅ "I want to finish the report by Friday" → EXTRACT (intention + deadline)
+       - ✅ "This month, I want to grow users to 500k" → EXTRACT (monthly goal)
+       - ✅ "Need to call the plumber tomorrow" → EXTRACT (future task)
+       - ✅ "Have to submit tax documents by March 31st" → EXTRACT (deadline)
+       - ❌ "I'm currently on a call with the client" → Skip (happening right now)
+       - ❌ "Right now I'm debugging this issue" → Skip (immediate action)
 
     EXCLUDE these types of items (be aggressive about exclusion):
     • Things user is ALREADY doing or actively working on
@@ -794,14 +974,15 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
         return None
 
 
-def generate_summary_with_prompt(conversation_text: str, prompt: str) -> str:
-    prompt = f"""
+def generate_summary_with_prompt(conversation_text: str, prompt: str, language_code: str = 'en') -> str:
+    # Build prompt matching the app processing format (without forced "be concise" constraint)
+    full_prompt = f"""
     Your task is: {prompt}
+
+    Language: The conversation language is {language_code}. Use the same language {language_code} for your response.
 
     The conversation is:
     {conversation_text}
-
-    You must output only the summary, no other text. Make sure to be concise and clear.
     """
-    response = llm_medium_experiment.invoke(prompt)
+    response = llm_medium_experiment.invoke(full_prompt)
     return response.content

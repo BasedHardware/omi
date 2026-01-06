@@ -7,21 +7,18 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
-import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/user_review_page.dart';
-import 'package:omi/pages/onboarding/welcome/page.dart';
-import 'package:omi/pages/onboarding/device_onboarding/device_onboarding_wrapper.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:provider/provider.dart';
@@ -52,10 +49,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   late Animation<double> _backgroundFadeAnimation;
   String _currentBackgroundImage = Assets.images.onboardingBg2.path;
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
+  SpeechProfileProvider? _speechProfileProvider;
 
   @override
   void initState() {
-    _controller = TabController(length: 8, vsync: this); // Auth, Name, Lang, Permissions, Review, Welcome, FindDevices, SpeechProfile
+    _speechProfileProvider = SpeechProfileProvider();
+    _controller = TabController(
+        length: 8, vsync: this); // Auth, Name, Lang, Permissions, Review, Welcome, FindDevices, SpeechProfile
     _controller!.addListener(() {
       setState(() {});
       // Update background image when page changes
@@ -107,6 +107,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   void dispose() {
     _controller?.dispose();
     _backgroundAnimationController.dispose();
+    _speechProfileProvider?.dispose();
     super.dispose();
   }
 
@@ -228,8 +229,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Placeholder pages - not used in new flow but kept for index consistency
       Container(), // WelcomePage placeholder
       Container(), // FindDevicesPage placeholder
-      ChangeNotifierProvider(
-        create: (context) => SpeechProfileProvider(),
+      ChangeNotifierProvider.value(
+        value: _speechProfileProvider!,
         child: SpeechProfileWidget(
           goNext: () {
             // Speech profile complete, finish onboarding
@@ -384,7 +385,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                   : Padding(
                                       padding: const EdgeInsets.symmetric(horizontal: 16),
                                       child: Text(
-                                        'Your personal growth journey with AI that listens to your every word.',
+                                        context.l10n.personalGrowthJourney,
                                         style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
                                         textAlign: TextAlign.center,
                                       ),
@@ -424,7 +425,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () {
-                                    if (_controller!.index > kNamePage) {
+                                    if (_controller!.index == kSpeechProfilePage) {
+                                      _speechProfileProvider?.close();
+                                      _controller!.animateTo(kUserReviewPage);
+                                    } else if (_controller!.index > kNamePage) {
                                       _controller!.animateTo(_controller!.index - 1);
                                     }
                                   },
@@ -477,4 +481,3 @@ double maxHeightWithTextScale(BuildContext context, int index) {
     return 305;
   }
 }
-

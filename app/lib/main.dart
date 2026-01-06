@@ -12,6 +12,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
@@ -47,6 +49,9 @@ import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
+import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
@@ -195,8 +200,8 @@ void main() {
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
         WindowOptions windowOptions = const WindowOptions(
-          size: Size(1440, 900),
-          minimumSize: Size(1000, 650),
+          size: Size(1300, 800),
+          minimumSize: Size(1100, 700),
           center: true,
           title: "Omi",
           titleBarStyle: TitleBarStyle.hidden,
@@ -333,7 +338,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
                 (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
           ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
@@ -347,13 +352,20 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           ChangeNotifierProvider(create: (context) => PaymentMethodProvider()),
           ChangeNotifierProvider(create: (context) => PersonaProvider()),
-          ChangeNotifierProvider(create: (context) => MemoriesProvider()),
+          ChangeNotifierProxyProvider<ConnectivityProvider, MemoriesProvider>(
+            create: (context) => MemoriesProvider(),
+            update: (context, connectivity, previous) =>
+                (previous?..setConnectivityProvider(connectivity)) ?? MemoriesProvider(),
+          ),
           ChangeNotifierProvider(create: (context) => UserProvider()),
           ChangeNotifierProvider(create: (context) => ActionItemsProvider()),
           ChangeNotifierProvider(create: (context) => SyncProvider()),
           ChangeNotifierProvider(create: (context) => TaskIntegrationProvider()),
           ChangeNotifierProvider(create: (context) => IntegrationProvider()),
           ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
+          ChangeNotifierProvider(create: (context) => FolderProvider()),
+          ChangeNotifierProvider(create: (context) => LocaleProvider()),
+          ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
         ],
         builder: (context, child) {
           return WithForegroundTask(
@@ -361,12 +373,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               debugShowCheckedModeBanner: F.env == Environment.dev,
               title: F.title,
               navigatorKey: MyApp.navigatorKey,
+              locale: context.watch<LocaleProvider>().locale,
               localizationsDelegates: const [
+                AppLocalizations.delegate,
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
               ],
-              supportedLocales: const [Locale('en')],
+              supportedLocales: AppLocalizations.supportedLocales,
               theme: ThemeData(
                   useMaterial3: false,
                   colorScheme: const ColorScheme.dark(
@@ -437,10 +451,10 @@ class CustomErrorWidget extends StatelessWidget {
               size: 50.0,
             ),
             const SizedBox(height: 10.0),
-            const Text(
-              'Something went wrong! Please try again later.',
+            Text(
+              context.l10n.somethingWentWrong,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10.0),
             Container(
@@ -465,18 +479,18 @@ class CustomErrorWidget extends StatelessWidget {
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: errorMessage));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Error message copied to clipboard'),
+                    SnackBar(
+                      content: Text(context.l10n.errorCopied),
                     ),
                   );
                 },
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text('Copy error message'),
-                    SizedBox(width: 10),
-                    Icon(Icons.copy_rounded),
+                    Text(context.l10n.copyErrorMessage),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.copy_rounded),
                   ],
                 ),
               ),

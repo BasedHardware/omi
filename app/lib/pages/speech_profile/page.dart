@@ -143,7 +143,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                 builder: (c) => getDialog(
                   context,
                   () {
-                    provider.resetSegments();
+                    provider.close();
                     Navigator.pop(context);
                   },
                   () {},
@@ -297,14 +297,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                             ],
                           )
                         : provider.text.isEmpty
-                            ? FadeTransition(
-                                opacity: _questionFadeAnimation,
-                                child: Text(
-                                  provider.currentQuestion,
-                                  style: const TextStyle(color: Colors.white, fontSize: 24, height: 1.4),
-                                  textAlign: TextAlign.center,
-                                ),
-                              )
+                            ? const SizedBox.shrink()
                             : Padding(
                                 padding: const EdgeInsets.only(top: 80.0),
                                 child: LayoutBuilder(
@@ -378,7 +371,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         }
 
                                         bool usePhoneMic = false;
-                                        
+
                                         // Check if device is connected and supports opus
                                         if (provider.device != null) {
                                           try {
@@ -397,10 +390,19 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                         }
 
                                         await stopDeviceRecording();
-                                        await provider.initialise(
+                                        bool success = await provider.initialise(
                                           finalizedCallback: restartDeviceRecording,
+                                          processConversationCallback: () {
+                                            Provider.of<CaptureProvider>(context, listen: false)
+                                                .forceProcessingCurrentConversation();
+                                          },
                                           usePhoneMic: usePhoneMic,
                                         );
+                                        if (!success) {
+                                          // Initialization failed, error dialog will be shown
+                                          await restartDeviceRecording();
+                                          return;
+                                        }
                                         provider.forceCompletionTimer =
                                             Timer(Duration(seconds: provider.maxDuration), () {
                                           provider.finalize();
@@ -454,6 +456,7 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                                 ),
                                 child: TextButton(
                                   onPressed: () {
+                                    // Conversation processing already triggered in finalize()
                                     Navigator.pop(context);
                                   },
                                   child: const Text(

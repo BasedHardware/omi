@@ -40,6 +40,7 @@ class MessageProvider extends ChangeNotifier {
   bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
+  double aiStreamProgress = 1.0;
 
   String firstTimeLoadingText = '';
 
@@ -54,6 +55,16 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void setChatApps(List<App> apps) {
+    chatApps = apps;
+    notifyListeners();
+  }
+
+  void removeChatApp(String appId) {
+    chatApps.removeWhere((app) => app.id == appId);
+    notifyListeners();
   }
 
   Future<void> fetchChatApps() async {
@@ -317,6 +328,7 @@ class MessageProvider extends ChangeNotifier {
       SharedPreferencesUtil().cachedMessages = messages;
       setHasCachedMessages(true);
     }
+    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setLoadingMessages(false);
     notifyListeners();
   }
@@ -325,6 +337,7 @@ class MessageProvider extends ChangeNotifier {
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
       messages = SharedPreferencesUtil().cachedMessages;
+      messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
     notifyListeners();
   }
@@ -344,6 +357,7 @@ class MessageProvider extends ChangeNotifier {
       notifyListeners();
     }
     messages = mes;
+    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setLoadingMessages(false);
     notifyListeners();
     return messages;
@@ -359,6 +373,7 @@ class MessageProvider extends ChangeNotifier {
     setClearingChat(true);
     var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
     messages = mes;
+    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     setClearingChat(false);
     notifyListeners();
   }
@@ -384,7 +399,7 @@ class MessageProvider extends ChangeNotifier {
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
-    messages.insert(0, message);
+    messages.add(message);
     notifyListeners();
   }
 
@@ -392,7 +407,7 @@ class MessageProvider extends ChangeNotifier {
     if (messages.firstWhereOrNull((m) => m.id == message.id) != null) {
       return;
     }
-    messages.insert(0, message);
+    messages.add(message);
     notifyListeners();
   }
 
@@ -419,7 +434,8 @@ class MessageProvider extends ChangeNotifier {
 
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
-    messages.insert(0, message);
+    messages.add(message);
+    final aiIndex = messages.length - 1;
     notifyListeners();
 
     try {
@@ -446,7 +462,7 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
-          messages[0] = message;
+          messages[aiIndex] = message;
           notifyListeners();
           continue;
         }
@@ -472,6 +488,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -493,7 +510,8 @@ class MessageProvider extends ChangeNotifier {
     _isNextMessageFromVoice = false;
 
     var message = ServerMessage.empty(appId: currentAppId);
-    messages.insert(0, message);
+    messages.add(message);
+    final aiIndex = messages.length - 1;
     notifyListeners();
     List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
     clearSelectedFiles();
@@ -505,6 +523,7 @@ class MessageProvider extends ChangeNotifier {
       if (textBuffer.isNotEmpty) {
         message.text += textBuffer;
         textBuffer = '';
+        aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
         HapticFeedback.lightImpact();
         notifyListeners();
       }
@@ -533,7 +552,7 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
-          messages[0] = message;
+          messages[aiIndex] = message;
           notifyListeners();
           continue;
         }
@@ -550,7 +569,9 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
+      setSendingMessage(false);
     }
   }
 
