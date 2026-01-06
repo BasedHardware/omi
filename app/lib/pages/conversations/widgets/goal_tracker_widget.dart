@@ -81,7 +81,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
 
   Future<void> _loadGoal() async {
     // Only show loading if we don't have any cached data
-    if (_goal == null && mounted) {
+    // But don't show loading for too long - show empty state quickly
+    if (_goal == null && mounted && !_initialLoadDone) {
       setState(() => _isLoading = true);
     }
 

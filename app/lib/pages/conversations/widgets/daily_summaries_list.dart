@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -55,6 +56,14 @@ class _DailySummariesListState extends State<DailySummariesList> {
   }
 
   void _openSummary(DailySummary summary) {
+    // Track recap card click
+    final cardIndex = _summaries.indexOf(summary);
+    MixpanelManager().recapSummaryCardClicked(
+      summaryId: summary.id,
+      date: summary.date,
+      cardIndex: cardIndex,
+    );
+
     Navigator.push(
       context,
       MaterialPageRoute(

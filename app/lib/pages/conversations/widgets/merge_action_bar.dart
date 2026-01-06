@@ -52,95 +52,98 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
           _animationController.reverse();
         }
 
-        return SlideTransition(
-          position: _slideAnimation,
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1C),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 20,
-                  offset: const Offset(0, -4),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: Row(
-                  children: [
-                    // Cancel button
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        provider.exitSelectionMode();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        child: Text(
-                          context.l10n.cancel,
-                          style: const TextStyle(
-                            color: Color(0xFF8E8E93),
-                            fontSize: 17,
-                            fontWeight: FontWeight.w500,
+        return IgnorePointer(
+          ignoring: !isActive,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1C),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  child: Row(
+                    children: [
+                      // Cancel button
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          provider.exitSelectionMode();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          child: Text(
+                            context.l10n.cancel,
+                            style: const TextStyle(
+                              color: Color(0xFF8E8E93),
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
-                    const Spacer(),
+                      const Spacer(),
 
-                    // Center: Selection count
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 150),
-                      child: Text(
-                        context.l10n.selectedCount(count),
-                        key: ValueKey(count),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
+                      // Center: Selection count
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 150),
+                        child: Text(
+                          context.l10n.selectedCount(count),
+                          key: ValueKey(count),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
 
-                    const Spacer(),
+                      const Spacer(),
 
-                    // Merge button
-                    GestureDetector(
-                      onTap: canMerge ? () => _handleMerge(context, provider) : null,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: canMerge ? const Color(0xFF7C3AED) : const Color(0xFF2C2C2E),
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.merge_rounded,
-                              size: 18,
-                              color: canMerge ? Colors.white : const Color(0xFF636366),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.merge,
-                              style: TextStyle(
+                      // Merge button
+                      GestureDetector(
+                        onTap: canMerge ? () => _handleMerge(context, provider) : null,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: canMerge ? const Color(0xFF7C3AED) : const Color(0xFF2C2C2E),
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.merge_rounded,
+                                size: 18,
                                 color: canMerge ? Colors.white : const Color(0xFF636366),
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 8),
+                              Text(
+                                context.l10n.merge,
+                                style: TextStyle(
+                                  color: canMerge ? Colors.white : const Color(0xFF636366),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

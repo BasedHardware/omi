@@ -34,6 +34,7 @@ Future<List<ServerConversation>> getConversations({
   DateTime? startDate,
   DateTime? endDate,
   String? folderId,
+  bool? starred,
 }) async {
   String url =
       '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
@@ -47,6 +48,9 @@ Future<List<ServerConversation>> getConversations({
   }
   if (folderId != null) {
     url += '&folder_id=$folderId';
+  }
+  if (starred != null) {
+    url += '&starred=$starred';
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');

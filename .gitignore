@@ -92,6 +92,7 @@ dist/
 # Web specific
 **/web/**/build/
 **/web/.dart_tool/
+web/app/public/firebase-messaging-sw.js
 
 # Miscellaneous
 !app/pubspec.lock
@@ -200,3 +201,7 @@ app/android/.kotlin/
 
 # Speaker ID Model
 *.gguf
+
+.playwright-mcp/
+
+CLAUDE.md

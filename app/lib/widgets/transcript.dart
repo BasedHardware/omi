@@ -12,6 +12,9 @@ import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/utils/other/temp.dart';
 
+// Use speaker colors from person.dart for bubble colors
+final List<Color> _speakerColors = speakerColors;
+
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
   final bool horizontalMargin;
@@ -74,35 +77,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   // Toggle to show/hide speaker names globally
   bool _showSpeakerNames = false;
 
-  // Define distinct muted colors for different speakers
-  static const List<Color> _speakerColors = [
-    Color(0xFF3A2E26), // Dark warm brown
-    Color(0xFF26313A), // Dark navy blue
-    Color(0xFF2E3A26), // Dark forest green
-    Color(0xFF3A2634), // Dark burgundy
-    Color(0xFF263A34), // Dark teal
-    Color(0xFF34332A), // Dark olive
-    Color(0xFF2F2A3A), // Dark plum
-    Color(0xFF3A3026), // Dark bronze
-  ];
-
-  Color _getSpeakerBubbleColor(bool isUser, int speakerId) {
+  Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
     if (isUser) {
       return const Color(0xFF8B5CF6).withValues(alpha: 0.8);
     }
-    // Use speakerId to get consistent color for each speaker
-    final colorIndex = speakerId % _speakerColors.length;
+    final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.8);
   }
 
-  Color _getSpeakerAvatarColor(bool isUser, int speakerId) {
+  Color _getSpeakerAvatarColor(bool isUser, int speakerId, Person? person) {
     if (isUser) {
       return const Color(0xFF8B5CF6).withValues(alpha: 0.3);
     }
     if (speakerId == omiSpeakerId) {
       return Colors.purple.withValues(alpha: 0.3);
     }
-    final colorIndex = speakerId % _speakerColors.length;
+    final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.3);
   }
 
@@ -121,8 +111,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         height: 24,
       );
     }
+    // Always modulo by speakerImagePath.length to prevent index out of bounds
+    final imageIndex = person != null
+        ? person.colorIdx! % speakerImagePath.length
+        : speakerId % speakerImagePath.length;
     return Image.asset(
-      person != null ? speakerImagePath[person.colorIdx!] : speakerImagePath[speakerId % speakerImagePath.length],
+      speakerImagePath[imageIndex],
       width: 24,
       height: 24,
     );
@@ -495,7 +489,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
                         child: _getSpeakerAvatar(data.speakerId, isUser, person),
                       ),
                       const SizedBox(height: 2),
@@ -590,7 +584,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                             ),
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: _getSpeakerBubbleColor(isUser, data.speakerId),
+                              color: _getSpeakerBubbleColor(isUser, data.speakerId, person),
                               borderRadius: BorderRadius.only(
                                 topLeft: Radius.circular(isUser
                                     ? 18
@@ -716,7 +710,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                     children: [
                       CircleAvatar(
                         radius: 16,
-                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId),
+                        backgroundColor: _getSpeakerAvatarColor(isUser, data.speakerId, person),
                         child: _getSpeakerAvatar(data.speakerId, isUser, person),
                       ),
                       const SizedBox(height: 2),

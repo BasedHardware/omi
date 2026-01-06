@@ -38,7 +38,6 @@ class _DeveloperSettingsPageState extends State<DeveloperSettingsPage> {
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await Provider.of<DeveloperModeProvider>(context, listen: false).initialize();
       context.read<McpProvider>().fetchKeys();
     });
     super.initState();

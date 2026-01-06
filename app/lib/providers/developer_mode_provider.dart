@@ -29,7 +29,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
-  bool showGoalTrackerEnabled = false;
+  bool showGoalTrackerEnabled = true; // Default to true
   bool dailyReflectionEnabled = true;
 
   void onConversationEventsToggled(bool value) {
