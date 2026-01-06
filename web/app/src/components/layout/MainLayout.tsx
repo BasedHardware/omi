@@ -2,15 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { HeaderLinks } from './HeaderLinks';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { ChatBubble } from '@/components/chat/ChatBubble';
-import { ChatPanel } from '@/components/chat/ChatPanel';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
-import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+// Dynamic imports for panels - not visible on initial load
+const ChatPanel = dynamic(() => import('@/components/chat/ChatPanel').then(mod => ({ default: mod.ChatPanel })), {
+  ssr: false,
+});
+
+const NotificationCenter = dynamic(() => import('@/components/notifications/NotificationCenter').then(mod => ({ default: mod.NotificationCenter })), {
+  ssr: false,
+});
 
 /**
  * Handles routing from notification clicks to the appropriate panel.

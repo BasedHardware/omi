@@ -1,4 +1,5 @@
 import { getIdToken } from './firebase';
+import { invalidateCache, invalidationPatterns } from './cache';
 import type {
   Conversation,
   ConversationSearchResponse,
@@ -212,6 +213,7 @@ export async function toggleStarred(
   await fetchWithAuth(`/v1/conversations/${id}/starred?starred=${starred}`, {
     method: 'PATCH',
   });
+  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**
@@ -221,6 +223,7 @@ export async function deleteConversation(id: string): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**
@@ -351,6 +354,7 @@ export async function deleteActionItem(id: string): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.actionItems);
 }
 
 // ============================================================================
@@ -395,7 +399,7 @@ export interface CreateMemoryParams {
 export async function createMemory(
   params: CreateMemoryParams
 ): Promise<Memory> {
-  return fetchWithAuth<Memory>('/v3/memories', {
+  const memory = await fetchWithAuth<Memory>('/v3/memories', {
     method: 'POST',
     body: JSON.stringify({
       content: params.content,
@@ -403,6 +407,8 @@ export async function createMemory(
       category: params.category || 'manual',
     }),
   });
+  invalidateCache(invalidationPatterns.memories);
+  return memory;
 }
 
 /**
@@ -416,6 +422,7 @@ export async function updateMemoryContent(
   await fetchWithAuth(`/v3/memories/${id}?value=${encodedValue}`, {
     method: 'PATCH',
   });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 /**
@@ -428,6 +435,7 @@ export async function updateMemoryVisibility(
   await fetchWithAuth(`/v3/memories/${id}/visibility?value=${visibility}`, {
     method: 'PATCH',
   });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 /**
@@ -437,6 +445,7 @@ export async function deleteMemory(id: string): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 /**
@@ -2045,6 +2054,7 @@ export async function createFolder(data: CreateFolderRequest): Promise<Folder> {
     method: 'POST',
     body: JSON.stringify(data),
   });
+  invalidateCache(invalidationPatterns.folders);
   return mapFolderResponse(folder);
 }
 
@@ -2059,6 +2069,7 @@ export async function updateFolder(
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+  invalidateCache(invalidationPatterns.folders);
   return mapFolderResponse(folder);
 }
 
@@ -2070,6 +2081,8 @@ export async function deleteFolder(folderId: string): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.folders);
+  invalidateCache(invalidationPatterns.conversations); // Conversations move back to "All"
 }
 
 /**
@@ -2085,6 +2098,7 @@ export async function moveConversationToFolder(
     method: 'PATCH',
     body: JSON.stringify({ folder_id: folderId }),
   });
+  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**

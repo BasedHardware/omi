@@ -1,40 +1,45 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getConversations, GetConversationsParams } from '@/lib/api';
 import type { Conversation, GroupedConversations } from '@/types/conversation';
 import { formatRelativeDate } from '@/lib/utils';
+import {
+  getCache,
+  setCache,
+  onCacheInvalidation,
+  invalidationPatterns,
+  CACHE_TTL,
+  cacheKeys,
+} from '@/lib/cache';
 
-// Module-level cache that persists across component mounts
+// Cache entry structure
 interface CacheEntry {
   conversations: Conversation[];
   offset: number;
   hasMore: boolean;
-  timestamp: number;
 }
 
-const conversationCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
 function getCacheKey(folderId?: string, startDate?: Date, endDate?: Date): string {
-  const parts = [
-    folderId || 'all',
-    startDate?.toISOString().split('T')[0] || '',
-    endDate?.toISOString().split('T')[0] || '',
-  ];
-  return parts.join('|');
+  return cacheKeys.conversations(
+    folderId,
+    startDate?.toISOString().split('T')[0],
+    endDate?.toISOString().split('T')[0]
+  );
 }
 
 function getFromCache(key: string): CacheEntry | null {
-  return conversationCache.get(key) || null;
+  const cached = getCache<CacheEntry>(key);
+  return cached ? cached.data : null;
+}
+
+function isCacheStale(key: string): boolean {
+  const cached = getCache<CacheEntry>(key);
+  return cached ? cached.isStale : true;
 }
 
 function setToCache(key: string, conversations: Conversation[], offset: number, hasMore: boolean): void {
-  conversationCache.set(key, { conversations, offset, hasMore, timestamp: Date.now() });
-}
-
-function isCacheStale(entry: CacheEntry): boolean {
-  return Date.now() - entry.timestamp > CACHE_TTL;
+  setCache<CacheEntry>(key, { conversations, offset, hasMore }, CACHE_TTL.MEDIUM);
 }
 
 interface UseConversationsOptions extends GetConversationsParams {
@@ -77,21 +82,23 @@ export function useConversations(
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
 
-  // Group conversations by date
-  const groupedConversations: GroupedConversations = conversations.reduce(
-    (groups, conversation) => {
-      const date = new Date(conversation.started_at || conversation.created_at);
-      const dateKey = formatRelativeDate(date);
+  // Group conversations by date - memoized for performance
+  const groupedConversations = useMemo<GroupedConversations>(() => {
+    return conversations.reduce(
+      (groups, conversation) => {
+        const date = new Date(conversation.started_at || conversation.created_at);
+        const dateKey = formatRelativeDate(date);
 
-      if (!groups[dateKey]) {
-        groups[dateKey] = [];
-      }
-      groups[dateKey].push(conversation);
+        if (!groups[dateKey]) {
+          groups[dateKey] = [];
+        }
+        groups[dateKey].push(conversation);
 
-      return groups;
-    },
-    {} as GroupedConversations
-  );
+        return groups;
+      },
+      {} as GroupedConversations
+    );
+  }, [conversations]);
 
   // Fetch conversations
   const fetchConversations = useCallback(
@@ -174,7 +181,7 @@ export function useConversations(
         setLoading(false);
 
         // If cache is stale, do background refresh
-        if (isCacheStale(cached)) {
+        if (isCacheStale(key)) {
           fetchConversations(0, false, true);
         }
       } else {
@@ -188,11 +195,22 @@ export function useConversations(
       setOffset(0);
       setHasMore(true);
       fetchConversations(0, false);
-    } else if (cached && isCacheStale(cached)) {
+    } else if (cached && isCacheStale(key)) {
       // Have cached data but it's stale, do background refresh
       fetchConversations(0, false, true);
     }
   }, [params.startDate, params.endDate, params.folderId, fetchConversations]);
+
+  // Subscribe to cache invalidation - refetch when conversations are modified
+  useEffect(() => {
+    const unsubscribe = onCacheInvalidation((pattern) => {
+      if (pattern === invalidationPatterns.conversations) {
+        // Cache was invalidated, do a fresh fetch
+        fetchConversations(0, false, false);
+      }
+    });
+    return unsubscribe;
+  }, [fetchConversations]);
 
   // Load more conversations
   const loadMore = useCallback(async () => {
