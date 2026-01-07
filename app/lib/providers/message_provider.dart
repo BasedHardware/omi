@@ -41,6 +41,7 @@ class MessageProvider extends ChangeNotifier {
   bool showTypingIndicator = false;
   bool sendingMessage = false;
   double aiStreamProgress = 1.0;
+  bool isVoiceStreaming = false;
 
   String firstTimeLoadingText = '';
 
@@ -126,6 +127,10 @@ class MessageProvider extends ChangeNotifier {
 
   void setShowTypingIndicator(bool value) {
     showTypingIndicator = value;
+    notifyListeners();
+  }
+  void setVoiceStreaming(bool value) {
+    isVoiceStreaming = value;
     notifyListeners();
   }
 
@@ -432,6 +437,7 @@ class MessageProvider extends ChangeNotifier {
       isPersonaChat: isPersonaChat,
     );
 
+    setVoiceStreaming(true);
     setShowTypingIndicator(true);
     var humanMessage = ServerMessage(
       const Uuid().v4(),
@@ -499,6 +505,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     setShowTypingIndicator(false);
+    setVoiceStreaming(false);
   }
 
   Future sendMessageStreamToServer(String text) async {

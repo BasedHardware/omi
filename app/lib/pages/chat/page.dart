@@ -125,14 +125,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
-        if (provider.messages.length > _prevMessageCount) {
+        if (provider.messages.length > _prevMessageCount && provider.isVoiceStreaming) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) scrollToBottom();
+            if (mounted) scrollToBottomOnSend();
           });
-          _prevMessageCount = provider.messages.length;
-        } else if (provider.messages.length != _prevMessageCount) {
-          _prevMessageCount = provider.messages.length;
         }
+        _prevMessageCount = provider.messages.length;
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
