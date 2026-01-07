@@ -441,7 +441,9 @@ class MessageProvider extends ChangeNotifier {
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
+        if (!firstChunkRecieved &&
+            [MessageChunkType.message, MessageChunkType.data, MessageChunkType.done, MessageChunkType.think]
+                .contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
