@@ -203,6 +203,9 @@ class PureSocket implements IPureSocket {
     });
 
     _listener?.onError(err, trace);
+    if (err is! SocketException && err is! WebSocketChannelException) {
+      PlatformManager.instance.crashReporter.reportCrash(err, trace);
+    }
   }
 
   @override
