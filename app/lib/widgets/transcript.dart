@@ -503,9 +503,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                  children: [
-                    // Speaker name (only shown when toggled)
-                    if (!isUser && _showSpeakerNames) ...[
+                    children: [
+                    if (!isUser) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
                         child: Row(
