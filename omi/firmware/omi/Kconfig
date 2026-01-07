@@ -115,7 +115,7 @@ config SOFTAP_SAMPLE_CHANNEL
 
 config SOFTAP_SAMPLE_SSID
 	string "SoftAP SSID"
-	default "Myssid"
+	default "Omi CV1"
 	help
 	  Set the SSID (Service Set Identifier) for the SoftAP.
 	  This is the name that will be broadcasted for client(s) to connect.
@@ -147,7 +147,7 @@ endchoice
 
 config SOFTAP_SAMPLE_PASSWORD
 	string "Passphrase (WPA2) or password (WPA3)"
-	default "Mypassword"
+	default "12345678"
 	help
 	  Set the password for SoftAP.
 
