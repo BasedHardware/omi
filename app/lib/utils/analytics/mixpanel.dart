@@ -452,6 +452,27 @@ class MixpanelManager {
         properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
       );
 
+  // Important Conversation Share Events
+  void importantConversationNotificationReceived(String conversationId) => track(
+        'Important Conversation Notification Received',
+        properties: {'conversation_id': conversationId},
+      );
+
+  void shareToContactsSheetOpened(String conversationId) => track(
+        'Share To Contacts Sheet Opened',
+        properties: {'conversation_id': conversationId},
+      );
+
+  void shareToContactsSelected(String conversationId, int contactCount) => track(
+        'Share To Contacts Selected',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
+
+  void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
+        'Share To Contacts SMS Opened',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
+
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
