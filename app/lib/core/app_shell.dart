@@ -55,17 +55,19 @@ class _AppShellState extends State<AppShell> {
     }
 
     if (uri.pathSegments.first == 'apps') {
-      if (mounted) {
-        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
-        if (app != null) {
-          PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
-          if (mounted) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
-          }
-        } else {
-          debugPrint('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
+      final appProvider = context.read<AppProvider>();
+      final app = await appProvider.getAppFromId(uri.pathSegments[1]);
+
+      if (!mounted) return;
+
+      if (app != null) {
+        PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
+        if (mounted) {
+          Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
         }
+      } else {
+        debugPrint('App not found: ${uri.pathSegments[1]}');
+        AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
       }
     } else if (uri.pathSegments.first == 'wrapped') {
       if (mounted) {
@@ -364,7 +366,11 @@ class _AppShellState extends State<AppShell> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
+      if (!mounted) return;
+
+      final auth = context.read<AuthenticationProvider>();
+
+      if (auth.isSignedIn()) {
         context.read<HomeProvider>().setupHasSpeakerProfile();
         context.read<HomeProvider>().setupUserPrimaryLanguage();
         context.read<UserProvider>().initialize();
@@ -374,6 +380,8 @@ class _AppShellState extends State<AppShell> {
         } catch (e) {
           debugPrint('Failed to login to Intercom: $e');
         }
+
+        if (!mounted) return;
 
         context.read<MessageProvider>().setMessagesFromCache();
         context.read<AppProvider>().setAppsFromCache();
@@ -387,7 +395,10 @@ class _AppShellState extends State<AppShell> {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();
         }
       }
-      PlatformManager.instance.intercom.setUserAttributes();
+
+      if (mounted) {
+        PlatformManager.instance.intercom.setUserAttributes();
+      }
     });
     super.initState();
   }
