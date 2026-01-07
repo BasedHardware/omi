@@ -371,10 +371,13 @@ class _AppShellState extends State<AppShell> {
       final auth = context.read<AuthenticationProvider>();
 
       if (auth.isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        context.read<UserProvider>().initialize();
-        context.read<PeopleProvider>().initialize();
+        final homeProvider = context.read<HomeProvider>();
+        final userProvider = context.read<UserProvider>();
+        final peopleProvider = context.read<PeopleProvider>();
+        homeProvider.setupHasSpeakerProfile();
+        homeProvider.setupUserPrimaryLanguage();
+        userProvider.initialize();
+        peopleProvider.initialize();
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
@@ -383,12 +386,16 @@ class _AppShellState extends State<AppShell> {
 
         if (!mounted) return;
 
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-        context.read<UsageProvider>().fetchSubscription();
-        context.read<TaskIntegrationProvider>().loadFromBackend();
+        final messageProvider = context.read<MessageProvider>();
+        final appProvider = context.read<AppProvider>();
+        final usageProvider = context.read<UsageProvider>();
+        final taskIntegrationProvider = context.read<TaskIntegrationProvider>();
 
+        messageProvider.setMessagesFromCache();
+        appProvider.setAppsFromCache();
+        messageProvider.refreshMessages();
+        usageProvider.fetchSubscription();
+        taskIntegrationProvider.loadFromBackend();
         NotificationService.instance.saveNotificationToken();
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
