@@ -13,6 +13,7 @@ import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
@@ -466,16 +467,15 @@ abstract class DeviceConnection {
     return false;
   }
 
-  Future<bool> setupWifiSync(String ssid, String password, String serverIp, int port) async {
+  Future<WifiSyncSetupResult> setupWifiSync(String ssid, String password, String serverIp, int port) async {
     if (await isConnected()) {
       return await performSetupWifiSync(ssid, password, serverIp, port);
     }
-    _showDeviceDisconnectedNotification();
-    return false;
+    return WifiSyncSetupResult.connectionFailed();
   }
 
-  Future<bool> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
-    return false;
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+    return WifiSyncSetupResult.failure(WifiSyncErrorCode.wifiHardwareNotAvailable);
   }
 
   Future<bool> startWifiSync() async {

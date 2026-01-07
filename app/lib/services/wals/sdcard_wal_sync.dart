@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -631,6 +632,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future<bool> setWifiCredentials(String ssid, String password) async {
+    // Validate credentials before saving
+    final validationError = WifiCredentialsValidator.validate(ssid, password);
+    if (validationError != null) {
+      debugPrint("SDCardWalSync: WiFi credential validation failed: $validationError");
+      throw WifiSyncException(validationError);
+    }
+
     _wifiSsid = ssid;
     _wifiPassword = password;
 
@@ -725,12 +733,23 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
 
       // Step 1: Setup WiFi on device with credentials and server info
-      final setupSuccess = await connection.setupWifiSync(_wifiSsid!, _wifiPassword!, localIp, tcpPort);
-      if (!setupSuccess) {
+      final setupResult = await connection.setupWifiSync(_wifiSsid!, _wifiPassword!, localIp, tcpPort);
+      if (!setupResult.success) {
         await wifiReceiver.stop();
         _resetSyncState();
-        throw Exception('WiFi sync failed: Failed to setup WiFi on device');
+        final errorMessage = setupResult.errorMessage ?? 'Failed to setup WiFi on device';
+        final errorCode = setupResult.errorCode;
+
+        if (errorCode != null) {
+          debugPrint(
+              "SDCardWalSync WiFi: Setup failed with error code 0x${errorCode.code.toRadixString(16)}: ${errorCode.userMessage}");
+          throw WifiSyncException(errorMessage, errorCode: errorCode);
+        } else {
+          throw WifiSyncException(errorMessage);
+        }
       }
+
+      debugPrint("SDCardWalSync WiFi: Setup successful, waiting for device to process...");
 
       // Wait for the device to process the setup command
       await Future.delayed(const Duration(seconds: 1));
@@ -1053,7 +1072,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       await wifiReceiver.stop();
 
       _resetSyncState();
-      rethrow;
+
+      // Re-throw WifiSyncException as-is, wrap other exceptions
+      if (e is WifiSyncException) {
+        rethrow;
+      } else {
+        throw WifiSyncException(e.toString());
+      }
     }
   }
 }
