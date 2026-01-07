@@ -30,6 +30,7 @@ from models.conversation import (
     CreateConversation,
     ConversationSource,
 )
+from utils.notifications import send_important_conversation_message
 from models.conversation import CalendarMeetingContext
 from models.other import Person
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
@@ -324,10 +325,10 @@ def _update_goal_progress(uid: str, conversation: Conversation):
             text = conversation.structured.overview
         elif conversation.transcript_segments:
             text = " ".join([s.text for s in conversation.transcript_segments[:20]])
-        
+
         if not text or len(text) < 10:
             return
-        
+
         # Use utility function to extract and update goal progress
         extract_and_update_goal_progress(uid, text)
     except Exception as e:
@@ -367,16 +368,16 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
-        
+
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
             from database import users as users_db
-            
+
             user = users_db.get_user_store_recording_permission(uid)
             user_name = user.get('name', 'User') if user else 'User'
-            
+
             from database.memories import set_memory_kg_extracted
-            
+
             for memory_db_obj in parsed_memories:
                 if memory_db_obj.kg_extracted:
                     continue
@@ -655,7 +656,6 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
     Send notification for long conversations (>30 minutes) that just completed.
     Only sends once per conversation using Redis deduplication.
     """
-    from utils.notifications import send_important_conversation_message
 
     # Skip if conversation is discarded
     if conversation.discarded:
