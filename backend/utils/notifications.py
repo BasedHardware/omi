@@ -74,27 +74,33 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
-def _build_webpush_config(tag: str, title: str = None, body: str = None, link: str = '/') -> messaging.WebpushConfig:
+def _build_webpush_config(tag: str, title: str = None, body: str = None, link: str = None) -> messaging.WebpushConfig:
     """Build WebPush configuration for browser notifications.
 
     Note: WebpushNotification must explicitly include title/body because
     browsers use webpush.notification instead of the top-level notification
     when the webpush block is present.
+
+    fcm_options.link must be an absolute HTTPS URL - relative paths will cause
+    FCM to reject the entire message batch with 'WebpushFCMOptions.link must be a HTTPS URL'.
     """
-    return messaging.WebpushConfig(
-        headers={
+    config_kwargs = {
+        'headers': {
             'Topic': tag,  # For deduplication
             'Urgency': 'high',
         },
-        notification=messaging.WebpushNotification(
+        'notification': messaging.WebpushNotification(
             title=title,
             body=body,
             icon='/logo.png',
         ),
-        fcm_options=messaging.WebpushFCMOptions(
-            link=link,
-        ),
-    )
+    }
+
+    # Only include fcm_options if link is a valid HTTPS URL
+    if link and link.startswith('https://'):
+        config_kwargs['fcm_options'] = messaging.WebpushFCMOptions(link=link)
+
+    return messaging.WebpushConfig(**config_kwargs)
 
 
 def _build_message(
@@ -110,7 +116,7 @@ def _build_message(
     title = notification.title if notification else None
     body = notification.body if notification else None
     # Extract navigate_to for webpush click-through link
-    link = data.get('navigate_to', '/') if data else '/'
+    link = data.get('navigate_to') if data else None
 
     return messaging.Message(
         token=token,
