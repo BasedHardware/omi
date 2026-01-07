@@ -58,6 +58,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   // Track which app is pending deletion confirmation
   String? _pendingDeleteAppId;
   String? _selectedContext;
+  int _prevMessageCount = 0;
 
   @override
   bool get wantKeepAlive => true;
@@ -124,10 +125,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
-        if (provider.showTypingIndicator) {
+        if (provider.messages.length > _prevMessageCount) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) scrollToBottom();
           });
+          _prevMessageCount = provider.messages.length;
+        } else if (provider.messages.length != _prevMessageCount) {
+          _prevMessageCount = provider.messages.length;
         }
         return Scaffold(
           key: scaffoldKey,
