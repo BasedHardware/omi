@@ -47,7 +47,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   bool _showVoiceRecorder = false;
   bool _hasInitialScrolled = false;
   bool _allowKeyboardFocus = false;
-  bool _didAutoFocusOnce = false;
   bool _disableTextField = false;
 
   var prefs = SharedPreferencesUtil();
@@ -82,9 +81,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       // Fetch enabled chat apps
       provider.fetchChatApps();
       
-      // One-time autofocus when chat opens (unless recorder is shown)
-      if (!_didAutoFocusOnce && !_showVoiceRecorder) {
-        _didAutoFocusOnce = true;
+      // Autofocus when chat opens
+      if (!_showVoiceRecorder) {
         _allowKeyboardFocus = true;
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
