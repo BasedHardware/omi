@@ -74,9 +74,7 @@ def _build_apns_config(tag: str, is_background: bool = False) -> messaging.APNSC
     return messaging.APNSConfig(headers=headers)
 
 
-def _build_webpush_config(
-    tag: str, title: str = None, body: str = None, link: str = '/'
-) -> messaging.WebpushConfig:
+def _build_webpush_config(tag: str, title: str = None, body: str = None, link: str = '/') -> messaging.WebpushConfig:
     """Build WebPush configuration for browser notifications.
 
     Note: WebpushNotification must explicitly include title/body because
@@ -408,24 +406,8 @@ def send_important_conversation_message(user_id: str, conversation_id: str):
         'navigate_to': f'/conversation/{conversation_id}?share=1',
     }
 
-    for token in tokens:
-        message = messaging.Message(
-            data=data,
-            token=token,
-            android=messaging.AndroidConfig(priority='high'),
-            apns=messaging.APNSConfig(
-                headers={
-                    'apns-priority': '10',
-                },
-                payload=messaging.APNSPayload(aps=messaging.Aps(content_available=True)),
-            ),
-        )
-
-        try:
-            response = messaging.send(message)
-            print(f'Important conversation message sent to device: {response}')
-        except Exception as e:
-            print(f'FCM send error for important conversation: {e}')
+    tag = _generate_tag(f'{user_id}:important_conversation:{conversation_id}')
+    _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
 def send_action_item_update_message(user_id: str, action_item_id: str, description: str, due_at: str):
