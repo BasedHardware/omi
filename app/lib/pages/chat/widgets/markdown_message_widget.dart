@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 Widget getMarkdownWidget(BuildContext context, String content) {
   var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
   return MarkdownBody(
-    selectable: false,
+    selectable: PlatformService.isMacOS,
     shrinkWrap: true,
     onTapLink: (text, href, title) async {
       if (href != null) {
