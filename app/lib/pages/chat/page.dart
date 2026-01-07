@@ -9,7 +9,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:uuid/uuid.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -46,9 +45,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   late FocusNode textFieldFocusNode;
 
   bool _showVoiceRecorder = false;
-  bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
-  bool _allowKeyboardFocus = true;
+  bool _allowKeyboardFocus = false;
+  bool _didAutoFocusOnce = false;
+  bool _disableTextField = false;
 
   var prefs = SharedPreferencesUtil();
   late List<App> apps;
@@ -76,48 +76,34 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
       if (provider.messages.isEmpty) {
-        provider.refreshMessages();
+        await provider.refreshMessages();
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
-      // Auto-focus the text field only on initial load, not on app switches
-      if (_isInitialLoad) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_showVoiceRecorder && _isInitialLoad) {
+      
+      // One-time autofocus when chat opens (unless recorder is shown)
+      if (!_didAutoFocusOnce && !_showVoiceRecorder) {
+        _didAutoFocusOnce = true;
+        _allowKeyboardFocus = true;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
             textFieldFocusNode.requestFocus();
           }
         });
       }
+      
       // Handle auto-message from notification (e.g., daily reflection or goal advice)
-      // This sends a message FROM Omi AI, not from the user
       if (widget.autoMessage != null && widget.autoMessage!.isNotEmpty && mounted) {
-        // Wait for messages to load first, then add auto-message
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (mounted) {
-            setState(() {
-              _allowSpacer = true;
-            });
-            final aiMessage = ServerMessage(
-              const Uuid().v4(),
-              DateTime.now(),
-              widget.autoMessage!,
-              MessageSender.ai,
-              MessageType.text,
-              null,
-              false,
-              [],
-              [],
-              [],
-              askForNps: false,
-            );
-            context.read<MessageProvider>().addMessage(aiMessage);
-            // Scroll after the message is added and rendered
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (mounted) {
-                scrollToBottom();
-              }
-            });
-          }
+        setState(() {
+          _allowSpacer = true;
+        });
+        final provider = context.read<MessageProvider>();
+        provider.setSendingMessage(true);
+        provider.addMessageLocally(widget.autoMessage!);
+        provider.sendMessageStreamToServer(widget.autoMessage!);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) scrollToBottom();
         });
       }
     });
@@ -138,6 +124,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     return Consumer2<MessageProvider, ConnectivityProvider>(
       builder: (context, provider, connectivityProvider, child) {
+        if (provider.showTypingIndicator) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) scrollToBottom();
+          });
+        }
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
@@ -241,7 +232,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                         setState(() {
                                                           _selectedContext = text;
                                                         });
-                                                        textFieldFocusNode.requestFocus();
                                                       },
                                                       displayOptions: provider.messages.length <= 1 &&
                                                           provider.messageSenderApp(message.appId)?.isNotPersona() ==
@@ -273,7 +263,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     setState(() {
                                                       _selectedContext = text;
                                                     });
-                                                    textFieldFocusNode.requestFocus();
                                                   }),
                                           );
                                         },
@@ -513,14 +502,21 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       ? VoiceRecorderWidget(
                                           onTranscriptReady: (transcript) {
                                             setState(() {
+                                              _disableTextField = true;
                                               _allowKeyboardFocus = false;
-                                              textController.text = transcript;
                                               _showVoiceRecorder = false;
                                               context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
                                             });
 
-                                            // Make absolutely sure
                                             FocusManager.instance.primaryFocus?.unfocus();
+
+                                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                                              if (!mounted) return;
+                                              textController.text = transcript;
+                                              setState(() {
+                                                _disableTextField = false;
+                                              });
+                                            });
                                           },
                                           onClose: () {
                                             setState(() {
@@ -536,10 +532,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             ),
                                           ),
                                           child: TextField(
-                                            enabled: true,
+                                            enabled: !_disableTextField,
                                             controller: textController,
                                             focusNode: textFieldFocusNode,
-                                            canRequestFocus: _allowKeyboardFocus,
+                                            canRequestFocus: !_disableTextField && _allowKeyboardFocus,
                                             onTap: () {
                                               setState(() {
                                                 _allowKeyboardFocus = true;
@@ -849,7 +845,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     });
 
     // Mark that we're no longer on initial load to prevent auto-focus
-    _isInitialLoad = false;
 
     // Store references before async operation
     final messageProvider = mounted ? context.read<MessageProvider>() : null;

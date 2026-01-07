@@ -433,6 +433,20 @@ class MessageProvider extends ChangeNotifier {
     );
 
     setShowTypingIndicator(true);
+    var humanMessage = ServerMessage(
+      const Uuid().v4(),
+      DateTime.now(),
+      '',
+      MessageSender.human,
+      MessageType.text,
+      currentAppId,
+      false,
+      [],
+      [],
+      [],
+    );
+    messages.add(humanMessage);
+    final humanIndex = messages.length - 1;
     var message = ServerMessage.empty();
     messages.add(message);
     final aiIndex = messages.length - 1;
@@ -468,7 +482,7 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(1, chunk.message!);
+          messages[humanIndex] = chunk.message!;
           notifyListeners();
           continue;
         }
