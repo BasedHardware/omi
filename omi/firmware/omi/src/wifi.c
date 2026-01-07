@@ -11,8 +11,13 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(softap, CONFIG_LOG_DEFAULT_LEVEL);
 
+#include <errno.h>
+#include <zephyr/kernel.h>
+#include <zephyr/kernel/thread_stack.h>
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/wifi_utils.h>
+#include <zephyr/net/socket.h>
+#include <zephyr/sys/atomic.h>
 #include "net_private.h"
 #if defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
 #include <zephyr/net/dhcpv4_server.h>
@@ -33,9 +38,120 @@ struct wifi_ap_sta_node {
 	struct wifi_ap_sta_info sta_info;
 };
 static struct wifi_ap_sta_node sta_list[CONFIG_SOFTAP_SAMPLE_MAX_STATIONS];
-#if defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
-static bool dhcp_server_configured;
-#endif
+
+// ---- TCP Stub Stream Client ----
+// Connects to a fixed remote endpoint and streams fixed-size (440 bytes) dummy frames.
+#define TCP_STUB_FRAME_SIZE 2200
+#define TCP_REMOTE_IP "192.168.1.5"
+#define TCP_REMOTE_PORT 12345
+
+static atomic_t tcp_stop_flag;
+static bool tcp_thread_started;
+static struct k_thread tcp_thread;
+K_THREAD_STACK_DEFINE(tcp_stack, 4096);
+
+static void tcp_client_entry(void *p1, void *p2, void *p3)
+{
+	ARG_UNUSED(p1);
+	ARG_UNUSED(p2);
+	ARG_UNUSED(p3);
+
+	uint8_t frame[TCP_STUB_FRAME_SIZE];
+	for (size_t i = 0; i < sizeof(frame); i++) {
+		frame[i] = (uint8_t)i;
+	}
+
+	while (1) {
+		while (atomic_get(&tcp_stop_flag)) {
+			k_sleep(K_MSEC(200));
+		}
+
+		int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (fd < 0) {
+			LOG_ERR("tcp: socket() failed: %d", errno);
+			k_sleep(K_SECONDS(1));
+			continue;
+		}
+
+		int one = 1;
+		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+		struct timeval tv = {
+			.tv_sec = 0,
+			.tv_usec = 0,
+		};
+
+		setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+		struct sockaddr_in addr = {0};
+		addr.sin_family = AF_INET;
+		addr.sin_port = htons(TCP_REMOTE_PORT);
+		if (zsock_inet_pton(AF_INET, TCP_REMOTE_IP, &addr.sin_addr) != 1) {
+			LOG_ERR("tcp: invalid remote IP: %s", TCP_REMOTE_IP);
+			close(fd);
+			k_sleep(K_SECONDS(1));
+			continue;
+		}
+
+		LOG_INF("tcp: connecting to %s:%d", TCP_REMOTE_IP, TCP_REMOTE_PORT);
+		if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+			LOG_ERR("tcp: connect() failed: %d", errno);
+			close(fd);
+			k_sleep(K_SECONDS(1));
+			continue;
+		}
+
+		LOG_INF("tcp: connected");
+		while (!atomic_get(&tcp_stop_flag)) {
+			size_t sent_total = 0;
+			while (sent_total < sizeof(frame) && !atomic_get(&tcp_stop_flag)) {
+				int n = send(fd, frame + sent_total, (size_t)(sizeof(frame) - sent_total), 0);
+				if (n > 0) {
+					sent_total += (size_t)n;
+					continue;
+				}
+				// disconnected or error
+				goto reconnect;
+			}
+
+			k_yield();
+		}
+
+	close(fd);
+	continue;
+
+	reconnect:
+		LOG_INF("tcp: disconnected (errno=%d), reconnecting...", errno);
+		close(fd);
+		k_sleep(K_SECONDS(1));
+	}
+}
+
+static void tcp_client_start(void)
+{
+	if (tcp_thread_started) {
+		atomic_clear(&tcp_stop_flag);
+		return;
+	}
+
+	atomic_clear(&tcp_stop_flag);
+	k_thread_create(&tcp_thread,
+					tcp_stack,
+					K_THREAD_STACK_SIZEOF(tcp_stack),
+					tcp_client_entry,
+					NULL,
+					NULL,
+					NULL,
+					K_PRIO_PREEMPT(7),
+					0,
+					K_NO_WAIT);
+	(void)k_thread_name_set(&tcp_thread, "tcp_stream");
+	tcp_thread_started = true;
+}
+
+static void tcp_client_stop(void)
+{
+	atomic_set(&tcp_stop_flag, 1);
+}
 
 static void wifi_ap_stations_unlocked(void)
 {
@@ -300,43 +416,6 @@ static int wifi_set_reg_domain(void)
 	return ret;
 }
 
-static int configure_dhcp_server(void)
-{
-#if !defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
-	return 0;
-#else
-	struct net_if *iface;
-	struct in_addr pool_start;
-	int ret = -1;
-
-	iface = net_if_get_first_wifi();
-	if (!iface) {
-		LOG_ERR("Failed to get Wi-Fi interface");
-		goto out;
-	}
-
-	if (net_addr_pton(AF_INET, CONFIG_SOFTAP_SAMPLE_DHCPV4_POOL_START, &pool_start.s_addr)) {
-		LOG_ERR("Invalid address: %s", CONFIG_SOFTAP_SAMPLE_DHCPV4_POOL_START);
-		goto out;
-	}
-
-	ret = net_dhcpv4_server_start(iface, &pool_start);
-	if (ret == -EALREADY) {
-		dhcp_server_configured = true;
-		LOG_ERR("DHCPv4 server already running on interface");
-	} else if (ret < 0) {
-		LOG_ERR("DHCPv4 server failed to start and returned %d error", ret);
-	} else {
-		dhcp_server_configured = true;
-		LOG_INF("DHCPv4 server started and pool address starts from %s",
-			CONFIG_SOFTAP_SAMPLE_DHCPV4_POOL_START);
-	}
-out:
-	return ret;
-
-#endif
-}
-
 #define CHECK_RET(func, ...) \
 	do { \
 		ret = func(__VA_ARGS__); \
@@ -352,38 +431,12 @@ int start_app(void)
 
 	CHECK_RET(wifi_set_reg_domain);
 
-	CHECK_RET(configure_dhcp_server);
-
 	CHECK_RET(wifi_softap_enable);
 
 	cmd_wifi_status();
 
 	return 0;
 }
-
-#if defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
-static int stop_dhcp_server(void)
-{
-	int ret;
-
-	struct net_if *iface = net_if_get_first_wifi();
-
-	if (!iface) {
-		LOG_ERR("Failed to get Wi-Fi interface");
-		return -1;
-	}
-
-	ret = net_dhcpv4_server_stop(iface);
-	if (ret) {
-		LOG_ERR("Failed to stop DHCPv4 server, error: %d", ret);
-	}
-
-	dhcp_server_configured = false;
-	LOG_INF("DHCPv4 server stopped");
-
-	return ret;
-}
-#endif
 
 void start_wifi_thread(void);
 K_THREAD_DEFINE(start_wifi_thread_id, CONFIG_SOFTAP_SAMPLE_START_WIFI_THREAD_STACK_SIZE,
@@ -409,15 +462,14 @@ void start_wifi_thread(void)
 
 		if (!wifi_ready_status) {
 			LOG_INF("Wi-Fi is not ready");
-			#if defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
-			if (dhcp_server_configured) {
-				stop_dhcp_server();
-			}
-			#endif
+
+			tcp_client_stop();
 			waiting_for_wifi = true;
 			continue;
 		}
-		start_app();
+		if (start_app() == 0) {
+			tcp_client_start();
+		}
 		waiting_for_wifi = false;
 	}
 }
@@ -464,10 +516,6 @@ void net_mgmt_callback_init(void)
 int wifi_init(void)
 {
 	int ret = 0;
-
-	#if defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
-	dhcp_server_configured = false;
-	#endif
 
 	net_mgmt_callback_init();
 
