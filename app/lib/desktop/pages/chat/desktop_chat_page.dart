@@ -52,6 +52,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
+  static final RegExp _contextRegex = RegExp(r'^Context: "([\s\S]+?)"\n\n');
+
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _pulseAnimation;
@@ -738,8 +740,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
     String messageText = text;
 
     if (message.sender == MessageSender.human) {
-      final contextRegex = RegExp(r'^Context: "([\s\S]+?)"\n\n');
-      final match = contextRegex.firstMatch(text);
+      final match = _contextRegex.firstMatch(text);
 
       if (match != null) {
         contextText = match.group(1);
@@ -812,7 +813,7 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                             const SizedBox(width: 8),
                             Flexible(
                               child: Text(
-                                contextText.length > 50 ? '${contextText.substring(0, 50)}...' : contextText,
+                                contextText,
                                 style: const TextStyle(
                                   color: ResponsiveHelper.textSecondary,
                                   fontSize: 12,
