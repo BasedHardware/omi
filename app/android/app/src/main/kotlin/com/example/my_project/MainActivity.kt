@@ -2,21 +2,44 @@ package com.friend.ios
 
 import android.content.Intent
 import androidx.annotation.NonNull
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import io.flutter.embedding.android.FlutterActivity
+import androidx.activity.result.contract.ActivityResultContracts
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity: FlutterActivity() {
+class MainActivity: FlutterFragmentActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
+    private var companionDeviceService: CompanionDeviceService? = null
+
+    // Activity result launcher for CompanionDeviceManager association dialog
+    // This must be registered before onCreate, hence lazy initialization
+    private val associationLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        companionDeviceService?.handleAssociationResult(result.resultCode, result.data)
+    }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-    
+
+        // Initialize CompanionDeviceService for battery-efficient device presence detection
+        companionDeviceService = CompanionDeviceService(this).apply {
+            setAssociationLauncher(associationLauncher)
+            register(flutterEngine)
+        }
+
+        // Set up presence listener to forward events to Flutter
+        CompanionDevicePresenceReceiver.setPresenceListener(object : CompanionDevicePresenceReceiver.Companion.PresenceListener {
+            override fun onDeviceAppeared(deviceAddress: String) {
+                // This will be handled by the EventChannel in CompanionDeviceService
+                // The event is sent via the broadcast receiver
+            }
+
+            override fun onDeviceDisappeared(deviceAddress: String) {
+                // This will be handled by the EventChannel in CompanionDeviceService
+            }
+        })
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
             if(call.method == "setNotificationOnKillService"){
@@ -36,6 +59,8 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-   
-
+    override fun onDestroy() {
+        companionDeviceService?.dispose()
+        super.onDestroy()
+    }
 }
