@@ -424,14 +424,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.l10n.doubleTapActionDesc,
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 13,
-                    ),
-                  ),
                   const SizedBox(height: 16),
                   ListTile(
                     title: Text(
@@ -467,13 +459,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    subtitle: Text(
-                      context.l10n.starOngoingDesc,
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
                       ),
                     ),
                     trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
@@ -1106,11 +1091,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ],
               if (provider.isConnected) ...[
                 const SizedBox(height: 16),
-                _buildSectionHeader(context.l10n.deviceInfoSection),
-                _buildDeviceInfoSection(provider.pairedDevice, provider),
-                const SizedBox(height: 32),
                 _buildSectionHeader(context.l10n.customizationSection),
                 _buildCustomizationSection(),
+                const SizedBox(height: 32),
+                _buildSectionHeader(context.l10n.deviceInfoSection),
+                _buildDeviceInfoSection(provider.pairedDevice, provider),
                 const SizedBox(height: 32),
                 _buildSectionHeader(context.l10n.hardwareSection),
                 _buildHardwareInfoSection(provider.pairedDevice),

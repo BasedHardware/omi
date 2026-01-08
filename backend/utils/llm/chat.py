@@ -3,7 +3,7 @@ import json
 import re
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
@@ -14,7 +14,7 @@ import database.goals as goals_db
 from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
-from models.chat import Message, MessageSender
+from models.chat import Message, MessageSender, PageContext
 from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -393,7 +393,12 @@ def _get_qa_rag_prompt(
     )
 
 
-def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None, messages: List[Message] = None) -> str:
+def _get_agentic_qa_prompt(
+    uid: str,
+    app: Optional[App] = None,
+    messages: List[Message] = None,
+    context: Optional[PageContext] = None
+) -> str:
     """
     Build the system prompt for the agentic agent.
 
@@ -401,6 +406,7 @@ def _get_agentic_qa_prompt(uid: str, app: Optional[App] = None, messages: List[M
         uid: User ID
         app: Optional app/plugin for personalized behavior
         messages: Optional message history for file context
+        context: Optional page context (type, id, title)
 
     Returns:
         System prompt string
@@ -462,12 +468,24 @@ Use search_files_tool to reference file IDs shown above.
 
 """
 
+    # Add page context if provided
+    context_section = ""
+    if context:
+        # Sanitize title to prevent prompt injection (escape angle brackets and quotes)
+        safe_title = (context.title or "").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        context_section = f"""<current_context>
+{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or 'unknown'})
+Keep this context in mind when answering their question.
+</current_context>
+
+"""
+
     base_prompt = f"""<assistant_role>
 You are Omi, {user_name}'s AI mentor and advisor. Like a smart friend who actually pushes back.
 Default: helpful, honest, and concise. Talk like a real person texting.
 </assistant_role>
 
-{goal_section}{file_context_section}<current_datetime>
+{goal_section}{file_context_section}{context_section}<current_datetime>
 {user_name}'s timezone: {tz}
 Now: {current_datetime_str} ({current_datetime_iso})
 </current_datetime>

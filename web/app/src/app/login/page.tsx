@@ -206,6 +206,27 @@ export default function LoginPage() {
           </motion.p>
         )}
 
+        {/* Beta disclaimer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+          className="mt-8 p-4 rounded-xl bg-purple-primary/5 border border-purple-primary/10"
+        >
+          <p className="text-sm text-text-tertiary text-center">
+            You&apos;re entering <span className="text-purple-primary font-medium">Omi Web Beta</span>. We&apos;re actively improving and would love your{' '}
+            <a
+              href="https://feedback.omi.me"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-primary hover:underline"
+            >
+              feedback
+            </a>
+            .
+          </p>
+        </motion.div>
+
         {/* Footer links */}
         <motion.div
           initial={{ opacity: 0 }}

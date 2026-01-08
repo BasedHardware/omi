@@ -3,40 +3,28 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-Widget getMarkdownWidget(BuildContext context, String content) {
-  var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
+Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
   return MarkdownBody(
-    selectable: PlatformService.isMacOS,
-    shrinkWrap: true,
-    onTapLink: (text, href, title) async {
-      if (href != null) {
-        final uri = Uri.parse(href);
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    },
-    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      a: style.copyWith(
-        decoration: TextDecoration.underline,
+      data: message.trimRight(),
+      selectable: PlatformService.isMacOS,
+      styleSheet: MarkdownStyleSheet(
+        p: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+        a: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+        listBullet: const TextStyle(color: Colors.white, fontSize: 16),
+        code: const TextStyle(
+          color: Colors.white,
+          backgroundColor: Colors.transparent,
+          fontFamily: 'monospace',
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(8),
+        ),
       ),
-      p: style.copyWith(
-        height: 1.5,
-      ),
-      pPadding: const EdgeInsets.only(bottom: 12),
-      blockquote: style.copyWith(
-        backgroundColor: Colors.transparent,
-        color: Colors.white,
-      ),
-      blockquoteDecoration: BoxDecoration(
-        color: Color(0xFF35343B),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      code: style.copyWith(
-        backgroundColor: Colors.transparent,
-        decoration: TextDecoration.none,
-        color: Colors.white,
-        fontWeight: FontWeight.w500,
-      ),
-    ),
-    data: content,
-  );
+      onTapLink: (text, href, title) {
+        if (href != null) {
+          launchUrl(Uri.parse(href));
+        }
+      },
+    );
 }

@@ -1,18 +1,23 @@
 'use client';
 
-import { useState, useCallback, useMemo, useTransition } from 'react';
+import { useState, useCallback, useMemo, useTransition, useEffect, useDeferredValue } from 'react';
 import { motion } from 'framer-motion';
-import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Trash2, Brain } from 'lucide-react';
+import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
 import { MemoryFilters } from './MemoryFilters';
 import { MemoryQuickAdd } from './MemoryQuickAdd';
 import { KnowledgeGraph } from './KnowledgeGraph';
+import { InsightsDashboard, LifeBalanceChart, TrendingSidebar } from './InsightsDashboard';
+import { useInsightsDashboard } from '@/hooks/useInsightsDashboard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { BulkActionBar } from '@/components/tasks/BulkActionBar';
+import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
-type ViewMode = 'list' | 'graph';
+type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -52,11 +57,44 @@ export function MemoriesPage() {
     activeCategories,
   } = useMemories();
 
-  // Calculate tag stats from memories (sample first 500 for performance)
+  // Chat context for passing selected memory info
+  const { setContext } = useChatContext();
+
+  // Set chat context when a memory is highlighted or single selected
+  useEffect(() => {
+    const targetId = highlightedMemoryId || (selectedIds.size === 1 ? Array.from(selectedIds)[0] : null);
+    if (targetId) {
+      const memory = memories.find((m) => m.id === targetId);
+      if (memory) {
+        setContext({
+          type: 'memory',
+          id: memory.id,
+          title: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
+          summary: memory.content,
+        });
+      } else {
+        setContext(null);
+      }
+    } else {
+      setContext(null);
+    }
+  }, [highlightedMemoryId, selectedIds, memories, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
+
+  // Defer memories to prevent blocking UI during heavy computations
+  const deferredMemories = useDeferredValue(memories);
+
+  // Get insights data for sidebar - uses deferred memories to not block UI
+  const { lifeBalance, risingTags, fadingTags } = useInsightsDashboard(deferredMemories);
+
+  // Calculate tag stats from all memories
   const tagStats = useMemo(() => {
     const tagCounts: Record<string, number> = {};
-    const sample = memories.slice(0, 500);
-    sample.forEach((memory) => {
+    deferredMemories.forEach((memory) => {
       if (memory.tags && Array.isArray(memory.tags)) {
         memory.tags.forEach((tag) => {
           tagCounts[tag] = (tagCounts[tag] || 0) + 1;
@@ -66,33 +104,29 @@ export function MemoriesPage() {
     return Object.entries(tagCounts)
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count);
-  }, [memories]);
+  }, [deferredMemories]);
 
   // Get top tags for display
   const topTags = tagStats.slice(0, 12);
   const allTags = tagStats;
 
-  // Get recent memories count (last 7 days) - sample first 500 for performance
+  // Get recent memories count (last 7 days) - uses deferred value
   const recentMemoriesCount = useMemo(() => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString();
-    // Sample for performance - recent memories are likely at the start
-    const sample = memories.slice(0, 500);
-    return sample.filter((m) => m.created_at >= sevenDaysAgoStr).length;
-  }, [memories]);
+    return deferredMemories.filter((m) => m.created_at >= sevenDaysAgoStr).length;
+  }, [deferredMemories]);
 
-  // Get today's memories - sample first 200 for performance
+  // Get today's memories - uses deferred value
   const todayMemories = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString();
-    // Today's memories are likely at the start of the sorted list
-    const sample = memories.slice(0, 200);
-    return sample.filter((m) => m.created_at >= todayStr);
-  }, [memories]);
+    return deferredMemories.filter((m) => m.created_at >= todayStr);
+  }, [deferredMemories]);
 
-  // Calculate activity data for chart (last 30 days) - O(n) single pass
+  // Calculate activity data for chart (last 30 days) - uses deferred value
   const activityData = useMemo(() => {
     const now = new Date();
     now.setHours(23, 59, 59, 999);
@@ -108,9 +142,8 @@ export function MemoriesPage() {
       dayCounts[date.toISOString().split('T')[0]] = 0;
     }
 
-    // Single pass through memories (sample first 1000 for performance)
-    const sample = memories.slice(0, 1000);
-    sample.forEach((m) => {
+    // Single pass through deferred memories
+    deferredMemories.forEach((m) => {
       const dateKey = m.created_at.split('T')[0];
       if (dateKey in dayCounts) {
         dayCounts[dateKey]++;
@@ -120,7 +153,7 @@ export function MemoriesPage() {
     return Object.entries(dayCounts)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
-  }, [memories]);
+  }, [deferredMemories]);
 
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {
@@ -247,6 +280,23 @@ export function MemoriesPage() {
     }
   }, [selectedIds, removeMemory]);
 
+  // Handle copy to clipboard
+  const handleCopy = useCallback(async () => {
+    const selected = memories.filter(m => selectedIds.has(m.id));
+    await copyMemoriesToClipboard(selected);
+  }, [memories, selectedIds]);
+
+  // Handle export
+  const handleExport = useCallback((format: 'csv' | 'json' | 'markdown') => {
+    const selected = memories.filter(m => selectedIds.has(m.id));
+    downloadMemories(selected, format);
+  }, [memories, selectedIds]);
+
+  // Clear selection
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
   // Clear selection when filters change
   const handleTagClickWithClearSelection = (tag: string) => {
     setSelectedIds(new Set());
@@ -264,10 +314,10 @@ export function MemoriesPage() {
       {/* Toolbar */}
       <header className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
         <div className="py-3 px-4">
-          {/* Row 1: View toggle + Search + Sort + Filter + Refresh */}
+          {/* Row 1: View toggle + Select + Sort + Filter + Search + Refresh */}
           <div className="flex items-center gap-3">
             {/* Left: View toggle */}
-            <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-4 flex-shrink-0">
               <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
                 <button
                   onClick={() => setViewMode('list')}
@@ -295,7 +345,101 @@ export function MemoriesPage() {
                   <Network className="w-4 h-4" />
                   Graph
                 </button>
+                <button
+                  onClick={() => setViewMode('tags')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium',
+                    'transition-all duration-150',
+                    viewMode === 'tags'
+                      ? 'bg-purple-primary text-white'
+                      : 'text-text-tertiary hover:text-text-primary'
+                  )}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Insights
+                </button>
               </div>
+
+              {/* Select mode toggle - moved to left */}
+              {viewMode === 'list' && filteredMemories.length > 0 && (
+                <button
+                  onClick={toggleSelectMode}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
+                    'transition-colors',
+                    isSelectMode
+                      ? 'bg-purple-primary/10 text-purple-primary'
+                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                  )}
+                >
+                  {isSelectMode ? (
+                    <>
+                      <CheckSquare className="w-4 h-4" />
+                      <span>Selecting</span>
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-4 h-4" />
+                      <span>Select</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {/* Sort dropdown - moved to left */}
+              {viewMode === 'list' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSortMenu(!showSortMenu)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
+                      'bg-bg-tertiary border border-bg-quaternary',
+                      'text-sm text-text-secondary hover:text-text-primary',
+                      'transition-colors'
+                    )}
+                  >
+                    <ArrowUpDown className="w-4 h-4" />
+                    <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+                    <ChevronDown className={cn('w-3 h-3 transition-transform', showSortMenu && 'rotate-180')} />
+                  </button>
+                  {showSortMenu && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowSortMenu(false)}
+                      />
+                      <div className="absolute left-0 top-full mt-1 z-20 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
+                        {SORT_OPTIONS.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setSortBy(option.value);
+                              setShowSortMenu(false);
+                            }}
+                            className={cn(
+                              'w-full text-left px-3 py-2 text-sm',
+                              'hover:bg-bg-tertiary transition-colors',
+                              sortBy === option.value
+                                ? 'text-purple-primary'
+                                : 'text-text-secondary'
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Filter dropdown - moved to left */}
+              {viewMode === 'list' && (
+                <MemoryFilters
+                  activeCategories={activeCategories}
+                  onCategoriesChange={setCategories}
+                />
+              )}
             </div>
 
             {/* Center: Search (only in list view) */}
@@ -318,90 +462,8 @@ export function MemoriesPage() {
               </div>
             )}
 
-            {/* Right: Sort + Filter + Refresh */}
+            {/* Right: Refresh only */}
             <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-              {viewMode === 'list' && (
-                <>
-                  {/* Sort dropdown */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowSortMenu(!showSortMenu)}
-                      className={cn(
-                        'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg',
-                        'bg-bg-tertiary border border-bg-quaternary',
-                        'text-sm text-text-secondary hover:text-text-primary',
-                        'transition-colors'
-                      )}
-                    >
-                      <ArrowUpDown className="w-4 h-4" />
-                      <span className="hidden sm:inline">{SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
-                      <ChevronDown className={cn('w-3 h-3 transition-transform', showSortMenu && 'rotate-180')} />
-                    </button>
-                    {showSortMenu && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() => setShowSortMenu(false)}
-                        />
-                        <div className="absolute right-0 top-full mt-1 z-20 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
-                          {SORT_OPTIONS.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                setSortBy(option.value);
-                                setShowSortMenu(false);
-                              }}
-                              className={cn(
-                                'w-full text-left px-3 py-2 text-sm',
-                                'hover:bg-bg-tertiary transition-colors',
-                                sortBy === option.value
-                                  ? 'text-purple-primary'
-                                  : 'text-text-secondary'
-                              )}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Filter dropdown */}
-                  <MemoryFilters
-                    activeCategories={activeCategories}
-                    onCategoriesChange={setCategories}
-                  />
-                </>
-              )}
-
-              {/* Select mode toggle */}
-              {viewMode === 'list' && filteredMemories.length > 0 && (
-                <button
-                  onClick={toggleSelectMode}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
-                    'transition-colors',
-                    isSelectMode
-                      ? 'bg-purple-primary/10 text-purple-primary'
-                      : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
-                  )}
-                >
-                  {isSelectMode ? (
-                    <>
-                      <CheckSquare className="w-4 h-4" />
-                      <span>Done</span>
-                    </>
-                  ) : (
-                    <>
-                      <Square className="w-4 h-4" />
-                      <span>Select</span>
-                    </>
-                  )}
-                </button>
-              )}
-
-              {/* Refresh */}
               <button
                 onClick={refresh}
                 disabled={loading}
@@ -426,7 +488,7 @@ export function MemoriesPage() {
 
       {/* Content - Two column layout */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row max-w-6xl mx-auto">
+        <div className="h-full flex flex-col lg:flex-row w-full">
           {/* Left Column - Memories list */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
             {viewMode === 'list' ? (
@@ -436,47 +498,20 @@ export function MemoriesPage() {
 
                 {/* Bulk action bar - only shown in select mode */}
                 {isSelectMode && (
-                  <div className="flex items-center gap-3 py-2 px-3 rounded-lg bg-bg-tertiary/50">
-                    <button
-                      onClick={handleSelectAll}
-                      className={cn(
-                        'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                        'transition-colors',
-                        selectedIds.size > 0
-                          ? 'bg-purple-primary/10 text-purple-primary'
-                          : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
-                      )}
-                    >
-                      {selectedIds.size === filteredMemories.length && filteredMemories.length > 0 ? (
-                        <CheckSquare className="w-4 h-4" />
-                      ) : (
-                        <Square className="w-4 h-4" />
-                      )}
-                      {selectedIds.size > 0
-                        ? `${selectedIds.size} selected`
-                        : 'Select All'}
-                    </button>
-
-                    {selectedIds.size > 0 && (
-                      <button
-                        onClick={handleBulkDeleteClick}
-                        disabled={isDeleting}
-                        className={cn(
-                          'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                          'bg-error/10 text-error hover:bg-error/20',
-                          'transition-colors',
-                          'disabled:opacity-50 disabled:cursor-not-allowed'
-                        )}
-                      >
-                        {isDeleting ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                        Delete
-                      </button>
-                    )}
-                  </div>
+                  <BulkActionBar
+                    inline
+                    selectedCount={selectedIds.size}
+                    onDelete={handleBulkDeleteClick}
+                    onClear={clearSelection}
+                    onCopy={handleCopy}
+                    onExport={handleExport}
+                    onSelectAll={handleSelectAll}
+                    onDone={toggleSelectMode}
+                    allSelected={selectedIds.size === filteredMemories.length && filteredMemories.length > 0}
+                    totalCount={filteredMemories.length}
+                    hideComplete
+                    hideSnooze
+                  />
                 )}
 
                 {/* Error state */}
@@ -522,8 +557,17 @@ export function MemoriesPage() {
                   />
                 )}
               </>
-            ) : (
+            ) : viewMode === 'graph' ? (
               <KnowledgeGraph onNodeSelect={handleNodeSelect} />
+            ) : (
+              <InsightsDashboard
+                memories={memories}
+                onTagSelect={(tags) => {
+                  // Use the first tag for filtering
+                  setSelectedTag(tags[0] || null);
+                  setViewMode('list');
+                }}
+              />
             )}
           </div>
 
@@ -591,13 +635,51 @@ export function MemoriesPage() {
                     </div>
                   </div>
 
+                  {/* Life Balance Radar */}
+                  {lifeBalance.length > 0 && lifeBalance.some(d => d.rawCount > 0) && (
+                    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                      <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-primary" />
+                        Life Balance
+                      </h3>
+                      <LifeBalanceChart data={lifeBalance} compact />
+                    </div>
+                  )}
+
+                  {/* Trending Topics */}
+                  {(risingTags.length > 0 || fadingTags.length > 0) && (
+                    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
+                      <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-purple-primary" />
+                        Trending
+                      </h3>
+                      <TrendingSidebar
+                        risingTags={risingTags}
+                        fadingTags={fadingTags}
+                        onTagClick={handleTagClick}
+                      />
+                    </div>
+                  )}
+
                   {/* Top Tags Card */}
                   {allTags.length > 0 && (
                     <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
-                      <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-purple-primary" />
-                        Top Tags
-                      </h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-2">
+                          <Tag className="w-4 h-4 text-purple-primary" />
+                          Top Tags
+                        </h3>
+                        <button
+                          onClick={() => setViewMode('tags')}
+                          className={cn(
+                            'p-1.5 rounded-md transition-colors',
+                            'text-text-quaternary hover:text-purple-primary hover:bg-purple-primary/10'
+                          )}
+                          title="View all tags"
+                        >
+                          <Network className="w-4 h-4" />
+                        </button>
+                      </div>
                       <div className="space-y-2">
                         {allTags.slice(0, 5).map(({ tag, count }) => {
                           const maxCount = allTags[0]?.count || 1;

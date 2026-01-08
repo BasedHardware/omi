@@ -484,7 +484,12 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               if (!isUser) ...[
                 // Avatar for other speakers (left side)
                 GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
+                  onTap: data.speakerId == omiSpeakerId
+                      ? null
+                      : () {
+                          widget.editSegment?.call(data.id, data.speakerId);
+                          MixpanelManager().tagSheetOpened();
+                        },
                   child: Column(
                     children: [
                       CircleAvatar(
@@ -503,9 +508,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                  children: [
-                    // Speaker name (only shown when toggled)
-                    if (!isUser && _showSpeakerNames) ...[
+                    children: [
+                    if (!isUser) ...[
                       Padding(
                         padding: const EdgeInsets.only(left: 4, bottom: 2),
                         child: Row(
@@ -651,8 +655,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                                     const SizedBox(height: 4),
                                     _buildTranslationNotice(),
                                   ],
-                                  // Timestamp and provider (only shown when toggled)
-                                  if (_showSpeakerNames && (widget.canDisplaySeconds || data.sttProvider != null)) ...[
+                                  // Timestamp and provider
+                                  if (widget.canDisplaySeconds || data.sttProvider != null) ...[
                                     const SizedBox(height: 4),
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
@@ -705,7 +709,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                 const SizedBox(width: 8),
                 // Avatar for user (right side)
                 GestureDetector(
-                  onTap: _toggleShowSpeakerNames,
+                  onTap: () {
+                    widget.editSegment?.call(data.id, data.speakerId);
+                    MixpanelManager().tagSheetOpened();
+                  },
                   child: Column(
                     children: [
                       CircleAvatar(

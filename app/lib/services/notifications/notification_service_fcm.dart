@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -69,10 +70,10 @@ class _FCMNotificationService implements NotificationInterface {
         debug: false);
 
     debugPrint('initializeNotifications: $initialized');
-
-    // Reset badge to clear existing badge count if any
+    
+// Reset badge to clear existing badge count if any
     int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
-    if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
+if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
 
   @override
@@ -224,6 +225,13 @@ class _FCMNotificationService implements NotificationInterface {
           return;
         } else if (messageType == 'merge_completed') {
           MergeNotificationHandler.handleMergeCompleted(
+            data,
+            channel.channelKey!,
+            isAppInForeground: true,
+          );
+          return;
+        } else if (messageType == 'important_conversation') {
+          ImportantConversationNotificationHandler.handleImportantConversation(
             data,
             channel.channelKey!,
             isAppInForeground: true,

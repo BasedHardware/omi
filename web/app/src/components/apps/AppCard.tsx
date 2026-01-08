@@ -48,9 +48,9 @@ export function AppCard({ app, onUpdate }: AppCardProps) {
     <Link
       href={`/apps/${app.id}`}
       className={cn(
-        'block p-4 rounded-xl',
-        'bg-bg-tertiary border border-bg-quaternary',
-        'hover:bg-bg-quaternary/50 hover:border-purple-primary/30',
+        'noise-overlay block p-4 rounded-xl',
+        'bg-white/[0.02] border border-white/[0.06]',
+        'hover:bg-white/[0.05] hover:border-purple-primary/30',
         'transition-all group'
       )}
     >

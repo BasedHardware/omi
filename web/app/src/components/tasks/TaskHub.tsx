@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Trash2, Check, Search } from 'lucide-react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionItems } from '@/hooks/useActionItems';
-import { TaskProgressCard } from './TaskProgressCard';
-import { MonthCalendar } from './MonthCalendar';
+import { useTaskKeyboardShortcuts } from '@/hooks/useTaskKeyboardShortcuts';
 import { TaskGroup, TaskGroupSkeleton } from './TaskGroup';
 import { TaskQuickAdd } from './TaskQuickAdd';
+import { TaskListView } from './TaskListView';
+import { TaskRightPanel } from './TaskRightPanel';
+import { BulkActionBar } from './BulkActionBar';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { copyTasksToClipboard, downloadTasks } from '@/lib/taskExport';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 type ViewMode = 'hub' | 'list';
 
@@ -19,10 +22,14 @@ export function TaskHub() {
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const {
     items,
     groupedItems,
+    sortedFlatList,
     loading,
     error,
     stats,
@@ -36,7 +43,36 @@ export function TaskHub() {
     bulkComplete,
     bulkDelete,
     bulkSnooze,
+    bulkSetDueDate,
   } = useActionItems();
+
+  // Chat context for passing selected task info
+  const { setContext } = useChatContext();
+
+  // Set chat context when a single task is selected
+  useEffect(() => {
+    if (selectedIds.size === 1) {
+      const taskId = Array.from(selectedIds)[0];
+      const task = items.find((t) => t.id === taskId);
+      if (task) {
+        setContext({
+          type: 'task',
+          id: task.id,
+          title: task.description,
+          summary: task.completed ? 'Completed' : `Due: ${task.due_at || 'No due date'}`,
+        });
+      } else {
+        setContext(null);
+      }
+    } else {
+      setContext(null);
+    }
+  }, [selectedIds, items, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
 
   // Common props for all TaskGroup components
   const taskGroupProps = {
@@ -115,6 +151,54 @@ export function TaskHub() {
     [selectedIds, bulkSnooze, clearSelection]
   );
 
+  // Handle copy to clipboard
+  const handleCopy = useCallback(async () => {
+    const selectedItems = items.filter(i => selectedIds.has(i.id));
+    await copyTasksToClipboard(selectedItems);
+  }, [items, selectedIds]);
+
+  // Handle export
+  const handleExport = useCallback((format: 'csv' | 'json' | 'markdown') => {
+    const selectedItems = items.filter(i => selectedIds.has(i.id));
+    downloadTasks(selectedItems, format);
+  }, [items, selectedIds]);
+
+  // Handle show no due date items
+  const handleShowNoDueDateItems = useCallback(() => {
+    setSearchQuery('');
+    setViewMode('list');
+    // Items without due dates will be at the bottom of the list
+  }, []);
+
+  // Handle set due today for selected items
+  const handleSetDueToday = useCallback(async (ids: string[]) => {
+    await bulkSetDueDate(ids, new Date());
+  }, [bulkSetDueDate]);
+
+  // Handle set due tomorrow for selected items
+  const handleSetDueTomorrow = useCallback(async (ids: string[]) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await bulkSetDueDate(ids, tomorrow);
+  }, [bulkSetDueDate]);
+
+  // Handle bulk toggle complete
+  const handleBulkToggleComplete = useCallback(async (ids: string[]) => {
+    await bulkComplete(ids);
+    clearSelection();
+  }, [bulkComplete, clearSelection]);
+
+  // Handle bulk delete via keyboard
+  const handleBulkDeleteByIds = useCallback(async (ids: string[]) => {
+    await bulkDelete(ids);
+    clearSelection();
+  }, [bulkDelete, clearSelection]);
+
+  // Handle start edit
+  const handleStartEdit = useCallback((id: string) => {
+    setEditingId(id);
+  }, []);
+
   // Handle date selection from week strip
   const handleDateSelect = useCallback((date: Date) => {
     setSelectedDate((prev) =>
@@ -157,9 +241,58 @@ export function TaskHub() {
       tomorrow: filterTasks(groupedItems.tomorrow),
       thisWeek: filterTasks(groupedItems.thisWeek),
       later: filterTasks(groupedItems.later),
+      noDueDate: filterTasks(groupedItems.noDueDate),
       completed: filterTasks(groupedItems.completed),
     };
   }, [groupedItems, searchQuery]);
+
+  // Keyboard navigation (defined after filteredItems)
+  const handleNavigate = useCallback((direction: 'up' | 'down') => {
+    const totalItems = viewMode === 'list'
+      ? sortedFlatList.pending.length + (showCompleted ? sortedFlatList.completed.length : 0)
+      : filteredItems.filter(i => !i.completed).length;
+
+    if (totalItems === 0) return;
+
+    setFocusedIndex(prev => {
+      if (direction === 'up') {
+        return prev <= 0 ? totalItems - 1 : prev - 1;
+      } else {
+        return prev >= totalItems - 1 ? 0 : prev + 1;
+      }
+    });
+  }, [viewMode, sortedFlatList, showCompleted, filteredItems]);
+
+  // Toggle select focused item
+  const handleToggleSelectFocused = useCallback(() => {
+    const allItems = viewMode === 'list'
+      ? [...sortedFlatList.pending, ...(showCompleted ? sortedFlatList.completed : [])]
+      : filteredItems.filter(i => !i.completed);
+
+    if (focusedIndex >= 0 && focusedIndex < allItems.length) {
+      const item = allItems[focusedIndex];
+      handleSelect(item.id, !selectedIds.has(item.id));
+    }
+  }, [viewMode, sortedFlatList, showCompleted, filteredItems, focusedIndex, selectedIds]);
+
+  // Keyboard shortcuts
+  useTaskKeyboardShortcuts({
+    enabled: !loading && items.length > 0,
+    selectedIds,
+    focusedIndex,
+    totalItems: viewMode === 'list'
+      ? sortedFlatList.pending.length
+      : filteredItems.filter(i => !i.completed).length,
+    onSetDueToday: handleSetDueToday,
+    onSetDueTomorrow: handleSetDueTomorrow,
+    onDelete: handleBulkDeleteByIds,
+    onToggleComplete: handleBulkToggleComplete,
+    onStartEdit: handleStartEdit,
+    onSelectAll: handleSelectAll,
+    onDeselectAll: clearSelection,
+    onNavigate: handleNavigate,
+    onToggleSelectFocused: handleToggleSelectFocused,
+  });
 
   // Filter tasks based on view mode and selected date
   const getVisibleGroups = () => {
@@ -226,6 +359,32 @@ export function TaskHub() {
             </button>
             </div>
 
+            {/* Select mode toggle - moved to left */}
+            {filteredItems.filter((i) => !i.completed).length > 0 && (
+              <button
+                onClick={toggleSelectMode}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
+                  'transition-colors',
+                  isSelectMode
+                    ? 'bg-purple-primary/10 text-purple-primary'
+                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+                )}
+              >
+                {isSelectMode ? (
+                  <>
+                    <CheckSquare className="w-4 h-4" />
+                    <span>Selecting</span>
+                  </>
+                ) : (
+                  <>
+                    <Square className="w-4 h-4" />
+                    <span>Select</span>
+                  </>
+                )}
+              </button>
+            )}
+
             {/* Search */}
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
@@ -247,31 +406,6 @@ export function TaskHub() {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            {/* Select mode toggle */}
-            {filteredItems.filter((i) => !i.completed).length > 0 && (
-              <button
-                onClick={toggleSelectMode}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
-                  'transition-colors',
-                  isSelectMode
-                    ? 'bg-purple-primary/10 text-purple-primary'
-                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {isSelectMode ? (
-                  <>
-                    <CheckSquare className="w-4 h-4" />
-                    <span>Done</span>
-                  </>
-                ) : (
-                  <>
-                    <Square className="w-4 h-4" />
-                    <span>Select</span>
-                  </>
-                )}
-              </button>
-            )}
             <button
               onClick={refresh}
               disabled={loading}
@@ -292,62 +426,29 @@ export function TaskHub() {
 
       {/* Content - Two column layout for Hub view */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col lg:flex-row max-w-6xl mx-auto">
+        <div className="h-full flex flex-col lg:flex-row w-full">
           {/* Left Column - Tasks (scrollable) */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
           {/* Quick add */}
           <TaskQuickAdd onAdd={handleAddTask} disabled={loading} />
 
-          {/* Bulk action bar - only shown in select mode */}
+          {/* Inline action bar - only shown in select mode */}
           {isSelectMode && (
-            <div className="flex items-center gap-3 py-2 px-3 rounded-lg bg-bg-tertiary/50">
-              <button
-                onClick={handleSelectAll}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                  'transition-colors',
-                  selectedIds.size > 0
-                    ? 'bg-purple-primary/10 text-purple-primary'
-                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
-                )}
-              >
-                {selectedIds.size === filteredItems.filter((i) => !i.completed).length && filteredItems.filter((i) => !i.completed).length > 0 ? (
-                  <CheckSquare className="w-4 h-4" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-                {selectedIds.size > 0
-                  ? `${selectedIds.size} selected`
-                  : 'Select All'}
-              </button>
-
-              {selectedIds.size > 0 && (
-                <>
-                  <button
-                    onClick={handleBulkComplete}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                      'bg-success/10 text-success hover:bg-success/20',
-                      'transition-colors'
-                    )}
-                  >
-                    <Check className="w-4 h-4" />
-                    Complete
-                  </button>
-                  <button
-                    onClick={handleBulkDelete}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
-                      'bg-error/10 text-error hover:bg-error/20',
-                      'transition-colors'
-                    )}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Delete
-                  </button>
-                </>
-              )}
-            </div>
+            <BulkActionBar
+              inline
+              selectedCount={selectedIds.size}
+              selectedItems={items.filter(i => selectedIds.has(i.id))}
+              onComplete={handleBulkComplete}
+              onDelete={handleBulkDelete}
+              onSnooze={handleBulkSnooze}
+              onClear={clearSelection}
+              onCopy={handleCopy}
+              onExport={handleExport}
+              onSelectAll={handleSelectAll}
+              onDone={toggleSelectMode}
+              allSelected={selectedIds.size === filteredItems.filter((i) => !i.completed).length && filteredItems.filter((i) => !i.completed).length > 0}
+              totalCount={filteredItems.filter((i) => !i.completed).length}
+            />
           )}
 
           {/* Error state */}
@@ -414,8 +515,26 @@ export function TaskHub() {
                 </div>
               )}
 
-              {/* Filtered view (when date is selected in Hub view) */}
-              {viewMode === 'hub' && filteredView ? (
+              {/* List view - flat list with TaskListView */}
+              {viewMode === 'list' ? (
+                <TaskListView
+                  pendingTasks={sortedFlatList.pending}
+                  completedTasks={sortedFlatList.completed}
+                  showCompleted={showCompleted}
+                  onToggleShowCompleted={() => setShowCompleted(!showCompleted)}
+                  selectedIds={selectedIds}
+                  onSelect={handleSelect}
+                  isSelectMode={isSelectMode}
+                  focusedIndex={focusedIndex}
+                  onToggleComplete={toggleComplete}
+                  onSnooze={snooze}
+                  onDelete={removeItem}
+                  onUpdateDescription={updateDescription}
+                  onSetDueDate={setDueDate}
+                  searchQuery={searchQuery}
+                />
+              ) : filteredView ? (
+                /* Filtered view (when date is selected in Hub view) */
                 <div className="space-y-4">
                   {filteredView.pending.length > 0 && (
                     <TaskGroup
@@ -442,7 +561,7 @@ export function TaskHub() {
                   )}
                 </div>
               ) : (
-                /* All task groups in single column */
+                /* Hub view - all task groups */
                 <div className="space-y-4">
                   <TaskGroup
                     title="Priority Tasks"
@@ -470,14 +589,22 @@ export function TaskHub() {
                     defaultCollapsed={filteredGroupedItems.thisWeek.length > 5}
                     {...taskGroupProps}
                   />
-                  {viewMode === 'list' && (
-                    <TaskGroup
-                      title="Later"
-                      icon="📋"
-                      tasks={filteredGroupedItems.later}
-                      {...taskGroupProps}
-                    />
-                  )}
+                  <TaskGroup
+                    title="Later"
+                    icon="📋"
+                    tasks={filteredGroupedItems.later}
+                    collapsible
+                    defaultCollapsed={filteredGroupedItems.later.length > 5}
+                    {...taskGroupProps}
+                  />
+                  <TaskGroup
+                    title="No Due Date"
+                    icon="📭"
+                    tasks={filteredGroupedItems.noDueDate}
+                    collapsible
+                    defaultCollapsed
+                    {...taskGroupProps}
+                  />
                   <TaskGroup
                     title="Completed"
                     icon="✓"
@@ -495,39 +622,28 @@ export function TaskHub() {
 
         {/* Right Column - Dashboard (sticky sidebar) - only in Hub view */}
         {viewMode === 'hub' && (
-          <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last space-y-4 lg:h-full lg:overflow-y-auto">
+          <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last lg:h-full lg:overflow-y-auto">
             {/* Loading state for dashboard */}
             {loading && items.length === 0 && (
               <div className="space-y-4">
                 <div className="h-32 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
+                <div className="h-24 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
                 <div className="h-64 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
               </div>
             )}
 
             {/* Dashboard content */}
             {!loading && items.length > 0 && (
-              <>
-                {/* Progress card */}
-                <TaskProgressCard
-                  overdueCount={stats.overdue}
-                  todayTotal={stats.todayTotal}
-                  todayCompleted={stats.todayCompleted}
-                  totalPending={stats.pending}
-                  totalCompleted={stats.completed}
-                  weekCompleted={stats.weekCompleted}
-                  weekPending={stats.weekPending}
-                  streak={stats.streak}
-                  compact
-                />
-
-                {/* Month calendar */}
-                <MonthCalendar
-                  items={items}
-                  selectedDate={selectedDate}
-                  onSelectDate={handleDateSelect}
-                  onDropTask={handleDropTask}
-                />
-              </>
+              <TaskRightPanel
+                stats={stats}
+                items={items}
+                groupedItems={groupedItems}
+                onBulkSetDueDate={bulkSetDueDate}
+                onShowNoDueDateItems={handleShowNoDueDateItems}
+                onDateSelect={handleDateSelect}
+                selectedDate={selectedDate}
+                onDragToDate={handleDropTask}
+              />
             )}
           </div>
         )}

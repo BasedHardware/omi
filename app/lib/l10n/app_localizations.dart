@@ -1197,12 +1197,6 @@ abstract class AppLocalizations {
   /// **'Double Tap Action'**
   String get doubleTapAction;
 
-  /// Double tap action description
-  ///
-  /// In en, this message translates to:
-  /// **'Choose what happens when you double tap'**
-  String get doubleTapActionDesc;
-
   /// End and process action
   ///
   /// In en, this message translates to:
@@ -1220,12 +1214,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Star Ongoing Conversation'**
   String get starOngoing;
-
-  /// Star ongoing conversation description
-  ///
-  /// In en, this message translates to:
-  /// **'Mark to star when conversation ends'**
-  String get starOngoingDesc;
 
   /// Off state
   ///

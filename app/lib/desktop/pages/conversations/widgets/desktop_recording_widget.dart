@@ -206,7 +206,7 @@ class _DesktopRecordingWidgetState extends State<DesktopRecordingWidget> {
         color: isRecordingOrPaused
             ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.08)
             : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isRecordingOrPaused
               ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.2)

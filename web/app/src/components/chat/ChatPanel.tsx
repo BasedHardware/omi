@@ -2,13 +2,14 @@
 
 import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Sparkles, Trash2, Brain, Paperclip } from 'lucide-react';
+import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
 import { useChat as useChatContext } from './ChatContext';
 import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
-import { uploadChatFiles } from '@/lib/api';
+import { uploadChatFiles, getChatApps } from '@/lib/api';
+import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
@@ -50,7 +51,7 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
-  const { isOpen, closeChat, currentContext } = useChatContext();
+  const { isOpen, closeChat, currentContext, selectedAppId, clearAppContext } = useChatContext();
   const {
     messages,
     isLoading,
@@ -61,16 +62,29 @@ export function ChatPanel() {
     sendMessage,
     clearHistory,
     loadHistory,
-  } = useChat();
+  } = useChat({ appId: selectedAppId || undefined });
 
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<App | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch app info when selectedAppId changes
+  useEffect(() => {
+    if (selectedAppId) {
+      getChatApps().then((apps) => {
+        const app = apps.find((a) => a.id === selectedAppId);
+        setSelectedApp(app || null);
+      }).catch(() => setSelectedApp(null));
+    } else {
+      setSelectedApp(null);
+    }
+  }, [selectedAppId]);
 
   // Load history when panel opens
   useEffect(() => {
@@ -182,7 +196,7 @@ export function ChatPanel() {
 
     setInput('');
     setSelectedFiles([]);
-    await sendMessage(text, fileIds);
+    await sendMessage(text, fileIds, currentContext);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -208,39 +222,54 @@ export function ChatPanel() {
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
+          {/* Mobile backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/30 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/30 z-40 sm:hidden"
             onClick={closeChat}
           />
 
-          {/* Panel */}
+          {/* Panel - push/slide animation */}
           <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            initial={{ width: 0 }}
+            animate={{ width: 400 }}
+            exit={{ width: 0 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
-              'fixed top-0 right-0 bottom-0 z-50',
-              'w-full sm:w-[400px]',
+              'h-full flex-shrink-0 overflow-hidden',
               'bg-bg-secondary border-l border-bg-tertiary',
-              'flex flex-col',
-              'shadow-2xl'
+              'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
             )}
           >
+            <div className={cn(
+              'w-[400px] h-full flex flex-col',
+              'max-sm:w-full'
+            )}>
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
               <div className="flex items-center gap-3">
+                {/* Back button when in app-specific chat */}
+                {selectedAppId && (
+                  <button
+                    onClick={clearAppContext}
+                    className="p-1.5 -ml-1 rounded-lg hover:bg-bg-tertiary transition-colors"
+                    aria-label="Back to Omi chat"
+                    title="Back to Omi"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-text-tertiary" />
+                  </button>
+                )}
                 <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center">
                   <Sparkles className="w-4 h-4 text-purple-primary" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-text-primary">Chat with Omi</h2>
-                  {currentContext?.title && (
+                  <h2 className="font-semibold text-text-primary">
+                    {selectedApp ? `Chat with ${selectedApp.name}` : 'Chat with Omi'}
+                  </h2>
+                  {currentContext?.title && !selectedAppId && (
                     <p className="text-xs text-text-tertiary truncate max-w-[250px]">
                       Context: {currentContext.title}
                     </p>
@@ -469,6 +498,7 @@ export function ChatPanel() {
                   </button>
                 </div>
               </div>
+            </div>
             </div>
           </motion.div>
 

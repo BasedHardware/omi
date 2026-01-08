@@ -69,6 +69,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int get missingWalsInSeconds =>
       missingWals.isEmpty ? 0 : missingWals.map((val) => val.seconds).reduce((a, b) => a + b);
 
+  /// Missing WALs that are still on device storage (SD card or Limitless flash page)
+  /// These are files that need to be downloaded from the hardware device
+  List<Wal> get missingWalsOnDevice => _allWals
+      .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.sdcard || w.storage == WalStorage.flashPage))
+      .toList();
+
   // Backward compatibility getters
   bool get isSyncing => _syncState.isSyncing;
   bool get syncCompleted => _syncState.isCompleted;

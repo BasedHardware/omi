@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:flutter/scheduler.dart';
@@ -17,6 +18,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
@@ -29,6 +31,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 
 import 'conversation_detail_provider.dart';
 import 'widgets/name_speaker_sheet.dart';
+import 'widgets/share_to_contacts_sheet.dart';
 // import 'share.dart';
 import 'test_prompts.dart';
 // import 'package:omi/pages/settings/developer.dart';
@@ -37,8 +40,16 @@ import 'test_prompts.dart';
 class ConversationDetailPage extends StatefulWidget {
   final ServerConversation conversation;
   final bool isFromOnboarding;
+  final bool openShareToContactsOnLoad;
+  final int initialTabIndex;
 
-  const ConversationDetailPage({super.key, this.isFromOnboarding = false, required this.conversation});
+  const ConversationDetailPage({
+    super.key,
+    this.isFromOnboarding = false,
+    required this.conversation,
+    this.openShareToContactsOnLoad = false,
+    this.initialTabIndex = 1, // Default to summary tab
+  });
 
   @override
   State<ConversationDetailPage> createState() => _ConversationDetailPageState();
@@ -131,7 +142,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   void initState() {
     super.initState();
 
-    _controller = TabController(length: 3, vsync: this, initialIndex: 1); // Start with summary tab
+    _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
     _controller!.addListener(() {
       setState(() {
         String? tabName;
@@ -162,15 +173,25 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      var provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-      var conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      if (!mounted) return;
+
+      final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
 
+      conversationProvider.groupConversationsByDate();
+
       // Find the proper date and index for this conversation in the grouped conversations
-      var (date, index) = conversationProvider.getConversationDateAndIndex(widget.conversation);
-      provider.updateConversation(widget.conversation.id, date);
+      final result = conversationProvider.getConversationDateAndIndex(widget.conversation);
+      if (result != null) {
+        final (date, index) = result;
+        provider.updateConversation(widget.conversation.id, date);
+      } else {
+        final effectiveDate = widget.conversation.startedAt ?? widget.conversation.createdAt;
+        provider.selectedDate = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+      }
 
       await provider.initConversation();
       if (provider.conversation.appResults.isEmpty) {
@@ -188,6 +209,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
         }
       }
+
+      // Auto-open share to contacts sheet if requested (from important conversation notification)
+      if (widget.openShareToContactsOnLoad && mounted) {
+        // Small delay to ensure the page is fully rendered
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          _showShareToContactsBottomSheet();
+        }
+      }
     });
     // _animationController = AnimationController(
     //   vsync: this,
@@ -195,8 +225,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     // )..repeat(reverse: true);
     //
     // _opacityAnimation = Tween<double>(begin: 1.0, end: 0.5).animate(_animationController);
-
-    super.initState();
   }
 
   @override
@@ -209,6 +237,13 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.dispose();
   }
 
+  /// Show the share to contacts bottom sheet
+  void _showShareToContactsBottomSheet() {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showShareToContactsBottomSheet(context, provider.conversation);
+  }
+
+
   String _getTabTitle(BuildContext context, ConversationTab tab) {
     switch (tab) {
       case ConversationTab.transcript:
@@ -218,6 +253,51 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       case ConversationTab.actionItems:
         return context.l10n.actionItemsTab;
     }
+  }
+
+  /// Navigate to adjacent conversation with slide animation.
+  /// [direction]: 1 for older (swipe left), -1 for newer (swipe right)
+  void _navigateToAdjacentConversation(int direction) {
+    final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+
+    final currentConvoId = detailProvider.conversation.id;
+    final currentDate = detailProvider.selectedDate;
+
+    final adjacent = conversationProvider.getAdjacentConversation(currentConvoId, currentDate, direction);
+    if (adjacent == null) {
+      // At boundary, provide haptic feedback
+      HapticFeedback.lightImpact();
+      return;
+    }
+
+    HapticFeedback.selectionClick();
+
+    // Navigate with slide animation (new page will initialize its own state)
+    final currentTabIndex = _controller?.index ?? 1;
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => ConversationDetailPage(
+          conversation: adjacent.conversation,
+          isFromOnboarding: widget.isFromOnboarding,
+          initialTabIndex: currentTabIndex,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // Slide from right for older (direction=1), from left for newer (direction=-1)
+          final begin = Offset(direction.toDouble(), 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(position: offsetAnimation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 250),
+      ),
+    );
   }
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
@@ -675,6 +755,24 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     });
                   }
                 },
+                // Horizontal swipe to navigate between conversations (mobile only)
+                onHorizontalDragEnd: PlatformService.isMobile
+                    ? (details) {
+                        // Skip if on Action Items tab (to not interfere with Dismissible swipe-to-delete)
+                        if (selectedTab == ConversationTab.actionItems) return;
+
+                        final velocity = details.primaryVelocity ?? 0;
+                        const swipeThreshold = 300.0; // minimum velocity to trigger navigation
+
+                        if (velocity < -swipeThreshold) {
+                          // Swipe left -> go to older conversation
+                          _navigateToAdjacentConversation(1);
+                        } else if (velocity > swipeThreshold) {
+                          // Swipe right -> go to newer conversation
+                          _navigateToAdjacentConversation(-1);
+                        }
+                      }
+                    : null,
                 child: Column(
                   children: [
                     Expanded(
