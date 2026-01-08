@@ -309,6 +309,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             LOG_INF("WIFI_SHUTDOWN command received");
             wifi_turn_off();
             mic_resume();
+            remaining_length = 0;
             result_buffer[0] = 0;
             break;
 

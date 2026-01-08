@@ -68,4 +68,5 @@ config OMI_ENABLE_WIFI
     help
         "Enable the WiFi support to sync audio data over TCP."
     default n
+
 endmenu
