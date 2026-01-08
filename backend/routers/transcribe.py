@@ -2070,7 +2070,7 @@ async def listen_handler(
                 bearer_token = auth_header.split(' ', 1)[1]
                 decoded = firebase_auth.verify_id_token(bearer_token)
                 uid = decoded['uid']
-            except InvalidIdTokenError as e:
+            except (InvalidIdTokenError, ValueError, Exception) as e:
                 print(f"Header token verification failed: {e}")
 
     # 2. Try query param token (web browser sends this)
@@ -2078,7 +2078,7 @@ async def listen_handler(
         try:
             decoded = firebase_auth.verify_id_token(token)
             uid = decoded['uid']
-        except InvalidIdTokenError as e:
+        except (InvalidIdTokenError, ValueError, Exception) as e:
             print(f"Query token verification failed: {e}")
             await websocket.accept()
             await websocket.close(code=1008, reason="Invalid token")
