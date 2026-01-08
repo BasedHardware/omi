@@ -160,6 +160,17 @@ void wifi_turn_off(void)
 	/* Stop new TCP sends immediately */
 	atomic_set(&stop_tcp_traffic, 1);
 	current_wifi_state = WIFI_STATE_SHUTDOWN;
+
+	// wait for wifi to turn off
+	while (current_wifi_state != WIFI_STATE_OFF) {
+		k_msleep(100);
+	}
+
+    // Ensure WiFi power is off
+    struct net_if *iface = net_if_get_first_wifi();
+    if (iface) {
+        net_if_down(iface);
+    }
 }
 
 int wifi_turn_on(void)
@@ -596,8 +607,7 @@ void start_wifi_thread(void)
 	while (1) {
 		switch (current_wifi_state) {
 		case WIFI_STATE_OFF:
-			LOG_INF("Wi-Fi state: OFF (waiting)");
-			k_msleep(500);
+			k_msleep(100);
 			break;
 
 		case WIFI_STATE_SHUTDOWN:
