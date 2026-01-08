@@ -10,6 +10,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/companion_device_manager.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -59,6 +60,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return Future.value(null);
     }
     await connection.unpair();
+
+    if (PlatformService.isAndroid) {
+      try {
+        final companionService = CompanionDeviceManagerService.instance;
+        await companionService.stopObservingDevicePresence(btDevice.id);
+        await companionService.disassociate(btDevice.id);
+        debugPrint('CompanionDevice: Disassociated ${btDevice.id}');
+      } catch (e) {
+        debugPrint('CompanionDevice: Error disassociating: $e');
+      }
+    }
+
     return await connection.disconnect();
   }
 
