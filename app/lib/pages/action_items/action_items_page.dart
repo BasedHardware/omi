@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/tasks_onboarding_widget.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -38,14 +40,34 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       MixpanelManager().actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
-        provider.fetchActionItems(showShimmer: true);
+        await provider.fetchActionItems(showShimmer: true);
+      }
+
+      // Create onboarding task if needed
+      if (!SharedPreferencesUtil().isHomeOnboardingCompleted) {
+        _createOnboardingTaskIfNeeded(provider);
       }
     });
+  }
+
+  void _createOnboardingTaskIfNeeded(ActionItemsProvider provider) {
+    // Check if "Open your brain map" task already exists
+    const onboardingTaskDescription = 'Open your brain map';
+    final existingTask = provider.actionItems.any(
+      (item) => item.description.toLowerCase() == onboardingTaskDescription.toLowerCase(),
+    );
+
+    if (!existingTask) {
+      provider.createActionItem(
+        description: onboardingTaskDescription,
+        dueAt: null, // No deadline
+      );
+    }
   }
 
   @override
@@ -372,6 +394,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 provider: provider,
               ),
             ),
+
+        // Tasks onboarding widget
+        if (!SharedPreferencesUtil().isHomeOnboardingCompleted)
+          const SliverToBoxAdapter(child: TasksOnboardingWidget()),
 
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),

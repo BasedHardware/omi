@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -22,6 +23,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
 import 'widgets/goal_tracker_widget.dart';
+import 'widgets/home_onboarding_widget.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -62,6 +64,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       // Check if we should show the app review prompt for first conversation
       if (mounted && conversationProvider.conversations.isNotEmpty) {
         await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: true);
+      }
+
+      // Increment onboarding view count if not completed
+      if (!SharedPreferencesUtil().isHomeOnboardingCompleted) {
+        SharedPreferencesUtil().incrementHomeOnboardingViewCount();
       }
     });
   }
@@ -229,7 +236,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const DailySummariesList()
             else if (convoProvider.groupedConversations.isEmpty &&
                 !convoProvider.isLoadingConversations &&
-                !convoProvider.isFetchingConversations)
+                !convoProvider.isFetchingConversations &&
+                SharedPreferencesUtil().isHomeOnboardingCompleted)
               SliverToBoxAdapter(
                 child: Center(
                   child: Padding(
@@ -290,6 +298,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   },
                 ),
               ),
+            // Home onboarding widget - shown AFTER conversations
+            if (!SharedPreferencesUtil().isHomeOnboardingCompleted)
+              const SliverToBoxAdapter(child: HomeOnboardingWidget()),
             SliverToBoxAdapter(
               child: SizedBox(height: convoProvider.isSelectionModeActive ? 160 : 100),
             ),
