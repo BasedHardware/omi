@@ -79,12 +79,19 @@ class CalendarService {
 
   /// Update calendar settings
   Future<void> updateSettings({
-    required bool showEventsWithNoParticipants,
+    bool? showEventsWithNoParticipants,
+    bool? showMeetingsInMenuBar,
   }) async {
     try {
-      await _methodChannel.invokeMethod('updateCalendarSettings', {
-        'showEventsWithNoParticipants': showEventsWithNoParticipants,
-      });
+      final args = <String, dynamic>{};
+      if (showEventsWithNoParticipants != null) {
+        args['showEventsWithNoParticipants'] = showEventsWithNoParticipants;
+      }
+      if (showMeetingsInMenuBar != null) {
+        args['showMeetingsInMenuBar'] = showMeetingsInMenuBar;
+      }
+
+      await _methodChannel.invokeMethod('updateCalendarSettings', args);
     } catch (e) {
       print('CalendarService: Error updating settings: $e');
     }
