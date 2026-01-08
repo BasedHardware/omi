@@ -199,7 +199,13 @@ export function ConversationSplitView() {
     if (b === 'Today') return 1;
     if (a === 'Yesterday') return -1;
     if (b === 'Yesterday') return 1;
-    return new Date(b).getTime() - new Date(a).getTime();
+    // Use actual conversation timestamps instead of parsing the date string
+    // (which lacks year info and causes incorrect sorting)
+    const convA = displayedConversations[a][0];
+    const convB = displayedConversations[b][0];
+    const dateA = new Date(convA?.started_at || convA?.created_at);
+    const dateB = new Date(convB?.started_at || convB?.created_at);
+    return dateB.getTime() - dateA.getTime();
   });
 
   const isLoading = isSearching ? searchLoading : (listLoading || folderSwitching);
