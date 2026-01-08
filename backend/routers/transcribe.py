@@ -20,6 +20,7 @@ import lc3  # lc3py
 from fastapi import APIRouter, Query
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from firebase_admin import auth as firebase_auth
+from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
@@ -2059,26 +2060,33 @@ async def listen_handler(
 
     # 1. Try Authorization header (mobile app sends this)
     auth_header = websocket.headers.get('authorization')
-    if auth_header and ' ' in auth_header:
-        try:
-            bearer_token = auth_header.split(' ', 1)[1]
-            decoded = firebase_auth.verify_id_token(bearer_token)
-            uid = decoded['uid']
-        except Exception as e:
-            print(f"Header token verification failed: {e}")
+    if auth_header:
+        # Check for ADMIN_KEY (for admin/testing tools)
+        admin_key = os.getenv('ADMIN_KEY')
+        if admin_key and admin_key in auth_header:
+            uid = auth_header.split(admin_key)[1]
+        elif ' ' in auth_header:
+            try:
+                bearer_token = auth_header.split(' ', 1)[1]
+                decoded = firebase_auth.verify_id_token(bearer_token)
+                uid = decoded['uid']
+            except InvalidIdTokenError as e:
+                print(f"Header token verification failed: {e}")
 
     # 2. Try query param token (web browser sends this)
     if not uid and token:
         try:
             decoded = firebase_auth.verify_id_token(token)
             uid = decoded['uid']
-        except Exception as e:
+        except InvalidIdTokenError as e:
             print(f"Query token verification failed: {e}")
+            await websocket.accept()
             await websocket.close(code=1008, reason="Invalid token")
             return
 
     # 3. Neither worked - reject connection
     if not uid:
+        await websocket.accept()
         await websocket.close(code=1008, reason="Authentication required")
         return
 
