@@ -9,26 +9,35 @@
  */
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(softap, CONFIG_LOG_DEFAULT_LEVEL);
+LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 
 #include <errno.h>
+#include <fcntl.h>
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/kernel/thread_stack.h>
+#include <zephyr/net/net_if.h>
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/net/wifi_utils.h>
 #include <zephyr/net/socket.h>
+#include <zephyr/posix/sys/socket.h>
 #include <zephyr/sys/atomic.h>
 #include "net_private.h"
-#if defined(CONFIG_SOFTAP_SAMPLE_DHCPV4_SERVER)
-#include <zephyr/net/dhcpv4_server.h>
-#endif
 
 #include <net/wifi_ready.h>
+#include "wifi.h"
 
-#define WIFI_SAP_MGMT_EVENTS (NET_EVENT_WIFI_AP_ENABLE_RESULT)
+#define WIFI_SAP_MGMT_EVENTS                                                                    \
+	(NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                     \
+	 NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED)
 
-static K_SEM_DEFINE(wifi_ready_state_changed_sem, 0, 1);
+#define AP_MAX_STATIONS 5
+
+static K_SEM_DEFINE(wifi_ap_disable_result_sem, 0, 1);
 static bool wifi_ready_status;
+
+static atomic_t wifi_ap_disable_seen;
+static int wifi_ap_disable_status;
 
 static struct net_mgmt_event_callback wifi_sap_mgmt_cb;
 
@@ -37,120 +46,223 @@ struct wifi_ap_sta_node {
 	bool valid;
 	struct wifi_ap_sta_info sta_info;
 };
-static struct wifi_ap_sta_node sta_list[CONFIG_SOFTAP_SAMPLE_MAX_STATIONS];
+static struct wifi_ap_sta_node sta_list[AP_MAX_STATIONS];
 
-// ---- TCP Stub Stream Client ----
-// Connects to a fixed remote endpoint and streams fixed-size (440 bytes) dummy frames.
-#define TCP_STUB_FRAME_SIZE 2200
+/* WiFi state management */
+static wifi_state_t current_wifi_state = WIFI_STATE_OFF;
+static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = "Omi CV1";
+
 #define TCP_REMOTE_IP "192.168.1.5"
 #define TCP_REMOTE_PORT 12345
 
-static atomic_t tcp_stop_flag;
-static bool tcp_thread_started;
-static struct k_thread tcp_thread;
-K_THREAD_STACK_DEFINE(tcp_stack, 4096);
+static atomic_t tcp_connected_flag;
+static K_MUTEX_DEFINE(tcp_sock_lock);
+static int tcp_socket = -1;
+static atomic_t stop_tcp_traffic = ATOMIC_INIT(1);
 
-static void tcp_client_entry(void *p1, void *p2, void *p3)
+static bool tcp_client_is_connected(void)
 {
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
-
-	uint8_t frame[TCP_STUB_FRAME_SIZE];
-	for (size_t i = 0; i < sizeof(frame); i++) {
-		frame[i] = (uint8_t)i;
+	if (!atomic_get(&tcp_connected_flag)) {
+		return false;
 	}
 
-	while (1) {
-		while (atomic_get(&tcp_stop_flag)) {
-			k_sleep(K_MSEC(200));
-		}
+	k_mutex_lock(&tcp_sock_lock, K_FOREVER);
+	int fd = tcp_socket;
+	k_mutex_unlock(&tcp_sock_lock);
 
-		int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-		if (fd < 0) {
-			LOG_ERR("tcp: socket() failed: %d", errno);
-			k_sleep(K_SECONDS(1));
-			continue;
-		}
-
-		int one = 1;
-		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-		struct timeval tv = {
-			.tv_sec = 0,
-			.tv_usec = 0,
-		};
-
-		setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-		struct sockaddr_in addr = {0};
-		addr.sin_family = AF_INET;
-		addr.sin_port = htons(TCP_REMOTE_PORT);
-		if (zsock_inet_pton(AF_INET, TCP_REMOTE_IP, &addr.sin_addr) != 1) {
-			LOG_ERR("tcp: invalid remote IP: %s", TCP_REMOTE_IP);
-			close(fd);
-			k_sleep(K_SECONDS(1));
-			continue;
-		}
-
-		LOG_INF("tcp: connecting to %s:%d", TCP_REMOTE_IP, TCP_REMOTE_PORT);
-		if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-			LOG_ERR("tcp: connect() failed: %d", errno);
-			close(fd);
-			k_sleep(K_SECONDS(1));
-			continue;
-		}
-
-		LOG_INF("tcp: connected");
-		while (!atomic_get(&tcp_stop_flag)) {
-			size_t sent_total = 0;
-			while (sent_total < sizeof(frame) && !atomic_get(&tcp_stop_flag)) {
-				int n = send(fd, frame + sent_total, (size_t)(sizeof(frame) - sent_total), 0);
-				if (n > 0) {
-					sent_total += (size_t)n;
-					continue;
-				}
-				// disconnected or error
-				goto reconnect;
-			}
-
-			k_yield();
-		}
-
-	close(fd);
-	continue;
-
-	reconnect:
-		LOG_INF("tcp: disconnected (errno=%d), reconnecting...", errno);
-		close(fd);
-		k_sleep(K_SECONDS(1));
-	}
-}
-
-static void tcp_client_start(void)
-{
-	if (tcp_thread_started) {
-		atomic_clear(&tcp_stop_flag);
-		return;
+	if (fd < 0) {
+		atomic_clear(&tcp_connected_flag);
+		return false;
 	}
 
-	atomic_clear(&tcp_stop_flag);
-	k_thread_create(&tcp_thread,
-					tcp_stack,
-					K_THREAD_STACK_SIZEOF(tcp_stack),
-					tcp_client_entry,
-					NULL,
-					NULL,
-					NULL,
-					K_PRIO_PREEMPT(7),
-					0,
-					K_NO_WAIT);
-	(void)k_thread_name_set(&tcp_thread, "tcp_stream");
-	tcp_thread_started = true;
+       struct zsock_pollfd pfd = {
+               .fd = fd,
+               .events = ZSOCK_POLLIN | ZSOCK_POLLERR | ZSOCK_POLLHUP,
+       };
+
+       int pret = zsock_poll(&pfd, 1, 0);
+       if (pret < 0) {
+               return true;
+       }
+
+       if (pret > 0 && (pfd.revents & (ZSOCK_POLLERR | ZSOCK_POLLHUP | ZSOCK_POLLNVAL))) {
+               return false;
+       }
+
+
+	return true;
 }
 
 static void tcp_client_stop(void)
 {
-	atomic_set(&tcp_stop_flag, 1);
+	atomic_clear(&tcp_connected_flag);
+
+	k_mutex_lock(&tcp_sock_lock, K_FOREVER);
+	int fd = tcp_socket;
+	tcp_socket = -1;
+	k_mutex_unlock(&tcp_sock_lock);
+
+	if (fd >= 0) {
+		(void)shutdown(fd, ZSOCK_SHUT_RDWR);
+		(void)close(fd);
+	}
+}
+
+static int tcp_client_start(void)
+{
+	if (atomic_get(&tcp_connected_flag)) {
+		return 0;
+	}
+
+	/* Always start from a clean state */
+	tcp_client_stop();
+
+	int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (fd < 0) {
+		LOG_ERR("tcp: socket() failed: %d (%s)", errno, strerror(errno));
+		return -errno;
+	}
+
+	int one = 1;
+	(void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+	struct timeval tv = {
+		.tv_sec = 0,
+		.tv_usec = 0,
+	};
+
+	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+	struct sockaddr_in addr = {0};
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(TCP_REMOTE_PORT);
+	if (zsock_inet_pton(AF_INET, TCP_REMOTE_IP, &addr.sin_addr) != 1) {
+		LOG_ERR("tcp: invalid remote IP: %s", TCP_REMOTE_IP);
+		close(fd);
+		return -EINVAL;
+	}
+
+	LOG_INF("tcp: connecting to %s:%d", TCP_REMOTE_IP, TCP_REMOTE_PORT);
+	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		LOG_ERR("TCP connect failed: %d", errno);
+		close(fd);
+		return -errno;
+	}
+
+	k_mutex_lock(&tcp_sock_lock, K_FOREVER);
+	tcp_socket = fd;
+	k_mutex_unlock(&tcp_sock_lock);
+	atomic_set(&tcp_connected_flag, 1);
+	LOG_INF("tcp: connected");
+	return 0;
+}
+
+void wifi_turn_off(void)
+{
+	/* Stop new TCP sends immediately */
+	atomic_set(&stop_tcp_traffic, 1);
+	current_wifi_state = WIFI_STATE_SHUTDOWN;
+}
+
+int wifi_turn_on(void)
+{
+	if (current_wifi_state != WIFI_STATE_OFF) {
+		return -EALREADY;
+	} else {
+		/* Bring interface up; driver will report readiness via wifi_ready callback */
+		struct net_if *iface = net_if_get_first_wifi();
+		if (iface) {
+			net_if_up(iface);
+		}
+	}
+
+	current_wifi_state = WIFI_STATE_ON;
+	atomic_clear(&stop_tcp_traffic);
+
+	return 0;
+}
+
+int setup_wifi_ssid(const char *ssid)
+{
+	if (!ssid) {
+		return -EINVAL;
+	}
+
+	size_t len = strlen(ssid);
+	if (len == 0 || len > WIFI_SSID_MAX_LEN) {
+		return -EINVAL;
+	}
+
+	strncpy(ap_ssid, ssid, sizeof(ap_ssid) - 1);
+	ap_ssid[sizeof(ap_ssid) - 1] = '\0';
+	return 0;
+}
+
+int wifi_send_data(const uint8_t *data, size_t len)
+{
+	int ret;
+	if (!data || len == 0) {
+		return 0;
+	}
+
+	if (atomic_get(&stop_tcp_traffic)) {
+		return -ECONNABORTED;
+	}
+
+	if (!atomic_get(&tcp_connected_flag)) {
+		return -ENOTCONN;
+	}
+
+	k_mutex_lock(&tcp_sock_lock, K_FOREVER);
+	int fd = tcp_socket;
+	if (fd < 0) {
+		k_mutex_unlock(&tcp_sock_lock);
+		return -ENOTCONN;
+	}
+	k_mutex_unlock(&tcp_sock_lock);
+
+	while (1) {
+		if (is_wifi_transport_ready()) {
+			ret = send(fd, data, len, ZSOCK_MSG_DONTWAIT);
+			if (ret < 0) {
+				int err = errno;
+				if (err == EINPROGRESS || err == EAGAIN || err == ENOBUFS) {
+					struct zsock_pollfd pfd = {
+						.fd = fd,
+						.events = ZSOCK_POLLOUT
+					};
+					int poll_ret = zsock_poll(&pfd, 1, 100); // 100ms timeout
+					if (poll_ret <= 0) {
+						k_msleep(1);
+						continue;
+					}
+					// Socket writable, retry send
+					continue;
+				}
+
+				LOG_ERR("TCP send failed with error: %d", err);
+				tcp_client_stop();
+				atomic_set(&stop_tcp_traffic, 1);
+				current_wifi_state = WIFI_STATE_CONNECTING;
+				return -err;
+			}
+			return ret;
+		} else {
+			return -ENOTCONN;
+		}
+	}
+
+	return -EAGAIN;
+}
+
+bool is_wifi_transport_ready(void)
+{
+	return atomic_get(&tcp_connected_flag);
+}
+
+bool is_wifi_on(void)
+{
+	/* Treat SHUTDOWN as off for data-path loops so they can exit quickly. */
+	return (current_wifi_state != WIFI_STATE_OFF) &&
+	       (current_wifi_state != WIFI_STATE_SHUTDOWN);
 }
 
 static void wifi_ap_stations_unlocked(void)
@@ -160,7 +272,7 @@ static void wifi_ap_stations_unlocked(void)
 	LOG_INF("AP stations:");
 	LOG_INF("============");
 
-	for (int i = 0; i < CONFIG_SOFTAP_SAMPLE_MAX_STATIONS; i++) {
+	for (int i = 0; i < AP_MAX_STATIONS; i++) {
 		struct wifi_ap_sta_info *sta;
 		uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
 
@@ -198,6 +310,23 @@ static void handle_wifi_ap_enable_result(struct net_mgmt_event_callback *cb)
 	}
 }
 
+static void handle_wifi_ap_disable_result(struct net_mgmt_event_callback *cb)
+{
+	const struct wifi_status *status =
+		(const struct wifi_status *)cb->info;
+
+	wifi_ap_disable_status = status->status;
+	atomic_set(&wifi_ap_disable_seen, 1);
+
+	if (status->status) {
+		LOG_ERR("AP disable request failed (%d)", status->status);
+	} else {
+		LOG_INF("AP disable requested");
+	}
+
+	k_sem_give(&wifi_ap_disable_result_sem);
+}
+
 static void handle_wifi_ap_sta_connected(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_ap_sta_info *sta_info =
@@ -210,7 +339,7 @@ static void handle_wifi_ap_sta_connected(struct net_mgmt_event_callback *cb)
 				       mac_string_buf, sizeof(mac_string_buf)));
 
 	k_mutex_lock(&wifi_ap_sta_list_lock, K_FOREVER);
-	for (i = 0; i < CONFIG_SOFTAP_SAMPLE_MAX_STATIONS; i++) {
+	for (i = 0; i < AP_MAX_STATIONS; i++) {
 		if (!sta_list[i].valid) {
 			sta_list[i].sta_info = *sta_info;
 			sta_list[i].valid = true;
@@ -218,9 +347,9 @@ static void handle_wifi_ap_sta_connected(struct net_mgmt_event_callback *cb)
 		}
 	}
 
-	if (i == CONFIG_SOFTAP_SAMPLE_MAX_STATIONS) {
+	if (i == AP_MAX_STATIONS) {
 		LOG_ERR("No space to store station info: "
-			"Increase CONFIG_SOFTAP_SAMPLE_MAX_STATIONS");
+			"Increase AP_MAX_STATIONS");
 	}
 
 	wifi_ap_stations_unlocked();
@@ -239,7 +368,7 @@ static void handle_wifi_ap_sta_disconnected(struct net_mgmt_event_callback *cb)
 				       mac_string_buf, sizeof(mac_string_buf)));
 
 	k_mutex_lock(&wifi_ap_sta_list_lock, K_FOREVER);
-	for (i = 0; i < CONFIG_SOFTAP_SAMPLE_MAX_STATIONS; i++) {
+	for (i = 0; i < AP_MAX_STATIONS; i++) {
 		if (!sta_list[i].valid) {
 			continue;
 		}
@@ -251,7 +380,7 @@ static void handle_wifi_ap_sta_disconnected(struct net_mgmt_event_callback *cb)
 		}
 	}
 
-	if (i == CONFIG_SOFTAP_SAMPLE_MAX_STATIONS) {
+	if (i == AP_MAX_STATIONS) {
 		LOG_WRN("No matching MAC address found in the list");
 	}
 
@@ -266,6 +395,9 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 	case NET_EVENT_WIFI_AP_ENABLE_RESULT:
 		handle_wifi_ap_enable_result(cb);
 		break;
+	case NET_EVENT_WIFI_AP_DISABLE_RESULT:
+		handle_wifi_ap_disable_result(cb);
+		break;
 	case NET_EVENT_WIFI_AP_STA_CONNECTED:
 		handle_wifi_ap_sta_connected(cb);
 		break;
@@ -279,15 +411,9 @@ static void wifi_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 
 static int __wifi_args_to_params(struct wifi_connect_req_params *params)
 {
-#ifdef CONFIG_SOFTAP_SAMPLE_2_4GHz
 	params->band = WIFI_FREQ_BAND_2_4_GHZ;
-#elif CONFIG_SOFTAP_SAMPLE_5GHz
-	params->band = WIFI_FREQ_BAND_5_GHZ;
-#endif
-	params->channel = CONFIG_SOFTAP_SAMPLE_CHANNEL;
-
-	/* SSID */
-	params->ssid = CONFIG_SOFTAP_SAMPLE_SSID;
+	params->channel = 1;
+	params->ssid = ap_ssid;
 	params->ssid_length = strlen(params->ssid);
 	if (params->ssid_length > WIFI_SSID_MAX_LEN) {
 		LOG_ERR("SSID length is too long, expected is %d characters long",
@@ -295,20 +421,7 @@ static int __wifi_args_to_params(struct wifi_connect_req_params *params)
 		return -1;
 	}
 
-#if defined(CONFIG_SOFTAP_SAMPLE_KEY_MGMT_WPA2)
-	params->security = 1;
-#elif defined(CONFIG_SOFTAP_SAMPLE_KEY_MGMT_WPA2_256)
-	params->security = 2;
-#elif defined(CONFIG_SOFTAP_SAMPLE_KEY_MGMT_WPA3)
-	params->security = 3;
-#else
-	params->security = 0;
-#endif
-
-#if !defined(CONFIG_SOFTAP_SAMPLE_KEY_MGMT_NONE)
-	params->psk = CONFIG_SOFTAP_SAMPLE_PASSWORD;
-	params->psk_length = strlen(params->psk);
-#endif
+	params->security = WIFI_SECURITY_TYPE_NONE;
 
 	return 0;
 }
@@ -389,31 +502,64 @@ out:
 	return ret;
 }
 
-static int wifi_set_reg_domain(void)
+static void handle_wifi_shutdown(void)
 {
-	struct net_if *iface;
-	struct wifi_reg_domain regd = {0};
-	int ret = -1;
+	LOG_INF("Wi-Fi state: SHUTDOWN");
+	atomic_set(&stop_tcp_traffic, 1);
+	LOG_INF("TCP traffic stopped - no new sends allowed");
 
-	iface = net_if_get_first_wifi();
+	/* Wait briefly until no thread holds the socket lock (best-effort). */
+	for (int i = 0; i < 50; i++) {
+		if (k_mutex_lock(&tcp_sock_lock, K_NO_WAIT) == 0) {
+			k_mutex_unlock(&tcp_sock_lock);
+			break;
+		}
+		k_msleep(20);
+	}
+
+	tcp_client_stop();
+	LOG_INF("TCP socket closed");
+	
+	struct net_if *iface = net_if_get_first_wifi();
 	if (!iface) {
-		LOG_ERR("Failed to get Wi-Fi iface");
-		return ret;
+		LOG_ERR("No WiFi interface - transition to OFF");
+		current_wifi_state = WIFI_STATE_OFF;
+		return;
 	}
+	
+	/* Step: Disable AP and wait for the actual result callback. */
+	atomic_clear(&wifi_ap_disable_seen);
+	wifi_ap_disable_status = -1;
+	k_sem_reset(&wifi_ap_disable_result_sem);
 
-	regd.oper = WIFI_MGMT_SET;
-	strncpy(regd.country_code, CONFIG_SOFTAP_SAMPLE_REG_DOMAIN,
-		(WIFI_COUNTRY_CODE_LEN + 1));
-
-	ret = net_mgmt(NET_REQUEST_WIFI_REG_DOMAIN, iface,
-		       &regd, sizeof(regd));
+	LOG_INF("Requesting AP disable...");
+	int ret = net_mgmt(NET_REQUEST_WIFI_AP_DISABLE, iface, NULL, 0);
 	if (ret) {
-		LOG_ERR("Cannot %s Regulatory domain: %d", "SET", ret);
-	} else {
-		LOG_INF("Regulatory domain set to %s", CONFIG_SOFTAP_SAMPLE_REG_DOMAIN);
+		LOG_ERR("AP disable request call failed: %d", ret);
+		k_sleep(K_SECONDS(2));
+		return; /* stay in SHUTDOWN */
 	}
 
-	return ret;
+	/* Wait for NET_EVENT_WIFI_AP_DISABLE_RESULT. If this times out, wpa_supp is stuck. */
+	ret = k_sem_take(&wifi_ap_disable_result_sem, K_SECONDS(8));
+	if (ret) {
+		LOG_ERR("AP disable result timeout -> WPA supplicant likely stuck");
+		k_sleep(K_SECONDS(2));
+		return; /* stay in SHUTDOWN */
+	}
+
+	if (!atomic_get(&wifi_ap_disable_seen) || wifi_ap_disable_status != 0) {
+		LOG_ERR("AP disable failed (status=%d)", wifi_ap_disable_status);
+		k_sleep(K_SECONDS(2));
+		return; /* stay in SHUTDOWN */
+	}
+
+	LOG_INF("AP disabled, bringing interface down...");
+	net_if_down(iface);
+	LOG_INF("Interface down complete");
+
+	current_wifi_state = WIFI_STATE_OFF;
+	LOG_INF("Wi-Fi shutdown complete");
 }
 
 #define CHECK_RET(func, ...) \
@@ -429,7 +575,7 @@ int start_app(void)
 {
 	int ret;
 
-	CHECK_RET(wifi_set_reg_domain);
+	// CHECK_RET(wifi_set_reg_domain);
 
 	CHECK_RET(wifi_softap_enable);
 
@@ -439,38 +585,75 @@ int start_app(void)
 }
 
 void start_wifi_thread(void);
-K_THREAD_DEFINE(start_wifi_thread_id, CONFIG_SOFTAP_SAMPLE_START_WIFI_THREAD_STACK_SIZE,
+K_THREAD_DEFINE(start_wifi_thread_id, 4096,
 		start_wifi_thread, NULL, NULL, NULL,
 		6, 0, -1);
 
 void start_wifi_thread(void)
 {
-	bool waiting_for_wifi = true;
+	current_wifi_state = WIFI_STATE_OFF;
 
 	while (1) {
-		int ret;
+		switch (current_wifi_state) {
+		case WIFI_STATE_OFF:
+			LOG_INF("Wi-Fi state: OFF (waiting)");
+			k_msleep(500);
+			break;
 
-		if (waiting_for_wifi) {
-			LOG_INF("Waiting for Wi-Fi to be ready");
-		}
+		case WIFI_STATE_SHUTDOWN:
+			handle_wifi_shutdown();
+			break;
 
-		ret = k_sem_take(&wifi_ready_state_changed_sem, K_FOREVER);
-		if (ret) {
-			LOG_ERR("Failed to take semaphore: %d", ret);
-			return;
-		}
+		case WIFI_STATE_ON:
+            LOG_INF("Wi-Fi state: ON (starting AP)");
+            if (!wifi_ready_status) {
+                    LOG_WRN("Wi-Fi not ready yet, retrying...");
+					k_sleep(K_SECONDS(1));
+                    break;
+            }
+            if (start_app() == 0) {
+                    current_wifi_state = WIFI_STATE_CONNECTING;
+            } else {
+                    k_sleep(K_SECONDS(1));
+            }
 
-		if (!wifi_ready_status) {
-			LOG_INF("Wi-Fi is not ready");
+			break;
 
+		case WIFI_STATE_CONNECTING:
+			LOG_INF("Wi-Fi state: CONNECTING (TCP)");
+			if (!wifi_ready_status) {
+				current_wifi_state = WIFI_STATE_SHUTDOWN;
+				break;
+			}
+			if (tcp_client_start() == 0) {
+				current_wifi_state = WIFI_STATE_CONNECT;
+			} else {
+				k_msleep(1000);
+			}
+			break;
+
+		case WIFI_STATE_CONNECT:
+			/* Keep the connection; if it drops, retry connect. */
+			if (!wifi_ready_status) {
+				current_wifi_state = WIFI_STATE_SHUTDOWN;
+				break;
+			}
+			if (!tcp_client_is_connected()) {
+				LOG_WRN("tcp: disconnected");
+				tcp_client_stop();
+				current_wifi_state = WIFI_STATE_CONNECTING;
+				break;
+			}
+			/* Check connection status periodically */
+			k_sleep(K_MSEC(1000));
+			break;
+
+		default:
+			/* Unknown state: reset state machine. */
 			tcp_client_stop();
-			waiting_for_wifi = true;
-			continue;
+			current_wifi_state = WIFI_STATE_OFF;
+			break;
 		}
-		if (start_app() == 0) {
-			tcp_client_start();
-		}
-		waiting_for_wifi = false;
 	}
 }
 
@@ -478,7 +661,6 @@ void wifi_ready_cb(bool wifi_ready)
 {
 	LOG_DBG("Is Wi-Fi ready?: %s", wifi_ready ? "yes" : "no");
 	wifi_ready_status = wifi_ready;
-	k_sem_give(&wifi_ready_state_changed_sem);
 }
 
 static int register_wifi_ready(void)
