@@ -329,9 +329,9 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
           enableNodeDrag={true}
           enableNavigationControls={true}
           showNavInfo={false}
-          cooldownTicks={200}
-          d3AlphaDecay={0.01}
-          d3VelocityDecay={0.2}
+          cooldownTicks={100}
+          d3AlphaDecay={0.03}
+          d3VelocityDecay={0.4}
         />
       )}
 

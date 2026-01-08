@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: 'Omi - Your AI Companion',
   description: 'Omi Web App - Access your conversations anywhere',
   icons: {
-    icon: '/logo.png',
+    icon: '/favicon.png',
   },
 };
 
