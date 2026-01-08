@@ -267,8 +267,6 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
     // MARK: - Meeting Detection Logic
 
     func isMeetingEvent(_ event: EKEvent) -> Bool {
-        let title = event.title ?? "Untitled"
-
         // 1. Must not be all-day
         if event.isAllDay {
             return false
@@ -344,7 +342,7 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
 
     private func shouldShowNub(for event: EKEvent) -> Bool {
         let now = Date()
-        guard let startTime = event.startDate, let endTime = event.endDate else { return false }
+        guard let startTime = event.startDate, let _ = event.endDate else { return false }
 
         let timeUntilStart = startTime.timeIntervalSince(now)
 
