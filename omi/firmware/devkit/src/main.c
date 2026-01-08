@@ -334,12 +334,7 @@ int main(void)
     LOG_INF("Entering main loop...\n");
 
     while (1) {
-        // Task-level watchdog: only feed if pusher thread is responsive
-        if (pusher_check_and_reset_alive()) {
-            watchdog_feed();
-        } else {
-            LOG_WRN("Pusher thread not responding - skipping watchdog feed");
-        }
+        watchdog_feed();
 
         set_led_state();
         k_msleep(500);

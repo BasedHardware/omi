@@ -27,13 +27,4 @@ int bt_off();
 
 void accel_off();
 
-/**
- * @brief Check if pusher thread is alive and reset the flag.
- *
- * Used by the main loop for task-level watchdog monitoring.
- *
- * @return true if pusher was alive since last check, false otherwise.
- */
-bool pusher_check_and_reset_alive(void);
-
 #endif
