@@ -10,6 +10,7 @@
 #include <zephyr/drivers/sensor.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/ring_buffer.h>
 
 #include "config.h"
@@ -27,7 +28,6 @@ LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 #define MAX_STORAGE_BYTES 0xFFFF0000
 extern bool is_connected;
 extern bool storage_is_on;
-
 extern uint8_t file_count;
 extern uint32_t file_num_array[2];
 struct bt_conn *current_connection = NULL;

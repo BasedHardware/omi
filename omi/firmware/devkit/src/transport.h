@@ -1,7 +1,6 @@
 #ifndef TRANSPORT_H
 #define TRANSPORT_H
 
-#include <stdbool.h>
 #include <zephyr/drivers/sensor.h>
 typedef struct sensors {
 
@@ -26,5 +25,4 @@ int bt_on();
 int bt_off();
 
 void accel_off();
-
 #endif
