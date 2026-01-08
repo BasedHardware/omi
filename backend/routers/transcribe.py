@@ -17,8 +17,9 @@ import webrtcvad  # type: ignore
 
 import lc3  # lc3py
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Query
 from fastapi.websockets import WebSocket, WebSocketDisconnect
+from firebase_admin import auth as firebase_auth
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
@@ -61,7 +62,6 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
-from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.other.task import safe_create_task
 from utils.pusher import connect_to_trigger_pusher
@@ -2042,7 +2042,7 @@ async def _listen(
 @router.websocket("/v4/listen")
 async def listen_handler(
     websocket: WebSocket,
-    uid: str = Depends(auth.get_current_user_uid),
+    token: Optional[str] = Query(None),  # For web browser auth (query param)
     language: str = 'en',
     sample_rate: int = 8000,
     codec: str = 'pcm8',
@@ -2054,6 +2054,34 @@ async def listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
 ):
+    # Authenticate - try header first (mobile), then query param (web)
+    uid = None
+
+    # 1. Try Authorization header (mobile app sends this)
+    auth_header = websocket.headers.get('authorization')
+    if auth_header and ' ' in auth_header:
+        try:
+            bearer_token = auth_header.split(' ', 1)[1]
+            decoded = firebase_auth.verify_id_token(bearer_token)
+            uid = decoded['uid']
+        except Exception as e:
+            print(f"Header token verification failed: {e}")
+
+    # 2. Try query param token (web browser sends this)
+    if not uid and token:
+        try:
+            decoded = firebase_auth.verify_id_token(token)
+            uid = decoded['uid']
+        except Exception as e:
+            print(f"Query token verification failed: {e}")
+            await websocket.close(code=1008, reason="Invalid token")
+            return
+
+    # 3. Neither worked - reject connection
+    if not uid:
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
     await _listen(
