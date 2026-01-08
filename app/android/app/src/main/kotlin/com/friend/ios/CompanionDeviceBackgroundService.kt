@@ -17,21 +17,26 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
 
     companion object {
         private const val TAG = "CompanionBgService"
+
+        // Track whether the app is in the foreground (set by MainActivity)
+        @Volatile
+        var isAppInForeground: Boolean = false
     }
 
     override fun onDeviceAppeared(associationInfo: AssociationInfo) {
         val deviceAddress = associationInfo.deviceMacAddress?.toString()
-        Log.d(TAG, "Device appeared (service): $deviceAddress")
+        Log.d(TAG, "Device appeared (service): $deviceAddress, appInForeground=$isAppInForeground")
 
         if (deviceAddress != null) {
             // Store the event for Flutter to pick up
             storePresenceEvent(deviceAddress, true)
 
-            // Show notification
-            showDeviceNotification(deviceAddress)
-
-            // Launch the app
-            launchApp()
+            // Only show notification and launch app if app is NOT in foreground
+            // When app is open, user can see the device reconnecting - no notification needed
+            if (!isAppInForeground) {
+                showDeviceNotification(deviceAddress)
+                launchApp()
+            }
         }
     }
 

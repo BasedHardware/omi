@@ -1,6 +1,7 @@
 package com.friend.ios
 
 import android.content.Intent
+import android.os.Build
 import androidx.annotation.NonNull
 import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -17,6 +18,20 @@ class MainActivity: FlutterFragmentActivity() {
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         companionDeviceService?.handleAssociationResult(result.resultCode, result.data)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            CompanionDeviceBackgroundService.isAppInForeground = true
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            CompanionDeviceBackgroundService.isAppInForeground = false
+        }
     }
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
