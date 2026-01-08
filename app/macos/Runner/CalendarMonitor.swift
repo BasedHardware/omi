@@ -254,6 +254,12 @@ class CalendarMonitor: NSObject, FlutterStreamHandler {
             }
         }
 
+        // Notify Flutter about meetings list update
+        sendEventToFlutter([
+            "type": "meetingsUpdated",
+            "count": upcomingMeetings.count
+        ])
+
         // Clean up old snoozes
         cleanupExpiredSnoozes()
     }

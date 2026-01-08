@@ -307,9 +307,9 @@ class CalendarMeetingEvent {
   factory CalendarMeetingEvent.fromMap(Map<dynamic, dynamic> map) {
     return CalendarMeetingEvent(
       type: _parseEventType(map['type'] as String),
-      eventId: map['eventId'] as String,
-      title: map['title'] as String,
-      platform: map['platform'] as String,
+      eventId: map['eventId'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      platform: map['platform'] as String? ?? '',
       startTime: map['startTime'] != null ? DateTime.parse(map['startTime'] as String).toLocal() : null,
       minutesUntilStart: map['minutesUntilStart'] as int?,
     );
@@ -323,6 +323,8 @@ class CalendarMeetingEvent {
         return CalendarMeetingEventType.started;
       case 'ended':
         return CalendarMeetingEventType.ended;
+      case 'meetingsUpdated':
+        return CalendarMeetingEventType.meetingsUpdated;
       default:
         return CalendarMeetingEventType.upcomingSoon;
     }
@@ -381,6 +383,7 @@ enum CalendarMeetingEventType {
   upcomingSoon, // Meeting starting in 2-5 minutes
   started, // Meeting just started
   ended, // Meeting ended
+  meetingsUpdated, // Meetings list was refreshed/updated
 }
 
 /// Calendar permission status
