@@ -173,7 +173,13 @@ def update_action_item(
             update_data['completed_at'] = datetime.now(timezone.utc)
         else:
             update_data['completed_at'] = None
-    if request.due_at is not None:
+    # Check if due_at was explicitly provided (even if None) to allow clearing
+    # In Pydantic v2, we check model_fields_set to see if field was explicitly set
+    if 'due_at' in request.model_fields_set:
+        # Field was explicitly provided (even if None) - update it
+        update_data['due_at'] = request.due_at
+    elif request.due_at is not None:
+        # Fallback: only update if not None (for backwards compatibility)
         update_data['due_at'] = request.due_at
     if request.exported is not None:
         update_data['exported'] = request.exported

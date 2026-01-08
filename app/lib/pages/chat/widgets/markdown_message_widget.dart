@@ -1,26 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
-import 'package:omi/widgets/generative_ui/generative_ui.dart';
+Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
 
-Widget getMarkdownWidget(BuildContext context, String content, {bool enableGenerativeUI = true}) {
-  // Check if content contains generative UI tags
+   // Check if content contains generative UI tags
   if (enableGenerativeUI && XmlTagParser.containsGenerativeTags(content)) {
     return GenerativeMarkdownWidget(content: content);
-  }
+  } 
 
-  // Original markdown rendering using shared style helper
   return MarkdownBody(
-    selectable: false,
-    shrinkWrap: true,
-    onTapLink: (text, href, title) async {
-      if (href != null) {
-        final uri = Uri.parse(href);
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    },
-    styleSheet: MarkdownStyleHelper.getStyleSheet(context),
-    data: content,
-  );
+      data: message.trimRight(),
+      selectable: PlatformService.isMacOS,
+      styleSheet: MarkdownStyleSheet(
+        p: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+        a: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+        listBullet: const TextStyle(color: Colors.white, fontSize: 16),
+        code: const TextStyle(
+          color: Colors.white,
+          backgroundColor: Colors.transparent,
+          fontFamily: 'monospace',
+        ),
+        codeblockDecoration: BoxDecoration(
+          color: const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+      onTapLink: (text, href, title) {
+        if (href != null) {
+          launchUrl(Uri.parse(href));
+        }
+      },
+    );
 }

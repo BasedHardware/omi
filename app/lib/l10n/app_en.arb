@@ -930,11 +930,6 @@
     "description": "Double tap action setting"
   },
 
-  "doubleTapActionDesc": "Choose what happens when you double tap",
-  "@doubleTapActionDesc": {
-    "description": "Double tap action description"
-  },
-
   "endAndProcess": "End & Process Conversation",
   "@endAndProcess": {
     "description": "End and process action"
@@ -948,11 +943,6 @@
   "starOngoing": "Star Ongoing Conversation",
   "@starOngoing": {
     "description": "Star ongoing conversation action"
-  },
-
-  "starOngoingDesc": "Mark to star when conversation ends",
-  "@starOngoingDesc": {
-    "description": "Star ongoing conversation description"
   },
 
   "ledBrightness": "LED Brightness",

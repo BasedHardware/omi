@@ -16,7 +16,9 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
@@ -330,8 +332,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ),
           );
           break;
-        case "daily-summary":
+        case "conversation":
+          // Handle conversation deep link: /conversation/{id}?share=1
           if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Check for share query param
+            final shouldOpenShare = navigateToUri?.queryParameters['share'] == '1';
+            final conversationId = detailPageId; // Capture non-null value
+
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              if (!mounted) return;
+
+              // Fetch conversation from server
+              final conversation = await getConversationById(conversationId);
+              if (conversation != null && mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConversationDetailPage(
+                      conversation: conversation,
+                      openShareToContactsOnLoad: shouldOpenShare,
+                    ),
+                  ),
+                );
+              } else {
+                debugPrint('Conversation not found: $conversationId');
+              }
+            });
+          }
+          break;
+                  case "daily-summary":
+          if (detailPageId != null && detailPageId.isNotEmpty) {
+            // Track notification opened
+            MixpanelManager().dailySummaryNotificationOpened(
+              summaryId: detailPageId,
+              date: '', // Date not available in navigate_to, will be fetched when detail page loads
+            );
+
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
                 Navigator.push(
@@ -343,7 +379,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               }
             });
           }
-          break;
+break;
         case "wrapped":
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -450,16 +486,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 // }
 
                 WidgetsBinding.instance.addPostFrameCallback((_) async {
-                  if (mounted) {
-                    if (ctx.read<ConversationProvider>().conversations.isEmpty) {
-                      await ctx.read<ConversationProvider>().getInitialConversations();
-                    } else {
-                      // Force refresh when internet connection is restored
-                      await ctx.read<ConversationProvider>().forceRefreshConversations();
-                    }
-                    if (ctx.read<MessageProvider>().messages.isEmpty) {
-                      await ctx.read<MessageProvider>().refreshMessages();
-                    }
+                  if (!mounted) return;
+
+                  final convoProvider = ctx.read<ConversationProvider>();
+                  final messageProvider = ctx.read<MessageProvider>();
+
+                  if (convoProvider.conversations.isEmpty) {
+                    await convoProvider.getInitialConversations();
+                  } else {
+                    // Force refresh when internet connection is restored
+                    await convoProvider.forceRefreshConversations();
+                  }
+
+                  if (messageProvider.messages.isEmpty) {
+                    await messageProvider.refreshMessages();
                   }
                 });
               });
@@ -786,15 +826,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           const SizedBox.shrink(),
           Row(
             children: [
-              // Sync icon - shows when there are pending files or a device is paired
+              // Sync icon - shows when there are pending files on device or a device is paired
               Consumer2<DeviceProvider, SyncProvider>(
                 builder: (context, deviceProvider, syncProvider, child) {
                   final device = deviceProvider.pairedDevice;
-                  final hasPending = syncProvider.missingWals.isNotEmpty;
+                  // Only show orange indicator for files still on device (SD card or Limitless)
+                  final hasPendingOnDevice = syncProvider.missingWalsOnDevice.isNotEmpty;
                   final isSyncing = syncProvider.isSyncing;
 
-                  // Show sync icon if there's a paired device OR if there are pending files to sync
-                  if (device != null || hasPending) {
+                  // Show sync icon if there's a paired device OR if there are pending files on device
+                  if (device != null || hasPendingOnDevice) {
                     return GestureDetector(
                       onTap: () {
                         HapticFeedback.mediumImpact();
@@ -810,7 +851,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         decoration: BoxDecoration(
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orange.withValues(alpha: 0.15)
                                   : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
@@ -820,7 +861,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           size: 18,
                           color: isSyncing
                               ? Colors.deepPurpleAccent
-                              : hasPending
+                              : hasPendingOnDevice
                                   ? Colors.orangeAccent
                                   : Colors.white70,
                         ),
@@ -971,8 +1012,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                 ),
                                                 value: [selectedDate],
                                                 onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty && dates[0] != null) {
-                                                    selectedDate = dates[0]!;
+                                                  if (dates.isNotEmpty) {
+                                                    selectedDate = dates[0];
                                                   }
                                                 },
                                               ),
@@ -1033,9 +1074,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: showCompleted
-                              ? Colors.deepPurple.withValues(alpha: 0.5)
-                              : const Color(0xFF1F1F25),
+                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(

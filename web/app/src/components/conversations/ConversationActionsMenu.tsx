@@ -13,6 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { deleteConversation, reprocessConversation } from '@/lib/api';
 import type { Conversation, TranscriptSegment } from '@/types/conversation';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
 interface ConversationActionsMenuProps {
   conversation: Conversation;
@@ -112,6 +113,9 @@ export function ConversationActionsMenu({
     setIsDeleting(true);
     try {
       await deleteConversation(conversation.id);
+      MixpanelManager.track('Conversation Deleted', {
+        conversation_id: conversation.id,
+      });
       setIsOpen(false);
       onDelete?.();
     } catch (error) {

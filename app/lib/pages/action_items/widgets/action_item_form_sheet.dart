@@ -73,7 +73,11 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       // Editing existing item
       String newDescription = _textController.text.trim();
       bool descriptionChanged = newDescription != widget.actionItem!.description;
-      bool dueDateChanged = _selectedDueDate != widget.actionItem!.dueAt;
+      // Compare due dates - handle null cases explicitly
+      bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
+          (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
+          (_selectedDueDate != null && widget.actionItem!.dueAt != null && 
+           _selectedDueDate!.millisecondsSinceEpoch != widget.actionItem!.dueAt!.millisecondsSinceEpoch);
       bool completionChanged = _isCompleted != widget.actionItem!.completed;
 
       if (!descriptionChanged && !dueDateChanged && !completionChanged) {

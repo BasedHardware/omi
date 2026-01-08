@@ -1,18 +1,14 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/ui/atoms/omi_avatar.dart';
-import 'package:omi/ui/atoms/omi_badge.dart';
-import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/ui/molecules/omi_edit_dialog.dart';
 import 'package:omi/ui/molecules/omi_context_menu.dart';
@@ -60,7 +56,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     final provider = Provider.of<ConversationProvider>(context, listen: false);
     provider.deleteConversationLocally(widget.conversation, widget.index, widget.date);
 
-    // Show simple delete confirmation snackbar (no undo for now)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
@@ -94,6 +89,9 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
 
   @override
   Widget build(BuildContext context) {
+    final duration = _getConversationDuration();
+    final isStarred = widget.conversation.starred;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -113,28 +111,118 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
           },
           child: Container(
             width: double.maxFinite,
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: _isHovered ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4) : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isHovered ? Colors.white.withOpacity(0.3) : Colors.white.withOpacity(0.05),
-                width: 1,
-              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                _buildHeader(),
-                const SizedBox(height: 12),
-                _buildContent(),
+                // Emoji icon in rounded square
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      widget.conversation.structured.getEmoji(),
+                      style: const TextStyle(fontSize: 22),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Title and subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.conversation.discarded
+                            ? 'Discarded Conversation'
+                            : (widget.conversation.structured.title.isNotEmpty
+                                ? widget.conversation.structured.title.decodeString
+                                : 'Untitled Conversation'),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: ResponsiveHelper.textPrimary,
+                          height: 1.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      // Timestamp • Duration
+                      Row(
+                        children: [
+                          Text(
+                            _getTimeString(),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: ResponsiveHelper.textTertiary,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          if (duration.isNotEmpty) ...[
+                            const Text(
+                              ' • ',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: ResponsiveHelper.textTertiary,
+                              ),
+                            ),
+                            Text(
+                              duration,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: ResponsiveHelper.textTertiary,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Star icon if starred, or lock icon if locked
+                if (isStarred)
+                  const FaIcon(
+                    FontAwesomeIcons.solidStar,
+                    size: 14,
+                    color: Colors.amber,
+                  )
+                else if (widget.conversation.isLocked)
+                  Icon(
+                    Icons.lock_outline_rounded,
+                    size: 16,
+                    color: ResponsiveHelper.textTertiary.withValues(alpha: 0.6),
+                  ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  String _getTimeString() {
+    final time = widget.conversation.startedAt ?? widget.conversation.createdAt;
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _getConversationDuration() {
+    if (widget.conversation.transcriptSegments.isEmpty) return '';
+
+    int durationSeconds = widget.conversation.getDurationInSeconds();
+    if (durationSeconds <= 0) return '';
+
+    return secondsToCompactDuration(durationSeconds);
   }
 
   void _showContextMenu(TapDownDetails details) async {
@@ -309,7 +397,6 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
   }
 
   void _copyConversation() {
-    // Copy conversation text to clipboard
     final text = widget.conversation.getTranscript();
     Clipboard.setData(ClipboardData(text: text));
 
@@ -370,13 +457,9 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
       final success = await updateConversationTitle(widget.conversation.id, newTitle);
 
       if (success) {
-        // Update the conversation locally by modifying the structured title
         widget.conversation.structured.title = newTitle;
-
-        // Update in provider
         final provider = Provider.of<ConversationProvider>(context, listen: false);
         provider.updateConversationInSortedList(widget.conversation);
-
         _showSnackBar('Conversation title updated successfully');
       } else {
         _showSnackBar('Failed to update conversation title');
@@ -384,124 +467,5 @@ class _DesktopConversationCardState extends State<DesktopConversationCard> {
     } catch (e) {
       _showSnackBar('Error updating conversation title');
     }
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Text(
-          widget.conversation.structured.getEmoji(),
-          style: const TextStyle(fontSize: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.conversation.discarded
-                    ? 'Discarded Conversation'
-                    : (widget.conversation.structured.title.isNotEmpty
-                        ? widget.conversation.structured.title.decodeString
-                        : 'Untitled Conversation'),
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: ResponsiveHelper.textPrimary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                dateTimeFormat(
-                  'MMM d, h:mm a',
-                  widget.conversation.startedAt ?? widget.conversation.createdAt,
-                ),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: ResponsiveHelper.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (_getConversationDuration().isNotEmpty) ...[
-          const SizedBox(width: 8),
-          Text(
-            _getConversationDuration(),
-            style: const TextStyle(
-              fontSize: 12,
-              color: ResponsiveHelper.textTertiary,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildLockedOverlay(BuildContext context) {
-    return Positioned.fill(
-      child: ClipRRect(
-        borderRadius: const BorderRadius.all(Radius.circular(8)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
-          child: Container(
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.01),
-            ),
-            child: const Text(
-              'Upgrade to unlimited',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    if (widget.conversation.discarded) {
-      return Text(
-        widget.conversation.getTranscript(maxCount: 150),
-        style: const TextStyle(
-          fontSize: 13,
-          color: ResponsiveHelper.textSecondary,
-          height: 1.5,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-
-    return Stack(
-      children: [
-        Text(
-          widget.conversation.structured.overview.decodeString,
-          style: const TextStyle(
-            fontSize: 13,
-            color: ResponsiveHelper.textSecondary,
-            height: 1.5,
-          ),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (widget.conversation.isLocked) _buildLockedOverlay(context),
-      ],
-    );
-  }
-
-  String _getConversationDuration() {
-    if (widget.conversation.transcriptSegments.isEmpty) return '';
-
-    int durationSeconds = widget.conversation.getDurationInSeconds();
-    if (durationSeconds <= 0) return '';
-
-    return secondsToCompactDuration(durationSeconds);
   }
 }

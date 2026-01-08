@@ -563,9 +563,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTapAction => '双击操作';
 
   @override
-  String get doubleTapActionDesc => '选择双击时发生的操作';
-
-  @override
   String get endAndProcess => '结束并处理';
 
   @override
@@ -573,9 +570,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get starOngoing => '星标当前对话';
-
-  @override
-  String get starOngoingDesc => '标记以便在结束时加星标';
 
   @override
   String get off => '关闭';

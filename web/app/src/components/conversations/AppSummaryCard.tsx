@@ -55,6 +55,7 @@ interface AppSummaryCardProps {
 export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) {
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDeleted, setIsDeleted] = useState(false);
 
   // Parse content into sections
   const sections = useMemo(() => {
@@ -74,8 +75,14 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       try {
         const appInfo = await getApp(appResponse.app_id);
         setApp(appInfo);
-      } catch (error) {
-        console.error('Failed to fetch app info:', error);
+      } catch (error: unknown) {
+        // Check for 404 (deleted template) - don't log as error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('404')) {
+          setIsDeleted(true);
+        } else {
+          console.error('Failed to fetch app info:', error);
+        }
       } finally {
         setLoading(false);
       }
@@ -93,8 +100,8 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'p-4 rounded-xl',
-        'bg-bg-tertiary border border-bg-quaternary/50',
+        'noise-overlay p-4 rounded-xl',
+        'bg-white/[0.02] border border-white/[0.06]',
         className
       )}
     >
@@ -102,6 +109,10 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       <div className="flex items-center gap-3 mb-3">
         {loading ? (
           <div className="w-8 h-8 rounded-lg bg-bg-quaternary animate-pulse" />
+        ) : isDeleted ? (
+          <div className="w-8 h-8 rounded-lg bg-bg-quaternary flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-text-tertiary" />
+          </div>
         ) : app?.image ? (
           <img
             src={app.image}
@@ -117,11 +128,13 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
           <h4 className="text-sm font-medium text-text-primary truncate">
             {loading ? (
               <span className="text-text-tertiary">Loading...</span>
+            ) : isDeleted ? (
+              <span className="text-text-tertiary italic">Template no longer available</span>
             ) : (
               app?.name || 'App Summary'
             )}
           </h4>
-          {app?.description && (
+          {!isDeleted && app?.description && (
             <p className="text-xs text-text-tertiary truncate">
               {app.description}
             </p>
@@ -131,26 +144,27 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
 
       {/* Summary Content - Sectioned or Plain */}
       {hasMultipleSections ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {sections.map((section, index) => (
-            <div key={index}>
+            <div
+              key={index}
+              className="p-3 rounded-lg bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/[0.08]"
+            >
               {section.title && (
                 <h3 className="text-sm font-medium text-text-primary mb-2">
                   {section.title}
                 </h3>
               )}
               {section.content && (
-                <div className="p-3 rounded-lg bg-bg-quaternary/60 border border-bg-quaternary">
-                  <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-1.5 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-2 prose-h3:mb-1 prose-ul:my-1.5 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-                    <ReactMarkdown>{section.content}</ReactMarkdown>
-                  </div>
+                <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                  <ReactMarkdown>{section.content}</ReactMarkdown>
                 </div>
               )}
             </div>
           ))}
         </div>
       ) : (
-        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-2 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-4 prose-h2:mb-2 prose-h3:text-sm prose-h3:mt-3 prose-h3:mb-1 prose-ul:my-2 prose-li:my-0.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-5 prose-h2:mb-3 prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
           <ReactMarkdown>{appResponse.content}</ReactMarkdown>
         </div>
       )}

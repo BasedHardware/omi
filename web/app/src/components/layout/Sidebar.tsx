@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  MessageSquare,
-  Sparkles,
+  GanttChartSquare,
+  MessageCircle,
   LayoutGrid,
-  CheckSquare,
+  ListChecks,
+  CalendarDays,
   Brain,
   LogOut,
   Menu,
@@ -17,12 +18,13 @@ import {
   PanelLeftClose,
   PanelLeft,
   User,
-  Shield,
   Puzzle,
   Code,
   Settings,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { useNotificationContext } from '@/components/notifications/NotificationContext';
 import { cn } from '@/lib/utils';
 
 // Hook to detect if we're on desktop
@@ -49,12 +51,17 @@ const navItems: NavItem[] = [
   {
     label: 'Conversations',
     href: '/conversations',
-    icon: <MessageSquare className="w-5 h-5" />,
+    icon: <GanttChartSquare className="w-5 h-5" />,
+  },
+  {
+    label: 'Recaps',
+    href: '/recaps',
+    icon: <CalendarDays className="w-5 h-5" />,
   },
   {
     label: 'Chat',
     href: '/chat',
-    icon: <Sparkles className="w-5 h-5" />,
+    icon: <MessageCircle className="w-5 h-5" />,
   },
   {
     label: 'Apps',
@@ -64,7 +71,7 @@ const navItems: NavItem[] = [
   {
     label: 'Tasks',
     href: '/tasks',
-    icon: <CheckSquare className="w-5 h-5" />,
+    icon: <ListChecks className="w-5 h-5" />,
   },
   {
     label: 'Memories',
@@ -76,7 +83,6 @@ const navItems: NavItem[] = [
 // Settings menu items for user dropdown
 const settingsMenuItems = [
   { id: 'profile', label: 'Profile', icon: User },
-  { id: 'privacy', label: 'Privacy', icon: Shield },
   { id: 'integrations', label: 'Integrations', icon: Puzzle },
   { id: 'developer', label: 'Developer', icon: Code },
   { id: 'account', label: 'Account', icon: Settings },
@@ -93,11 +99,14 @@ export function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
+  const { toggleNotificationCenter, unreadCount } = useNotificationContext();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [isTemporaryExpand, setIsTemporaryExpand] = useState(false);
   const isDesktop = useIsDesktop();
   const sidebarRef = useRef<HTMLElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Load expanded state from localStorage on mount
   useEffect(() => {
@@ -106,6 +115,29 @@ export function Sidebar({
       setIsExpanded(true);
     }
   }, []);
+
+  // Click outside handler to close menu and collapse if temporary
+  useEffect(() => {
+    if (!showUserMenu || !isTemporaryExpand) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+        setIsExpanded(false);
+        setIsTemporaryExpand(false);
+      }
+    };
+
+    // Delay adding listener to avoid immediate trigger
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserMenu, isTemporaryExpand]);
 
   // Toggle expand/collapse
   const handleToggleExpand = useCallback(() => {
@@ -117,6 +149,7 @@ export function Sidebar({
       }
       return newValue;
     });
+    setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
   const handleSignOut = async () => {
@@ -175,7 +208,7 @@ export function Sidebar({
           >
             <Link
               href="/conversations"
-              className="flex items-center"
+              className="flex items-center gap-2"
             >
               <Image
                 src="/omi-white.webp"
@@ -184,6 +217,9 @@ export function Sidebar({
                 height={isExpanded ? 24 : 13}
                 className="object-contain"
               />
+              <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+                Beta
+              </span>
             </Link>
 
             {/* Mobile close button */}
@@ -222,6 +258,46 @@ export function Sidebar({
               </button>
             </div>
           )}
+
+          {/* Notification bell */}
+          <div
+            className={cn(
+              'px-4 pb-3',
+              isExpanded ? 'flex justify-start' : 'flex justify-center'
+            )}
+          >
+            <button
+              onClick={toggleNotificationCenter}
+              className={cn(
+                'flex items-center rounded-lg transition-colors',
+                'text-text-tertiary hover:bg-bg-tertiary hover:text-text-secondary',
+                isExpanded ? 'px-2 py-2' : 'p-2'
+              )}
+              title="Notifications"
+            >
+              <div className="relative">
+                <Bell className="w-5 h-5" />
+                {unreadCount > 0 && (
+                  <span
+                    className={cn(
+                      'absolute -top-2.5 -right-2.5',
+                      'min-w-[18px] h-[18px] px-1',
+                      'flex items-center justify-center',
+                      'bg-red-500 text-white text-[10px] font-bold',
+                      'rounded-full'
+                    )}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              {isExpanded && (
+                <span className="ml-3 text-sm text-text-secondary">
+                  Notifications
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
@@ -267,15 +343,24 @@ export function Sidebar({
         {/* Footer - User Section with Settings Menu */}
         <div className="border-t border-white/[0.04]">
           <div className="bg-bg-primary/30">
-            <div className="relative">
+            <div className="relative" ref={userMenuRef}>
               <button
-                onClick={() => isExpanded && setShowUserMenu(!showUserMenu)}
+                onClick={() => {
+                  if (isExpanded) {
+                    setShowUserMenu(!showUserMenu);
+                  } else {
+                    // In collapsed mode, temporarily expand sidebar and show user menu
+                    setIsExpanded(true);
+                    setIsTemporaryExpand(true);
+                    setShowUserMenu(true);
+                  }
+                }}
                 className={cn(
                   'w-full flex items-center',
                   'hover:bg-bg-tertiary/50 transition-colors',
                   isExpanded ? 'gap-3 p-4' : 'justify-center p-3'
                 )}
-                title={!isExpanded ? user?.displayName || 'User' : undefined}
+                title={!isExpanded ? 'Settings' : undefined}
               >
                 {/* Avatar */}
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
@@ -379,6 +464,10 @@ export function Sidebar({
                           href={`/settings?section=${item.id}`}
                           onClick={() => {
                             setShowUserMenu(false);
+                            if (isTemporaryExpand) {
+                              setIsExpanded(false);
+                              setIsTemporaryExpand(false);
+                            }
                             if (!isDesktop) onClose();
                           }}
                           className={cn(

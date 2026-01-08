@@ -1,21 +1,22 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Send, X, Eye, EyeOff } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Plus, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Memory, MemoryVisibility } from '@/types/conversation';
 
 interface MemoryQuickAddProps {
   onAdd: (content: string, visibility?: MemoryVisibility) => Promise<Memory | null>;
+  disabled?: boolean;
 }
 
-export function MemoryQuickAdd({ onAdd }: MemoryQuickAddProps) {
+export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [content, setContent] = useState('');
   const [visibility, setVisibility] = useState<MemoryVisibility>('public');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isExpanded && inputRef.current) {
@@ -23,17 +24,29 @@ export function MemoryQuickAdd({ onAdd }: MemoryQuickAddProps) {
     }
   }, [isExpanded]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!content.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
-    const result = await onAdd(content.trim(), visibility);
-    setIsSubmitting(false);
+    try {
+      const result = await onAdd(content.trim(), visibility);
+      if (result) {
+        setContent('');
+        setVisibility('public');
+        setIsExpanded(false);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    if (result) {
-      setContent('');
-      setVisibility('public');
-      setIsExpanded(false);
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    } else if (e.key === 'Escape') {
+      handleCancel();
     }
   };
 
@@ -47,12 +60,14 @@ export function MemoryQuickAdd({ onAdd }: MemoryQuickAddProps) {
     return (
       <button
         onClick={() => setIsExpanded(true)}
+        disabled={disabled}
         className={cn(
-          'w-full flex items-center gap-2 px-4 py-3',
-          'rounded-xl border border-dashed border-bg-quaternary',
+          'flex items-center gap-2 w-full px-3 py-2.5',
+          'rounded-lg border border-dashed border-bg-quaternary',
           'text-text-tertiary hover:text-text-secondary',
-          'hover:border-purple-primary/30 hover:bg-bg-tertiary/50',
-          'transition-all duration-150'
+          'hover:border-purple-primary/50 hover:bg-bg-tertiary',
+          'transition-all duration-150',
+          disabled && 'opacity-50 cursor-not-allowed'
         )}
       >
         <Plus className="w-4 h-4" />
@@ -62,90 +77,95 @@ export function MemoryQuickAdd({ onAdd }: MemoryQuickAddProps) {
   }
 
   return (
-    <motion.div
+    <motion.form
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.15 }}
+      onSubmit={handleSubmit}
       className={cn(
-        'rounded-xl p-4',
-        'bg-bg-tertiary border border-purple-primary/30',
-        'shadow-lg shadow-purple-primary/5'
+        'rounded-lg border border-purple-primary/50',
+        'bg-bg-secondary p-3 space-y-3'
       )}
     >
-      <textarea
+      {/* Input */}
+      <input
         ref={inputRef}
+        type="text"
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSubmit();
-          } else if (e.key === 'Escape') {
-            handleCancel();
-          }
-        }}
+        onKeyDown={handleKeyDown}
         placeholder="What would you like to remember?"
+        disabled={isSubmitting}
         className={cn(
-          'w-full px-3 py-2 rounded-lg resize-none',
-          'bg-bg-secondary border border-bg-quaternary',
-          'text-sm text-text-primary',
-          'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-          'placeholder:text-text-quaternary'
+          'w-full bg-transparent',
+          'text-sm text-text-primary placeholder:text-text-quaternary',
+          'outline-none'
         )}
-        rows={3}
       />
 
-      <div className="flex items-center justify-between mt-3">
+      {/* Actions row */}
+      <div className="flex items-center justify-between gap-2">
         {/* Visibility toggle */}
         <button
+          type="button"
           onClick={() => setVisibility(visibility === 'public' ? 'private' : 'public')}
+          disabled={isSubmitting}
           className={cn(
-            'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm',
+            'flex items-center gap-1.5 px-2 py-1 rounded text-xs',
             'transition-colors',
             visibility === 'public'
-              ? 'bg-success/10 text-success hover:bg-success/20'
-              : 'bg-warning/10 text-warning hover:bg-warning/20'
+              ? 'text-success hover:bg-success/10'
+              : 'text-warning hover:bg-warning/10'
           )}
         >
           {visibility === 'public' ? (
             <>
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-3 h-3" />
               Public
             </>
           ) : (
             <>
-              <EyeOff className="w-3.5 h-3.5" />
+              <EyeOff className="w-3 h-3" />
               Private
             </>
           )}
         </button>
 
-        {/* Action buttons */}
+        {/* Buttons */}
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handleCancel}
+            disabled={isSubmitting}
             className={cn(
-              'p-2 rounded-lg',
-              'text-text-tertiary hover:text-text-primary',
-              'hover:bg-bg-quaternary transition-colors'
+              'px-3 py-1 text-xs rounded',
+              'text-text-tertiary hover:text-text-secondary',
+              'transition-colors'
             )}
           >
-            <X className="w-4 h-4" />
+            Cancel
           </button>
           <button
-            onClick={handleSubmit}
+            type="submit"
             disabled={!content.trim() || isSubmitting}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-              'bg-purple-primary text-white text-sm font-medium',
-              'hover:bg-purple-secondary transition-colors',
+              'px-3 py-1 text-xs rounded',
+              'bg-purple-primary hover:bg-purple-secondary',
+              'text-white font-medium',
+              'transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
-            <Send className="w-3.5 h-3.5" />
-            Add
+            {isSubmitting ? 'Adding...' : 'Add Memory'}
           </button>
         </div>
       </div>
-    </motion.div>
+
+      {/* Hint */}
+      <p className="text-[10px] text-text-quaternary">
+        Press Enter to add, Escape to cancel
+      </p>
+    </motion.form>
   );
 }

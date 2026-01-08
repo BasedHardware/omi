@@ -185,9 +185,9 @@ export function TaskCard({
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       className={cn(
-        'group relative rounded-xl cursor-pointer',
+        'noise-overlay group relative rounded-xl cursor-pointer',
         'border-l-4 transition-all duration-150',
-        'bg-bg-tertiary hover:bg-bg-quaternary/50',
+        'bg-white/[0.02] hover:bg-white/[0.05]',
         'p-4',
         // Left border color based on status
         task.completed
@@ -229,34 +229,36 @@ export function TaskCard({
           </button>
         )}
 
-        {/* Completion checkbox */}
-        <button
-          onClick={handleCheckboxClick}
-          className={cn(
-            'flex-shrink-0 w-5 h-5 mt-0.5 rounded-full',
-            'border-2 transition-all duration-200',
-            'flex items-center justify-center',
-            task.completed
-              ? 'bg-success border-success'
-              : isOverdue
-              ? 'border-purple-primary hover:bg-purple-primary/20'
-              : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-tertiary'
-          )}
-          aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
-        >
-          <AnimatePresence>
-            {(task.completed || isCompleting) && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Check className="w-3 h-3 text-white" strokeWidth={3} />
-              </motion.div>
+        {/* Completion checkbox - hidden in selection mode */}
+        {!onSelect && (
+          <button
+            onClick={handleCheckboxClick}
+            className={cn(
+              'flex-shrink-0 w-5 h-5 mt-0.5 rounded-full',
+              'border-2 transition-all duration-200',
+              'flex items-center justify-center',
+              task.completed
+                ? 'bg-success border-success'
+                : isOverdue
+                ? 'border-purple-primary hover:bg-purple-primary/20'
+                : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-tertiary'
             )}
-          </AnimatePresence>
-        </button>
+            aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
+          >
+            <AnimatePresence>
+              {(task.completed || isCompleting) && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </button>
+        )}
 
         {/* Content */}
         <div className="flex-1 min-w-0">

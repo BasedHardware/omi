@@ -34,6 +34,7 @@ export interface GroupedActionItems {
   tomorrow: ActionItem[];
   thisWeek: ActionItem[];
   later: ActionItem[];
+  noDueDate: ActionItem[];
   completed: ActionItem[];
 }
 

@@ -183,6 +183,7 @@ def get_conversations(
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -195,6 +196,9 @@ def get_conversations(
 
     if folder_id:
         conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
 
     # Apply date range filters if provided
     if start_date:

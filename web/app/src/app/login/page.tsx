@@ -6,12 +6,18 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
+import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
 export default function LoginPage() {
   const { user, loading, signInWithGoogle, signInWithApple } = useAuth();
   const router = useRouter();
   const [isSigningIn, setIsSigningIn] = useState<'google' | 'apple' | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Track page view
+  useEffect(() => {
+    MixpanelManager.pageView('Login');
+  }, []);
 
   // Redirect to conversations if already logged in
   useEffect(() => {
@@ -200,6 +206,27 @@ export default function LoginPage() {
           </motion.p>
         )}
 
+        {/* Beta disclaimer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3, delay: 0.25 }}
+          className="mt-8 p-4 rounded-xl bg-purple-primary/5 border border-purple-primary/10"
+        >
+          <p className="text-sm text-text-tertiary text-center">
+            You&apos;re entering <span className="text-purple-primary font-medium">Omi Web Beta</span>. We&apos;re actively improving and would love your{' '}
+            <a
+              href="https://feedback.omi.me"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-primary hover:underline"
+            >
+              feedback
+            </a>
+            .
+          </p>
+        </motion.div>
+
         {/* Footer links */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -207,16 +234,16 @@ export default function LoginPage() {
           transition={{ duration: 0.3, delay: 0.3 }}
           className="mt-12 flex gap-4 text-sm text-text-quaternary"
         >
-          <a href="https://omi.me/terms" target="_blank" rel="noopener noreferrer" className="hover:text-text-tertiary transition-colors">
-            Terms
+          <a href="https://www.omi.me/" target="_blank" rel="noopener noreferrer" className="hover:text-text-tertiary transition-colors">
+            About
           </a>
           <span>·</span>
-          <a href="https://omi.me/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-text-tertiary transition-colors">
+          <a href="https://www.omi.me/pages/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-text-tertiary transition-colors">
             Privacy
           </a>
           <span>·</span>
-          <a href="https://omi.me/support" target="_blank" rel="noopener noreferrer" className="hover:text-text-tertiary transition-colors">
-            Support
+          <a href="https://help.omi.me/" target="_blank" rel="noopener noreferrer" className="hover:text-text-tertiary transition-colors">
+            Help
           </a>
         </motion.div>
       </div>

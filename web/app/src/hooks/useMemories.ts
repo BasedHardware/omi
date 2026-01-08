@@ -10,6 +10,15 @@ import {
   deleteMemory,
   reviewMemory,
 } from '@/lib/api';
+import {
+  getCache,
+  setCache,
+  updateCache,
+  onCacheInvalidation,
+  invalidationPatterns,
+  CACHE_TTL,
+  cacheKeys,
+} from '@/lib/cache';
 
 export interface UseMemoriesOptions {
   categories?: MemoryCategory[];
@@ -33,45 +42,36 @@ export interface UseMemoriesReturn {
   activeCategories: MemoryCategory[];
 }
 
-// Module-level cache that persists across component mounts
+// Cache entry structure
 interface CacheEntry {
   memories: Memory[];
   offset: number;
   hasMore: boolean;
-  timestamp: number;
 }
 
-const memoryCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes - after this, background refresh
-
 function getCacheKey(categories: MemoryCategory[]): string {
-  return categories.length === 0 ? 'all' : categories.sort().join(',');
+  return cacheKeys.memories(categories.length === 0 ? [] : [...categories].sort());
 }
 
 function getFromCache(key: string): CacheEntry | null {
-  const entry = memoryCache.get(key);
-  if (!entry) return null;
-  return entry;
+  const cached = getCache<CacheEntry>(key);
+  return cached ? cached.data : null;
 }
 
 function setToCache(key: string, memories: Memory[], offset: number, hasMore: boolean): void {
-  memoryCache.set(key, {
-    memories,
-    offset,
-    hasMore,
-    timestamp: Date.now(),
-  });
+  setCache<CacheEntry>(key, { memories, offset, hasMore }, CACHE_TTL.MEDIUM);
 }
 
 function updateCacheMemories(key: string, updater: (memories: Memory[]) => Memory[]): void {
-  const entry = memoryCache.get(key);
-  if (entry) {
-    entry.memories = updater(entry.memories);
-  }
+  updateCache<CacheEntry>(key, (entry) => ({
+    ...entry,
+    memories: updater(entry.memories),
+  }));
 }
 
-function isCacheStale(entry: CacheEntry): boolean {
-  return Date.now() - entry.timestamp > CACHE_TTL;
+function isCacheStale(key: string): boolean {
+  const cached = getCache<CacheEntry>(key);
+  return cached ? cached.isStale : true;
 }
 
 export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn {
@@ -120,7 +120,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     const cached = getFromCache(key);
 
     // If we have fresh cache, use it and skip fetch
-    if (cached && !isCacheStale(cached)) {
+    if (cached && !isCacheStale(key)) {
       setMemories(cached.memories);
       setHasMore(cached.hasMore);
       offsetRef.current = cached.offset;
@@ -188,7 +188,7 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
       offsetRef.current = cached.offset;
 
       // If not stale, we're done
-      if (!isCacheStale(cached)) {
+      if (!isCacheStale(key)) {
         return;
       }
       // If stale, continue to background refresh
@@ -222,6 +222,34 @@ export function useMemories(options: UseMemoriesOptions = {}): UseMemoriesReturn
     };
 
     loadForCategories();
+  }, [activeCategories, doFetch, limit]);
+
+  // Subscribe to cache invalidation - refetch when memories are modified elsewhere
+  useEffect(() => {
+    const unsubscribe = onCacheInvalidation((pattern) => {
+      if (pattern === invalidationPatterns.memories) {
+        // Clear local state and refetch
+        const key = getCacheKey(activeCategories);
+        const loadFresh = async () => {
+          if (fetchingRef.current) return;
+          fetchingRef.current = true;
+          try {
+            const result = await doFetch(activeCategories, 0);
+            setMemories(result);
+            offsetRef.current = result.length;
+            setHasMore(result.length >= limit);
+            setToCache(key, result, result.length, result.length >= limit);
+          } catch (err) {
+            // Silent fail on background refresh
+            console.error('Failed to refresh memories after invalidation:', err);
+          } finally {
+            fetchingRef.current = false;
+          }
+        };
+        loadFresh();
+      }
+    });
+    return unsubscribe;
   }, [activeCategories, doFetch, limit]);
 
   // Load more (pagination)

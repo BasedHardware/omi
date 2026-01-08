@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ConversationCard, ConversationCardSkeleton } from './ConversationCard';
@@ -41,7 +42,7 @@ const itemVariants = {
   },
 };
 
-export function DateGroup({
+export const DateGroup = memo(function DateGroup({
   dateLabel,
   conversations,
   onConversationClick,
@@ -92,7 +93,7 @@ export function DateGroup({
       </motion.div>
     </section>
   );
-}
+});
 
 // Skeleton loader for date groups
 interface DateGroupSkeletonProps {

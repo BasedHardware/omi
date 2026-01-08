@@ -581,9 +581,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get doubleTapAction => 'Doppeltippen-Aktion';
 
   @override
-  String get doubleTapActionDesc => 'Wählen Sie, was passiert, wenn Sie doppelt tippen';
-
-  @override
   String get endAndProcess => 'Beenden & Verarbeiten';
 
   @override
@@ -591,9 +588,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get starOngoing => 'Laufende Unterhaltung favorisieren';
-
-  @override
-  String get starOngoingDesc => 'Markieren, um beim Beenden zu favorisieren';
 
   @override
   String get off => 'Aus';

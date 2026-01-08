@@ -574,9 +574,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get doubleTapAction => 'Double Tap Action';
 
   @override
-  String get doubleTapActionDesc => 'Choose what happens when you double tap';
-
-  @override
   String get endAndProcess => 'End & Process Conversation';
 
   @override
@@ -584,9 +581,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get starOngoing => 'Star Ongoing Conversation';
-
-  @override
-  String get starOngoingDesc => 'Mark to star when conversation ends';
 
   @override
   String get off => 'Off';

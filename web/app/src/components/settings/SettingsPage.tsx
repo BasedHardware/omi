@@ -582,8 +582,6 @@ function PrivacySection({
 }) {
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-text-primary">Privacy & Data</h2>
-
       <Card>
         <SettingRow
           label="Store Recordings"
@@ -983,12 +981,8 @@ function UsageSectionContent({
 
   return (
     <div className="space-y-6">
-      {/* Section Header with Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h2 className="text-xl font-semibold text-text-primary">Plan & Usage</h2>
-
-        {/* Tab Switcher */}
-        <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit">
+      {/* Tab Switcher */}
+      <div className="flex gap-1 p-1 bg-bg-tertiary rounded-xl w-fit">
           <button
             onClick={() => setActiveTab('plan')}
             className={cn(
@@ -1011,7 +1005,6 @@ function UsageSectionContent({
           >
             Usage
           </button>
-        </div>
       </div>
 
       {/* Tab Content */}
@@ -1530,8 +1523,6 @@ function IntegrationsSection({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-text-primary">Integrations</h2>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {integrations.map((integration) => (
           <Card key={integration.id} className={cn(integration.coming_soon && 'opacity-60')}>
@@ -2036,56 +2027,8 @@ function DeveloperSection({
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
-  // Quick nav sections
-  const sections = [
-    { id: 'data-management', label: 'Data' },
-    { id: 'api-keys', label: 'API Keys' },
-    { id: 'mcp', label: 'MCP' },
-    { id: 'webhooks', label: 'Webhooks' },
-    { id: 'experimental', label: 'Experimental' },
-  ];
-
   return (
-    <div className="flex gap-6">
-      {/* Main content */}
-      <div className="flex-1 space-y-8 min-w-0">
-        <h2 className="text-xl font-semibold text-text-primary">Developer</h2>
-
-        {/* Data Management */}
-        <div id="data-management" className="space-y-3 scroll-mt-4">
-          <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Data Management</h3>
-        <Card>
-          <button
-            onClick={onExportData}
-            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-purple-400 transition-colors"
-          >
-            <div className="p-2 rounded-lg bg-bg-tertiary">
-              <Download className="w-5 h-5 text-text-tertiary" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium">Export All Data</p>
-              <p className="text-xs text-text-tertiary">Export conversations to a JSON file</p>
-            </div>
-            <ExternalLink className="w-4 h-4 text-text-quaternary" />
-          </button>
-        </Card>
-        <Card className="border-red-500/20">
-          <button
-            onClick={() => setShowDeleteGraphDialog(true)}
-            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-red-400 transition-colors"
-          >
-            <div className="p-2 rounded-lg bg-red-500/10">
-              <Network className="w-5 h-5 text-red-400" />
-            </div>
-            <div className="flex-1 text-left">
-              <p className="font-medium">Delete Knowledge Graph</p>
-              <p className="text-xs text-text-tertiary">Clear all nodes and connections</p>
-            </div>
-            <Trash2 className="w-4 h-4 text-text-quaternary" />
-          </button>
-        </Card>
-      </div>
-
+    <div className="space-y-8">
         {/* Developer API Keys */}
         <div id="api-keys" className="space-y-3 scroll-mt-4">
           <div className="flex items-center justify-between">
@@ -2336,6 +2279,41 @@ function DeveloperSection({
         </Card>
       </div>
 
+      {/* Data Management */}
+      <div id="data-management" className="space-y-3 scroll-mt-4">
+        <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">Data Management</h3>
+        <Card>
+          <button
+            onClick={onExportData}
+            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-purple-400 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-bg-tertiary">
+              <Download className="w-5 h-5 text-text-tertiary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium">Export All Data</p>
+              <p className="text-xs text-text-tertiary">Export conversations to a JSON file</p>
+            </div>
+            <ExternalLink className="w-4 h-4 text-text-quaternary" />
+          </button>
+        </Card>
+        <Card className="border-red-500/20">
+          <button
+            onClick={() => setShowDeleteGraphDialog(true)}
+            className="w-full flex items-center gap-4 py-3 text-text-primary hover:text-red-400 transition-colors"
+          >
+            <div className="p-2 rounded-lg bg-red-500/10">
+              <Network className="w-5 h-5 text-red-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="font-medium">Delete Knowledge Graph</p>
+              <p className="text-xs text-text-tertiary">Clear all nodes and connections</p>
+            </div>
+            <Trash2 className="w-4 h-4 text-text-quaternary" />
+          </button>
+        </Card>
+      </div>
+
         {/* Experimental Features */}
         <div id="experimental" className="space-y-3 scroll-mt-4">
           <div className="flex items-center gap-2">
@@ -2493,25 +2471,6 @@ function DeveloperSection({
           </div>
         </div>
       )}
-      </div>
-
-      {/* Quick Nav Sidebar */}
-      <div className="hidden lg:block w-32 flex-shrink-0">
-        <div className="sticky top-4">
-          <p className="text-xs font-medium text-text-quaternary uppercase tracking-wider mb-3">On this page</p>
-          <nav className="space-y-1">
-            {sections.map((section) => (
-              <a
-                key={section.id}
-                href={`#${section.id}`}
-                className="block text-sm text-text-tertiary hover:text-text-primary transition-colors py-1"
-              >
-                {section.label}
-              </a>
-            ))}
-          </nav>
-        </div>
-      </div>
     </div>
   );
 }
@@ -3033,10 +2992,10 @@ export function SettingsPage() {
         ];
       case 'developer':
         return [
-          { id: 'data-management', label: 'Data' },
           { id: 'api-keys', label: 'API Keys' },
           { id: 'mcp', label: 'MCP' },
           { id: 'webhooks', label: 'Webhooks' },
+          { id: 'data-management', label: 'Data' },
           { id: 'experimental', label: 'Experimental' },
         ];
       default:
@@ -3052,12 +3011,13 @@ export function SettingsPage() {
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 
       {/* Main Content with optional Quick Nav */}
-      <main className="flex-1 overflow-y-auto px-6 lg:px-8 pb-12">
-        <div className="flex gap-6">
-          {/* Main content */}
-          <div className="flex-1 max-w-3xl min-w-0">
-            {renderSection()}
-          </div>
+      <main className="flex-1 overflow-y-auto pb-12">
+        <div className="max-w-4xl mx-auto px-6 lg:px-8 pt-6">
+          <div className="flex gap-6">
+            {/* Main content */}
+            <div className="flex-1 min-w-0">
+              {renderSection()}
+            </div>
 
           {/* Quick Nav Sidebar - only show on desktop when there are sections */}
           {quickNavSections.length > 0 && (
@@ -3078,6 +3038,7 @@ export function SettingsPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
       </main>
 

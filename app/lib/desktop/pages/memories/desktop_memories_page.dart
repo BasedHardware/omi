@@ -129,47 +129,54 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     });
   }
 
-
-
   Future<void> _handleRefresh() async {
     final provider = context.read<MemoriesProvider>();
     await provider.init();
 
-    _applyFilter(_currentFilter);
-
-
+    await _applyFilter(_currentFilter);
   }
 
-  void _applyFilter(FilterOption option) {
+  Future<void> _applyFilter(FilterOption option) async {
     setState(() {
       _currentFilter = option;
-
       switch (option) {
         case FilterOption.interesting:
-          _filterByCategory(MemoryCategory.interesting);
-          MixpanelManager().memoriesFiltered('interesting');
+          _selectedCategory = MemoryCategory.interesting;
           break;
         case FilterOption.system:
-          _filterByCategory(MemoryCategory.system);
-          MixpanelManager().memoriesFiltered('system');
+          _selectedCategory = MemoryCategory.system;
           break;
         case FilterOption.manual:
-          _filterByCategory(MemoryCategory.manual);
-          MixpanelManager().memoriesFiltered('manual');
+          _selectedCategory = MemoryCategory.manual;
           break;
         case FilterOption.all:
-          _filterByCategory(null);
-          MixpanelManager().memoriesFiltered('all');
+          _selectedCategory = null;
           break;
       }
     });
-  }
 
-  void _filterByCategory(MemoryCategory? category) {
-    setState(() {
-      _selectedCategory = category;
-    });
-    context.read<MemoriesProvider>().setCategoryFilter(category);
+    final provider = context.read<MemoriesProvider>();
+    provider.clearCategoryFilter();
+
+    if (!mounted) return;
+
+    switch (option) {
+      case FilterOption.interesting:
+        provider.toggleCategoryFilter(MemoryCategory.interesting);
+        MixpanelManager().memoriesFiltered('interesting');
+        break;
+      case FilterOption.system:
+        provider.toggleCategoryFilter(MemoryCategory.system);
+        MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.manual:
+        provider.toggleCategoryFilter(MemoryCategory.manual);
+        MixpanelManager().memoriesFiltered('manual');
+        break;
+      case FilterOption.all:
+        MixpanelManager().memoriesFiltered('all');
+        break;
+    }
   }
 
   Future<void> _handleReload() async {

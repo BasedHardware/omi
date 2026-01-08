@@ -59,8 +59,13 @@ export function ConversationList({ onConversationClick }: ConversationListProps)
     if (b === 'Today') return 1;
     if (a === 'Yesterday') return -1;
     if (b === 'Yesterday') return 1;
-    // For other dates, parse and compare
-    return new Date(b).getTime() - new Date(a).getTime();
+    // For other dates, use actual conversation timestamps instead of parsing
+    // the date string (which lacks year info and causes incorrect sorting)
+    const convA = groupedConversations[a][0];
+    const convB = groupedConversations[b][0];
+    const dateA = new Date(convA?.started_at || convA?.created_at);
+    const dateB = new Date(convB?.started_at || convB?.created_at);
+    return dateB.getTime() - dateA.getTime();
   });
 
   const isEmpty = !loading && orderedKeys.length === 0;

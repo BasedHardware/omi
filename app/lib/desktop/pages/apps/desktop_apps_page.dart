@@ -2,18 +2,16 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/utils/other/debouncer.dart';
-import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'widgets/desktop_app_grid.dart';
-import 'widgets/desktop_filter_chips.dart';
 import 'widgets/desktop_app_detail.dart';
 import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
@@ -242,7 +240,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                         child: Column(
                           children: [
                             _buildHeader(responsive, appProvider),
-                            if (appProvider.isFilterActive()) _buildActiveFilters(responsive, appProvider),
                             Expanded(
                               child: _buildContent(responsive, appProvider),
                             ),
@@ -340,7 +337,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title and search row
+          // Title row
           Row(
             children: [
               // Title
@@ -379,30 +376,6 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                 ),
               ),
 
-              // Search bar - prominent like App Store
-              SizedBox(
-                width: responsive.responsiveWidth(baseWidth: 400, maxWidth: 500),
-                child: OmiSearchInput(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  onChanged: (query) => _debouncer.run(() {
-                    appProvider.searchApps(query);
-                    if (query.isNotEmpty) {
-                      MixpanelManager().memorySearched(query, appProvider.filteredApps.length);
-                    }
-                  }),
-                  onClear: () {
-                    _searchController.clear();
-                    appProvider.searchApps('');
-                    MixpanelManager().memorySearchCleared(appProvider.apps.length);
-                    _searchFocusNode.unfocus();
-                  },
-                  hint: 'Search apps...',
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
               // Create App button
               OmiButton(
                 label: 'Create App',
@@ -416,139 +389,128 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
             ],
           ),
 
-          SizedBox(height: responsive.spacing(baseSpacing: 24)),
+          SizedBox(height: responsive.spacing(baseSpacing: 20)),
 
-          // Filter chips row - only show when initialized
-          if (_isInitialized)
-            DesktopFilterChips(
-              onFilterChanged: () {
-                // Debounce filter operations for better performance
-                _debouncer.run(() {
-                  appProvider.applyFilters();
-                });
-              },
-            ),
+          // Search and filter row - matching mobile style
+          _buildSearchAndFiltersRow(responsive, appProvider),
         ],
       ),
     );
   }
 
-  Widget _buildActiveFilters(ResponsiveHelper responsive, AppProvider appProvider) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: responsive.spacing(baseSpacing: 32),
-        vertical: responsive.spacing(baseSpacing: 8),
-      ),
-      child: Row(
-        children: [
-          Text(
-            'Active filters:',
-            style: responsive.bodySmall.copyWith(
-              color: ResponsiveHelper.textTertiary,
-            ),
-          ),
-          SizedBox(width: responsive.spacing(baseSpacing: 12)),
-          Expanded(
-            child: Wrap(
-              spacing: responsive.spacing(baseSpacing: 8),
-              runSpacing: responsive.spacing(baseSpacing: 4),
-              children: appProvider.filters.entries.map((entry) {
-                return _buildActiveFilterChip(responsive, appProvider, entry.key, entry.value);
-              }).toList(),
-            ),
-          ),
-          // Clear all button
-          TextButton.icon(
-            onPressed: () {
-              MixpanelManager().appsClearFilters();
-              appProvider.clearFilters();
-            },
-            icon: const Icon(Icons.clear_all, size: 16),
-            label: Text(
-              'Clear all',
-              style: responsive.bodySmall.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            style: TextButton.styleFrom(
-              foregroundColor: ResponsiveHelper.purplePrimary,
-              padding: EdgeInsets.symmetric(
-                horizontal: responsive.spacing(baseSpacing: 12),
-                vertical: responsive.spacing(baseSpacing: 4),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildSearchAndFiltersRow(ResponsiveHelper responsive, AppProvider appProvider) {
+    final isSearchActive = appProvider.isSearchActive();
+    final isMyAppsSelected = appProvider.isFilterSelected('My Apps', 'Apps');
+    final isInstalledSelected = appProvider.isFilterSelected('Installed Apps', 'Apps');
 
-  Widget _buildActiveFilterChip(ResponsiveHelper responsive, AppProvider appProvider, String key, dynamic value) {
-    String displayText = '';
-    if (value is String) {
-      displayText = value;
-    } else if (value is Category) {
-      // Handle Category objects
-      displayText = value.title;
-    } else if (value is AppCapability) {
-      // Handle AppCapability objects
-      displayText = value.title;
-    } else {
-      displayText = value.toString();
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: responsive.spacing(baseSpacing: 12),
-        vertical: responsive.spacing(baseSpacing: 6),
-      ),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            displayText,
-            style: responsive.bodySmall.copyWith(
-              color: ResponsiveHelper.purplePrimary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          SizedBox(width: responsive.spacing(baseSpacing: 6)),
-          GestureDetector(
-            onTap: () {
-              // Track filter removal based on filter type
-              if (value is Category) {
-                MixpanelManager().appsCategoryFilter(value.title, false);
-              } else if (value is AppCapability) {
-                MixpanelManager().appsCapabilityFilter(value.title, false);
-              } else if (value is String) {
-                if (value == 'Installed Apps' || value == 'My Apps') {
-                  MixpanelManager().appsTypeFilter(value, false);
-                } else if (value.startsWith('1+') ||
-                    value.startsWith('2+') ||
-                    value.startsWith('3+') ||
-                    value.startsWith('4+')) {
-                  MixpanelManager().appsRatingFilter(value, false);
-                } else if (value == 'A-Z' || value == 'Z-A' || value == 'Highest Rating' || value == 'Lowest Rating') {
-                  MixpanelManager().appsSortFilter(value, false);
+    return Row(
+      children: [
+        // Search bar
+        Expanded(
+          flex: isSearchActive ? 3 : 2,
+          child: SizedBox(
+            height: 44,
+            child: OmiSearchInput(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              onChanged: (query) => _debouncer.run(() {
+                appProvider.searchApps(query);
+                if (query.isNotEmpty) {
+                  MixpanelManager().memorySearched(query, appProvider.filteredApps.length);
                 }
-              }
-              appProvider.removeFilter(key);
-            },
-            child: const Icon(
-              Icons.close,
-              size: 14,
-              color: ResponsiveHelper.purplePrimary,
+              }),
+              onClear: () {
+                _searchController.clear();
+                appProvider.searchApps('');
+                MixpanelManager().memorySearchCleared(appProvider.apps.length);
+                _searchFocusNode.unfocus();
+              },
+              hint: 'Search apps...',
             ),
           ),
-        ],
+        ),
+
+        const SizedBox(width: 12),
+
+        // My Apps button
+        _buildFilterButton(
+          label: 'My Apps',
+          icon: FontAwesomeIcons.solidUser,
+          isSelected: isMyAppsSelected,
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            final wasSelected = appProvider.isFilterSelected('My Apps', 'Apps');
+            appProvider.addOrRemoveFilter('My Apps', 'Apps');
+            appProvider.applyFilters();
+            MixpanelManager().appsTypeFilter('My Apps', !wasSelected);
+          },
+        ),
+
+        const SizedBox(width: 8),
+
+        // Installed Apps button
+        _buildFilterButton(
+          label: 'Installed Apps',
+          icon: FontAwesomeIcons.download,
+          isSelected: isInstalledSelected,
+          onTap: () {
+            HapticFeedback.mediumImpact();
+            final wasSelected = appProvider.isFilterSelected('Installed Apps', 'Apps');
+            appProvider.addOrRemoveFilter('Installed Apps', 'Apps');
+            appProvider.applyFilters();
+            MixpanelManager().appsTypeFilter('Installed Apps', !wasSelected);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterButton({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+                : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.5)
+                  : ResponsiveHelper.backgroundTertiary,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FaIcon(
+                icon,
+                size: 14,
+                color: isSelected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isSelected ? ResponsiveHelper.textPrimary : ResponsiveHelper.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -564,9 +526,9 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // Show category-based layout when not filtering/searching
+          // Show capability-based layout when not filtering/searching (like mobile)
           if (!appProvider.isFilterActive() && !appProvider.isSearchActive())
-            ..._buildCategoryBasedContent(responsive, appProvider)
+            ..._buildCapabilityBasedContent(responsive, appProvider)
           else
             // Show filtered/searched apps in grid when filtering/searching
             _buildAppsGrid(responsive, appProvider),
@@ -575,229 +537,14 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildPopularAppsSection(ResponsiveHelper responsive, AppProvider appProvider) {
-    // Limit popular apps to prevent UI lag
-    final limitedPopularApps = appProvider.popularApps.take(8).toList();
-
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 32)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.trending_up_rounded,
-                  color: ResponsiveHelper.purplePrimary,
-                  size: 20,
-                ),
-                SizedBox(width: responsive.spacing(baseSpacing: 8)),
-                Text(
-                  'Popular',
-                  style: responsive.titleMedium.copyWith(
-                    color: ResponsiveHelper.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-
-            SizedBox(height: responsive.spacing(baseSpacing: 16)),
-
-            // Horizontal scrolling popular apps
-            SizedBox(
-              height: 120, // Match fixed card height
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: limitedPopularApps.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 16),
-                itemBuilder: (context, index) {
-                  final app = limitedPopularApps[index];
-                  return _buildPopularAppCard(responsive, app);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPopularAppCard(ResponsiveHelper responsive, App app) {
-    return SizedBox(
-      width: 320, // Fixed width to match category cards
-      height: 120, // Increased height for better content spacing
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _handleAppTap(app),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                // App icon
-                CachedNetworkImage(
-                  imageUrl: app.getImageUrl(),
-                  imageBuilder: (context, imageProvider) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      image: DecorationImage(
-                        image: imageProvider,
-                        fit: BoxFit.cover,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                  placeholder: (context, url) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-                    ),
-                    child: const Icon(
-                      Icons.apps,
-                      color: ResponsiveHelper.textQuaternary,
-                      size: 24,
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-                    ),
-                    child: const Icon(
-                      Icons.apps,
-                      color: ResponsiveHelper.textQuaternary,
-                      size: 24,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(width: 16),
-
-                // App info - takes remaining space
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // App name
-                      Text(
-                        app.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: ResponsiveHelper.textPrimary,
-                          height: 1.2,
-                        ),
-                      ),
-
-                      const SizedBox(height: 6),
-
-                      // App description - reduced opacity and better spacing
-                      Text(
-                        app.description.decodeString,
-                        maxLines: 2, // Back to 2 lines with increased card height
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: ResponsiveHelper.textTertiary.withValues(alpha: 0.7), // Reduced opacity
-                          height: 1.3,
-                        ),
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      // Rating and install status
-                      Row(
-                        children: [
-                          if (app.ratingAvg != null) ...[
-                            const Icon(
-                              Icons.star_rounded,
-                              color: ResponsiveHelper.purplePrimary,
-                              size: 14,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              app.getRatingAvg()!,
-                              style: const TextStyle(
-                                color: ResponsiveHelper.textSecondary,
-                                fontSize: 11,
-                                height: 1.2,
-                              ),
-                            ),
-                            const Spacer(),
-                          ] else
-                            const Spacer(),
-                          if (app.enabled)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'Installed',
-                                style: TextStyle(
-                                  color: ResponsiveHelper.purplePrimary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildCategoryBasedContent(ResponsiveHelper responsive, AppProvider appProvider) {
+  List<Widget> _buildCapabilityBasedContent(ResponsiveHelper responsive, AppProvider appProvider) {
     List<Widget> slivers = [];
 
-    // Popular apps section first
-    if (appProvider.popularApps.isNotEmpty) {
-      slivers.add(_buildPopularAppsSection(responsive, appProvider));
-    }
+    // Use groupedApps from AppProvider (capability-based, like mobile)
+    final groups = appProvider.groupedApps;
 
-    // Get available categories from AddAppProvider
-    final categories = context.read<AddAppProvider>().categories;
-
-    if (categories.isEmpty) {
-      // Show loading state instead of all apps to prevent initial flash
+    if (groups.isEmpty) {
+      // Show loading state
       return [
         SliverFillRemaining(
           child: Center(
@@ -809,7 +556,7 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
                 ),
                 SizedBox(height: responsive.spacing(baseSpacing: 16)),
                 Text(
-                  'Loading categories...',
+                  'Loading apps...',
                   style: responsive.bodyLarge.copyWith(
                     color: ResponsiveHelper.textSecondary,
                   ),
@@ -821,180 +568,114 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       ];
     }
 
-    // Group apps by category
-    final Map<String, List<App>> appsByCategory = {};
-    for (final app in appProvider.apps) {
-      final categoryId = app.category;
-      if (categoryId.isNotEmpty) {
-        appsByCategory[categoryId] ??= [];
-        appsByCategory[categoryId]!.add(app);
-      }
-    }
+    // Filter out sections that are accessed elsewhere (like mobile):
+    // - "Summary" (memories) section - accessed via conversation detail page
+    // - "Chat Assistants" (chat) section - accessed via chat page drawer
+    final filteredGroups = groups.where((group) {
+      final capabilityMap = group['capability'] as Map<String, dynamic>?;
+      final groupId = capabilityMap?['id'] as String? ?? '';
+      return groupId != 'memories' && groupId != 'chat';
+    }).toList();
 
-    // Build category sections
-    for (final category in categories) {
-      final categoryApps = appsByCategory[category.id] ?? [];
-      if (categoryApps.isNotEmpty) {
-        slivers.add(_buildCategorySection(responsive, appProvider, category, categoryApps));
-      }
-    }
+    // Build capability sections
+    for (final group in filteredGroups) {
+      final capabilityMap = group['capability'] as Map<String, dynamic>?;
+      final categoryMap = group['category'] as Map<String, dynamic>?;
 
-    // Add uncategorized apps if any
-    final uncategorizedApps = appProvider.apps.where((app) => app.category.isEmpty).toList();
-    if (uncategorizedApps.isNotEmpty) {
-      slivers.add(_buildUncategorizedSection(responsive, appProvider, uncategorizedApps));
+      final groupMap = capabilityMap ?? categoryMap;
+      final groupTitle = (groupMap != null ? (groupMap['title'] as String? ?? '') : '').trim();
+      final groupApps = group['data'] as List<App>? ?? <App>[];
+
+      if (groupApps.isNotEmpty) {
+        slivers.add(_buildCapabilitySection(responsive, groupTitle, groupApps));
+      }
     }
 
     return slivers;
   }
 
-  Widget _buildCategorySection(
-      ResponsiveHelper responsive, AppProvider appProvider, dynamic category, List<App> categoryApps) {
-    // Show up to 8 apps from this category
-    final displayApps = categoryApps.take(8).toList();
+  Widget _buildCapabilitySection(ResponsiveHelper responsive, String title, List<App> apps) {
+    // Show up to 9 apps from this capability (like mobile)
+    final displayApps = apps.take(9).toList();
+
+    // Calculate grid height based on number of rows (3 items per column, scrolls horizontally)
+    final numRows = displayApps.length.clamp(1, 3);
+    final gridHeight = numRows * 80.0 + (numRows - 1) * 12.0;
 
     return SliverToBoxAdapter(
       child: Container(
-        margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 32)),
+        margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 28)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Category header with name and view all button
+            // Section header - clean like mobile
             Row(
               children: [
-                const Icon(
-                  Icons.category_rounded,
-                  color: ResponsiveHelper.purplePrimary,
-                  size: 20,
-                ),
-                SizedBox(width: responsive.spacing(baseSpacing: 8)),
                 Text(
-                  category.title,
-                  style: responsive.titleMedium.copyWith(
+                  title.isEmpty ? 'Apps' : title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
                     color: ResponsiveHelper.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(width: responsive.spacing(baseSpacing: 8)),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: responsive.spacing(baseSpacing: 6),
-                    vertical: responsive.spacing(baseSpacing: 2),
-                  ),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${categoryApps.length}',
-                    style: responsive.bodySmall.copyWith(
-                      color: ResponsiveHelper.textTertiary,
-                      fontSize: 10,
-                    ),
                   ),
                 ),
                 const Spacer(),
-                if (categoryApps.length > 8)
-                  TextButton.icon(
-                    onPressed: () {
-                      // Apply category filter
-                      MixpanelManager().appsCategoryFilter(category.title, true);
-                      appProvider.addOrRemoveCategoryFilter(category);
-                    },
-                    icon: const Icon(Icons.arrow_forward, size: 16),
-                    label: Text(
-                      'View All',
-                      style: responsive.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    iconAlignment: IconAlignment.end, // Icon after text
-                    style: TextButton.styleFrom(
-                      foregroundColor: ResponsiveHelper.purplePrimary,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: responsive.spacing(baseSpacing: 12),
-                        vertical: responsive.spacing(baseSpacing: 4),
+                if (apps.length > 9)
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        // TODO: Navigate to full category view
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'All',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: ResponsiveHelper.textTertiary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            SizedBox(width: 2),
+                            Icon(
+                              Icons.chevron_right,
+                              color: ResponsiveHelper.textTertiary,
+                              size: 16,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
               ],
             ),
 
-            SizedBox(height: responsive.spacing(baseSpacing: 16)),
-
-            // Horizontal scrolling apps
-            SizedBox(
-              height: 120, // Fixed height to match card dimensions
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: displayApps.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 16),
-                itemBuilder: (context, index) {
-                  final app = displayApps[index];
-                  return _buildCategoryAppCard(responsive, app);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUncategorizedSection(ResponsiveHelper responsive, AppProvider appProvider, List<App> uncategorizedApps) {
-    final displayApps = uncategorizedApps.take(8).toList();
-
-    return SliverToBoxAdapter(
-      child: Container(
-        margin: EdgeInsets.only(bottom: responsive.spacing(baseSpacing: 32)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.apps_rounded,
-                  color: ResponsiveHelper.textTertiary,
-                  size: 20,
-                ),
-                SizedBox(width: responsive.spacing(baseSpacing: 8)),
-                Text(
-                  'Other Apps',
-                  style: responsive.titleMedium.copyWith(
-                    color: ResponsiveHelper.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(width: responsive.spacing(baseSpacing: 8)),
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: responsive.spacing(baseSpacing: 6),
-                    vertical: responsive.spacing(baseSpacing: 2),
-                  ),
-                  decoration: BoxDecoration(
-                    color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${uncategorizedApps.length}',
-                    style: responsive.bodySmall.copyWith(
-                      color: ResponsiveHelper.textTertiary,
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: 16),
+
+            // Horizontal scrolling grid (3 rows like mobile)
             SizedBox(
-              height: 120, // Fixed height to match card dimensions
-              child: ListView.separated(
+              height: gridHeight,
+              child: GridView.builder(
                 scrollDirection: Axis.horizontal,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: numRows,
+                  childAspectRatio: 0.22,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 16,
+                ),
                 itemCount: displayApps.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 16),
                 itemBuilder: (context, index) {
                   final app = displayApps[index];
-                  return _buildCategoryAppCard(responsive, app);
+                  return _buildAppCard(responsive, app);
                 },
               ),
             ),
@@ -1004,161 +685,142 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildCategoryAppCard(ResponsiveHelper responsive, App app) {
-    return SizedBox(
-      width: 320,
-      height: 120,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _handleAppTap(app),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                // App icon
-                CachedNetworkImage(
-                  imageUrl: app.getImageUrl(),
-                  imageBuilder: (context, imageProvider) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      image: DecorationImage(
-                        image: imageProvider,
-                        fit: BoxFit.cover,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                  placeholder: (context, url) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-                    ),
-                    child: const Icon(
-                      Icons.apps,
-                      color: ResponsiveHelper.textQuaternary,
-                      size: 24,
-                    ),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
-                    ),
-                    child: const Icon(
-                      Icons.apps,
-                      color: ResponsiveHelper.textQuaternary,
-                      size: 24,
+  Widget _buildAppCard(ResponsiveHelper responsive, App app) {
+    // Get category name
+    final categories = context.read<AddAppProvider>().categories;
+    final category = categories.firstWhere(
+      (c) => c.id == app.category,
+      orElse: () => Category(id: app.category, title: app.getCategoryName()),
+    );
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleAppTap(app),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          child: Row(
+            children: [
+              // App icon - square with rounded corners like mobile
+              CachedNetworkImage(
+                imageUrl: app.getImageUrl(),
+                imageBuilder: (context, imageProvider) => Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    image: DecorationImage(
+                      image: imageProvider,
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),
+                placeholder: (context, url) => Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF35343B),
+                  ),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF35343B),
+                  ),
+                  child: const Icon(Icons.apps, color: Colors.white54, size: 24),
+                ),
+              ),
 
-                const SizedBox(width: 16),
+              const SizedBox(width: 12),
 
-                // App info - takes remaining space
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // App name
-                      Text(
-                        app.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: ResponsiveHelper.textPrimary,
-                          height: 1.2,
-                        ),
+              // App info
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // App name
+                    Text(
+                      app.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: ResponsiveHelper.textPrimary,
                       ),
+                    ),
 
-                      const SizedBox(height: 6),
+                    const SizedBox(height: 2),
 
-                      // App description - reduced opacity and better spacing
-                      Text(
-                        app.description.decodeString,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: ResponsiveHelper.textTertiary.withValues(alpha: 0.7),
-                          height: 1.3,
-                        ),
+                    // Category
+                    Text(
+                      category.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: ResponsiveHelper.textTertiary,
                       ),
+                    ),
 
-                      const SizedBox(height: 8),
-
-                      // Rating and install status
+                    // Rating
+                    if (app.ratingAvg != null) ...[
+                      const SizedBox(height: 4),
                       Row(
                         children: [
-                          if (app.ratingAvg != null) ...[
-                            const Icon(
-                              Icons.star_rounded,
-                              color: ResponsiveHelper.purplePrimary,
-                              size: 14,
+                          const Icon(
+                            Icons.star_rounded,
+                            color: ResponsiveHelper.purplePrimary,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            app.getRatingAvg()!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade300,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              app.getRatingAvg()!,
-                              style: const TextStyle(
-                                color: ResponsiveHelper.textSecondary,
-                                fontSize: 11,
-                                height: 1.2,
-                              ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '(${app.ratingCount})',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
                             ),
-                            const Spacer(),
-                          ] else
-                            const Spacer(),
-                          if (app.enabled)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'Installed',
-                                style: TextStyle(
-                                  color: ResponsiveHelper.purplePrimary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
+                          ),
                         ],
                       ),
                     ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              // Install/Open button - pill shaped like mobile
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: app.enabled ? Colors.grey.shade700 : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  app.enabled ? 'Open' : 'Install',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: app.enabled ? Colors.white : Colors.black,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1175,10 +837,17 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
       );
     }
 
-    return SliverToBoxAdapter(
-      child: DesktopAppGrid(
-        apps: apps,
-        onAppTap: (app) => _handleAppTap(app),
+    // Use vertical list for filtered/searched apps
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final app = apps[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: _buildAppCard(responsive, app),
+          );
+        },
+        childCount: apps.length,
       ),
     );
   }
@@ -1227,3 +896,4 @@ class _DesktopAppsPageState extends State<DesktopAppsPage> with AutomaticKeepAli
     }
   }
 }
+

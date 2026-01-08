@@ -1461,9 +1461,9 @@ class CaptureProvider extends ChangeNotifier
 
       final isAssigningToUser = finalPersonId == 'user';
 
-      // Update local state for all segments with this speakerId
+      // Update all segments with this speakerId for UI consistency
       for (var segment in segments) {
-        if (segmentIds.contains(segment.id)) {
+        if (segment.speakerId == speakerId) {
           segment.isUser = isAssigningToUser;
           segment.personId = isAssigningToUser ? null : finalPersonId;
         }

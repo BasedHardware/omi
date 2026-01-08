@@ -70,6 +70,7 @@ function groupActionItems(items: ActionItem[]): GroupedActionItems {
       tomorrow: [],
       thisWeek: [],
       later: [],
+      noDueDate: [],
       completed: [],
     };
   }
@@ -80,6 +81,7 @@ function groupActionItems(items: ActionItem[]): GroupedActionItems {
     tomorrow: [],
     thisWeek: [],
     later: [],
+    noDueDate: [],
     completed: [],
   };
 
@@ -90,8 +92,8 @@ function groupActionItems(items: ActionItem[]): GroupedActionItems {
     }
 
     if (!item.due_at) {
-      // No due date goes to "later"
-      groups.later.push(item);
+      // No due date goes to dedicated group
+      groups.noDueDate.push(item);
       continue;
     }
 
@@ -123,11 +125,19 @@ function groupActionItems(items: ActionItem[]): GroupedActionItems {
     return bCreated - aCreated;
   };
 
+  // Sort by created_at (newest first) for items without due date
+  const sortByCreatedAt = (a: ActionItem, b: ActionItem) => {
+    const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return bCreated - aCreated;
+  };
+
   groups.overdue.sort(sortByDueDate);
   groups.today.sort(sortByDueDate);
   groups.tomorrow.sort(sortByDueDate);
   groups.thisWeek.sort(sortByDueDate);
   groups.later.sort(sortByDueDate);
+  groups.noDueDate.sort(sortByCreatedAt);
 
   // Sort completed by completion date (most recent first)
   groups.completed.sort((a, b) => {
@@ -172,12 +182,19 @@ export interface UseActionItemsReturn {
   loading: boolean;
   error: string | null;
 
+  // Flat sorted list for list view (pending sorted by due date, no-date items last)
+  sortedFlatList: {
+    pending: ActionItem[];
+    completed: ActionItem[];
+  };
+
   // Stats
   stats: {
     total: number;
     completed: number;
     pending: number;
     overdue: number;
+    noDueDateCount: number;
     todayTotal: number;
     todayCompleted: number;
     // Weekly stats
@@ -207,6 +224,7 @@ export interface UseActionItemsReturn {
   bulkComplete: (ids: string[]) => Promise<void>;
   bulkDelete: (ids: string[]) => Promise<void>;
   bulkSnooze: (ids: string[], days: number) => Promise<void>;
+  bulkSetDueDate: (ids: string[], date: Date | null) => Promise<void>;
 }
 
 export function useActionItems(): UseActionItemsReturn {
@@ -244,6 +262,7 @@ export function useActionItems(): UseActionItemsReturn {
     const completed = items.filter(i => i.completed).length;
     const pending = items.filter(i => !i.completed).length;
     const overdue = groupedItems.overdue.length;
+    const noDueDateCount = groupedItems.noDueDate.length;
     const todayItems = items.filter(i => i.due_at && isToday(new Date(i.due_at)));
     const todayCompleted = todayItems.filter(i => i.completed).length;
 
@@ -303,6 +322,7 @@ export function useActionItems(): UseActionItemsReturn {
       completed,
       pending,
       overdue,
+      noDueDateCount,
       todayTotal: todayItems.length,
       todayCompleted,
       weekCompleted,
@@ -334,6 +354,36 @@ export function useActionItems(): UseActionItemsReturn {
     }
 
     return days;
+  }, [items]);
+
+  // Sorted flat list for list view (pending sorted by due date, no-date items last)
+  const sortedFlatList = useMemo(() => {
+    const pending = items.filter(i => !i.completed);
+    const completed = items.filter(i => i.completed);
+
+    // Sort pending: by due date (soonest first), items without due date go last
+    pending.sort((a, b) => {
+      // Handle no due date (goes last)
+      if (!a.due_at && !b.due_at) {
+        // Both no due date: sort by created_at (newest first)
+        const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bCreated - aCreated;
+      }
+      if (!a.due_at) return 1;
+      if (!b.due_at) return -1;
+
+      return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+    });
+
+    // Sort completed by completion date (most recent first)
+    completed.sort((a, b) => {
+      const aCompleted = a.completed_at ? new Date(a.completed_at).getTime() : 0;
+      const bCompleted = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+      return bCompleted - aCompleted;
+    });
+
+    return { pending, completed };
   }, [items]);
 
   // Add new item
@@ -538,11 +588,33 @@ export function useActionItems(): UseActionItemsReturn {
     }
   }, [fetchItems]);
 
+  // Bulk set due date (for no-due-date items)
+  const bulkSetDueDate = useCallback(async (ids: string[], date: Date | null) => {
+    const newDueAt = date ? date.toISOString() : null;
+
+    // Optimistic update
+    setItems(prev =>
+      prev.map(item =>
+        ids.includes(item.id) ? { ...item, due_at: newDueAt } : item
+      )
+    );
+
+    try {
+      await Promise.all(ids.map(id => updateActionItemDueDate(id, newDueAt)));
+    } catch (err) {
+      console.error('Failed to bulk set due date:', err);
+      // Refresh to get correct state
+      fetchItems();
+      setError(err instanceof Error ? err.message : 'Failed to set due dates');
+    }
+  }, [fetchItems]);
+
   return {
     items,
     groupedItems,
     loading,
     error,
+    sortedFlatList,
     stats,
     weekData,
     refresh: fetchItems,
@@ -555,5 +627,6 @@ export function useActionItems(): UseActionItemsReturn {
     bulkComplete,
     bulkDelete,
     bulkSnooze,
+    bulkSetDueDate,
   };
 }

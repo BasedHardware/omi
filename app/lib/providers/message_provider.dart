@@ -40,6 +40,7 @@ class MessageProvider extends ChangeNotifier {
   bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
+  double aiStreamProgress = 1.0;
 
   String firstTimeLoadingText = '';
 
@@ -54,6 +55,16 @@ class MessageProvider extends ChangeNotifier {
 
   void updateAppProvider(AppProvider p) {
     appProvider = p;
+  }
+
+  void setChatApps(List<App> apps) {
+    chatApps = apps;
+    notifyListeners();
+  }
+
+  void removeChatApp(String appId) {
+    chatApps.removeWhere((app) => app.id == appId);
+    notifyListeners();
   }
 
   Future<void> fetchChatApps() async {
@@ -424,13 +435,15 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.add(message);
-    final aiIndex = messages.length - 1;
+    var aiIndex = messages.length - 1;
     notifyListeners();
 
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
+        if (!firstChunkRecieved &&
+            [MessageChunkType.message, MessageChunkType.data, MessageChunkType.done, MessageChunkType.think]
+                .contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
@@ -457,7 +470,8 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(1, chunk.message!);
+          messages.insert(aiIndex, chunk.message!);
+          aiIndex++;
           notifyListeners();
           continue;
         }
@@ -477,6 +491,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -511,6 +526,7 @@ class MessageProvider extends ChangeNotifier {
       if (textBuffer.isNotEmpty) {
         message.text += textBuffer;
         textBuffer = '';
+        aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
         HapticFeedback.lightImpact();
         notifyListeners();
       }
@@ -556,7 +572,9 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
+      setSendingMessage(false);
     }
   }
 

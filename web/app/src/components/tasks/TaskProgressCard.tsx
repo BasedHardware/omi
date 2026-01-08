@@ -78,8 +78,8 @@ export function TaskProgressCard({
   return (
     <div
       className={cn(
-        'rounded-xl',
-        'bg-bg-secondary border border-bg-tertiary',
+        'noise-overlay rounded-xl',
+        'bg-white/[0.02] border border-white/[0.06]',
         compact ? 'flex flex-col' : 'grid grid-cols-2 gap-0'
       )}
     >

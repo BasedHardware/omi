@@ -51,11 +51,13 @@ import 'package:omi/providers/theme_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/desktop_update_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/growthbook.dart';
@@ -103,6 +105,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await ActionItemNotificationHandler.handleDeletionMessage(data);
   } else if (messageType == 'merge_completed') {
     await MergeNotificationHandler.handleMergeCompleted(
+      data,
+      channelKey,
+      isAppInForeground: false,
+    );
+  } else if (messageType == 'important_conversation') {
+    await ImportantConversationNotificationHandler.handleImportantConversation(
       data,
       channelKey,
       isAppInForeground: false,
@@ -193,9 +201,9 @@ void main() {
       WidgetsFlutterBinding.ensureInitialized();
       if (PlatformService.isDesktop) {
         await windowManager.ensureInitialized();
-        WindowOptions windowOptions = WindowOptions(
-          size: const Size(1440, 900),
-          minimumSize: const Size(1000, 650),
+        WindowOptions windowOptions = const WindowOptions(
+          size: Size(1300, 800),
+          minimumSize: Size(1100, 700),
           center: true,
           title: Env.appName,
           titleBarStyle: TitleBarStyle.hidden,
@@ -332,7 +340,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
                 (previous?..setProviders(app, conversation)) ?? ConversationDetailProvider(),
           ),
-          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()),
+          ChangeNotifierProvider(create: (context) => DeveloperModeProvider()..initialize()),
           ChangeNotifierProvider(create: (context) => McpProvider()),
           ChangeNotifierProxyProvider<AppProvider, AddAppProvider>(
             create: (context) => AddAppProvider(),
@@ -360,6 +368,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ChangeNotifierProvider(create: (context) => CalendarProvider(), lazy: false),
           ChangeNotifierProvider(create: (context) => FolderProvider()),
           ChangeNotifierProvider(create: (context) => LocaleProvider()),
+          ChangeNotifierProvider(create: (context) => VoiceRecorderProvider()),
         ],
         builder: (context, child) {
           final themeProvider = context.watch<ThemeProvider>();

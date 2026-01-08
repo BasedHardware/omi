@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Any
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -163,9 +163,18 @@ class ResponseMessage(Message):
     ask_for_nps: Optional[bool] = False
 
 
+class PageContext(BaseModel):
+    """Page context for chat - indicates what the user is currently viewing."""
+
+    type: Literal["conversation", "task", "memory", "recap"]
+    id: Optional[str] = None
+    title: Optional[str] = None
+
+
 class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
+    context: Optional[PageContext] = None
 
 
 class ChatSession(BaseModel):

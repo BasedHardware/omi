@@ -106,6 +106,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? description,
   bool? completed,
   DateTime? dueAt,
+  bool clearDueAt = false, // Flag to explicitly clear due date
   bool? exported,
   DateTime? exportDate,
   String? exportPlatform,
@@ -118,7 +119,10 @@ Future<ActionItemWithMetadata?> updateActionItem(
   if (completed != null) {
     requestBody['completed'] = completed;
   }
-  if (dueAt != null) {
+  // Handle dueAt - send ISO string if set, or null to clear deadline
+  if (clearDueAt) {
+    requestBody['due_at'] = null;
+  } else if (dueAt != null) {
     requestBody['due_at'] = dueAt.toUtc().toIso8601String();
   }
   if (exported != null) {

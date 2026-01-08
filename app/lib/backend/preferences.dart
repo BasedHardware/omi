@@ -280,9 +280,9 @@ class SharedPreferencesUtil {
 
   // Short conversation threshold in seconds - default is 60 (1 minute)
   // Options: 60 (1 min), 120 (2 min), 180 (3 min), 240 (4 min), 300 (5 min)
-  int get shortConversationThreshold => getInt('shortConversationThreshold', defaultValue: 60);
+  int get shortConversationThreshold => getInt('v2/shortConversationThreshold', defaultValue: 0);
 
-  set shortConversationThreshold(int value) => saveInt('shortConversationThreshold', value);
+  set shortConversationThreshold(int value) => saveInt('v2/shortConversationThreshold', value);
 
   // Transcription settings (cached for fast preload)
   bool get cachedSingleLanguageMode => getBool('cachedSingleLanguageMode');

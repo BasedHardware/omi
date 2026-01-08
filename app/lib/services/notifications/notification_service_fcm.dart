@@ -13,11 +13,10 @@ import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:omi/env/env.dart';
-import 'package:omi/theme/brand_colors.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
@@ -27,15 +26,12 @@ class _FCMNotificationService implements NotificationInterface {
   MethodChannel platform = const MethodChannel('com.friend.ios/notifyOnKill');
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
 
-  // Use dynamic brand color for notifications
-  static final _notificationColor = BrandColors.getColorsForFlavor().primary;
-
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: '${Env.appName} Notifications',
-    channelDescription: 'Notification channel for ${Env.appName}',
-    defaultColor: _notificationColor,
+    channelName: 'Omi Notifications',
+    channelDescription: 'Notification channel for Omi',
+    defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );
 
@@ -60,7 +56,7 @@ class _FCMNotificationService implements NotificationInterface {
             channelKey: channel.channelKey,
             channelName: channel.channelName,
             channelDescription: channel.channelDescription,
-            defaultColor: _notificationColor,
+            defaultColor: const Color(0xFF9D50DD),
             ledColor: Colors.white,
           )
         ],
@@ -74,10 +70,10 @@ class _FCMNotificationService implements NotificationInterface {
         debug: false);
 
     debugPrint('initializeNotifications: $initialized');
-
-    // Reset badge to clear existing badge count if any
+    
+// Reset badge to clear existing badge count if any
     int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
-    if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
+if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
 
   @override
@@ -124,8 +120,8 @@ class _FCMNotificationService implements NotificationInterface {
       await platform.invokeMethod(
         'setNotificationOnKillService',
         {
-          'title': "Your ${Env.appName} Device Disconnected",
-          'description': "Please keep your app opened to continue using your ${Env.appName}.",
+          'title': "Your Omi Device Disconnected",
+          'description': "Please keep your app opened to continue using your Omi.",
         },
       );
     } catch (e) {
@@ -229,6 +225,13 @@ class _FCMNotificationService implements NotificationInterface {
           return;
         } else if (messageType == 'merge_completed') {
           MergeNotificationHandler.handleMergeCompleted(
+            data,
+            channel.channelKey!,
+            isAppInForeground: true,
+          );
+          return;
+        } else if (messageType == 'important_conversation') {
+          ImportantConversationNotificationHandler.handleImportantConversation(
             data,
             channel.channelKey!,
             isAppInForeground: true,

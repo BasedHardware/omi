@@ -452,6 +452,27 @@ class MixpanelManager {
         properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
       );
 
+  // Important Conversation Share Events
+  void importantConversationNotificationReceived(String conversationId) => track(
+        'Important Conversation Notification Received',
+        properties: {'conversation_id': conversationId},
+      );
+
+  void shareToContactsSheetOpened(String conversationId) => track(
+        'Share To Contacts Sheet Opened',
+        properties: {'conversation_id': conversationId},
+      );
+
+  void shareToContactsSelected(String conversationId, int contactCount) => track(
+        'Share To Contacts Selected',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
+
+  void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
+        'Share To Contacts SMS Opened',
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+      );
+
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
@@ -729,7 +750,7 @@ class MixpanelManager {
   void brainMapShareClicked() => track('Brain Map Share Clicked');
 
   void brainMapRebuilt() => track('Brain Map Rebuilt');
-  
+
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({
     required String conversationId,
@@ -1565,6 +1586,108 @@ class MixpanelManager {
       'card_name': cardName,
       'card_index': cardIndex,
       if (error != null) 'error': error,
+    });
+  }
+
+  // ============================================================================
+  // DAILY SUMMARY / RECAP TRACKING
+  // ============================================================================
+
+  void dailySummarySettingsOpened() => track('Daily Summary Settings Opened');
+
+  void dailySummaryToggled({required bool enabled}) {
+    track('Daily Summary Toggled', properties: {'enabled': enabled});
+    setUserProperty('Daily Summary Enabled', enabled);
+  }
+
+  void dailySummaryTimeChanged({required int hour}) {
+    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    final period = hour >= 12 ? 'PM' : 'AM';
+    track('Daily Summary Time Changed', properties: {
+      'hour_24': hour,
+      'hour_12': hour12,
+      'period': period,
+      'display_time': '$hour12:00 $period',
+    });
+    setUserProperty('Daily Summary Hour', hour);
+  }
+
+  void dailySummaryDetailViewed({
+    required String summaryId,
+    required String date,
+    String? source,
+  }) {
+    track('Daily Summary Detail Viewed', properties: {
+      'summary_id': summaryId,
+      'date': date,
+      if (source != null) 'source': source,
+    });
+  }
+
+  void dailySummaryTestGenerated({required String date}) {
+    track('Daily Summary Test Generated', properties: {'date': date});
+  }
+
+  void dailySummaryTestGenerationFailed({required String date, String? error}) {
+    track('Daily Summary Test Generation Failed', properties: {
+      'date': date,
+      if (error != null) 'error': error,
+    });
+  }
+
+  void recapTabOpened() => track('Recap Tab Opened');
+
+  void recapSummaryCardClicked({
+    required String summaryId,
+    required String date,
+    required int cardIndex,
+  }) {
+    track('Recap Summary Card Clicked', properties: {
+      'summary_id': summaryId,
+      'date': date,
+      'card_index': cardIndex,
+    });
+  }
+
+  void dailySummaryNotificationReceived({
+    required String summaryId,
+    required String date,
+  }) {
+    track('Daily Summary Notification Received', properties: {
+      'summary_id': summaryId,
+      'date': date,
+    });
+  }
+
+  void dailySummaryNotificationOpened({
+    required String summaryId,
+    required String date,
+  }) {
+    track('Daily Summary Notification Opened', properties: {
+      'summary_id': summaryId,
+      'date': date,
+    });
+  }
+
+  void dailySummaryConversationClicked({
+    required String summaryId,
+    required String conversationId,
+    required String source,
+  }) {
+    track('Daily Summary Conversation Clicked', properties: {
+      'summary_id': summaryId,
+      'conversation_id': conversationId,
+      'source': source,
+    });
+  }
+
+  void dailySummarySectionViewed({
+    required String summaryId,
+    required String sectionName,
+  }) {
+    track('Daily Summary Section Viewed', properties: {
+      'summary_id': summaryId,
+      'section_name': sectionName,
     });
   }
 }
