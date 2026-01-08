@@ -68,13 +68,14 @@ export class TranscriptionSocket {
         sample_rate: String(this.options.sampleRate || 16000),
         codec: 'pcm16',
         uid: uid,
+        token: token, // Pass Firebase token for web auth
         source: 'web',
         include_speech_profile: 'true',
       });
 
       const wsUrl = `${WS_BASE_URL}/v4/listen?${params.toString()}`;
 
-      this.ws = new WebSocket(wsUrl, ['Bearer', token]);
+      this.ws = new WebSocket(wsUrl);
 
       this.ws.binaryType = 'arraybuffer';
 
