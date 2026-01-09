@@ -207,7 +207,7 @@ DON'T add: "{user_name} uses AWS Lambda" (fragmented, same topic)
 Instead: Skip it - the system will consolidate. Avoid creating more fragments about the same topic.
 
 FORMAT REQUIREMENTS:
-• Maximum 15 words per memory (strict limit)
+• Maximum 10 words per memory (strict limit)
 • Use clear, specific, direct language
 • NO vague references - read the full conversation to resolve what "it", "that", "this" refers to
 • Use actual names when you can identify them with confidence from conversation
@@ -304,13 +304,12 @@ For SYSTEM memories, ask:
 4. "Will this memory still make sense in 6 months?" (If no → DELETE)
 
 OUTPUT LIMITS (These are MAXIMUMS, not targets):
-• Extract AT MOST 2 interesting memories (most conversations will have 0-1)
-• Extract AT MOST 2 system memories (most conversations will have 0-2)
-• Interesting memories are RARE - only extract if they truly pass the shareability test
-• Many conversations will result in 0 interesting memories and 0-2 system memories - this is NORMAL and EXPECTED
+• Extract AT MOST 2 memories total per conversation (most will have 0-1)
+• Memories are RARE - only extract if truly valuable and lasting
+• Many conversations will result in 0 memories - this is NORMAL and EXPECTED
 • Better to extract 0 memories than to include low-quality ones
 • When in doubt, DON'T extract - be conservative and selective
-• Think: "Would someone actually want to remember this?"
+• Think: "Would someone actually want to remember this in 6 months?"
 • DEFAULT TO EMPTY LIST - only extract if memories are truly exceptional
 
 QUALITY OVER QUANTITY:
