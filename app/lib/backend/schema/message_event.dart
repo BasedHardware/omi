@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
@@ -30,10 +32,8 @@ abstract class MessageEvent {
         return OnboardingQuestionAnsweredEvent.fromJson(json);
       case 'onboarding_complete':
         return OnboardingCompleteEvent.fromJson(json);
-      case 'credits_low':
-        return CreditsLowEvent.fromJson(json);
-      case 'credits_exhausted':
-        return CreditsExhaustedEvent.fromJson(json);
+      case 'freemium_threshold_reached':
+        return FreemiumThresholdReachedEvent.fromJson(json);
       default:
         // Return a generic event or throw an error if the type is unknown
         return UnknownEvent(eventType: json['type'] ?? 'unknown');
@@ -232,33 +232,56 @@ class OnboardingCompleteEvent extends MessageEvent {
   }
 }
 
-/// Freemium: Sent when user's credits are running low (e.g., 3 minutes remaining)
-/// Allows client to prepare on-device STT in background for seamless switch
-class CreditsLowEvent extends MessageEvent {
-  final int remainingSeconds;
+/// Freemium action types sent by backend
+enum FreemiumAction {
+  /// User needs to setup on-device transcription to continue after credits run out
+  setupOnDeviceStt,
 
-  CreditsLowEvent({required this.remainingSeconds}) : super(eventType: 'credits_low');
-
-  factory CreditsLowEvent.fromJson(Map<String, dynamic> json) {
-    // status_text contains remaining seconds as string
-    final remainingStr = json['status_text'] ?? '0';
-    return CreditsLowEvent(
-      remainingSeconds: int.tryParse(remainingStr) ?? 0,
-    );
-  }
+  /// No action required - backend handles fallback automatically (future use)
+  none,
 }
 
-/// Freemium: Sent when user's credits are exhausted
-/// Client should switch to on-device STT to continue conversation seamlessly
-class CreditsExhaustedEvent extends MessageEvent {
-  final String? conversationId;
+/// Freemium: Sent when user's credits are approaching the limit (e.g., 3 minutes remaining)
+/// Includes action type to tell the app what the user needs to do (if anything)
+class FreemiumThresholdReachedEvent extends MessageEvent {
+  final int remainingSeconds;
+  final FreemiumAction action;
 
-  CreditsExhaustedEvent({this.conversationId}) : super(eventType: 'credits_exhausted');
+  FreemiumThresholdReachedEvent({
+    required this.remainingSeconds,
+    required this.action,
+  }) : super(eventType: 'freemium_threshold_reached');
 
-  factory CreditsExhaustedEvent.fromJson(Map<String, dynamic> json) {
-    final convId = json['status_text'];
-    return CreditsExhaustedEvent(
-      conversationId: (convId != null && convId.toString().isNotEmpty) ? convId.toString() : null,
+  /// Whether user action is required
+  bool get requiresUserAction => action == FreemiumAction.setupOnDeviceStt;
+
+  factory FreemiumThresholdReachedEvent.fromJson(Map<String, dynamic> json) {
+    // status_text contains JSON with remaining_seconds and action
+    final statusText = json['status_text'] ?? '{}';
+
+    int remainingSeconds = 0;
+    FreemiumAction action = FreemiumAction.none;
+
+    try {
+      final data = jsonDecode(statusText);
+      remainingSeconds = data['remaining_seconds'] ?? 0;
+
+      final actionStr = data['action'] ?? 'none';
+      switch (actionStr) {
+        case 'setup_on_device_stt':
+          action = FreemiumAction.setupOnDeviceStt;
+          break;
+        default:
+          action = FreemiumAction.none;
+      }
+    } catch (e) {
+      // Fallback: try parsing as plain number (backwards compatibility)
+      remainingSeconds = int.tryParse(statusText) ?? 0;
+    }
+
+    return FreemiumThresholdReachedEvent(
+      remainingSeconds: remainingSeconds,
+      action: action,
     );
   }
 }

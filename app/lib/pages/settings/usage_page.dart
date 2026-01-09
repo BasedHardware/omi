@@ -10,6 +10,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -566,9 +567,35 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           ),
           if (minutesLimit > 0) ...[
             const SizedBox(height: 12),
-            Text(
-              context.l10n.basicPlanDesc(minutesLimit),
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+                );
+              },
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '$minutesLimit premium minutes/month + unlimited ',
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                    ),
+                    TextSpan(
+                      text: 'on-device transcription',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade300,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    TextSpan(
+                      text: '. Omi is free forever.',
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             LinearProgressIndicator(
@@ -1165,6 +1192,71 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                       minHeight: 4,
                       borderRadius: BorderRadius.circular(2),
                     ),
+                    if (percentage >= 1.0) ...[
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+                          );
+                        },
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: 'Premium minutes used. ',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                              ),
+                              TextSpan(
+                                text: 'Setup on-device',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade400,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' for unlimited free transcription.',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ] else if (percentage >= 0.8) ...[
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
+                          );
+                        },
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${minutesLimit - minutesUsed} premium mins left. ',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                              ),
+                              TextSpan(
+                                text: 'On-device',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade400,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' always available.',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 );
               })

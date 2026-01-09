@@ -261,7 +261,7 @@
   "managePlan": "Plan verwalten",
   "cancelAtPeriodEnd": "Ihr Plan endet am {date}.",
   "renewsOn": "Ihr Plan verlängert sich am {date}.",
-  "basicPlan": "Basic Plan",
+  "basicPlan": "Kostenloser Plan",
   "usageLimitMessage": "{used} von {limit} Minuten verbraucht",
   "upgrade": "Upgrade",
   "upgradeToUnlimited": "Upgrade auf Unlimited",

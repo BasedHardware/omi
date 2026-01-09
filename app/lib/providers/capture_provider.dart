@@ -26,8 +26,7 @@ import 'package:omi/backend/schema/message_event.dart'
         TranslationEvent,
         PhotoProcessingEvent,
         PhotoDescribedEvent,
-        CreditsLowEvent,
-        CreditsExhaustedEvent;
+        FreemiumThresholdReachedEvent;
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -89,16 +88,16 @@ class CaptureProvider extends ChangeNotifier
 
   bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
 
-  // Freemium: On-device auto-switch state
-  bool _onDeviceReady = false;
-  bool _preparingOnDevice = false;
-  bool _creditsLowWarningSent = false;
-  bool _isFreemiumMode = false;
-  CustomSttConfig? _originalSttConfig;
+  // Freemium: Threshold notification state
+  bool _freemiumThresholdReached = false;
+  int _freemiumRemainingSeconds = 0;
+  bool _freemiumRequiresUserAction = false;
 
-  bool get isFreemiumMode => _isFreemiumMode;
-  bool get isPreparingOnDevice => _preparingOnDevice;
-  bool get onDeviceReady => _onDeviceReady;
+  bool get freemiumThresholdReached => _freemiumThresholdReached;
+  int get freemiumRemainingSeconds => _freemiumRemainingSeconds;
+
+  /// Whether user needs to take action (e.g., setup on-device STT)
+  bool get freemiumRequiresUserAction => _freemiumRequiresUserAction;
 
   Timer? _reconnectTimer;
   int _reconnectCountdown = 5;
@@ -1343,14 +1342,13 @@ class CaptureProvider extends ChangeNotifier
     }
 
     if (event is MessageServiceStatusEvent) {
-      // Handle freemium events via status field
-      if (event.status == 'credits_low') {
-        final remainingSeconds = int.tryParse(event.statusText ?? '0') ?? 0;
-        _handleCreditsLow(remainingSeconds);
-        return;
-      }
-      if (event.status == 'credits_exhausted') {
-        _handleCreditsExhausted(event.statusText);
+      // Handle freemium threshold event via status field
+      if (event.status == 'freemium_threshold_reached') {
+        // Parse as FreemiumThresholdReachedEvent for consistent handling
+        final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({
+          'status_text': event.statusText,
+        });
+        _handleFreemiumThresholdReached(thresholdEvent);
         return;
       }
 
@@ -1360,13 +1358,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    if (event is CreditsLowEvent) {
-      _handleCreditsLow(event.remainingSeconds);
-      return;
-    }
-
-    if (event is CreditsExhaustedEvent) {
-      _handleCreditsExhausted(event.conversationId);
+    if (event is FreemiumThresholdReachedEvent) {
+      _handleFreemiumThresholdReached(event);
       return;
     }
 
@@ -1574,185 +1567,46 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  // ============== Freemium: On-Device Auto-Switch ==============
+  // ============== Freemium: Threshold Notification ==============
 
-  /// Handle credits_low: Prepare on-device STT in background
-  void _handleCreditsLow(int remainingSeconds) {
-    if (_creditsLowWarningSent) return;
-    _creditsLowWarningSent = true;
-    _prepareOnDeviceInBackground();
-  }
+  /// Handle freemium threshold reached: Notify user based on required action
+  void _handleFreemiumThresholdReached(FreemiumThresholdReachedEvent event) {
+    if (_freemiumThresholdReached) return;
 
-  /// Handle credits_exhausted: Switch to on-device STT
-  Future<void> _handleCreditsExhausted(String? conversationId) async {
-    // Update usage provider state
-    usageProvider?.markAsOutOfCreditsAndRefresh();
+    _freemiumThresholdReached = true;
+    _freemiumRemainingSeconds = event.remainingSeconds;
+    _freemiumRequiresUserAction = event.requiresUserAction;
 
-    // Check codec compatibility if using device
-    if (_recordingDevice != null) {
-      final codec = await _getAudioCodec(_recordingDevice!.id);
-      if (!TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
-        // Can't use freemium with this device codec - just notify user
-        notifyListeners();
-        return;
-      }
-    }
+    debugPrint('[Freemium] Threshold reached - ${event.remainingSeconds} seconds remaining');
+    debugPrint('[Freemium] Action required: ${event.action.name}, requires user action: ${event.requiresUserAction}');
 
-    // Ensure on-device is ready
-    if (!_onDeviceReady) {
-      await _prepareOnDeviceInBackground();
-
-      // If still not ready (e.g., Android needs download), mark freemium mode
-      // UI can show download prompt
-      if (!_onDeviceReady && !Platform.isIOS) {
-        _isFreemiumMode = true;
-        notifyListeners();
-        return;
-      }
-    }
-
-    // Seamless switch to on-device
-    await _switchToOnDeviceSTT();
-  }
-
-  /// Prepare on-device STT in background (no UI interruption)
-  Future<void> _prepareOnDeviceInBackground() async {
-    if (_preparingOnDevice || _onDeviceReady) return;
-    _preparingOnDevice = true;
-    notifyListeners();
-
-    try {
-      if (Platform.isIOS) {
-        // iOS: Apple Speech Recognition needs no setup
-        _onDeviceReady = true;
-      } else if (Platform.isAndroid) {
-        // Android: Check if Whisper model exists
-        final modelPath = await _getWhisperModelPath();
-        if (modelPath != null && await File(modelPath).exists()) {
-          _onDeviceReady = true;
-        } else {
-          _onDeviceReady = false;
-        }
-      } else if (PlatformService.isDesktop) {
-        // Desktop: Check for Whisper model
-        final modelPath = await _getWhisperModelPath();
-        if (modelPath != null && await File(modelPath).exists()) {
-          _onDeviceReady = true;
-        } else {
-          _onDeviceReady = false;
-        }
-      }
-    } catch (e) {
-      _onDeviceReady = false;
-    } finally {
-      _preparingOnDevice = false;
-      notifyListeners();
-    }
-  }
-
-  /// Get path to existing Whisper model (if downloaded)
-  Future<String?> _getWhisperModelPath() async {
-    try {
-      final appDir = await getApplicationSupportDirectory();
-      final modelsDir = Directory('${appDir.path}/models');
-
-      if (!await modelsDir.exists()) return null;
-
-      // Check for any existing model (prefer smaller ones for performance)
-      final modelPriority = ['tiny', 'base', 'small'];
-      for (final model in modelPriority) {
-        final path = '${modelsDir.path}/ggml-$model.bin';
-        if (await File(path).exists()) {
-          return path;
-        }
-      }
-      return null;
-    } catch (e) {
-      debugPrint('[Freemium] Error checking whisper model path: $e');
-      return null;
-    }
-  }
-
-  /// Switch current session to on-device STT
-  Future<void> _switchToOnDeviceSTT() async {
-    _isFreemiumMode = true;
-
-    // Preserve user's original config (if not already on-device)
-    final currentConfig = SharedPreferencesUtil().customSttConfig;
-    if (!currentConfig.isEnabled || currentConfig.provider != SttProvider.onDeviceWhisper) {
-      _originalSttConfig = currentConfig;
-    }
-
-    // Build on-device config
-    final onDeviceConfig = await _buildOnDeviceConfig();
-
-    // Save as active config
-    await SharedPreferencesUtil().saveCustomSttConfig(onDeviceConfig);
-
-    notifyListeners();
-
-    // Reconnect socket with new config (preserves conversation)
-    await onTranscriptionSettingsChanged();
-  }
-
-  /// Build CustomSttConfig for on-device transcription
-  Future<CustomSttConfig> _buildOnDeviceConfig() async {
-    final language = SharedPreferencesUtil().userPrimaryLanguage;
-
-    if (Platform.isIOS) {
-      // iOS uses Apple Speech - no model path needed
-      return CustomSttConfig(
-        provider: SttProvider.onDeviceWhisper,
-        language: language,
-        model: 'apple',
-      );
+    if (event.requiresUserAction) {
+      debugPrint('[Freemium] User should setup on-device transcription in Settings > Transcription');
     } else {
-      // Android/Desktop uses Whisper
-      final modelPath = await _getWhisperModelPath();
-      return CustomSttConfig(
-        provider: SttProvider.onDeviceWhisper,
-        language: language,
-        model: 'tiny',
-        url: modelPath,
-      );
+      debugPrint('[Freemium] No user action required - backend will handle fallback');
     }
-  }
 
-  /// Restore original STT config (e.g., when credits reset or user upgrades)
-  Future<void> restoreOriginalSttConfig() async {
-    if (_originalSttConfig != null) {
-      await SharedPreferencesUtil().saveCustomSttConfig(_originalSttConfig!);
-      _originalSttConfig = null;
-    } else {
-      // Reset to Omi default
-      await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
-    }
-    _isFreemiumMode = false;
-    _creditsLowWarningSent = false;
+    // Update usage provider to reflect approaching limit
+    usageProvider?.refreshSubscription();
+
     notifyListeners();
   }
 
-  /// Check if credits were restored and offer to switch back to cloud
-  Future<void> checkCreditsAndResetFreemiumIfNeeded() async {
-    if (!_isFreemiumMode) return;
+  /// Reset freemium threshold state (e.g., when credits reset or on new session)
+  void resetFreemiumThresholdState() {
+    _freemiumThresholdReached = false;
+    _freemiumRemainingSeconds = 0;
+    _freemiumRequiresUserAction = false;
+    notifyListeners();
+  }
 
+  /// Check if credits were restored and reset threshold state
+  Future<void> checkCreditsAndResetThresholdIfNeeded() async {
     await usageProvider?.fetchSubscription();
-    if (usageProvider?.isOutOfCredits == false) {
-      debugPrint('[Freemium] Credits restored! Can switch back to cloud transcription.');
-      // Auto-switch back to cloud
-      await restoreOriginalSttConfig();
-      await onTranscriptionSettingsChanged();
+    if (usageProvider?.isOutOfCredits == false && _freemiumThresholdReached) {
+      debugPrint('[Freemium] Credits restored! Resetting threshold state.');
+      resetFreemiumThresholdState();
     }
-  }
-
-  /// Reset freemium state (call on logout or explicit reset)
-  void resetFreemiumState() {
-    _isFreemiumMode = false;
-    _creditsLowWarningSent = false;
-    _onDeviceReady = false;
-    _preparingOnDevice = false;
-    _originalSttConfig = null;
-    notifyListeners();
   }
 
   void setIsWalSupported(bool value) {

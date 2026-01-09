@@ -95,8 +95,14 @@ router = APIRouter()
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 
-# Freemium: Send warning when credits are low to allow seamless on-device switch
-CREDITS_LOW_THRESHOLD_SECONDS = 180  # 3 minutes - trigger background prep on client
+# Freemium: Send notification when credits threshold is reached
+FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
+
+# Freemium action types:
+# - "setup_on_device_stt": User needs to configure on-device transcription
+# - "none": No action required (future: backend handles fallback automatically)
+FREEMIUM_ACTION_SETUP_ON_DEVICE = "setup_on_device_stt"
+FREEMIUM_ACTION_NONE = "none"
 
 
 class AudioRingBuffer:
@@ -366,13 +372,12 @@ async def _listen(
     last_transcript_time: Optional[float] = None
     current_conversation_id = None
 
-    credits_low_warning_sent = False  # Track if we've sent the low credits warning
-    credits_exhausted_sent = False  # Track if we've sent the exhausted event (separate from user_has_credits)
+    freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
 
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
-        nonlocal credits_low_warning_sent, credits_exhausted_sent
+        nonlocal freemium_threshold_sent
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -393,48 +398,45 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            # Freemium: Check remaining credits for auto-switch to on-device
+            # Freemium: Check remaining credits and notify when threshold reached
             remaining_seconds = get_remaining_transcription_seconds(uid)
 
-            # Pre-emptive warning at threshold (e.g., 3 minutes remaining)
-            # Allows client to prepare on-device STT in background
+            # Notify user when approaching limit (3 minutes remaining)
             if (
                 remaining_seconds is not None
-                and remaining_seconds <= CREDITS_LOW_THRESHOLD_SECONDS
-                and remaining_seconds > 0
-                and not credits_low_warning_sent
+                and remaining_seconds <= FREEMIUM_THRESHOLD_SECONDS
+                and not freemium_threshold_sent
             ):
+                # Determine required action
+                # Currently: user must setup on-device STT
+                # Future: backend may auto-fallback to lower-tier cloud STT (action = "none")
+                freemium_action = FREEMIUM_ACTION_SETUP_ON_DEVICE
+
                 _send_message_event(
                     MessageServiceStatusEvent(
-                        status="credits_low",
-                        status_text=str(remaining_seconds),
+                        status="freemium_threshold_reached",
+                        status_text=json.dumps({
+                            "remaining_seconds": remaining_seconds,
+                            "action": freemium_action,
+                        }),
                     )
                 )
-                credits_low_warning_sent = True
+                freemium_threshold_sent = True
 
-            # Credits exhausted - notify for seamless switch to on-device
-            # NOTE: We don't lock the conversation anymore - client will reconnect with on-device STT
+                # Also send push notification
+                try:
+                    await send_credit_limit_notification(uid)
+                except Exception as e:
+                    print(f"Error sending credit limit notification: {e}", uid, session_id)
+
+            # Update credits state
             if remaining_seconds is not None and remaining_seconds <= 0:
-                if not credits_exhausted_sent:  # Use separate flag - user_has_credits may already be False at connect
-                    credits_exhausted_sent = True
-                    user_has_credits = False
-                    _send_message_event(
-                        MessageServiceStatusEvent(
-                            status="credits_exhausted",
-                            status_text=current_conversation_id or "",
-                        )
-                    )
-
-                    try:
-                        await send_credit_limit_notification(uid)
-                    except Exception as e:
-                        print(f"Error sending credit limit notification: {e}", uid, session_id)
-
+                user_has_credits = False
             elif remaining_seconds is None or remaining_seconds > 0:
                 user_has_credits = True
-                # Reset warning flag if credits were restored (new month, upgrade, etc.)
-                if remaining_seconds is None or remaining_seconds > CREDITS_LOW_THRESHOLD_SECONDS:
-                    credits_low_warning_sent = False
+                # Reset threshold flag if credits were restored (new month, upgrade, etc.)
+                if remaining_seconds is None or remaining_seconds > FREEMIUM_THRESHOLD_SECONDS:
+                    freemium_threshold_sent = False
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)
