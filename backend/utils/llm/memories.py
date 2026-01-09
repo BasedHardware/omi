@@ -15,8 +15,8 @@ from .clients import llm_mini, llm_high
 class Memories(BaseModel):
     facts: List[Memory] = Field(
         min_items=0,
-        max_items=4,
-        description="List of **new** facts. If any",
+        max_items=2,
+        description="List of **new** memories. Maximum 2 per conversation.",
         default=[],
     )
 
@@ -28,17 +28,19 @@ class MemoriesByTexts(BaseModel):
     )
 
 
-# Map for converting categories from old to new format
+# Map for converting categories from old to new format (all legacy -> auto)
 LEGACY_TO_NEW_CATEGORY = {
-    'core': MemoryCategory.system,
-    'hobbies': MemoryCategory.system,
-    'lifestyle': MemoryCategory.system,
-    'interests': MemoryCategory.system,
-    'work': MemoryCategory.system,
-    'skills': MemoryCategory.system,
-    'learnings': MemoryCategory.system,
-    'habits': MemoryCategory.system,
-    'other': MemoryCategory.system,
+    'interesting': MemoryCategory.auto,
+    'system': MemoryCategory.auto,
+    'core': MemoryCategory.auto,
+    'hobbies': MemoryCategory.auto,
+    'lifestyle': MemoryCategory.auto,
+    'interests': MemoryCategory.auto,
+    'work': MemoryCategory.auto,
+    'skills': MemoryCategory.auto,
+    'learnings': MemoryCategory.auto,
+    'habits': MemoryCategory.auto,
+    'other': MemoryCategory.auto,
 }
 
 
@@ -148,25 +150,72 @@ def new_learnings_extractor(
                 'format_instructions': parser.get_format_instructions(),
             }
         )
-        return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
+        return list(map(lambda x: Memory(content=x, category=MemoryCategory.auto), response.result))
     except Exception as e:
         print(f'Error extracting new facts: {e}')
         return []
 
 
-def identify_category_for_memory(memory: str, categories: List) -> str:
-    # TODO: this should be structured output!!
-    categories_str = ', '.join(categories)
-    prompt = f"""
-    You are an AI tasked with identifying the category of a fact from a list of predefined categories. 
+class MemoryResolution(BaseModel):
+    """Result of resolving a new memory against similar existing memories."""
 
-    Your task is to determine the most relevant category for the given fact. 
+    action: str = Field(
+        description="Action to take: 'keep_new' (add new memory), 'keep_existing' (skip new, existing is sufficient), 'merge' (replace existing with merged version), 'keep_both' (both provide distinct value)"
+    )
+    merged_content: Optional[str] = Field(
+        default=None, description="If action is 'merge', the combined/refined memory content. Must be under 10 words."
+    )
+    reasoning: str = Field(description="Brief explanation of why this action was chosen")
 
-    Respond only with the category name.
 
-    The categories are: {categories_str}
-
-    Fact: {memory}
+def resolve_memory_conflict(
+    new_memory: str,
+    similar_memories: List[dict],
+) -> MemoryResolution:
     """
-    response = llm_mini.invoke(prompt)
-    return response.content
+    Use LLM to decide how to handle a new memory that's similar to existing ones.
+
+    Args:
+        new_memory: The newly extracted memory content
+        similar_memories: List of similar existing memories with 'content' and 'score' keys
+
+    Returns:
+        MemoryResolution with action and optional merged content
+    """
+    if not similar_memories:
+        return MemoryResolution(action='keep_new', reasoning='No similar memories found')
+
+    existing_str = "\n".join([f"- \"{m['content']}\" (similarity: {m['score']:.2f})" for m in similar_memories])
+
+    prompt = f"""You are a memory management system. A new memory has been extracted that is similar to existing memories.
+Decide the best action to maintain an accurate, non-redundant knowledge base.
+
+NEW MEMORY: "{new_memory}"
+
+SIMILAR EXISTING MEMORIES:
+{existing_str}
+
+RULES:
+1. "keep_new" - The new memory adds genuinely NEW information not in existing memories
+2. "keep_existing" - The new memory is redundant; existing memories already capture this
+3. "merge" - The new memory REFINES or UPDATES existing knowledge (e.g., adds specificity, corrects, or combines info). Provide merged_content (max 10 words)
+4. "keep_both" - Both memories provide distinct, non-conflicting value (rare - only if truly different aspects)
+
+EXAMPLES:
+- Existing: "Likes pancakes" + New: "Doesn't like blueberry pancakes" → merge: "Likes pancakes but not blueberry ones"
+- Existing: "Works at Google" + New: "Works at Google as engineer" → merge: "Works at Google as engineer"
+- Existing: "Has a dog" + New: "Has a dog named Max" → merge: "Has a dog named Max"
+- Existing: "Enjoys hiking" + New: "Enjoys hiking" → keep_existing (duplicate)
+- Existing: "Lives in NYC" + New: "Has apartment in Brooklyn" → keep_both (complementary info)
+
+Respond with the action and reasoning."""
+
+    try:
+        parser = PydanticOutputParser(pydantic_object=MemoryResolution)
+        chain = llm_mini | parser
+        response: MemoryResolution = chain.invoke(prompt + f"\n\n{parser.get_format_instructions()}")
+        return response
+    except Exception as e:
+        print(f'Error resolving memory conflict: {e}')
+        # Default to keeping new if resolution fails
+        return MemoryResolution(action='keep_new', reasoning=f'Resolution failed: {e}')

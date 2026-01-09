@@ -234,6 +234,16 @@ def delete_all_memories(uid: str):
     batch.commit()
 
 
+def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]:
+    """Get all memory IDs associated with a conversation."""
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    query = memories_ref.where(filter=FieldFilter('memory_id', '==', conversation_id))
+
+    memory_ids = [doc.id for doc in query.stream()]
+    return memory_ids
+
+
 def delete_memories_for_conversation(uid: str, memory_id: str):
     batch = db.batch()
     user_ref = db.collection(users_collection).document(uid)
