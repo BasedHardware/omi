@@ -170,8 +170,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // Wrapped 2025 Banner
-            const SliverToBoxAdapter(child: WrappedBanner()),
             // const SliverToBoxAdapter(child: SizedBox(height: 16)), // above capture widget
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
