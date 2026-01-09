@@ -33,6 +33,9 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define AP_MAX_STATIONS 5
 
+static atomic_t wifi_scan_done;
+
+static K_SEM_DEFINE(wifi_scan_done_sem, 0, 1);
 static K_SEM_DEFINE(wifi_ap_disable_result_sem, 0, 1);
 static bool wifi_ready_status;
 
@@ -40,6 +43,7 @@ static atomic_t wifi_ap_disable_seen;
 static int wifi_ap_disable_status;
 
 static struct net_mgmt_event_callback wifi_sap_mgmt_cb;
+static struct net_mgmt_event_callback wifi_scan_mgmt_cb;
 
 static K_MUTEX_DEFINE(wifi_ap_sta_list_lock);
 struct wifi_ap_sta_node {
@@ -59,6 +63,7 @@ static atomic_t tcp_connected_flag;
 static K_MUTEX_DEFINE(tcp_sock_lock);
 static int tcp_socket = -1;
 static atomic_t stop_tcp_traffic = ATOMIC_INIT(1);
+static bool is_hardware_available = false;
 
 static bool tcp_client_is_connected(void)
 {
@@ -106,6 +111,72 @@ static void tcp_client_stop(void)
 		(void)shutdown(fd, ZSOCK_SHUT_RDWR);
 		(void)close(fd);
 	}
+}
+
+static void wifi_scan_event_handler(struct net_mgmt_event_callback *cb,
+				    uint32_t mgmt_event, struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(iface);
+
+	if (mgmt_event == NET_EVENT_WIFI_SCAN_DONE) {
+		atomic_set(&wifi_scan_done, 1);
+		k_sem_give(&wifi_scan_done_sem);
+	}
+}
+
+static bool wifi_probe_rpu(struct net_if *iface)
+{
+	struct wifi_scan_params params = { 0 };
+	int ret;
+
+	atomic_set(&wifi_scan_done, 0);
+	k_sem_reset(&wifi_scan_done_sem);
+
+	params.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+	params.bands = 0; /* 0 == no restriction */
+	params.dwell_time_active = 20;
+	params.dwell_time_passive = 60;
+	params.max_bss_cnt = 1;
+
+	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params, sizeof(params));
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_WRN("Wi-Fi scan probe request failed: %d", ret);
+		return false;
+	}
+
+	ret = k_sem_take(&wifi_scan_done_sem, K_SECONDS(5));
+	if (ret != 0) {
+		LOG_ERR("Wi-Fi scan probe timed out (RPU not responding?)");
+		return false;
+	}
+
+	return true;
+}
+
+static bool wifi_check_hardware_ready()
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+
+	if (!iface) {
+		LOG_ERR("No Wi-Fi interface found");
+		return false;
+	}
+
+	int ret = net_if_up(iface);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("net_if_up failed: %d", ret);
+		return false;
+	}
+
+	if (!wifi_probe_rpu(iface)) {
+		LOG_ERR("Wi-Fi RPU probe failed");
+		net_if_down(iface);
+		return false;
+	}
+	net_if_down(iface);
+
+	return true;
 }
 
 static int tcp_client_start(void)
@@ -157,6 +228,10 @@ static int tcp_client_start(void)
 
 void wifi_turn_off(void)
 {
+	if (current_wifi_state == WIFI_STATE_OFF) {
+		LOG_INF("Wi-Fi already off");
+		return;
+	}
 	/* Stop new TCP sends immediately */
 	atomic_set(&stop_tcp_traffic, 1);
 	current_wifi_state = WIFI_STATE_SHUTDOWN;
@@ -604,6 +679,14 @@ void start_wifi_thread(void)
 {
 	current_wifi_state = WIFI_STATE_OFF;
 
+	// check if Wi-Fi hardware is broken/unavailable
+	if (!wifi_check_hardware_ready()) {
+		LOG_ERR("Wi-Fi hardware not ready");
+		return;
+	}
+	is_hardware_available = true;
+	LOG_INF("Wi-Fi hardware is ready");
+
 	while (1) {
 		switch (current_wifi_state) {
 		case WIFI_STATE_OFF:
@@ -698,17 +781,22 @@ static int register_wifi_ready(void)
 
 void net_mgmt_callback_init(void)
 {
+	atomic_set(&wifi_scan_done, 0);
 	net_mgmt_init_event_callback(&wifi_sap_mgmt_cb,
 				     wifi_mgmt_event_handler,
 				     WIFI_SAP_MGMT_EVENTS);
 
 	net_mgmt_add_event_callback(&wifi_sap_mgmt_cb);
+	net_mgmt_init_event_callback(&wifi_scan_mgmt_cb,
+				     wifi_scan_event_handler,
+				     NET_EVENT_WIFI_SCAN_DONE);
+	net_mgmt_add_event_callback(&wifi_scan_mgmt_cb);
 }
 
 int wifi_init(void)
 {
 	int ret = 0;
-
+	
 	net_mgmt_callback_init();
 
 	ret = register_wifi_ready();
@@ -718,4 +806,9 @@ int wifi_init(void)
 	k_thread_start(start_wifi_thread_id);
 
 	return ret;
+}
+
+bool wifi_is_hw_available(void)
+{
+	return is_hardware_available;
 }

@@ -24,4 +24,5 @@ int setup_wifi_ssid(const char *ssid);
 int wifi_send_data(const uint8_t *data, size_t len);
 bool is_wifi_transport_ready(void);
 bool is_wifi_on(void);
+bool wifi_is_hw_available(void);
 #endif
