@@ -5,7 +5,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
 
-Future<bool> createMemoryServer(String content, String visibility, String category) async {
+Future<Memory?> createMemoryServer(String content, String visibility, String category) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories',
     headers: {},
@@ -16,9 +16,12 @@ Future<bool> createMemoryServer(String content, String visibility, String catego
       'category': category,
     }),
   );
-  if (response == null) return false;
+  if (response == null) return null;
   debugPrint('createMemory response: ${response.body}');
-  return response.statusCode == 200;
+  if (response.statusCode == 200) {
+    return Memory.fromJson(json.decode(response.body));
+  }
+  return null;
 }
 
 Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) async {

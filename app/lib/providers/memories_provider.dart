@@ -183,15 +183,18 @@ class MemoriesProvider extends ChangeNotifier {
 
     for (var memory in List.from(pendingMemories)) {
       try {
-        final success = await createMemoryServer(
+        final serverMemory = await createMemoryServer(
           memory.content,
           memory.visibility.name,
           memory.category.name,
         );
         
-        if (success) {
+        if (serverMemory != null) {
           SharedPreferencesUtil().removePendingMemory(memory.id);
-          debugPrint('MemoriesProvider: Synced memory ${memory.id}');
+          final idx = _memories.indexWhere((m) => m.id == memory.id);
+          if (idx != -1) {
+            _memories[idx].id = serverMemory.id;
+          }
         }
       } catch (e) {
         debugPrint('MemoriesProvider: Failed to sync memory ${memory.id}: $e');
@@ -230,8 +233,8 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void _startDeletionTimer() {
-    _deletionTimer = Timer(const Duration(seconds: 10), () {
-      _executeServerDeletion();
+    _deletionTimer = Timer(const Duration(seconds: 4), () async {
+      await _finalizeDeletion();
     });
   }
 
@@ -242,6 +245,16 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _finalizeDeletion() async {
+    await _executeServerDeletion();
+    _lastDeletedMemory = null;
+  }
+
+  Future<void> confirmPendingDeletion() async {
+    _cancelDeletionTimer();
+    await _finalizeDeletion();
+  }
+
   // Restore the last deleted memory
   Future<bool> restoreLastDeletedMemory() async {
     if (_lastDeletedMemory == null) return false;
@@ -250,12 +263,10 @@ class MemoriesProvider extends ChangeNotifier {
     _pendingDeletionId = null;
 
     _memories.add(_lastDeletedMemory!);
+    _lastDeletedMemory = null;
 
     _setCategories();
     notifyListeners();
-
-    final restoredMemory = _lastDeletedMemory;
-    _lastDeletedMemory = null;
 
     return true;
   }
@@ -313,15 +324,19 @@ class MemoriesProvider extends ChangeNotifier {
     SharedPreferencesUtil().addPendingMemory(newMemory);
 
     // Try to sync to server immediately
-    final success = await createMemoryServer(
+    final serverMemory = await createMemoryServer(
       content,
       visibility.name,
       category.name,
     );
 
-    if (success) {
-      // Remove from pending if server sync succeeded
+    if (serverMemory != null) {
+      // Remove from pending and update local memory with server ID
       SharedPreferencesUtil().removePendingMemory(newMemory.id);
+      final idx = _memories.indexWhere((m) => m.id == newMemory.id);
+      if (idx != -1) {
+        _memories[idx].id = serverMemory.id;
+      }
     }
 
     // Return true since memory is saved locally regardless of server sync
