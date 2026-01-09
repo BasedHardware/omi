@@ -2063,8 +2063,8 @@ async def listen_handler(
     if auth_header:
         # Check for ADMIN_KEY (for admin/testing tools)
         admin_key = os.getenv('ADMIN_KEY')
-        if admin_key and admin_key in auth_header:
-            uid = auth_header.split(admin_key)[1]
+        if admin_key and auth_header.startswith(admin_key):
+            uid = auth_header[len(admin_key):]
         elif ' ' in auth_header:
             try:
                 bearer_token = auth_header.split(' ', 1)[1]
@@ -2072,6 +2072,9 @@ async def listen_handler(
                 uid = decoded['uid']
             except (InvalidIdTokenError, ValueError, Exception) as e:
                 print(f"Header token verification failed: {e}")
+                await websocket.accept()
+                await websocket.close(code=1008, reason="Invalid token")
+                return
 
     # 2. Try query param token (web browser sends this)
     if not uid and token:
