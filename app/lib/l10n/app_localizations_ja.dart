@@ -2022,10 +2022,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noMemoriesYet => 'メモリはまだありません';
 
   @override
-  String get noInterestingMemories => '興味深いメモリはまだありません';
+  String get noAutoMemories => '自動メモリはまだありません';
 
   @override
-  String get noSystemMemories => 'システムメモリはまだありません';
+  String get noManualMemories => '手動メモリはまだありません';
 
   @override
   String get noMemoriesInCategories => 'このカテゴリのメモリはありません';
@@ -2150,13 +2150,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get filterAll => 'すべて';
 
   @override
-  String get filterInteresting => '興味深い';
+  String get filterAuto => '自動';
 
   @override
   String get filterManual => '手動';
-
-  @override
-  String get filterSystem => 'システム';
 
   @override
   String get completed => '完了';

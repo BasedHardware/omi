@@ -241,10 +241,8 @@ class DesktopMemoryItem extends StatelessWidget {
 
   Color _getCategoryColor() {
     switch (memory.category) {
-      case MemoryCategory.interesting:
+      case MemoryCategory.auto:
         return ResponsiveHelper.purplePrimary;
-      case MemoryCategory.system:
-        return Colors.orange;
       case MemoryCategory.manual:
         return Colors.purple;
     }
@@ -252,10 +250,8 @@ class DesktopMemoryItem extends StatelessWidget {
 
   IconData _getCategoryIcon() {
     switch (memory.category) {
-      case MemoryCategory.interesting:
-        return Icons.lightbulb_outline;
-      case MemoryCategory.system:
-        return Icons.settings_outlined;
+      case MemoryCategory.auto:
+        return Icons.auto_awesome_outlined;
       case MemoryCategory.manual:
         return Icons.edit_outlined;
     }

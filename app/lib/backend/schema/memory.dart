@@ -1,6 +1,13 @@
-enum MemoryCategory { interesting, system, manual }
+enum MemoryCategory { auto, manual }
 
 enum MemoryVisibility { private, public }
+
+// Maps legacy category strings to new categories
+MemoryCategory _parseMemoryCategory(String? category) {
+  if (category == null) return MemoryCategory.auto;
+  if (category == 'manual') return MemoryCategory.manual;
+  return MemoryCategory.auto;
+}
 
 class Memory {
   String id;
@@ -40,10 +47,7 @@ class Memory {
       id: json['id'],
       uid: json['uid'],
       content: json['content'],
-      category: MemoryCategory.values.firstWhere(
-        (e) => e.toString().split('.').last == json['category'],
-        orElse: () => MemoryCategory.interesting,
-      ),
+      category: _parseMemoryCategory(json['category']),
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
       conversationId: json['conversation_id'],
