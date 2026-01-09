@@ -238,15 +238,23 @@ class MemoriesProvider extends ChangeNotifier {
     });
   }
 
-  Future<void> _executeServerDeletion() async {
-    if (_pendingDeletionId != null) {
-      await deleteMemoryServer(_pendingDeletionId!);
-      _pendingDeletionId = null;
-    }
-  }
-
   Future<void> _finalizeDeletion() async {
-    await _executeServerDeletion();
+    if (_pendingDeletionId == null) {
+      _lastDeletedMemory = null;
+      return;
+    }
+
+    final id = _pendingDeletionId!;
+
+    // If memory was created offline and not yet synced
+    if (SharedPreferencesUtil().pendingMemories.any((m) => m.id == id)) {
+      SharedPreferencesUtil().removePendingMemory(id);
+    } else {
+      // Memory exists on server
+      await deleteMemoryServer(id);
+    }
+
+    _pendingDeletionId = null;
     _lastDeletedMemory = null;
   }
 
