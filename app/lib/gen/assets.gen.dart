@@ -9,6 +9,17 @@
 
 import 'package:flutter/widgets.dart';
 
+class $AssetsCompetitorLogosGen {
+  const $AssetsCompetitorLogosGen();
+
+  /// File path: assets/competitor-logos/limitless-logo.jpg
+  AssetGenImage get limitlessLogo =>
+      const AssetGenImage('assets/competitor-logos/limitless-logo.jpg');
+
+  /// List of all assets
+  List<AssetGenImage> get values => [limitlessLogo];
+}
+
 class $AssetsDeviceAssetsGen {
   const $AssetsDeviceAssetsGen();
 
@@ -474,6 +485,8 @@ class $AssetsIntegrationAppLogosGen {
 class Assets {
   const Assets._();
 
+  static const $AssetsCompetitorLogosGen competitorLogos =
+      $AssetsCompetitorLogosGen();
   static const $AssetsDeviceAssetsGen deviceAssets = $AssetsDeviceAssetsGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
