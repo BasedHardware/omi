@@ -188,8 +188,12 @@ void set_mic_callback(mix_handler callback)
 void mic_pause()
 {
     LOG_INF("Pausing microphone");
-    int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
     if (mic_running) {
+        int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_STOP);
+        if (ret < 0) {
+            LOG_ERR("STOP trigger failed: %d", ret);
+            return;
+        }
         mic_running = false;
     }
 }
@@ -197,10 +201,19 @@ void mic_pause()
 void mic_resume()
 {
     LOG_INF("Resuming microphone");
-    int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
     if (!mic_running) {
+        int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
+        if (ret < 0) {
+            LOG_ERR("START trigger failed: %d", ret);
+            return;
+        }
         mic_running = true;
     }
+}
+
+bool mic_is_running()
+{
+    return mic_running;
 }
 
 void mic_off()

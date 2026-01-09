@@ -65,6 +65,33 @@ static int tcp_socket = -1;
 static atomic_t stop_tcp_traffic = ATOMIC_INIT(1);
 static bool is_hardware_available = false;
 
+#define WIFI_CONNECTING_TIMEOUT_MS (30U * 1000U)
+static uint32_t connecting_started_ms;
+static bool connecting_timer_running;
+
+static inline void wifi_connecting_timer_reset(void)
+{
+	connecting_timer_running = false;
+}
+
+static inline void wifi_connecting_timer_start_once(void)
+{
+	if (!connecting_timer_running) {
+		connecting_started_ms = k_uptime_get_32();
+		connecting_timer_running = true;
+	}
+}
+
+static inline bool wifi_connecting_timer_expired(uint32_t timeout_ms)
+{
+	if (!connecting_timer_running) {
+		return false;
+	}
+
+	uint32_t elapsed_ms = (uint32_t)(k_uptime_get_32() - connecting_started_ms);
+	return (elapsed_ms > timeout_ms);
+}
+
 static bool tcp_client_is_connected(void)
 {
 	if (!atomic_get(&tcp_connected_flag)) {
@@ -691,9 +718,15 @@ void start_wifi_thread(void)
 		switch (current_wifi_state) {
 		case WIFI_STATE_OFF:
 			k_msleep(100);
+			// Ensure mic is resumed
+			if(!mic_is_running()) {
+				LOG_INF("Microphone resumed from Wi-Fi OFF state");
+				mic_resume();
+			}
 			break;
 
 		case WIFI_STATE_SHUTDOWN:
+			wifi_connecting_timer_reset();
 			handle_wifi_shutdown();
 			break;
 
@@ -706,6 +739,7 @@ void start_wifi_thread(void)
             }
             if (start_app() == 0) {
                     current_wifi_state = WIFI_STATE_CONNECTING;
+						wifi_connecting_timer_reset();
             } else {
                     k_sleep(K_SECONDS(1));
             }
@@ -714,18 +748,26 @@ void start_wifi_thread(void)
 
 		case WIFI_STATE_CONNECTING:
 			LOG_INF("Wi-Fi state: CONNECTING (TCP)");
+			wifi_connecting_timer_start_once();
+			if (wifi_connecting_timer_expired(WIFI_CONNECTING_TIMEOUT_MS)) {
+				LOG_WRN("TCP connecting > 30s -> shutting down Wi-Fi");
+				current_wifi_state = WIFI_STATE_SHUTDOWN;
+				break;
+			}
 			if (!wifi_ready_status) {
 				current_wifi_state = WIFI_STATE_SHUTDOWN;
 				break;
 			}
 			if (tcp_client_start() == 0) {
 				current_wifi_state = WIFI_STATE_CONNECT;
+				wifi_connecting_timer_reset();
 			} else {
 				k_msleep(1000);
 			}
 			break;
 
 		case WIFI_STATE_CONNECT:
+			wifi_connecting_timer_reset();
 			/* Keep the connection; if it drops, retry connect. */
 			if (!wifi_ready_status) {
 				current_wifi_state = WIFI_STATE_SHUTDOWN;
