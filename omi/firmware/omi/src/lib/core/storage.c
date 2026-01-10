@@ -281,19 +281,18 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
                 result_buffer[0] = 2; // error: invalid setup length
                 break;
             }
-            // Parse SSID, PASSWORD, TCP_SERVER_IP, TCP_SERVER_PORT
-            // Format: [cmd][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port(2 bytes)]
-            uint8_t idx = 1;
-            uint8_t ssid_len = ((const uint8_t *)buf)[idx++];
-            LOG_INF("WIFI_SETUP: ssid_len=%d, idx=%d, len=%d", ssid_len, idx, len);
+            // Parse SSID
+            // Format: [cmd][ssid_len][ssid]
+            uint8_t ssid_len = ((const uint8_t *)buf)[1];
+            LOG_INF("WIFI_SETUP: ssid_len=%d, len=%d", ssid_len, len);
 
-            if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || idx + ssid_len > len) {
-                LOG_WRN("SSID length invalid: ssid_len=%d, idx=%d, len=%d", ssid_len, idx, len);
+            if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || 2 + ssid_len > len) {
+                LOG_WRN("SSID length invalid: ssid_len=%d, len=%d", ssid_len, len);
                 result_buffer[0] = 3; break;
             }
             char ssid[WIFI_MAX_SSID_LEN + 1] = {0};
-            memcpy(ssid, &((const uint8_t *)buf)[idx], ssid_len);
-            LOG_INF("WIFI_SETUP: ssid='%s', idx=%d", ssid, idx);
+            memcpy(ssid, &((const uint8_t *)buf)[2], ssid_len);
+            LOG_INF("WIFI_SETUP: ssid='%s'", ssid);
 
             setup_wifi_ssid(ssid);
             result_buffer[0] = 0; // success

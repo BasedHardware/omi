@@ -718,14 +718,14 @@ void start_wifi_thread(void)
 		switch (current_wifi_state) {
 		case WIFI_STATE_OFF:
 			k_msleep(100);
-			// Ensure mic is resumed
-			if(!mic_is_running()) {
-				LOG_INF("Microphone resumed from Wi-Fi OFF state");
-				mic_resume();
-			}
 			break;
 
 		case WIFI_STATE_SHUTDOWN:
+			// Ensure mic is resumed
+			if(!mic_is_running()) {
+				LOG_INF("Microphone resumed when Wi-Fi shuts down");
+				mic_resume();
+			}
 			wifi_connecting_timer_reset();
 			handle_wifi_shutdown();
 			break;
