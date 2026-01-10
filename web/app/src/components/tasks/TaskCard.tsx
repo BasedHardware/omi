@@ -15,6 +15,8 @@ interface TaskCardProps {
   onSetDueDate?: (id: string, date: Date | null) => void;
   isSelected?: boolean;
   onSelect?: (id: string, selected: boolean) => void;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 /**
@@ -71,6 +73,7 @@ export function TaskCard({
   onSetDueDate,
   isSelected = false,
   onSelect,
+  onEnterSelectionMode,
 }: TaskCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
@@ -128,11 +131,19 @@ export function TaskCard({
     onDelete(task.id);
   };
 
-  const handleDoubleClick = (e: React.MouseEvent) => {
+  const handleTextDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!task.completed && onUpdateDescription) {
       setEditValue(task.description);
       setIsEditing(true);
+    }
+  };
+
+  const handleCardDoubleClick = () => {
+    // Double-click on card enters selection mode and selects this task
+    // Only trigger if not already in selection mode and handler is provided
+    if (!onSelect && onEnterSelectionMode) {
+      onEnterSelectionMode(task.id);
     }
   };
 
@@ -184,6 +195,7 @@ export function TaskCard({
       transition={{ duration: 0.2 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
+      onDoubleClick={handleCardDoubleClick}
       className={cn(
         'noise-overlay group relative rounded-xl cursor-pointer',
         'border-l-4 transition-all duration-150',
@@ -279,7 +291,7 @@ export function TaskCard({
             />
           ) : (
             <p
-              onDoubleClick={handleDoubleClick}
+              onDoubleClick={handleTextDoubleClick}
               className={cn(
                 'text-sm transition-all duration-200',
                 task.completed

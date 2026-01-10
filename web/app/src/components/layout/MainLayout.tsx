@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
-import { HeaderLinks } from './HeaderLinks';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
+import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -136,8 +136,8 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
           {/* Chat bubble - floating button */}
           <ChatBubble />
 
-          {/* Header links - Feedback/Discord */}
-          <HeaderLinks />
+          {/* Recording indicator - handles its own fixed positioning and animates with panels */}
+          <HeaderRecordingIndicator />
         </div>
       </NotificationProvider>
     </ChatProvider>

@@ -20,6 +20,8 @@ interface TaskGroupProps {
   onSetDueDate?: (id: string, date: Date | null) => void;
   selectedIds?: Set<string>;
   onSelect?: (id: string, selected: boolean) => void;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 
@@ -37,6 +39,7 @@ export function TaskGroup({
   onSetDueDate,
   selectedIds,
   onSelect,
+  onEnterSelectionMode,
 }: TaskGroupProps) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [showAll, setShowAll] = useState(false);
@@ -86,6 +89,7 @@ export function TaskGroup({
               onSetDueDate={onSetDueDate}
               isSelected={selectedIds?.has(task.id)}
               onSelect={onSelect}
+              onEnterSelectionMode={onEnterSelectionMode}
             />
           ))}
 
