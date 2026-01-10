@@ -510,23 +510,31 @@ def vector_search_conversations_tool(
     config: RunnableConfig = None,
 ) -> str:
     """
-    Search conversations using semantic vector search based on meaning and context.
+    Search conversations using semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
 
     This tool uses AI embeddings to find conversations that are semantically similar to your query,
-    even if they don't contain the exact keywords. Perfect for conceptual/thematic searches.
+    even if they don't contain the exact keywords. Perfect for finding when specific events happened.
+
+    **CRITICAL: Use this tool for EVENT/INCIDENT questions:**
+    - "When did a dog bite me?" → USE THIS TOOL
+    - "What happened at the party?" → USE THIS TOOL
+    - "When did I get injured?" → USE THIS TOOL
+    - "When did I meet John?" → USE THIS TOOL
+    - "What did I say about the accident?" → USE THIS TOOL
+    - Any "when did X happen?" or "what happened when Y?" questions → USE THIS TOOL
 
     **When to use this tool:**
+    - Questions about SPECIFIC EVENTS or INCIDENTS that happened to the user
     - Searching for concepts, themes, or topics (e.g., "discussions about personal growth", "health-related talks")
     - Finding similar conversations even without exact keyword matches
     - Broad subject searches (e.g., "what have I talked about regarding relationships?")
     - Understanding overall themes or patterns in conversations
 
     **When NOT to use this tool:**
+    - For user preferences/facts (use get_memories_tool for "what's my favorite X?", "do I like Y?")
     - For exact keyword or phrase searches (use search_conversations_tool instead)
-    - For searching specific names, dates, or factual data (use search_conversations_tool instead)
-    - For precise location or entity matching (use search_conversations_tool instead)
 
-    **Tip:** For best results, use descriptive phrases about the concept you're looking for rather than specific keywords.
+    **Tip:** For best results, use descriptive phrases about the event or concept you're looking for.
 
     Transcript retrieval guidance (same as other conversation tools):
     - By default (max_transcript_segments=0), no transcript segments are included
