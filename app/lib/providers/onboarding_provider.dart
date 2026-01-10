@@ -529,6 +529,27 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     return connection?.device;
   }
 
+  String _getServiceUuidForDevice(BtDevice device) {
+    switch (device.type) {
+      case DeviceType.limitless:
+        return limitlessServiceUuid;
+      case DeviceType.bee:
+        return beeServiceUuid;
+      case DeviceType.fieldy:
+        return fieldyServiceUuid;
+      case DeviceType.friendPendant:
+        return friendPendantServiceUuid;
+      case DeviceType.plaud:
+        return plaudServiceUuid;
+      case DeviceType.frame:
+        return frameServiceUuid;
+      case DeviceType.omi:
+      case DeviceType.openglass:
+      case DeviceType.appleWatch:
+        return omiServiceUuid;
+    }
+  }
+
   Future<void> _associateCompanionDevice(BtDevice device) async {
     try {
       final companionService = CompanionDeviceManagerService.instance;
@@ -548,10 +569,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
       debugPrint('CompanionDevice: Associating device ${device.id} (${device.name})');
 
+      final serviceUuid = _getServiceUuidForDevice(device);
+
       final result = await companionService.associate(
         deviceAddress: device.id,
         deviceName: device.name,
-        serviceUuid: omiServiceUuid,
+        serviceUuid: serviceUuid,
       );
 
       if (result.success) {
