@@ -6,15 +6,17 @@ import { Mic, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { useRecording } from '@/hooks/useRecording';
+import { useRecordingContext } from '@/components/recording/RecordingContext';
 import { AudioModeSelector } from '@/components/recording/AudioModeSelector';
 import { RecordingControls } from '@/components/recording/RecordingControls';
 import { LiveTranscript } from '@/components/recording/LiveTranscript';
 import { cn } from '@/lib/utils';
 
 /**
- * Inner content component that uses recording hooks.
+ * Inner content component that uses recording context.
  * Must be rendered INSIDE MainLayout (which provides RecordingProvider).
+ * Uses context directly instead of useRecording hook to avoid conflicting
+ * with the RecordingController that manages the actual recording infrastructure.
  */
 function RecordPageContent() {
   const {
@@ -31,12 +33,14 @@ function RecordPageContent() {
     resumeRecording,
     stopRecording,
     clearError,
-    isIdle,
-    isRecording,
-    isPaused,
-    isInitializing,
-    isProcessing,
-  } = useRecording();
+  } = useRecordingContext();
+
+  // Computed states
+  const isIdle = state === 'idle';
+  const isRecording = state === 'recording';
+  const isPaused = state === 'paused';
+  const isInitializing = state === 'initializing';
+  const isProcessing = state === 'processing';
 
   const [showModeSelector, setShowModeSelector] = useState(false);
 

@@ -7,8 +7,7 @@ import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
-import { RecordingProvider, RecordingController, HeaderRecordingIndicator } from '@/components/recording';
-import { ToastProvider } from '@/components/ui/Toast';
+import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -81,13 +80,9 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
   return (
     <ChatProvider>
       <NotificationProvider>
-        <RecordingProvider>
-          <ToastProvider>
-          {/* Initialize recording hooks */}
-          <RecordingController />
-          {/* Handle notification routing from chatApp query param */}
-          <ChatAppRouter />
-          <div className="h-screen bg-bg-primary flex overflow-hidden">
+        {/* Handle notification routing from chatApp query param */}
+        <ChatAppRouter />
+        <div className="h-screen bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
           <Sidebar
             isOpen={sidebarOpen}
@@ -144,8 +139,6 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
           {/* Recording indicator - handles its own fixed positioning and animates with panels */}
           <HeaderRecordingIndicator />
         </div>
-          </ToastProvider>
-        </RecordingProvider>
       </NotificationProvider>
     </ChatProvider>
   );

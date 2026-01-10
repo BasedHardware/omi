@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useRef, ReactNode } from 'react';
+import type { AudioCapture } from '@/lib/audioCapture';
+import type { TranscriptionSocket } from '@/lib/transcriptionSocket';
 
 // Types
 export type AudioMode = 'mic-only' | 'mic-and-system';
@@ -49,6 +51,13 @@ interface RecordingContextValue {
   pauseRecordingRef: React.MutableRefObject<(() => void) | null>;
   resumeRecordingRef: React.MutableRefObject<(() => void) | null>;
   stopRecordingRef: React.MutableRefObject<(() => Promise<void>) | null>;
+
+  // Shared refs for audio capture and WebSocket (stored in context, not local to hook)
+  audioCaptureRef: React.MutableRefObject<AudioCapture | null>;
+  transcriptionSocketRef: React.MutableRefObject<TranscriptionSocket | null>;
+  durationIntervalRef: React.MutableRefObject<NodeJS.Timeout | null>;
+  startTimeRef: React.MutableRefObject<number>;
+  pausedDurationRef: React.MutableRefObject<number>;
 }
 
 const RecordingContext = createContext<RecordingContextValue | null>(null);
@@ -71,6 +80,13 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
   const pauseRecordingRef = useRef<(() => void) | null>(null);
   const resumeRecordingRef = useRef<(() => void) | null>(null);
   const stopRecordingRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Shared refs for audio capture and WebSocket - stored in context so they persist across navigation
+  const audioCaptureRef = useRef<AudioCapture | null>(null);
+  const transcriptionSocketRef = useRef<TranscriptionSocket | null>(null);
+  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const pausedDurationRef = useRef<number>(0);
 
   // Action wrappers that call the refs
   const startRecording = useCallback(async (overrideMode?: AudioMode) => {
@@ -133,11 +149,18 @@ export function RecordingProvider({ children }: { children: ReactNode }) {
         setSystemLevel,
         setError,
 
-        // Refs
+        // Refs for action handlers
         startRecordingRef,
         pauseRecordingRef,
         resumeRecordingRef,
         stopRecordingRef,
+
+        // Shared refs for audio capture and WebSocket
+        audioCaptureRef,
+        transcriptionSocketRef,
+        durationIntervalRef,
+        startTimeRef,
+        pausedDurationRef,
       }}
     >
       {children}

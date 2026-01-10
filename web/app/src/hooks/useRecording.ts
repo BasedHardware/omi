@@ -4,13 +4,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useRecordingContext, TranscriptSegment, type AudioMode } from '@/components/recording/RecordingContext';
 import {
   createAudioCapture,
-  AudioCapture,
   isAudioCaptureSupported,
 } from '@/lib/audioCapture';
-import {
-  createTranscriptionSocket,
-  TranscriptionSocket,
-} from '@/lib/transcriptionSocket';
+import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
 import { processInProgressConversation } from '@/lib/api';
 
 /**
@@ -41,14 +37,15 @@ export function useRecording() {
     pauseRecordingRef,
     resumeRecordingRef,
     stopRecordingRef,
+    // Shared refs from context - these persist across component mounts/unmounts
+    audioCaptureRef,
+    transcriptionSocketRef,
+    durationIntervalRef,
+    startTimeRef,
+    pausedDurationRef,
   } = context;
 
-  // Refs for audio capture and WebSocket
-  const audioCaptureRef = useRef<AudioCapture | null>(null);
-  const transcriptionSocketRef = useRef<TranscriptionSocket | null>(null);
-  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const pausedDurationRef = useRef<number>(0);
+  // Local ref for preventing state updates after unmount (this one is local since it's component-specific)
   const isMountedRef = useRef<boolean>(true);
 
   // Start recording
@@ -217,34 +214,22 @@ export function useRecording() {
   }, [state, setState, setMicLevel, setSystemLevel]);
 
   // Register action handlers with context
+  // Note: We do NOT clear refs on unmount - they should persist across navigation
+  // as long as the RecordingProvider is mounted
   useEffect(() => {
     startRecordingRef.current = startRecording;
     pauseRecordingRef.current = pauseRecording;
     resumeRecordingRef.current = resumeRecording;
     stopRecordingRef.current = stopRecording;
-
-    return () => {
-      startRecordingRef.current = null;
-      pauseRecordingRef.current = null;
-      resumeRecordingRef.current = null;
-      stopRecordingRef.current = null;
-    };
   }, [startRecording, pauseRecording, resumeRecording, stopRecording, startRecordingRef, pauseRecordingRef, resumeRecordingRef, stopRecordingRef]);
 
-  // Cleanup on unmount
+  // Track mounted state for this hook instance
+  // Note: We do NOT cleanup audio/WebSocket on unmount because they are shared via context
+  // and should persist across navigation. Cleanup only happens via explicit stopRecording().
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current);
-      }
-      if (audioCaptureRef.current) {
-        audioCaptureRef.current.stop();
-      }
-      if (transcriptionSocketRef.current) {
-        transcriptionSocketRef.current.disconnect();
-      }
     };
   }, []);
 
