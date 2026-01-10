@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:version/version.dart';
@@ -129,6 +128,9 @@ class DeviceUtils {
       if (upperModel.contains('FIELDY') || upperModel.contains('COMPASS')) {
         return Assets.images.fieldy.path;
       }
+      if (upperModel.contains('NEO')) {
+        return Assets.images.neoOne.path;
+      }
     }
 
     // Fallback to device name
@@ -158,6 +160,9 @@ class DeviceUtils {
       }
       if (upperName.contains('LIMITLESS')) {
         return Assets.images.limitless.path;
+      }
+      if (upperName.contains('NEO')) {
+        return Assets.images.neoOne.path;
       }
     }
 

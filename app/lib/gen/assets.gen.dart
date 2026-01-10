@@ -224,6 +224,9 @@ class $AssetsImagesGen {
   AssetGenImage get logoTransparentV2 =>
       const AssetGenImage('assets/images/logo_transparent_v2.png');
 
+  /// File path: assets/images/neo_one.webp
+  AssetGenImage get neoOne => const AssetGenImage('assets/images/neo_one.webp');
+
   /// File path: assets/images/new_background.png
   AssetGenImage get newBackground =>
       const AssetGenImage('assets/images/new_background.png');
@@ -382,6 +385,7 @@ class $AssetsImagesGen {
     linkedinLogo,
     logoTransparent,
     logoTransparentV2,
+    neoOne,
     newBackground,
     notionLogo,
     omiDevkitWithoutRope,
