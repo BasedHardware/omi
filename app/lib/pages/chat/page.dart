@@ -71,6 +71,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     textController.addListener(() {
       setState(() {});
     });
+    
+    // Scroll to bottom when keyboard appears (text field gets focus)
+    textFieldFocusNode.addListener(() {
+      if (textFieldFocusNode.hasFocus) {
+        // Delay to allow keyboard animation to complete
+        Future.delayed(const Duration(milliseconds: 350), () {
+          if (mounted && scrollController.hasClients) {
+            scrollToBottom(animated: true);
+          }
+        });
+      }
+    });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
@@ -139,6 +151,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           key: scaffoldKey,
+          resizeToAvoidBottomInset: true,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
