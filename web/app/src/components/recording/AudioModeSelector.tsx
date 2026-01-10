@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Monitor, Headphones, Volume2, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Mic, Headphones, Volume2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AudioMode } from './RecordingContext';
 import { isSystemAudioSupported } from '@/lib/audioCapture';

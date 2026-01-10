@@ -70,7 +70,7 @@ function Waveform({ level, isActive, isPaused }: { level: number; isActive: bool
  */
 export default function RecordingPopoutPage() {
   const [state, setState] = useState<RecordingState>('idle');
-  const [audioMode, setAudioMode] = useState<AudioMode>('mic-only');
+  const [, setAudioMode] = useState<AudioMode>('mic-only');
   const [selectedMode, setSelectedMode] = useState<AudioMode>('mic-only');
   const [showModeSelector, setShowModeSelector] = useState(false);
   const [duration, setDuration] = useState(0);
