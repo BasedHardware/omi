@@ -197,6 +197,17 @@ def update_memory_fields(uid: str, memory_id: str, data: dict):
     memory_ref = memories_ref.document(memory_id)
 
     update_payload = data.copy()
+
+    # Handle content encryption (same pattern as edit_memory)
+    if 'content' in update_payload:
+        doc_snapshot = memory_ref.get()
+        if not doc_snapshot.exists:
+            return
+
+        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+        if doc_level == 'enhanced':
+            update_payload['content'] = encryption.encrypt(update_payload['content'], uid)
+
     update_payload['updated_at'] = datetime.now(timezone.utc)
     memory_ref.update(update_payload)
 
