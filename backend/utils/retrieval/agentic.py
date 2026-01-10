@@ -373,7 +373,7 @@ async def execute_agentic_chat_stream(
     conversations_collected = []
 
     # Initialize safety guard
-    safety_guard = AgentSafetyGuard(max_tool_calls=10, max_context_tokens=500000)
+    safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
 
     config = {
         "configurable": {
