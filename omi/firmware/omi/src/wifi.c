@@ -33,7 +33,7 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 	(NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                     \
 	 NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED)
 
-#define AP_MAX_STATIONS 1
+#define AP_MAX_STATIONS 5
 
 static atomic_t wifi_scan_done;
 
@@ -66,11 +66,12 @@ static K_MUTEX_DEFINE(tcp_sock_lock);
 static int tcp_socket = -1;
 static atomic_t stop_tcp_traffic = ATOMIC_INIT(1);
 static bool is_hardware_available = false;
-static bool dhcp_server_configured;
 
 #define WIFI_CONNECTING_TIMEOUT_MS (60U * 1000U)
 static uint32_t connecting_started_ms;
 static bool connecting_timer_running;
+
+static int stop_dhcp_server(void);
 
 static inline void wifi_connecting_timer_reset(void)
 {
@@ -637,12 +638,10 @@ static int configure_dhcp_server(void)
 
 	ret = net_dhcpv4_server_start(iface, &pool_start);
 	if (ret == -EALREADY) {
-		dhcp_server_configured = true;
 		LOG_ERR("DHCPv4 server already running on interface");
 	} else if (ret < 0) {
 		LOG_ERR("DHCPv4 server failed to start and returned %d error", ret);
 	} else {
-		dhcp_server_configured = true;
 		LOG_INF("DHCPv4 server started and pool address starts from %s",
 			"192.168.1.2");
 	}
@@ -668,6 +667,9 @@ static void handle_wifi_shutdown(void)
 
 	tcp_client_stop();
 	LOG_INF("TCP socket closed");
+
+	stop_dhcp_server();
+	LOG_INF("DHCP server stopped");
 	
 	struct net_if *iface = net_if_get_first_wifi();
 	if (!iface) {
@@ -748,7 +750,6 @@ static int stop_dhcp_server(void)
 		LOG_ERR("Failed to stop DHCPv4 server, error: %d", ret);
 	}
 
-	dhcp_server_configured = false;
 	LOG_INF("DHCPv4 server stopped");
 
 	return ret;
