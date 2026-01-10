@@ -37,7 +37,7 @@ class ActionType(str, Enum):
     CREATE_FACTS = "create_facts"
     READ_MEMORIES = "read_memories"
     READ_CONVERSATIONS = "read_conversations"
-
+    READ_TASKS = "read_tasks"
 
 class Action(BaseModel):
     action: ActionType
