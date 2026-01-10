@@ -38,6 +38,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 import { cn } from '@/lib/utils';
+import { RECORDING_ENABLED } from '@/lib/featureFlags';
 
 // Hook to detect if we're on desktop
 function useIsDesktop() {
@@ -330,6 +331,7 @@ export function Sidebar({
               (item.href === '/conversations' &&
                 pathname?.startsWith('/conversations'));
             const showRecordingBadge = item.href === '/record' && isRecording;
+            const showComingSoon = item.href === '/record' && !RECORDING_ENABLED;
 
             return (
               <Link
@@ -338,14 +340,15 @@ export function Sidebar({
                 onClick={() => {
                   if (!isDesktop) onClose();
                 }}
-                title={!isExpanded ? item.label : undefined}
+                title={!isExpanded ? (showComingSoon ? `${item.label} (Coming Soon)` : item.label) : undefined}
                 className={cn(
                   'flex items-center rounded-xl',
                   'transition-all duration-150',
                   isExpanded ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                   isActive
                     ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+                  showComingSoon && 'opacity-60'
                 )}
               >
                 <span className="flex-shrink-0 relative">
@@ -359,7 +362,14 @@ export function Sidebar({
                   )}
                 </span>
                 {isExpanded && (
-                  <span className="font-medium">{item.label}</span>
+                  <span className="font-medium flex items-center gap-2">
+                    {item.label}
+                    {showComingSoon && (
+                      <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                        Soon
+                      </span>
+                    )}
+                  </span>
                 )}
               </Link>
             );

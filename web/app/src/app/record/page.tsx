@@ -11,6 +11,7 @@ import { AudioModeSelector } from '@/components/recording/AudioModeSelector';
 import { RecordingControls } from '@/components/recording/RecordingControls';
 import { LiveTranscript } from '@/components/recording/LiveTranscript';
 import { cn } from '@/lib/utils';
+import { RECORDING_ENABLED } from '@/lib/featureFlags';
 
 /**
  * Inner content component that uses recording context.
@@ -95,31 +96,63 @@ function RecordPageContent() {
               // Start recording UI - compact centered
               <div className="flex flex-col items-center gap-4 px-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-purple-primary/10 flex items-center justify-center">
-                    <Mic className="w-8 h-8 text-purple-primary" />
+                  <div className={cn(
+                    "w-16 h-16 rounded-full flex items-center justify-center",
+                    RECORDING_ENABLED ? "bg-purple-primary/10" : "bg-bg-tertiary"
+                  )}>
+                    <Mic className={cn(
+                      "w-8 h-8",
+                      RECORDING_ENABLED ? "text-purple-primary" : "text-text-quaternary"
+                    )} />
                   </div>
                   <div className="text-left">
-                    <h2 className="text-xl font-semibold text-text-primary">
-                      Start Recording
+                    <h2 className="text-xl font-semibold text-text-primary flex items-center gap-2">
+                      {RECORDING_ENABLED ? 'Start Recording' : 'Web Recording'}
+                      {!RECORDING_ENABLED && (
+                        <span className="text-xs text-text-quaternary bg-bg-quaternary px-2 py-1 rounded-full">
+                          Coming Soon
+                        </span>
+                      )}
                     </h2>
                     <p className="text-sm text-text-tertiary">
-                      Real-time transcription with speaker identification
+                      {RECORDING_ENABLED
+                        ? 'Real-time transcription with speaker identification'
+                        : 'Record conversations directly from your browser with live transcription'}
                     </p>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleStartClick}
-                  className={cn(
-                    'px-6 py-3 rounded-xl font-medium',
-                    'bg-purple-primary hover:bg-purple-secondary text-white',
-                    'transition-all transform hover:scale-105',
-                    'flex items-center gap-2'
-                  )}
-                >
-                  <Mic className="w-5 h-5" />
-                  <span>Start Recording</span>
-                </button>
+                {RECORDING_ENABLED ? (
+                  <button
+                    onClick={handleStartClick}
+                    className={cn(
+                      'px-6 py-3 rounded-xl font-medium',
+                      'bg-purple-primary hover:bg-purple-secondary text-white',
+                      'transition-all transform hover:scale-105',
+                      'flex items-center gap-2'
+                    )}
+                  >
+                    <Mic className="w-5 h-5" />
+                    <span>Start Recording</span>
+                  </button>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-sm text-text-tertiary mb-2">
+                      This feature is being deployed. Check back soon!
+                    </p>
+                    <Link
+                      href="/conversations"
+                      className={cn(
+                        'inline-flex items-center gap-2 px-4 py-2 rounded-lg',
+                        'text-sm text-purple-primary hover:bg-purple-primary/10',
+                        'transition-colors'
+                      )}
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to Conversations
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : (
               // Recording controls - horizontal compact layout

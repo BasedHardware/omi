@@ -11,6 +11,7 @@ import { openRecordingWidget, openTranscriptWindow } from '@/lib/popout';
 import { useNotificationContext } from '@/components/notifications/NotificationContext';
 import { useChat } from '@/components/chat/ChatContext';
 import { cn } from '@/lib/utils';
+import { RECORDING_ENABLED } from '@/lib/featureFlags';
 
 /**
  * Format duration in seconds to MM:SS format
@@ -90,6 +91,23 @@ export function HeaderRecordingIndicator() {
         {/* Idle state - Start recording button */}
         {isIdle && (
         <>
+          {!RECORDING_ENABLED ? (
+            /* Coming Soon state - Recording disabled until backend is deployed */
+            <div
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-full',
+                'bg-bg-tertiary border border-bg-quaternary',
+                'text-sm font-medium cursor-not-allowed opacity-70'
+              )}
+              title="Web recording coming soon"
+            >
+              <Mic className="w-4 h-4 text-text-quaternary" />
+              <span className="text-text-tertiary">Record</span>
+              <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                Soon
+              </span>
+            </div>
+          ) : (
           <button
             onClick={() => setShowModeSelector(!showModeSelector)}
             className={cn(
@@ -108,6 +126,7 @@ export function HeaderRecordingIndicator() {
               )}
             />
           </button>
+          )}
 
           {/* Mode selector dropdown */}
           <AnimatePresence>
