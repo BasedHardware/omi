@@ -27,7 +27,7 @@ def perplexity_search_tool(
     DO NOT use this tool for:
     - Questions about the user's personal conversations or memories (use get_memories_tool instead)
     - Questions about the user's action items (use get_action_items_tool instead)
-    - Questions about conversations the user had (use get_conversations_tool or vector_search_conversations_tool instead)
+    - Questions about conversations the user had (use get_conversations_tool or search_conversations_tool instead)
     - Questions about Omi/Friend product information (use get_omi_product_info_tool instead)
 
     Args:

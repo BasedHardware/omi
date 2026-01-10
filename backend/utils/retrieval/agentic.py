@@ -29,7 +29,7 @@ from models.chat import Message, ChatSession, PageContext
 from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
-    vector_search_conversations_tool,
+    search_conversations_tool,
     get_memories_tool,
     get_action_items_tool,
     create_action_item_tool,
@@ -97,7 +97,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_gmail_messages_tool': 'Checking Gmail',
         'perplexity_search_tool': 'Searching the web',
         'get_conversations_tool': 'Searching conversations',
-        'vector_search_conversations_tool': 'Searching conversations',
+        'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
@@ -220,7 +220,7 @@ def execute_agentic_chat(
     # Get all tools
     tools = [
         get_conversations_tool,
-        vector_search_conversations_tool,
+        search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
@@ -322,7 +322,7 @@ async def execute_agentic_chat_stream(
     # Get all tools
     tools = [
         get_conversations_tool,
-        vector_search_conversations_tool,
+        search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
@@ -493,7 +493,7 @@ async def _run_agent_stream(
                 # Standard tool names that don't come from apps
                 standard_tool_names = {
                     'get_conversations_tool',
-                    'vector_search_conversations_tool',
+                    'search_conversations_tool',
                     'get_memories_tool',
                     'get_action_items_tool',
                     'create_action_item_tool',
