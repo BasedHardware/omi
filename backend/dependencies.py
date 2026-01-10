@@ -117,3 +117,11 @@ async def get_uid_with_action_items_write(auth: ApiKeyAuth = Depends(get_api_key
             status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.ACTION_ITEMS_WRITE}"
         )
     return auth.uid
+
+
+async def get_uid_with_daily_summaries_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
+    if not has_scope(auth.scopes, Scopes.DAILY_SUMMARIES_READ):
+        raise HTTPException(
+            status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.DAILY_SUMMARIES_READ}"
+        )
+    return auth.uid
