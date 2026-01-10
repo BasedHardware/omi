@@ -897,7 +897,6 @@ void net_mgmt_callback_init(void)
 int wifi_init(void)
 {
 	int ret = 0;
-	dhcp_server_configured = false;
 	net_mgmt_callback_init();
 
 	ret = register_wifi_ready();
