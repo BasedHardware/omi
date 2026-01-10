@@ -60,16 +60,28 @@ The sample rate is passed as a query parameter so your endpoint can handle diffe
 
     **Request format:**
     ```
-    POST /your-endpoint?sample_rate=16000&uid=user123
+    POST /your-endpoint?sample_rate=16000&uid=user123&timestamp=1703520000
     Content-Type: application/octet-stream
     Body: [raw PCM16 audio bytes]
     ```
 
+    **Query Parameters:**
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `sample_rate` | int | Audio sample rate in Hz (8000 or 16000) |
+    | `uid` | string | User identifier |
+    | `timestamp` | int | *(Optional)* Unix timestamp of when audio was recorded. Present for offline sync, absent for realtime streaming. |
+
     Your endpoint should:
     - Accept `application/octet-stream` content type
-    - Read `sample_rate` and `uid` from query parameters
+    - Read query parameters (`sample_rate`, `uid`, and optionally `timestamp`)
     - Process the raw bytes (buffer, save, or analyze)
     - Return 200 OK quickly to avoid timeouts
+
+    <Tip>
+    The `timestamp` parameter is included when syncing offline recordings (e.g., from Limitless pendant).
+    For realtime streaming, you can use the request time as the audio timestamp.
+    </Tip>
   </Step>
   <Step title="Configure in Omi App" icon="mobile">
     1. Open the Omi App
