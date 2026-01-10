@@ -264,6 +264,13 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
         return len;
     }
 
+    if (wifi_is_hw_available() == false) {
+        LOG_ERR("Wi-Fi hardware not available");
+        result_buffer[0] = 0xFE; // error: hardware not available
+        bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
+        return len;
+    }
+
     const uint8_t cmd = ((const uint8_t *)buf)[0];
 
     switch (cmd) {
@@ -286,42 +293,9 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             }
             char ssid[WIFI_MAX_SSID_LEN + 1] = {0};
             memcpy(ssid, &((const uint8_t *)buf)[idx], ssid_len);
-            idx += ssid_len;
             LOG_INF("WIFI_SETUP: ssid='%s', idx=%d", ssid, idx);
 
-            uint8_t pwd_len = ((const uint8_t *)buf)[idx++];
-            LOG_INF("WIFI_SETUP: pwd_len=%d, idx=%d, len=%d", pwd_len, idx, len);
-            if (pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
-                LOG_WRN("PWD length invalid: pwd_len=%d, idx=%d, len=%d", pwd_len, idx, len);
-                result_buffer[0] = 4; break;
-            }
-            char pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
-            if (pwd_len > 0) memcpy(pwd, &((const uint8_t *)buf)[idx], pwd_len);
-            idx += pwd_len;
-            LOG_INF("WIFI_SETUP: pwd='%s', idx=%d", pwd, idx);
-
-            uint8_t ip_len = ((const uint8_t *)buf)[idx++];
-            LOG_INF("WIFI_SETUP: ip_len=%d, idx=%d, len=%d", ip_len, idx, len);
-            if (ip_len == 0 || ip_len > WIFI_MAX_SERVER_ADDR_LEN - 1 || idx + ip_len > len) {
-                LOG_WRN("IP length invalid: ip_len=%d, idx=%d, len=%d", ip_len, idx, len);
-                result_buffer[0] = 5; break;
-            }
-            char ip[WIFI_MAX_SERVER_ADDR_LEN] = {0};
-            memcpy(ip, &((const uint8_t *)buf)[idx], ip_len);
-            idx += ip_len;
-            LOG_INF("WIFI_SETUP: ip='%s', idx=%d", ip, idx);
-
-            if (idx + 2 > len) {
-                LOG_WRN("PORT length invalid: idx=%d, len=%d", idx, len);
-                result_buffer[0] = 6; break;
-            }
-            uint16_t port = ((const uint8_t *)buf)[idx] << 8 | ((const uint8_t *)buf)[idx+1];
-            idx += 2;
-            LOG_INF("WIFI_SETUP: port=%u, idx=%d", port, idx);
-
-            LOG_INF("WIFI_SETUP: SSID=%s, PWD=%s, IP=%s, PORT=%u", ssid, pwd, ip, port);
-            setup_wifi_credentials(ssid, pwd);
-            setup_tcp_server(ip, port);
+            setup_wifi_ssid(ssid);
             result_buffer[0] = 0; // success
             break;
 
@@ -335,6 +309,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             LOG_INF("WIFI_SHUTDOWN command received");
             wifi_turn_off();
             mic_resume();
+            remaining_length = 0;
             result_buffer[0] = 0;
             break;
 
@@ -373,6 +348,7 @@ static void write_to_gatt(struct bt_conn *conn)
 #ifdef CONFIG_OMI_ENABLE_WIFI
 static void write_to_tcp()
 {
+    
     uint32_t to_read = MIN(remaining_length, SD_BLE_SIZE * 10);
     int ret = read_audio_data(storage_write_buffer, to_read, offset);
     if (ret > 0) {

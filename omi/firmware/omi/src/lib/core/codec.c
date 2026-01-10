@@ -46,7 +46,7 @@ int codec_receive_pcm(int16_t *data, size_t len) // this gets called after mic d
 
 int16_t codec_input_samples[CODEC_PACKAGE_SAMPLES];
 uint8_t codec_output_bytes[CODEC_OUTPUT_MAX_BYTES];
-K_THREAD_STACK_DEFINE(codec_stack, 32000);
+K_THREAD_STACK_DEFINE(codec_stack, 19000);
 static struct k_thread codec_thread;
 uint16_t execute_codec();
 
