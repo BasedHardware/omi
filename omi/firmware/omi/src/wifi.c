@@ -22,6 +22,7 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 #include <zephyr/net/socket.h>
 #include <zephyr/posix/sys/socket.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/net/dhcpv4_server.h>
 #include "net_private.h"
 
 #include <net/wifi_ready.h>
@@ -32,7 +33,7 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 	(NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                     \
 	 NET_EVENT_WIFI_AP_STA_CONNECTED | NET_EVENT_WIFI_AP_STA_DISCONNECTED)
 
-#define AP_MAX_STATIONS 5
+#define AP_MAX_STATIONS 1
 
 static atomic_t wifi_scan_done;
 
@@ -57,7 +58,7 @@ static struct wifi_ap_sta_node sta_list[AP_MAX_STATIONS];
 static wifi_state_t current_wifi_state = WIFI_STATE_OFF;
 static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = "Omi CV1";
 
-#define TCP_REMOTE_IP "192.168.1.5"
+#define TCP_REMOTE_IP "192.168.1.2"
 #define TCP_REMOTE_PORT 12345
 
 static atomic_t tcp_connected_flag;
@@ -65,8 +66,9 @@ static K_MUTEX_DEFINE(tcp_sock_lock);
 static int tcp_socket = -1;
 static atomic_t stop_tcp_traffic = ATOMIC_INIT(1);
 static bool is_hardware_available = false;
+static bool dhcp_server_configured;
 
-#define WIFI_CONNECTING_TIMEOUT_MS (30U * 1000U)
+#define WIFI_CONNECTING_TIMEOUT_MS (60U * 1000U)
 static uint32_t connecting_started_ms;
 static bool connecting_timer_running;
 
@@ -108,19 +110,19 @@ static bool tcp_client_is_connected(void)
 		return false;
 	}
 
-       struct zsock_pollfd pfd = {
-               .fd = fd,
-               .events = ZSOCK_POLLIN | ZSOCK_POLLERR | ZSOCK_POLLHUP,
-       };
+    struct zsock_pollfd pfd = {
+            .fd = fd,
+            .events = ZSOCK_POLLIN | ZSOCK_POLLERR | ZSOCK_POLLHUP,
+    };
 
-       int pret = zsock_poll(&pfd, 1, 0);
-       if (pret < 0) {
-               return true;
-       }
+    int pret = zsock_poll(&pfd, 1, 0);
+    if (pret < 0) {
+            return true;
+    }
 
-       if (pret > 0 && (pfd.revents & (ZSOCK_POLLERR | ZSOCK_POLLHUP | ZSOCK_POLLNVAL))) {
-               return false;
-       }
+    if (pret > 0 && (pfd.revents & (ZSOCK_POLLERR | ZSOCK_POLLHUP | ZSOCK_POLLNVAL))) {
+            return false;
+    }
 
 
 	return true;
@@ -616,6 +618,39 @@ out:
 	return ret;
 }
 
+static int configure_dhcp_server(void)
+{
+	struct net_if *iface;
+	struct in_addr pool_start;
+	int ret = -1;
+
+	iface = net_if_get_first_wifi();
+	if (!iface) {
+		LOG_ERR("Failed to get Wi-Fi interface");
+		goto out;
+	}
+
+	if (net_addr_pton(AF_INET, "192.168.1.2", &pool_start.s_addr)) {
+		LOG_ERR("Invalid address: %s", "192.168.1.2");
+		goto out;
+	}
+
+	ret = net_dhcpv4_server_start(iface, &pool_start);
+	if (ret == -EALREADY) {
+		dhcp_server_configured = true;
+		LOG_ERR("DHCPv4 server already running on interface");
+	} else if (ret < 0) {
+		LOG_ERR("DHCPv4 server failed to start and returned %d error", ret);
+	} else {
+		dhcp_server_configured = true;
+		LOG_INF("DHCPv4 server started and pool address starts from %s",
+			"192.168.1.2");
+	}
+out:
+	return ret;
+
+}
+
 static void handle_wifi_shutdown(void)
 {
 	LOG_INF("Wi-Fi state: SHUTDOWN");
@@ -689,13 +724,34 @@ int start_app(void)
 {
 	int ret;
 
-	// CHECK_RET(wifi_set_reg_domain);
-
 	CHECK_RET(wifi_softap_enable);
+	CHECK_RET(configure_dhcp_server);
 
 	cmd_wifi_status();
 
 	return 0;
+}
+
+static int stop_dhcp_server(void)
+{
+	int ret;
+
+	struct net_if *iface = net_if_get_first_wifi();
+
+	if (!iface) {
+		LOG_ERR("Failed to get Wi-Fi interface");
+		return -1;
+	}
+
+	ret = net_dhcpv4_server_stop(iface);
+	if (ret) {
+		LOG_ERR("Failed to stop DHCPv4 server, error: %d", ret);
+	}
+
+	dhcp_server_configured = false;
+	LOG_INF("DHCPv4 server stopped");
+
+	return ret;
 }
 
 void start_wifi_thread(void);
@@ -751,7 +807,7 @@ void start_wifi_thread(void)
 			LOG_INF("Wi-Fi state: CONNECTING (TCP)");
 			wifi_connecting_timer_start_once();
 			if (wifi_connecting_timer_expired(WIFI_CONNECTING_TIMEOUT_MS)) {
-				LOG_WRN("TCP connecting > 30s -> shutting down Wi-Fi");
+				LOG_WRN("TCP connecting > 60s -> shutting down Wi-Fi");
 				storage_stop_transfer();
 				current_wifi_state = WIFI_STATE_SHUTDOWN;
 				break;
@@ -840,7 +896,7 @@ void net_mgmt_callback_init(void)
 int wifi_init(void)
 {
 	int ret = 0;
-	
+	dhcp_server_configured = false;
 	net_mgmt_callback_init();
 
 	ret = register_wifi_ready();

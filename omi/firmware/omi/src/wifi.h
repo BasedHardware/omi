@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define WIFI_MAX_SSID_LEN        32
+#define WIFI_MAX_SERVER_ADDR_LEN 64
 
 /* WiFi state machine states */
 typedef enum {
