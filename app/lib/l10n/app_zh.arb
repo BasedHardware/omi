@@ -261,7 +261,7 @@
   "managePlan": "管理套餐",
   "cancelAtPeriodEnd": "您的套餐将于 {date} 结束。",
   "renewsOn": "您的套餐将于 {date} 续订。",
-  "basicPlan": "基础套餐",
+  "basicPlan": "免费套餐",
   "usageLimitMessage": "已使用 {used} / {limit} 分钟",
   "upgrade": "升级",
   "upgradeToUnlimited": "升级到无限版",
