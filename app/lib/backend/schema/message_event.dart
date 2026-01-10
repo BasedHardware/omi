@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
@@ -238,7 +236,16 @@ enum FreemiumAction {
   setupOnDeviceStt,
 
   /// No action required - backend handles fallback automatically (future use)
-  none,
+  none;
+
+  static FreemiumAction fromString(String? value) {
+    switch (value) {
+      case 'setup_on_device_stt':
+        return FreemiumAction.setupOnDeviceStt;
+      default:
+        return FreemiumAction.none;
+    }
+  }
 }
 
 /// Freemium: Sent when user's credits are approaching the limit (e.g., 3 minutes remaining)
@@ -256,32 +263,9 @@ class FreemiumThresholdReachedEvent extends MessageEvent {
   bool get requiresUserAction => action == FreemiumAction.setupOnDeviceStt;
 
   factory FreemiumThresholdReachedEvent.fromJson(Map<String, dynamic> json) {
-    // status_text contains JSON with remaining_seconds and action
-    final statusText = json['status_text'] ?? '{}';
-
-    int remainingSeconds = 0;
-    FreemiumAction action = FreemiumAction.none;
-
-    try {
-      final data = jsonDecode(statusText);
-      remainingSeconds = data['remaining_seconds'] ?? 0;
-
-      final actionStr = data['action'] ?? 'none';
-      switch (actionStr) {
-        case 'setup_on_device_stt':
-          action = FreemiumAction.setupOnDeviceStt;
-          break;
-        default:
-          action = FreemiumAction.none;
-      }
-    } catch (e) {
-      // Fallback: try parsing as plain number (backwards compatibility)
-      remainingSeconds = int.tryParse(statusText) ?? 0;
-    }
-
     return FreemiumThresholdReachedEvent(
-      remainingSeconds: remainingSeconds,
-      action: action,
+      remainingSeconds: json['remaining_seconds'] ?? 0,
+      action: FreemiumAction.fromString(json['action']),
     );
   }
 }
