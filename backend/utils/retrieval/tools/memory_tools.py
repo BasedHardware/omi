@@ -36,11 +36,11 @@ def get_memories_tool(
 
     **CRITICAL DISTINCTION - Use the right tool:**
     - "What's my favorite food?" → USE THIS TOOL (preference/fact)
-    - "When did I get food poisoning?" → DO NOT USE THIS - use vector_search_conversations_tool (event)
+    - "When did I get food poisoning?" → DO NOT USE THIS - use search_conversations_tool (event)
     - "Do I like dogs?" → USE THIS TOOL (preference)
-    - "When did a dog bite me?" → DO NOT USE THIS - use vector_search_conversations_tool (event)
+    - "When did a dog bite me?" → DO NOT USE THIS - use search_conversations_tool (event)
     - "What are my hobbies?" → USE THIS TOOL (facts about user)
-    - "What happened at the party?" → DO NOT USE THIS - use vector_search_conversations_tool (event)
+    - "What happened at the party?" → DO NOT USE THIS - use search_conversations_tool (event)
 
     Use this tool ONLY when:
     - User asks "what do you know about me?" or "tell me about my preferences"
@@ -49,7 +49,7 @@ def get_memories_tool(
     - Questions like "do I like X?", "what's my favorite Y?", "what are my Z?"
 
     DO NOT use this tool when:
-    - User asks about specific events/incidents (use vector_search_conversations_tool instead)
+    - User asks about specific events/incidents (use search_conversations_tool instead)
     - Questions like "when did X happen?", "what happened at Y?", "when did I get Z?"
 
     Memory retrieval guidance - choosing the right limit:

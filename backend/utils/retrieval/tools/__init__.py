@@ -7,7 +7,7 @@ The LLM decides which tools to use and extracts the parameters needed.
 
 from .conversation_tools import (
     get_conversations_tool,
-    vector_search_conversations_tool,
+    search_conversations_tool,
 )
 from .memory_tools import (
     get_memories_tool,
@@ -58,7 +58,7 @@ from .notification_settings_tools import (
 
 __all__ = [
     'get_conversations_tool',
-    'vector_search_conversations_tool',
+    'search_conversations_tool',
     'get_memories_tool',
     'get_action_items_tool',
     'create_action_item_tool',

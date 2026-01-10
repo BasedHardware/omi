@@ -259,7 +259,7 @@ def get_conversations_tool(
 
 
 @tool
-def vector_search_conversations_tool(
+def search_conversations_tool(
     query: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -315,32 +315,32 @@ def vector_search_conversations_tool(
         Formatted string with semantically matching conversations ranked by relevance, including transcripts,
         summaries, action items, events, and metadata.
     """
-    print(f"🔧 vector_search_conversations_tool called with query: {query}")
+    print(f"🔧 search_conversations_tool called with query: {query}")
 
     # Get config from parameter or context variable (like other tools do)
     if config is None:
         try:
             config = agent_config_context.get()
             if config:
-                print(f"🔧 vector_search_conversations_tool - got config from context variable")
+                print(f"🔧 search_conversations_tool - got config from context variable")
         except LookupError:
-            print(f"❌ vector_search_conversations_tool - config not found in context variable")
+            print(f"❌ search_conversations_tool - config not found in context variable")
             config = None
 
     if config is None:
-        print(f"❌ vector_search_conversations_tool - config is None")
+        print(f"❌ search_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     try:
         uid = config['configurable'].get('user_id')
     except (KeyError, TypeError) as e:
-        print(f"❌ vector_search_conversations_tool - error accessing config: {e}")
+        print(f"❌ search_conversations_tool - error accessing config: {e}")
         return "Error: Configuration not available"
 
     if not uid:
-        print(f"❌ vector_search_conversations_tool - no user_id in config")
+        print(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    print(f"✅ vector_search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
+    print(f"✅ search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
 
     # Get safety guard from config if available
     safety_guard = config['configurable'].get('safety_guard')
@@ -381,7 +381,7 @@ def vector_search_conversations_tool(
         # Perform vector search
         conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
 
-        print(f"📊 vector_search_conversations_tool - found {len(conversation_ids)} results for query: '{query}'")
+        print(f"📊 search_conversations_tool - found {len(conversation_ids)} results for query: '{query}'")
 
         if not conversation_ids:
             date_info = ""
@@ -393,7 +393,7 @@ def vector_search_conversations_tool(
                 date_info = f" before the specified end date"
 
             msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
-            print(f"⚠️ vector_search_conversations_tool - {msg}")
+            print(f"⚠️ search_conversations_tool - {msg}")
             return msg
 
         # Get full conversation data
@@ -402,7 +402,7 @@ def vector_search_conversations_tool(
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"
 
-        print(f"🔍 vector_search_conversations_tool - Loaded {len(conversations_data)} full conversations")
+        print(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
         # Only load people if transcripts will be included
         people = []
@@ -413,15 +413,15 @@ def vector_search_conversations_tool(
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
 
-            print(f"🔍 vector_search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
+            print(f"🔍 search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
 
             # Fetch people data
             if all_person_ids:
                 people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
                 people = [Person(**p) for p in people_data]
-                print(f"🔍 vector_search_conversations_tool - Loaded {len(people)} people")
+                print(f"🔍 search_conversations_tool - Loaded {len(people)} people")
         else:
-            print(f"🔍 vector_search_conversations_tool - Skipping people loading (transcript not included)")
+            print(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
 
         # Convert to Conversation objects
         conversations = []
@@ -442,7 +442,7 @@ def vector_search_conversations_tool(
                 print(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
                 continue
 
-        print(f"🔍 vector_search_conversations_tool - Converted {len(conversations)} conversation objects")
+        print(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
 
         # Store conversations in config for citation tracking (as lightweight dicts)
         conversations_collected = config['configurable'].get('conversations_collected', [])
@@ -454,7 +454,7 @@ def vector_search_conversations_tool(
             conv_dict.pop('audio_files', None)
             conversations_collected.append(conv_dict)
         print(
-            f"📚 vector_search_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
+            f"📚 search_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
         # Return formatted string
@@ -463,13 +463,13 @@ def vector_search_conversations_tool(
             conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
         )
 
-        print(f"🔍 vector_search_conversations_tool - Generated result string, length: {len(result)}")
+        print(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
 
         return result
 
     except Exception as e:
         error_msg = f"Error performing vector search: {str(e)}"
-        print(f"❌ vector_search_conversations_tool - {error_msg}")
+        print(f"❌ search_conversations_tool - {error_msg}")
         import traceback
 
         traceback.print_exc()
