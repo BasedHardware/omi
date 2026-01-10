@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -17,6 +18,7 @@ import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
+import 'package:omi/services/devices/transports/companion_device_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
@@ -34,7 +36,11 @@ class DeviceConnectionFactory {
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
         final bleDevice = BluetoothDevice.fromId(deviceId);
-        transport = BleTransport(bleDevice);
+        if (Platform.isAndroid) {
+          transport = CompanionDeviceTransport(bleDevice);
+        } else {
+          transport = BleTransport(bleDevice);
+        }
         break;
 
       case TransportKind.watchConnectivity:
@@ -126,6 +132,7 @@ abstract class DeviceConnection {
 
   Future<void> connect({
     void Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
+    bool autoConnect = false,
   }) async {
     if (_connectionState == DeviceConnectionState.connected) {
       throw DeviceConnectionException("Connection already established, please disconnect before start new connection");
@@ -136,7 +143,7 @@ abstract class DeviceConnection {
 
     try {
       // Use transport to connect
-      await transport.connect();
+      await transport.connect(autoConnect: autoConnect);
 
       // Check connection
       await ping();

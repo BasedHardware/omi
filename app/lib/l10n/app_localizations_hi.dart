@@ -736,7 +736,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => 'मूल योजना';
+  String get basicPlan => 'निःशुल्क योजना';
 
   @override
   String usageLimitMessage(String used, int limit) {

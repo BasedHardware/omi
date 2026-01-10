@@ -34,13 +34,22 @@ const PERSISTENT_KEYS = ['memories:', 'conversations:', 'actionItems', 'folders'
 // Try to hydrate cache from sessionStorage on module load
 if (typeof window !== 'undefined') {
   try {
-    const stored = sessionStorage.getItem('omi_cache');
-    if (stored) {
-      const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
-      for (const [key, entry] of Object.entries(parsed)) {
-        // Only restore if not expired (check against original TTL)
-        if (Date.now() - entry.timestamp < entry.ttl) {
-          cache.set(key, entry);
+    // Check if this is a page reload - if so, clear cache for fresh data
+    // This ensures refreshing the page always fetches fresh data from server
+    const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const isReload = navEntry?.type === 'reload';
+
+    if (isReload) {
+      sessionStorage.removeItem('omi_cache');
+    } else {
+      const stored = sessionStorage.getItem('omi_cache');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, CacheEntry<unknown>>;
+        for (const [key, entry] of Object.entries(parsed)) {
+          // Only restore if not expired (check against original TTL)
+          if (Date.now() - entry.timestamp < entry.ttl) {
+            cache.set(key, entry);
+          }
         }
       }
     }

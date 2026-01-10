@@ -18,11 +18,13 @@ import { SearchBar } from './SearchBar';
 import { DateFilter } from './DateFilter';
 import { MergeActionBar } from './MergeActionBar';
 import { MergeConfirmationDialog } from './MergeConfirmationDialog';
+import { DeleteConversationsDialog } from './DeleteConversationsDialog';
 import { FolderTabs, FolderTabsSkeleton, FOLDER_ALL, FOLDER_STARRED } from './FolderTabs';
 import { FolderDialog, DeleteFolderDialog } from './FolderDialog';
 import { MoveFolderDialog } from './MoveFolderDialog';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { useToast } from '@/components/ui/Toast';
 import {
   mergeConversations,
   getFolders,
@@ -31,6 +33,7 @@ import {
   deleteFolder,
   bulkMoveConversationsToFolder,
   toggleStarred,
+  deleteConversation,
 } from '@/lib/api';
 import type { Conversation } from '@/types/conversation';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
@@ -44,6 +47,7 @@ const DEFAULT_PANEL_WIDTH = 420;
 export function ConversationSplitView() {
   const { user } = useAuth();
   const { setContext } = useChat();
+  const { showToast } = useToast();
   const searchParams = useSearchParams();
   const urlConversationId = searchParams.get('id');
   const [selectedId, setSelectedId] = useState<string | null>(urlConversationId);
@@ -69,6 +73,8 @@ export function ConversationSplitView() {
   const [mergingIds, setMergingIds] = useState<Set<string>>(new Set());
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
   const [mergeLoading, setMergeLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Folder state
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -199,7 +205,13 @@ export function ConversationSplitView() {
     if (b === 'Today') return 1;
     if (a === 'Yesterday') return -1;
     if (b === 'Yesterday') return 1;
-    return new Date(b).getTime() - new Date(a).getTime();
+    // Use actual conversation timestamps instead of parsing the date string
+    // (which lacks year info and causes incorrect sorting)
+    const convA = displayedConversations[a][0];
+    const convB = displayedConversations[b][0];
+    const dateA = new Date(convA?.started_at || convA?.created_at);
+    const dateB = new Date(convB?.started_at || convB?.created_at);
+    return dateB.getTime() - dateA.getTime();
   });
 
   const isLoading = isSearching ? searchLoading : (listLoading || folderSwitching);
@@ -283,6 +295,13 @@ export function ConversationSplitView() {
     setSelectedId(null); // Deselect any viewed conversation
   }, []);
 
+  // Enter selection mode and select the specified card (for double-click)
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectionMode(true);
+    setSelectedIds(new Set([id]));
+    setSelectedId(null); // Deselect any viewed conversation
+  }, []);
+
   const exitSelectionMode = useCallback(() => {
     setIsSelectionMode(false);
     setSelectedIds(new Set());
@@ -333,12 +352,49 @@ export function ConversationSplitView() {
       await refresh();
     } catch (error) {
       console.error('Failed to merge conversations:', error);
-      // TODO: Show error toast
+      showToast('Failed to merge conversations. Please try again.', 'error');
     } finally {
       setMergeLoading(false);
       setMergingIds(new Set());
     }
-  }, [selectedIds, refresh]);
+  }, [selectedIds, refresh, showToast]);
+
+  // Handle delete button click - open confirmation dialog
+  const handleDeleteClick = useCallback(() => {
+    if (selectedIds.size >= 1) {
+      setShowDeleteConfirm(true);
+    }
+  }, [selectedIds.size]);
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = useCallback(async () => {
+    if (selectedIds.size < 1) return;
+
+    setDeleteLoading(true);
+    try {
+      // Delete each selected conversation
+      const deletePromises = Array.from(selectedIds).map(id => deleteConversation(id));
+      await Promise.all(deletePromises);
+
+      // Exit selection mode and close dialog
+      setShowDeleteConfirm(false);
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
+
+      // Clear selected conversation if it was deleted
+      if (selectedId && selectedIds.has(selectedId)) {
+        setSelectedId(null);
+      }
+
+      // Refresh the list
+      await refresh();
+    } catch (error) {
+      console.error('Failed to delete conversations:', error);
+      showToast('Failed to delete conversations. Please try again.', 'error');
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [selectedIds, selectedId, refresh, showToast]);
 
   // ============================================================================
   // Folder handlers
@@ -450,7 +506,7 @@ export function ConversationSplitView() {
       {/* Page Header */}
       <PageHeader title="Conversations" icon={MessageSquare} />
 
-      {/* Toolbar: Folder Tabs + Select */}
+      {/* Toolbar: Folder Tabs */}
       <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary">
         <div className="flex items-center gap-4 px-6 py-3">
           {/* Folder Tabs - takes up available space */}
@@ -469,30 +525,6 @@ export function ConversationSplitView() {
               />
             )}
           </div>
-
-          {/* Select/Cancel button for merge mode */}
-          <button
-            onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0',
-              'text-sm font-medium transition-colors',
-              isSelectionMode
-                ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
-                : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-            )}
-          >
-            {isSelectionMode ? (
-              <>
-                <X className="w-4 h-4" />
-                <span>Cancel</span>
-              </>
-            ) : (
-              <>
-                <CheckSquare className="w-4 h-4" />
-                <span>Select</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 
@@ -509,7 +541,7 @@ export function ConversationSplitView() {
             selectedId ? 'hidden lg:flex' : 'flex'
           )}
         >
-          {/* Search and Date Filter - stays with list */}
+          {/* Search, Date Filter, and Select - stays with list */}
           <div className="flex-shrink-0 px-3 pt-4 pb-3">
             <div className="flex items-center gap-2">
               <SearchBar
@@ -523,6 +555,29 @@ export function ConversationSplitView() {
                 selectedDate={filterDate}
                 onDateChange={handleDateFilterChange}
               />
+              {/* Select/Cancel button for merge mode */}
+              <button
+                onClick={isSelectionMode ? exitSelectionMode : enterSelectionMode}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0',
+                  'text-sm font-medium transition-colors',
+                  isSelectionMode
+                    ? 'bg-purple-primary/20 text-purple-primary hover:bg-purple-primary/30'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                )}
+              >
+                {isSelectionMode ? (
+                  <>
+                    <X className="w-4 h-4" />
+                    <span>Cancel</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckSquare className="w-4 h-4" />
+                    <span>Select</span>
+                  </>
+                )}
+              </button>
             </div>
 
             {/* Active filter indicators */}
@@ -544,6 +599,21 @@ export function ConversationSplitView() {
                     Showing starred only
                   </span>
                 )}
+              </div>
+            )}
+
+            {/* Inline Merge Action Bar - shows when in selection mode */}
+            {isSelectionMode && (
+              <div className="mt-3">
+                <MergeActionBar
+                  selectedCount={selectedIds.size}
+                  onCancel={exitSelectionMode}
+                  onMerge={handleMergeClick}
+                  onMoveToFolder={handleMoveToFolderClick}
+                  onDelete={handleDeleteClick}
+                  isLoading={mergeLoading || deleteLoading}
+                  inline
+                />
               </div>
             )}
           </div>
@@ -604,6 +674,7 @@ export function ConversationSplitView() {
                 hasMore={!isSearching && hasMore}
                 onLoadMore={loadMore}
                 loading={listLoading}
+                onEnterSelectionMode={enterSelectionModeWithId}
               />
             )}
           </div>
@@ -658,19 +729,6 @@ export function ConversationSplitView() {
         </div>
       </div>
 
-      {/* Merge Action Bar - shows when in selection mode */}
-      <AnimatePresence>
-        {isSelectionMode && (
-          <MergeActionBar
-            selectedCount={selectedIds.size}
-            onCancel={exitSelectionMode}
-            onMerge={handleMergeClick}
-            onMoveToFolder={handleMoveToFolderClick}
-            isLoading={mergeLoading}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Merge Confirmation Dialog */}
       <MergeConfirmationDialog
         isOpen={showMergeConfirm}
@@ -678,6 +736,15 @@ export function ConversationSplitView() {
         onConfirm={handleMergeConfirm}
         onCancel={() => setShowMergeConfirm(false)}
         isLoading={mergeLoading}
+      />
+
+      {/* Delete Conversations Confirmation Dialog */}
+      <DeleteConversationsDialog
+        isOpen={showDeleteConfirm}
+        count={selectedIds.size}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDeleteConfirm}
+        isLoading={deleteLoading}
       />
 
       {/* Create/Edit Folder Dialog */}

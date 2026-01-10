@@ -1209,7 +1209,7 @@
     }
   },
 
-  "basicPlan": "Basic Plan",
+  "basicPlan": "Free Plan",
   "@basicPlan": {
     "description": "Basic plan name"
   },

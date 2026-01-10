@@ -252,6 +252,38 @@ export async function mergeConversations(
   });
 }
 
+/**
+ * Response from processing an in-progress conversation
+ */
+export interface CreateConversationResponse {
+  conversation: Conversation;
+  messages: ServerMessage[];
+}
+
+/**
+ * Finalize an in-progress conversation from a recording session.
+ * This processes the transcript, generates title/summary/action items,
+ * and creates audio file records from stored chunks.
+ *
+ * @returns The processed conversation, or null if no in-progress conversation exists
+ */
+export async function processInProgressConversation(): Promise<CreateConversationResponse | null> {
+  try {
+    const result = await fetchWithAuth<CreateConversationResponse>('/v1/conversations', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    // 404 means no in-progress conversation exists
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 // ============================================================================
 // Action Items (Tasks) API
 // ============================================================================

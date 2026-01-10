@@ -1113,11 +1113,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               TextSpan(
                 children: [
                   TextSpan(
-                    text: '1,200 free minutes/month included. Unlimited with ',
+                    text: '1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                   ),
                   TextSpan(
-                    text: 'Omi Unlimited',
+                    text: 'View usage',
                     style: TextStyle(
                       color: Colors.grey.shade400,
                       fontSize: 12,
@@ -1134,7 +1134,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           )
         else if (currentTab == 1)
           Text(
-            'Audio is processed locally. Note that this increases battery usage.',
+            'Audio is processed locally. Works offline, more private, but uses more battery.',
             style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
           )
         else if (currentTab == 2)

@@ -201,3 +201,4 @@ app/android/.kotlin/
 .playwright-mcp/
 
 CLAUDE.md
+web/app/next-env.d.ts

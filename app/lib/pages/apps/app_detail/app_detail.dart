@@ -118,13 +118,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
     return '$day $month ${date.year}';
   }
 
-  checkSetupCompleted() {
+  checkSetupCompleted({bool autoInstallIfCompleted = false}) {
     // TODO: move check to backend
     isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
       if (mounted) {
         setState(() => setupCompleted = value);
 
-        if (value && !app.enabled) {
+        if (autoInstallIfCompleted && value && !app.enabled) {
           _tryAutoInstallAfterSetup();
         }
       }
@@ -280,12 +280,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
           });
         }
       }
-      // Always check setup completed status when there are auth steps
-      if (app.externalIntegration?.authSteps.isNotEmpty == true) {
-        checkSetupCompleted();
-      } else if (!app.enabled) {
-        checkSetupCompleted();
-      }
     }
 
     super.initState();
@@ -403,6 +397,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
         title: 'Read Memories',
         type: 'Access',
         description: 'This app can access your memories.',
+      ));
+    }
+    if (actions.any((a) => a.action == 'read_tasks')) {
+      permissionItems.add(_PermissionItem(
+        title: 'Read Tasks',
+        type: 'Access',
+        description: 'This app can access your tasks.',
       ));
     }
 
@@ -1336,7 +1337,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   return;
                                 }
                                 await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-                                checkSetupCompleted();
+                                checkSetupCompleted(autoInstallIfCompleted: true);
                               },
                               child: Padding(
                                 padding: const EdgeInsets.all(16.0),

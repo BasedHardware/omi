@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.517+542
+version: 1.0.519+570
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -52,7 +52,7 @@ dependencies:
   sign_in_with_apple: ^6.1.1
 
   # Analytics and Support
-  intercom_flutter: 9.3.3
+  intercom_flutter: 9.4.22
   mixpanel_flutter:
     git:
       url: https://github.com/beastoin/mixpanel-flutter.git
@@ -74,12 +74,12 @@ dependencies:
   # Utils
   pool: ^1.5.1
   collection: ^1.19.1
-  flutter_blue_plus: 1.33.6
-  flutter_blue_plus_windows: 1.24.21
+  flutter_blue_plus: 2.1.0
   http: ^1.4.0
   pdf: ^3.11.0
   intl: 0.20.2
   permission_handler: ^12.0.0+1
+  flutter_contacts: ^1.1.9+2
   share_plus: 11.0.0
   shared_preferences: 2.5.3
   url_launcher: ^6.3.0
@@ -140,6 +140,7 @@ dependencies:
 dependency_overrides:
   js: ^0.7.1
   uuid: ^4.4.0
+  flutter_blue_plus: 2.1.0
   opus_flutter_ios:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git
