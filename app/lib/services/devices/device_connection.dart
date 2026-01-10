@@ -474,14 +474,14 @@ abstract class DeviceConnection {
     return false;
   }
 
-  Future<WifiSyncSetupResult> setupWifiSync(String ssid, String password, String serverIp, int port) async {
+  Future<WifiSyncSetupResult> setupWifiSync(String ssid) async {
     if (await isConnected()) {
-      return await performSetupWifiSync(ssid, password, serverIp, port);
+      return await performSetupWifiSync(ssid);
     }
     return WifiSyncSetupResult.connectionFailed();
   }
 
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid) async {
     return WifiSyncSetupResult.failure(WifiSyncErrorCode.wifiHardwareNotAvailable);
   }
 

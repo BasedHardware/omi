@@ -5,16 +5,14 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/devices/device_connection.dart';
+import 'package:omi/services/devices/transports/tcp_transport.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
-import 'package:omi/services/wals/wifi_audio_receiver.dart';
+import 'package:omi/services/wifi/wifi_network_service.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-const String _wifiSsidKey = 'wifi_sync_ssid';
-const String _wifiPasswordKey = 'wifi_sync_password';
 
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = const [];
@@ -35,10 +33,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   double _currentSpeedKBps = 0.0;
   @override
   double get currentSpeedKBps => _currentSpeedKBps;
-
-  // WiFi sync fields
-  String? _wifiSsid;
-  String? _wifiPassword;
 
   SDCardWalSyncImpl(this.listener);
 
@@ -623,61 +617,61 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       debugPrint("SDCardWalSync WiFi: Could not get device connection");
       return false;
     }
-    final supported = await connection.isWifiSyncSupported();
-
-    final hasCredentials = _wifiSsid != null && _wifiSsid!.isNotEmpty;
-
-    return supported && hasCredentials;
+    return await connection.isWifiSyncSupported();
   }
 
+  // Legacy methods - kept for interface compatibility but no longer used in AP mode
   @override
   Future<bool> setWifiCredentials(String ssid, String password) async {
-    // Validate credentials before saving
-    final validationError = WifiCredentialsValidator.validate(ssid, password);
-    if (validationError != null) {
-      debugPrint("SDCardWalSync: WiFi credential validation failed: $validationError");
-      throw WifiSyncException(validationError);
-    }
-
-    _wifiSsid = ssid;
-    _wifiPassword = password;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_wifiSsidKey, ssid);
-      await prefs.setString(_wifiPasswordKey, password);
-      debugPrint("SDCardWalSync: WiFi credentials saved for SSID: $ssid");
-      return true;
-    } catch (e) {
-      debugPrint("SDCardWalSync: Failed to save WiFi credentials: $e");
-      return false;
-    }
+    // In AP mode, credentials are not needed - SSID is auto-generated from device ID
+    debugPrint("SDCardWalSync: setWifiCredentials called but not needed in AP mode");
+    return true;
   }
 
   @override
   Future<void> clearWifiCredentials() async {
-    _wifiSsid = null;
-    _wifiPassword = null;
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_wifiSsidKey);
-    await prefs.remove(_wifiPasswordKey);
+    // No-op in AP mode
   }
 
   @override
   Future<void> loadWifiCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    _wifiSsid = prefs.getString(_wifiSsidKey);
-    _wifiPassword = prefs.getString(_wifiPasswordKey);
-    if (_wifiSsid != null) {
-      debugPrint("SDCardWalSync: Loaded WiFi credentials for SSID: $_wifiSsid");
-    }
+    // No-op in AP mode
   }
 
   @override
   Map<String, String?>? getWifiCredentials() {
-    if (_wifiSsid == null) return null;
-    return {'ssid': _wifiSsid, 'password': _wifiPassword};
+    // In AP mode, return null - credentials are auto-generated
+    return null;
+  }
+
+  /// Helper to clean up WiFi sync resources
+  Future<void> _cleanupWifiSync(
+    TcpTransport? tcpTransport,
+    WifiNetworkService? wifiNetwork,
+    String? ssid,
+    DeviceConnection? connection,
+  ) async {
+    try {
+      await tcpTransport?.disconnect();
+    } catch (e) {
+      debugPrint("SDCardWalSync WiFi: Error disconnecting transport: $e");
+    }
+
+    if (ssid != null && wifiNetwork != null) {
+      try {
+        await wifiNetwork.disconnectFromAp(ssid);
+      } catch (e) {
+        debugPrint("SDCardWalSync WiFi: Error disconnecting from AP: $e");
+      }
+    }
+
+    try {
+      await connection?.stopWifiSync();
+    } catch (e) {
+      debugPrint("SDCardWalSync WiFi: Error stopping WiFi sync on device: $e");
+    }
+
+    _resetSyncState();
   }
 
   @override
@@ -693,53 +687,32 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       return null;
     }
 
-    if (_wifiSsid == null || _wifiPassword == null) {
-      debugPrint("SDCardWalSync WiFi: No WiFi credentials set");
-      return null;
-    }
-
     _resetSyncState();
     _isSyncing = true;
 
-    // Get device connection
-    var connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+    final deviceId = _device!.id;
+
+    final ssid = WifiNetworkService.generateSsid(deviceId);
+    debugPrint("SDCardWalSync WiFi: Starting sync with device AP SSID: $ssid (deviceId: $deviceId)");
+
+    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       debugPrint("SDCardWalSync WiFi: Failed to get device connection");
       _resetSyncState();
       return null;
     }
 
-    // Get the WiFi receiver singleton
-    final wifiReceiver = WifiAudioReceiver.instance;
+    final wifiNetwork = WifiNetworkService();
+    TcpTransport? tcpTransport;
 
     try {
-      // Get local IP address for the TCP server
-      final localIp = await wifiReceiver.getLocalIpAddress();
-      if (localIp == null) {
-        debugPrint("SDCardWalSync WiFi: Could not determine local IP address");
-        await wifiReceiver.stop();
-        _resetSyncState();
-        throw Exception('WiFi sync failed: Please enable your phone\'s hotspot and try again');
-      }
-
-      const tcpPort = WifiAudioReceiver.defaultPort;
-
-      // Start TCP server
-      final serverStarted = await wifiReceiver.start(port: tcpPort);
-      if (!serverStarted) {
-        await wifiReceiver.stop();
-        _resetSyncState();
-        throw Exception('WiFi sync failed: Failed to start TCP server');
-      }
-
-      // Step 1: Setup WiFi on device with credentials and server info
-      final setupResult = await connection.setupWifiSync(_wifiSsid!, _wifiPassword!, localIp, tcpPort);
+      // Step 1: Configure SSID on device via BLE
+      debugPrint("SDCardWalSync WiFi: Step 1 - Configuring device AP with SSID: $ssid");
+      final setupResult = await connection.setupWifiSync(ssid);
       if (!setupResult.success) {
-        await wifiReceiver.stop();
         _resetSyncState();
         final errorMessage = setupResult.errorMessage ?? 'Failed to setup WiFi on device';
         final errorCode = setupResult.errorCode;
-
         if (errorCode != null) {
           debugPrint(
               "SDCardWalSync WiFi: Setup failed with error code 0x${errorCode.code.toRadixString(16)}: ${errorCode.userMessage}");
@@ -749,51 +722,74 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
       }
 
-      debugPrint("SDCardWalSync WiFi: Setup successful, waiting for device to process...");
-
-      // Wait for the device to process the setup command
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Step 2: Start WiFi transfer on device
+      // Step 2: Enable WiFi AP on device via BLE
+      debugPrint("SDCardWalSync WiFi: Step 2 - Enabling device WiFi AP");
       final startSuccess = await connection.startWifiSync();
       if (!startSuccess) {
-        await wifiReceiver.stop();
         _resetSyncState();
-        return null;
+        throw WifiSyncException('Failed to start device WiFi AP');
       }
 
+      // Step 3: Wait for AP to initialize
+      debugPrint("SDCardWalSync WiFi: Step 3 - Waiting for AP to start (2 seconds)");
+      await Future.delayed(const Duration(seconds: 2));
+
+      // Step 4: Connect phone to device's WiFi AP
+      debugPrint("SDCardWalSync WiFi: Step 4 - Connecting phone to device WiFi AP");
+      final wifiResult = await wifiNetwork.connectToAp(ssid);
+      if (!wifiResult.success) {
+        await _cleanupWifiSync(null, wifiNetwork, ssid, connection);
+        final errorMsg = wifiResult.errorMessage ?? wifiResult.error?.userMessage ?? 'Failed to connect to device WiFi';
+        throw WifiSyncException('WiFi connection failed: $errorMsg');
+      }
+
+      // Step 5: Wait for WiFi connection to stabilize
+      debugPrint("SDCardWalSync WiFi: Step 5 - Waiting for WiFi connection to stabilize");
+      await Future.delayed(const Duration(seconds: 3));
+
+      // Step 6: Start TCP server and wait for device to connect
+      const tcpPort = 12345;
+      debugPrint("SDCardWalSync WiFi: Step 6 - Starting TCP server on port $tcpPort");
+      tcpTransport = TcpTransport(deviceId, port: tcpPort, connectionTimeout: const Duration(seconds: 60));
+      try {
+        await tcpTransport.connect();
+        debugPrint("SDCardWalSync WiFi: Device connected to TCP server!");
+      } catch (e) {
+        debugPrint("SDCardWalSync WiFi: TCP server error: $e");
+        await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection);
+        throw WifiSyncException('Device did not connect to TCP server: $e');
+      }
+
+      // Setup WiFi status listener (optional, for debugging)
       StreamSubscription? wifiStatusSubscription;
-      int lastWifiStatus = -1;
       try {
         wifiStatusSubscription = await connection.getWifiSyncStatusListener(
           onStatusReceived: (status) {
-            if (status != lastWifiStatus) {
-              lastWifiStatus = status;
-              String statusName;
-              switch (status) {
-                case 0:
-                  statusName = 'OFF';
-                  break;
-                case 1:
-                  statusName = 'SHUTDOWN';
-                  break;
-                case 2:
-                  statusName = 'ON';
-                  break;
-                case 3:
-                  statusName = 'CONNECTING';
-                  break;
-                case 4:
-                  statusName = 'CONNECTED';
-                  break;
-                case 5:
-                  statusName = 'TCP_CONNECTED';
-                  break;
-                default:
-                  statusName = 'UNKNOWN';
-                  break;
-              }
+            String statusName;
+            switch (status) {
+              case 0:
+                statusName = 'OFF';
+                break;
+              case 1:
+                statusName = 'SHUTDOWN';
+                break;
+              case 2:
+                statusName = 'ON';
+                break;
+              case 3:
+                statusName = 'CONNECTING';
+                break;
+              case 4:
+                statusName = 'CONNECTED';
+                break;
+              case 5:
+                statusName = 'TCP_CONNECTED';
+                break;
+              default:
+                statusName = 'UNKNOWN';
+                break;
             }
+            debugPrint("SDCardWalSync WiFi: Device status: $statusName ($status)");
           },
         );
       } catch (e) {
@@ -820,30 +816,29 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
       List<int> tcpBuffer = [];
 
+      // Step 7: Start SD card read via BLE
+      debugPrint("SDCardWalSync WiFi: Step 7 - Starting SD card read from offset $offset");
+      connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) {
+        debugPrint("SDCardWalSync WiFi: WARNING - Could not reconnect BLE to start SD card read");
+        await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, null);
+        throw WifiSyncException('Lost BLE connection and could not reconnect');
+      }
+      final readStarted = await _writeToStorage(deviceId, wal.fileNum, 0, offset);
+      if (!readStarted) {
+        await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection);
+        throw WifiSyncException('Failed to start storage read');
+      }
+
+      // Step 8: Receive and process data
+      debugPrint("SDCardWalSync WiFi: Step 8 - Receiving data ($totalBytes bytes to download)");
+
       final completer = Completer<void>();
       StreamSubscription? audioSubscription;
 
-      final audioStream = wifiReceiver.audioStream;
-      if (audioStream == null) {
-        debugPrint("SDCardWalSync WiFi: No TCP client connected");
-        await wifiStatusSubscription?.cancel();
-        await wifiReceiver.stop();
-        _resetSyncState();
-        throw Exception(
-            'WiFi sync failed: Device could not connect to hotspot. Check WiFi credentials and ensure hotspot is active.');
-      }
-
-      final readStarted = await _writeToStorage(_device!.id, wal.fileNum, 0, offset);
-      if (!readStarted) {
-        await wifiReceiver.stop();
-        await connection.stopWifiSync();
-        _resetSyncState();
-        throw Exception('WiFi sync failed: Failed to start storage read');
-      }
+      final audioStream = tcpTransport.dataStream;
 
       // Track position within 440-byte logical blocks
-      // The SD card data is organized in 440-byte chunks, same as BLE packets
-      // Each chunk may have padding at the end that shouldn't be parsed as frame data
       int globalBytePosition = 0;
 
       audioSubscription = audioStream.listen(
@@ -874,27 +869,20 @@ class SDCardWalSyncImpl implements SDCardWalSync {
             }
 
             // Check if we're in padding area at end of block
-            // If we're near end of block and size seems invalid, skip to next block
             if (posInBlock > 0 && bytesRemainingInBlock < 12) {
-              // Not enough room for a minimal frame (size + 10 byte min data)
-              // Skip padding to next block boundary
               if (packageOffset + bytesRemainingInBlock > bufferLength) {
-                break; // Wait for more data
+                break;
               }
-
               packageOffset += bytesRemainingInBlock;
               bytesProcessed = packageOffset;
               continue;
             }
 
-            // Check if this frame would extend beyond the current 440-byte block boundary
-            // SD card frames never span block boundaries - if it would, this is padding
+            // Check if frame would extend beyond block boundary
             if (posInBlock > 0 && packageSize + 1 > bytesRemainingInBlock) {
-              // Frame doesn't fit in current block, skip to next boundary
               if (packageOffset + bytesRemainingInBlock > bufferLength) {
-                break; // Wait for more data
+                break;
               }
-
               packageOffset += bytesRemainingInBlock;
               bytesProcessed = packageOffset;
               continue;
@@ -908,14 +896,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
                 packageOffset += bytesRemainingInBlock;
                 bytesProcessed = packageOffset;
               } else {
-                break; // Wait for more data
+                break;
               }
               continue;
             }
 
-            // Check if we have the complete frame (size byte + frame data)
+            // Check if we have the complete frame
             if (packageOffset + 1 + packageSize > bufferLength) {
-              // Incomplete frame - wait for more data
               break;
             }
 
@@ -932,7 +919,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
                     frame[0] == 0x7c);
 
             if (!validToc) {
-              // Skip to next block boundary
               if (posInBlock > 0 && packageOffset + bytesRemainingInBlock <= bufferLength) {
                 packageOffset += bytesRemainingInBlock;
                 bytesProcessed = packageOffset;
@@ -952,9 +938,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           // Update global position for block tracking
           globalBytePosition += bytesProcessed;
 
-          // Remove processed bytes from buffer safely
+          // Remove processed bytes from buffer
           if (bytesProcessed > 0) {
-            // Create new list from unprocessed bytes
             tcpBuffer = List<int>.from(tcpBuffer.skip(bytesProcessed));
           }
 
@@ -1030,27 +1015,19 @@ class SDCardWalSyncImpl implements SDCardWalSync {
         }
       }
 
-      // Cleanup
+      // Step 9: Cleanup
+      debugPrint("SDCardWalSync WiFi: Step 9 - Cleanup");
       await audioSubscription.cancel();
       await wifiStatusSubscription?.cancel();
-      await wifiReceiver.stop();
 
-      // Stop WiFi on device (may fail if device already disconnected, that's OK)
+      // Clear SD card storage
       try {
-        await connection.stopWifiSync();
+        await _writeToStorage(deviceId, wal.fileNum, 1, 0);
       } catch (e) {
-        debugPrint("SDCardWalSync WiFi: stopWifiSync failed (device may have disconnected): $e");
+        debugPrint("SDCardWalSync WiFi: Could not clear SD card storage: $e");
       }
 
-      // Clear SD card storage (may fail if device disconnected during WiFi sync)
-      // Device disconnecting after WiFi transfer is normal - it switches back to BLE mode
-      try {
-        if (_device != null) {
-          await _writeToStorage(_device!.id, wal.fileNum, 1, 0);
-        }
-      } catch (e) {
-        debugPrint("SDCardWalSync WiFi: Could not clear SD card storage (device may have disconnected): $e");
-      }
+      await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection);
 
       wal.status = WalStatus.synced;
       wal.isSyncing = false;
@@ -1059,19 +1036,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       wal.syncSpeedKBps = null;
       listener.onWalUpdated();
 
-      _resetSyncState();
+      debugPrint("SDCardWalSync WiFi: Sync completed successfully");
       return resp;
     } catch (e) {
       debugPrint("SDCardWalSync WiFi: Error during sync: $e");
 
-      // Ensure cleanup on error
-      try {
-        await connection.stopWifiSync();
-      } catch (_) {}
-
-      await wifiReceiver.stop();
-
-      _resetSyncState();
+      await _cleanupWifiSync(tcpTransport, wifiNetwork, ssid, connection);
 
       // Re-throw WifiSyncException as-is, wrap other exceptions
       if (e is WifiSyncException) {

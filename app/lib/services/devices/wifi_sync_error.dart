@@ -3,9 +3,6 @@ enum WifiSyncErrorCode {
   invalidPacketLength(0x01),
   invalidSetupLength(0x02),
   ssidLengthInvalid(0x03),
-  passwordLengthInvalid(0x04),
-  ipLengthInvalid(0x05),
-  portLengthInvalid(0x06),
   wifiHardwareNotAvailable(0xFE),
   unknownCommand(0xFF);
 
@@ -28,13 +25,7 @@ enum WifiSyncErrorCode {
       case WifiSyncErrorCode.invalidSetupLength:
         return 'Internal error - please try again';
       case WifiSyncErrorCode.ssidLengthInvalid:
-        return 'Hotspot name must be 1-32 characters';
-      case WifiSyncErrorCode.passwordLengthInvalid:
-        return 'Password must be under 64 characters';
-      case WifiSyncErrorCode.ipLengthInvalid:
-        return 'Internal error - please try again';
-      case WifiSyncErrorCode.portLengthInvalid:
-        return 'Internal error - please try again';
+        return 'Device name must be 1-32 characters';
       case WifiSyncErrorCode.wifiHardwareNotAvailable:
         return 'Your device does not support WiFi sync';
       case WifiSyncErrorCode.unknownCommand:
@@ -99,48 +90,23 @@ class WifiSyncException implements Exception {
   String toString() => 'WifiSyncException: $message';
 }
 
-/// Validation helper for WiFi credentials
-class WifiCredentialsValidator {
+/// Validation helper for WiFi SSID (AP mode - no password needed)
+class WifiSsidValidator {
   static const int maxSsidLength = 32;
-  static const int maxPasswordLength = 64;
 
   /// Validates SSID and returns error message if invalid, null if valid
-  static String? validateSsid(String ssid) {
+  static String? validate(String ssid) {
     if (ssid.isEmpty) {
-      return 'Hotspot name is required';
+      return 'Device name is required';
     }
     if (ssid.length > maxSsidLength) {
-      return 'Hotspot name must be at most $maxSsidLength characters';
+      return 'Device name must be at most $maxSsidLength characters';
     }
     // Check byte length (UTF-8 encoded)
     final byteLength = ssid.codeUnits.length;
     if (byteLength > maxSsidLength) {
-      return 'Hotspot name is too long';
+      return 'Device name is too long';
     }
-    return null;
-  }
-
-  /// Validates password and returns error message if invalid, null if valid
-  static String? validatePassword(String password) {
-    if (password.length > maxPasswordLength) {
-      return 'Password must be at most $maxPasswordLength characters';
-    }
-    // Check byte length (UTF-8 encoded)
-    final byteLength = password.codeUnits.length;
-    if (byteLength > maxPasswordLength) {
-      return 'Password is too long';
-    }
-    return null;
-  }
-
-  /// Validates both credentials and returns combined error message or null
-  static String? validate(String ssid, String password) {
-    final ssidError = validateSsid(ssid);
-    if (ssidError != null) return ssidError;
-
-    final passwordError = validatePassword(password);
-    if (passwordError != null) return passwordError;
-
     return null;
   }
 }

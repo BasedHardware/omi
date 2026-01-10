@@ -620,20 +620,18 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid) async {
     try {
-      // Pre-validate credentials before sending to device
-      final validationError = WifiCredentialsValidator.validate(ssid, password);
-      if (validationError != null) {
-        debugPrint('OmiDeviceConnection: WiFi credential validation failed: $validationError');
-        if (validationError.contains('Hotspot name')) {
-          return WifiSyncSetupResult.failure(WifiSyncErrorCode.ssidLengthInvalid, customMessage: validationError);
-        } else {
-          return WifiSyncSetupResult.failure(WifiSyncErrorCode.passwordLengthInvalid, customMessage: validationError);
-        }
+      // Validate SSID length (1-32 characters)
+      if (ssid.isEmpty || ssid.length > 32) {
+        debugPrint('OmiDeviceConnection: Invalid SSID length: ${ssid.length}');
+        return WifiSyncSetupResult.failure(
+          WifiSyncErrorCode.ssidLengthInvalid,
+          customMessage: 'SSID must be 1-32 characters',
+        );
       }
 
-      // Format: [0x01][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port_high][port_low]
+      // Format for AP mode: [0x01][ssid_len][ssid]
       final List<int> command = [];
 
       command.add(0x01);
@@ -642,20 +640,6 @@ class OmiDeviceConnection extends DeviceConnection {
       final ssidBytes = ssid.codeUnits;
       command.add(ssidBytes.length);
       command.addAll(ssidBytes);
-
-      // Password
-      final passwordBytes = password.codeUnits;
-      command.add(passwordBytes.length);
-      command.addAll(passwordBytes);
-
-      // Server IP
-      final ipBytes = serverIp.codeUnits;
-      command.add(ipBytes.length);
-      command.addAll(ipBytes);
-
-      // Port (big endian - high byte first)
-      command.add((port >> 8) & 0xFF);
-      command.add(port & 0xFF);
 
       // Set up listener for the response before sending the command
       final completer = Completer<WifiSyncSetupResult>();
@@ -667,9 +651,6 @@ class OmiDeviceConnection extends DeviceConnection {
         responseSubscription = stream.listen((value) {
           if (value.isNotEmpty && !completer.isCompleted) {
             final responseCode = value[0];
-            debugPrint(
-                'OmiDeviceConnection: WiFi setup response code: 0x${responseCode.toRadixString(16)} ($responseCode)');
-
             final errorCode = WifiSyncErrorCode.fromCode(responseCode);
             if (errorCode.isSuccess) {
               completer.complete(WifiSyncSetupResult.success());
@@ -679,17 +660,15 @@ class OmiDeviceConnection extends DeviceConnection {
           }
         });
 
+        await Future.delayed(const Duration(milliseconds: 100));
+
         // Send the setup command
         await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
-        debugPrint('OmiDeviceConnection: WiFi setup command sent, waiting for response...');
 
         // Wait for response with timeout
         final result = await completer.future.timeout(
           const Duration(seconds: 5),
-          onTimeout: () {
-            debugPrint('OmiDeviceConnection: WiFi setup response timeout');
-            return WifiSyncSetupResult.timeout();
-          },
+          onTimeout: () => WifiSyncSetupResult.timeout(),
         );
 
         return result;
