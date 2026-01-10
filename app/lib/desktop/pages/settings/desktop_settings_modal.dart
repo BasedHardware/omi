@@ -1982,12 +1982,6 @@ class _DesktopSettingsModalState extends State<DesktopSettingsModal> {
                   value: devProvider.showGoalTrackerEnabled,
                   onChanged: (v) => devProvider.onShowGoalTrackerChanged(v),
                 ),
-                _buildToggleRow(
-                  title: 'Daily Reflection',
-                  subtitle: '9 PM reminder to reflect on your day',
-                  value: devProvider.dailyReflectionEnabled,
-                  onChanged: (v) => devProvider.onDailyReflectionChanged(v),
-                ),
               ],
             ),
 

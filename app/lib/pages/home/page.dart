@@ -34,7 +34,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -78,11 +77,6 @@ class _HomePageWrapperState extends State<HomePageWrapper> {
       if (SharedPreferencesUtil().notificationsEnabled) {
         NotificationService.instance.register();
         NotificationService.instance.saveNotificationToken();
-
-        // Schedule daily reflection notification if enabled
-        if (SharedPreferencesUtil().dailyReflectionEnabled) {
-          DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
-        }
       }
     });
     _navigateToRoute = widget.navigateToRoute;
