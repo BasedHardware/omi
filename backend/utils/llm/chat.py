@@ -607,9 +607,19 @@ To maximize context and find the most relevant conversations, follow these strat
    - As a last resort, expand the time window (e.g., from "today" to "last 3 days")
 
 5. **When to use each retrieval tool:**
-   - Use **vector_search_conversations_tool** for: Semantic/thematic searches, finding conversations by meaning or topics (e.g., "discussions about personal growth", "health-related talks", "career advice conversations", "meetings about Project Alpha", "conversations with John Smith")
+   - Use **vector_search_conversations_tool** for:
+     * Semantic/thematic searches, finding conversations by meaning or topics (e.g., "discussions about personal growth", "health-related talks", "career advice conversations")
+     * **CRITICAL: Questions about SPECIFIC EVENTS or INCIDENTS** that happened to the user (e.g., "when did a dog bite me?", "what happened at the party?", "when did I get injured?", "when did I meet John?", "what did I say about the accident?")
+     * Finding conversations about specific people, places, or things (e.g., "conversations with John Smith", "discussions about San Francisco", "talks about my car")
+     * Any question asking "when did X happen?" or "what happened when Y?" - these are EVENT queries, not memory queries
    - Use **get_conversations_tool** for: Time-based queries without specific search criteria, general activities, chronological views (e.g., "what did I do today?", "conversations from last week")
-   - **Strategy**: For most user questions about topics, themes, people, or specific content, use vector_search_conversations_tool for semantic matching. For general time-based queries without specific topics, use get_conversations_tool
+   - Use **get_memories_tool** for: ONLY static facts/preferences about the user (name, age, preferences, habits, goals, relationships) - NOT for specific events or incidents
+   - **IMPORTANT DISTINCTION**:
+     * "What's my favorite food?" → get_memories_tool (this is a preference/fact)
+     * "When did I get food poisoning?" → vector_search_conversations_tool (this is an EVENT)
+     * "Do I like dogs?" → get_memories_tool (this is a preference)
+     * "When did a dog bite me?" → vector_search_conversations_tool (this is an EVENT)
+   - **Strategy**: For questions about topics, themes, people, specific events, or any "when did X happen?" queries, use vector_search_conversations_tool. For general time-based queries without specific topics, use get_conversations_tool. For user preferences/facts, use get_memories_tool.
    - Always prefer narrower time windows first (hours > day > week > month) for better relevance
 </tool_instructions>
 
@@ -653,7 +663,7 @@ Answer the user's questions accurately and personally, using the tools when need
 - Always answer the question directly; no extra info, no fluff.
 - Never say "based on available memories" or "according to the tools"—just answer.
 - If a tool returns "No conversations/memories found," say honestly that {user_name} doesn’t have that data yet, in a friendly way.
-- Always use get_memories_tool to learn about {user_name} before answering questions about their preferences, habits, goals, relationships, or personal details.
+- Use get_memories_tool for questions about {user_name}'s static facts/preferences (name, age, habits, goals, relationships). Do NOT use it for questions about specific events/incidents - use vector_search_conversations_tool instead for those.
 - Use correct date/time format (see <tool_instructions>) when calling tools.
 - Cite conversations when using them (see <citing_instructions>).
 - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way (e.g., "3:45 PM, Tuesday, Oct 16th").
@@ -665,7 +675,7 @@ Answer the user's questions accurately and personally, using the tools when need
 </instructions>
 
 {plugin_section}
-Remember: Use tools strategically to provide the best possible answers. Always use get_memories_tool to learn about {user_name} before answering questions about their personal preferences, habits, or interests. Your goal is to help {user_name} in the most personalized and helpful way possible.
+Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use vector_search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
     return base_prompt.strip()
