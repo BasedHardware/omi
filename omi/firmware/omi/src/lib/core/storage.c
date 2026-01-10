@@ -216,8 +216,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len)
         nuke_started = 1;
     } else if (command == STOP_COMMAND) // should be no explicit stop command, send heartbeats to keep connection alive
     {
-        remaining_length = 0;
-        stop_started = 1;
+        storage_stop_transfer();
     } else if (command == HEARTBEAT) {
         heartbeat_count = 0;
     } else {
@@ -308,7 +307,7 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
             LOG_INF("WIFI_SHUTDOWN command received");
             wifi_turn_off();
             mic_resume();
-            remaining_length = 0;
+            storage_stop_transfer();
             result_buffer[0] = 0;
             break;
 
@@ -370,6 +369,13 @@ static void write_to_tcp()
     }
 }
 #endif
+
+
+void storage_stop_transfer()
+{
+    remaining_length = 0;
+    stop_started = 1;
+}
 
 void storage_write(void)
 {

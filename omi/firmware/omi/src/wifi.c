@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(wifi, CONFIG_LOG_DEFAULT_LEVEL);
 
 #include <net/wifi_ready.h>
 #include "wifi.h"
+#include "storage.h"
 
 #define WIFI_SAP_MGMT_EVENTS                                                                    \
 	(NET_EVENT_WIFI_AP_ENABLE_RESULT | NET_EVENT_WIFI_AP_DISABLE_RESULT |                     \
@@ -751,6 +752,7 @@ void start_wifi_thread(void)
 			wifi_connecting_timer_start_once();
 			if (wifi_connecting_timer_expired(WIFI_CONNECTING_TIMEOUT_MS)) {
 				LOG_WRN("TCP connecting > 30s -> shutting down Wi-Fi");
+				storage_stop_transfer();
 				current_wifi_state = WIFI_STATE_SHUTDOWN;
 				break;
 			}
