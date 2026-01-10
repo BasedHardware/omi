@@ -73,6 +73,7 @@ export function useConversations(
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(cachedEntry?.offset || 0);
   const [hasMore, setHasMore] = useState(cachedEntry?.hasMore ?? true);
+  const [hasProcessing, setHasProcessing] = useState(false);
 
   // Track previous params to detect changes
   const prevStartDate = useRef(params.startDate?.getTime());
@@ -211,6 +212,23 @@ export function useConversations(
     });
     return unsubscribe;
   }, [fetchConversations]);
+
+  // Track if any conversations are processing
+  useEffect(() => {
+    const processing = conversations.some(c => c.status === 'processing');
+    setHasProcessing(processing);
+  }, [conversations]);
+
+  // Poll for updates while conversations are processing
+  useEffect(() => {
+    if (!hasProcessing) return;
+
+    const pollInterval = setInterval(() => {
+      fetchConversations(0, false, true); // Background refresh, skip cache
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [hasProcessing, fetchConversations]);
 
   // Load more conversations
   const loadMore = useCallback(async () => {

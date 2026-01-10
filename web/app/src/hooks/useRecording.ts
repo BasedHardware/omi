@@ -233,7 +233,7 @@ export function useRecording() {
     };
   }, []);
 
-  // Warn before closing tab during recording
+  // Warn before closing tab during recording and cleanup on page hide
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (state === 'recording' || state === 'paused') {
@@ -243,9 +243,29 @@ export function useRecording() {
       }
     };
 
+    // Cleanup resources when page is actually hidden/closed
+    const handlePageHide = () => {
+      if (state === 'recording' || state === 'paused') {
+        // Synchronously disconnect to ensure cleanup happens before page unloads
+        if (audioCaptureRef.current) {
+          audioCaptureRef.current.stop();
+        }
+        if (transcriptionSocketRef.current) {
+          transcriptionSocketRef.current.disconnect();
+        }
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+        }
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [state]);
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [state, audioCaptureRef, transcriptionSocketRef, durationIntervalRef]);
 
   return {
     // State

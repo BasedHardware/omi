@@ -230,13 +230,16 @@ export class TranscriptionSocket {
 
         const data = JSON.parse(event.data);
 
-        // Helper to parse speaker ID from various formats (e.g., "SPEAKER_01" -> 0, 1 -> 1)
+        // Helper to parse speaker ID from various formats (e.g., "SPEAKER_01" -> 0, "1" -> 1)
         const parseSpeakerId = (id: string | number | undefined): number => {
           if (typeof id === 'number') return id;
           if (typeof id === 'string') {
-            // Handle "SPEAKER_01" format
-            const match = id.match(/(\d+)$/);
-            if (match) return parseInt(match[1], 10) - 1; // Convert to 0-indexed
+            // Handle "SPEAKER_01" format - convert 1-indexed to 0-indexed
+            const speakerMatch = id.match(/^SPEAKER_(\d+)$/);
+            if (speakerMatch) return Math.max(0, parseInt(speakerMatch[1], 10) - 1);
+            // Handle plain numeric strings (already 0-indexed)
+            const num = parseInt(id, 10);
+            if (!isNaN(num)) return num;
           }
           return 0;
         };

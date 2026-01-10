@@ -295,6 +295,13 @@ export function ConversationSplitView() {
     setSelectedId(null); // Deselect any viewed conversation
   }, []);
 
+  // Enter selection mode and select the specified card (for double-click)
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectionMode(true);
+    setSelectedIds(new Set([id]));
+    setSelectedId(null); // Deselect any viewed conversation
+  }, []);
+
   const exitSelectionMode = useCallback(() => {
     setIsSelectionMode(false);
     setSelectedIds(new Set());
@@ -667,6 +674,7 @@ export function ConversationSplitView() {
                 hasMore={!isSearching && hasMore}
                 onLoadMore={loadMore}
                 loading={listLoading}
+                onEnterSelectionMode={enterSelectionModeWithId}
               />
             )}
           </div>
