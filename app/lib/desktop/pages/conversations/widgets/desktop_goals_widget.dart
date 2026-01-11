@@ -58,6 +58,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
 
   Future<void> _loadGoals() async {
     try {
+      // Load from local storage first - this is the source of truth for multi-goal
       final prefs = await SharedPreferences.getInstance();
       final goalsJson = prefs.getString(_goalsStorageKey);
       final emojisJson = prefs.getString(_goalsEmojiKey);
@@ -67,27 +68,38 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
         _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
       }
       
+      bool hasLocalGoals = false;
       if (goalsJson != null) {
-        final List<dynamic> decoded = json.decode(goalsJson);
-        final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
-        if (mounted) {
-          setState(() {
-            _goals = localGoals;
-            _isLoading = false;
-          });
+        try {
+          final List<dynamic> decoded = json.decode(goalsJson);
+          final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
+          if (localGoals.isNotEmpty) {
+            hasLocalGoals = true;
+            if (mounted) {
+              setState(() {
+                _goals = localGoals;
+                _isLoading = false;
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('[GOALS] Error parsing local goals: $e');
         }
       }
 
-      final backendGoal = await getCurrentGoal();
-      if (backendGoal != null && mounted) {
-        final existingIndex = _goals.indexWhere((g) => g.id == backendGoal.id);
-        if (existingIndex >= 0) {
-          _goals[existingIndex] = backendGoal;
-        } else if (_goals.isEmpty) {
-          _goals.add(backendGoal);
+      // Only try backend if no local goals exist (backward compatibility)
+      // Backend only supports 1 goal, so don't let it overwrite our multi-goal local storage
+      if (!hasLocalGoals) {
+        final backendGoal = await getCurrentGoal();
+        if (backendGoal != null && mounted) {
+          setState(() {
+            _goals = [backendGoal];
+            _isLoading = false;
+          });
+          await _saveGoalsLocally();
+        } else if (mounted) {
+          setState(() => _isLoading = false);
         }
-        await _saveGoalsLocally();
-        setState(() => _isLoading = false);
       } else if (mounted) {
         setState(() => _isLoading = false);
       }
