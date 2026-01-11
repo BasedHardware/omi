@@ -475,9 +475,14 @@ abstract class DeviceConnection {
   }
 
   Future<WifiSyncSetupResult> setupWifiSync(String ssid) async {
-    if (await isConnected()) {
-      return await performSetupWifiSync(ssid);
+    final connected = await isConnected();
+    debugPrint('DeviceConnection: setupWifiSync - isConnected: $connected, ssid: $ssid');
+    if (connected) {
+      final result = await performSetupWifiSync(ssid);
+      debugPrint('DeviceConnection: setupWifiSync - result: ${result.success}, error: ${result.errorCode}');
+      return result;
     }
+    debugPrint('DeviceConnection: setupWifiSync - device disconnected');
     return WifiSyncSetupResult.connectionFailed();
   }
 
@@ -486,9 +491,14 @@ abstract class DeviceConnection {
   }
 
   Future<bool> startWifiSync() async {
-    if (await isConnected()) {
-      return await performStartWifiSync();
+    final connected = await isConnected();
+    debugPrint('DeviceConnection: startWifiSync - isConnected: $connected');
+    if (connected) {
+      final result = await performStartWifiSync();
+      debugPrint('DeviceConnection: startWifiSync - performStartWifiSync returned: $result');
+      return result;
     }
+    debugPrint('DeviceConnection: startWifiSync - device disconnected, showing notification');
     _showDeviceDisconnectedNotification();
     return false;
   }
