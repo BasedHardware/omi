@@ -264,12 +264,19 @@ def execute_agentic_chat(
         tools=tools,
     )
 
-    # Run agent
+    # Run agent with LangSmith tracing metadata
     config = {
         "configurable": {
             "user_id": uid,
             "thread_id": str(uuid.uuid4()),
-        }
+        },
+        "run_name": "chat.agentic",
+        "tags": ["chat", "agentic"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+        },
     }
 
     # Store config in context for tools to access
@@ -375,7 +382,12 @@ async def execute_agentic_chat_stream(
     # Initialize safety guard
     safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
 
+    # Generate run_id for LangSmith tracing (allows feedback attachment later)
+    langsmith_run_id = str(uuid.uuid4())
+
+    # LangSmith tracing metadata
     config = {
+        "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
         "configurable": {
             "user_id": uid,
             "thread_id": str(uuid.uuid4()),
@@ -383,8 +395,23 @@ async def execute_agentic_chat_stream(
             "safety_guard": safety_guard,
             "chat_session_id": chat_session.id if chat_session else None,
             "tools": tools,  # Store tools for status message lookup
-        }
+        },
+        "run_name": "chat.agentic.stream",
+        "tags": ["chat", "agentic", "streaming"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+            "num_tools": len(tools),
+        },
     }
+
+    # Store run_id in callback_data for message persistence
+    if callback_data is not None:
+        callback_data['langsmith_run_id'] = langsmith_run_id
 
     # Store config in context for tools to access
     agent_config_context.set(config)

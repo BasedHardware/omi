@@ -184,7 +184,7 @@ class AIMessage extends StatefulWidget {
   final bool displayOptions;
   final App? appSender;
   final Function(ServerConversation) updateConversation;
-  final Function(int) setMessageNps;
+  final Function(int, {String? reason}) setMessageNps;
 
   const AIMessage({
     super.key,
@@ -243,7 +243,7 @@ Widget buildMessageWidget(
   bool displayOptions,
   App? appSender,
   Function(ServerConversation) updateConversation,
-  Function(int) sendMessageNps, {
+  Function(int, {String? reason}) sendMessageNps, {
   Function(String)? onAskOmi,
 }) {
   if (message.memories.isNotEmpty) {
@@ -422,7 +422,7 @@ class NormalMessageWidget extends StatefulWidget {
   final String messageText;
   final List<String> thinkings;
   final ServerMessage message;
-  final Function(int) setMessageNps;
+  final Function(int, {String? reason}) setMessageNps;
   final DateTime createdAt;
   final Function(String)? onAskOmi;
 
@@ -617,7 +617,7 @@ class MemoriesMessageWidget extends StatefulWidget {
   final String messageText;
   final Function(ServerConversation) updateConversation;
   final ServerMessage message;
-  final Function(int) setMessageNps;
+  final Function(int, {String? reason}) setMessageNps;
   final DateTime date;
   final Function(String)? onAskOmi;
 
@@ -916,9 +916,23 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
   }
 }
 
+/// Feedback reason options for thumbs down
+enum FeedbackReason {
+  tooVerbose('too_verbose', 'Too verbose'),
+  incorrectOrHallucination('incorrect_or_hallucination', 'Incorrect / hallucination'),
+  notHelpfulOrIrrelevant('not_helpful_or_irrelevant', 'Not helpful / irrelevant'),
+  didntFollowInstructions('didnt_follow_instructions', "Didn't follow instructions"),
+  other('other', 'Other');
+
+  final String key;
+  final String label;
+
+  const FeedbackReason(this.key, this.label);
+}
+
 class MessageActionBar extends StatefulWidget {
   final String messageText;
-  final Function(int)? setMessageNps;
+  final Function(int, {String? reason})? setMessageNps;
   final int? currentNps;
 
   const MessageActionBar({
@@ -939,6 +953,129 @@ class _MessageActionBarState extends State<MessageActionBar> {
   void initState() {
     super.initState();
     _selectedNps = widget.currentNps;
+  }
+
+  /// Show bottom sheet with thumbs down reason options
+  void _showThumbsDownReasonPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return Container(
+          margin: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Title
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C2C2E),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                ),
+                child: const Text(
+                  'What went wrong?',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              // Reason options
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1E).withOpacity(0.95),
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(13)),
+                ),
+                child: Column(
+                  children: FeedbackReason.values.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final reason = entry.value;
+                    return Column(
+                      children: [
+                        if (index > 0)
+                          Container(
+                            height: 0.5,
+                            color: Colors.grey.shade700,
+                            margin: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              Navigator.pop(context);
+                              // Set thumbs down and submit with reason
+                              setState(() {
+                                _selectedNps = -1;
+                              });
+                              widget.setMessageNps?.call(-1, reason: reason.key);
+                            },
+                            borderRadius: BorderRadius.vertical(
+                              bottom: index == FeedbackReason.values.length - 1
+                                  ? const Radius.circular(13)
+                                  : Radius.zero,
+                            ),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                              child: Text(
+                                reason.label,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 17,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Cancel button
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1E).withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.pop(context);
+                    },
+                    borderRadius: BorderRadius.circular(13),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.blue,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -987,10 +1124,16 @@ class _MessageActionBarState extends State<MessageActionBar> {
             isSelected: _selectedNps == -1,
             onTap: () {
               HapticFeedback.lightImpact();
-              setState(() {
-                _selectedNps = _selectedNps == -1 ? null : -1;
-              });
-              widget.setMessageNps?.call(_selectedNps ?? 0);
+              if (_selectedNps == -1) {
+                // Already thumbs down, toggle off
+                setState(() {
+                  _selectedNps = null;
+                });
+                widget.setMessageNps?.call(0);
+              } else {
+                // Show reason picker for thumbs down
+                _showThumbsDownReasonPicker();
+              }
             },
           ),
           const SizedBox(width: 20),
