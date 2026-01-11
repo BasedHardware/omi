@@ -366,7 +366,6 @@ class _AppShellState extends State<AppShell> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
 
       final auth = context.read<AuthenticationProvider>();
 
@@ -402,10 +401,7 @@ class _AppShellState extends State<AppShell> {
           await PlatformManager.instance.intercom.loginUnidentifiedUser();
         }
       }
-
-      if (mounted) {
-        PlatformManager.instance.intercom.setUserAttributes();
-      }
+      PlatformManager.instance.intercom.setUserAttributes();
     });
     super.initState();
   }
