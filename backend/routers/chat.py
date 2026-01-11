@@ -294,6 +294,14 @@ def get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
+    
+    # Debug: Check for messages with ratings
+    rated_messages = [m for m in messages if m.get('rating') is not None]
+    if rated_messages:
+        print(f'📊 Messages with ratings: {len(rated_messages)}')
+        for m in rated_messages[:5]:  # Show first 5
+            print(f"  - Message {m.get('id')}: rating={m.get('rating')}")
+    
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages

@@ -1168,6 +1168,17 @@ class _MessageActionBarState extends State<MessageActionBar> {
     _selectedNps = widget.currentNps;
   }
 
+  @override
+  void didUpdateWidget(MessageActionBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Update local state if the widget's currentNps changed (e.g., from server fetch)
+    if (oldWidget.currentNps != widget.currentNps) {
+      setState(() {
+        _selectedNps = widget.currentNps;
+      });
+    }
+  }
+
   /// Show bottom sheet with thumbs down reason options and comment field
   void _showThumbsDownReasonPicker() {
     showFeedbackBottomSheet(
