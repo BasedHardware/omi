@@ -807,7 +807,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
           Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 0.0, 0.0, 4.0),
+            padding: const EdgeInsetsDirectional.fromSTEB(0.0, 4.0, 0.0, 4.0),
             child: GestureDetector(
               onTap: () async {
                 final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
@@ -871,11 +871,11 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
                 width: double.maxFinite,
                 decoration: BoxDecoration(
                   color: const Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.circular(12.0),
+                  borderRadius: BorderRadius.circular(16.0),
                 ),
                 child: Row(
                   children: [
@@ -890,12 +890,13 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                     const SizedBox(width: 8),
                     conversationDetailLoading[data.$1]
                         ? const SizedBox(
-                            height: 24,
-                            width: 24,
+                            height: 16,
+                            width: 16,
                             child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                              strokeWidth: 2,
                             ))
-                        : const Icon(Icons.arrow_right_alt)
+                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54)
                   ],
                 ),
               ),
