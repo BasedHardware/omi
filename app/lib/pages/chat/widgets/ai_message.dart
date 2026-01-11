@@ -930,6 +930,217 @@ enum FeedbackReason {
   const FeedbackReason(this.key, this.label);
 }
 
+/// Bottom sheet for collecting feedback on chat messages
+class FeedbackBottomSheet extends StatefulWidget {
+  final Function(String reason, String? comment) onSubmit;
+
+  const FeedbackBottomSheet({
+    super.key,
+    required this.onSubmit,
+  });
+
+  @override
+  State<FeedbackBottomSheet> createState() => _FeedbackBottomSheetState();
+}
+
+class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
+  FeedbackReason? _selectedReason;
+  final TextEditingController _commentController = TextEditingController();
+  final FocusNode _commentFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    _commentFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleSubmit() {
+    if (_selectedReason == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a reason'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    
+    HapticFeedback.mediumImpact();
+    final comment = _commentController.text.trim();
+    widget.onSubmit(_selectedReason!.key, comment.isEmpty ? null : comment);
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade600,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            
+            // Header with title and submit button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'What went wrong?',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _selectedReason != null ? _handleSubmit : null,
+                  child: Text(
+                    'Submit',
+                    style: TextStyle(
+                      color: _selectedReason != null 
+                          ? Colors.blue 
+                          : Colors.grey.shade600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Reason options
+            const Text(
+              'Select a reason',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 10),
+            
+            // Reason chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: FeedbackReason.values.map((reason) {
+                final isSelected = _selectedReason == reason;
+                return GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() {
+                      _selectedReason = reason;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isSelected 
+                          ? Colors.blue.withOpacity(0.2) 
+                          : const Color(0xFF2C2C2E),
+                      borderRadius: BorderRadius.circular(20),
+                      border: isSelected 
+                          ? Border.all(color: Colors.blue, width: 1.5) 
+                          : null,
+                    ),
+                    child: Text(
+                      reason.label,
+                      style: TextStyle(
+                        color: isSelected ? Colors.blue : Colors.white,
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 20),
+
+            // Comment input
+            const Text(
+              'Additional feedback (optional)',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextField(
+                controller: _commentController,
+                focusNode: _commentFocusNode,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  height: 1.4,
+                ),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+                  hintText: 'Tell us more about what went wrong...',
+                  hintStyle: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 15,
+                  ),
+                ),
+                maxLines: 3,
+                minLines: 2,
+                maxLength: 500,
+                buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Show the feedback bottom sheet
+Future<void> showFeedbackBottomSheet(
+  BuildContext context, {
+  required Function(String reason, String? comment) onSubmit,
+}) async {
+  await showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => FeedbackBottomSheet(onSubmit: onSubmit),
+  );
+}
+
 class MessageActionBar extends StatefulWidget {
   final String messageText;
   final Function(int, {String? reason})? setMessageNps;
@@ -955,125 +1166,33 @@ class _MessageActionBarState extends State<MessageActionBar> {
     _selectedNps = widget.currentNps;
   }
 
-  /// Show bottom sheet with thumbs down reason options
+  /// Show bottom sheet with thumbs down reason options and comment field
   void _showThumbsDownReasonPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (BuildContext context) {
-        return Container(
-          margin: const EdgeInsets.all(10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Title
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2E),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                ),
-                child: const Text(
-                  'What went wrong?',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+    showFeedbackBottomSheet(
+      context,
+      onSubmit: (reason, comment) {
+        setState(() {
+          _selectedNps = -1;
+        });
+        // Combine reason and comment for the API call
+        String feedbackReason = reason;
+        if (comment != null && comment.isNotEmpty) {
+          feedbackReason = '$reason: $comment';
+        }
+        widget.setMessageNps?.call(-1, reason: feedbackReason);
+        
+        // Show confirmation snackbar
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Thanks for your feedback!',
+                style: TextStyle(color: Colors.white),
               ),
-              // Reason options
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E).withOpacity(0.95),
-                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(13)),
-                ),
-                child: Column(
-                  children: FeedbackReason.values.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final reason = entry.value;
-                    return Column(
-                      children: [
-                        if (index > 0)
-                          Container(
-                            height: 0.5,
-                            color: Colors.grey.shade700,
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                          ),
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              Navigator.pop(context);
-                              // Set thumbs down and submit with reason
-                              setState(() {
-                                _selectedNps = -1;
-                              });
-                              widget.setMessageNps?.call(-1, reason: reason.key);
-                            },
-                            borderRadius: BorderRadius.vertical(
-                              bottom: index == FeedbackReason.values.length - 1
-                                  ? const Radius.circular(13)
-                                  : Radius.zero,
-                            ),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-                              child: Text(
-                                reason.label,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 17,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Cancel button
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E).withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      Navigator.pop(context);
-                    },
-                    borderRadius: BorderRadius.circular(13),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Colors.blue,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
-            ],
-          ),
-        );
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       },
     );
   }
