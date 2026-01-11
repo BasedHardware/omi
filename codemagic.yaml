@@ -1049,10 +1049,13 @@ workflows:
         - tag
         - push
       tag_patterns:
+        # Only trigger on manual tags
         - pattern: "v*-desktop-cm"
           include: true
         - pattern: "v*-macos-cm"
           include: true
+        - pattern: "v*-desktop-auto"
+          include: false
       branch_patterns:
         - pattern: main
           include: true
@@ -1130,7 +1133,7 @@ workflows:
             BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)  # e.g., "1.0.78"
 
             # Get latest build number from GitHub releases for desktop tags and increment
-            LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -E 'desktop-cm|macos-cm' | head -1 | grep -oE '\+[0-9]+' | tr -d '+' || echo "0")
+            LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -E 'desktop-cm|macos-cm|desktop-auto' | head -1 | grep -oE '\+[0-9]+' | tr -d '+' || echo "0")
             if [ -z "$LATEST_BUILD" ] || [ "$LATEST_BUILD" = "0" ]; then
               # Fallback: try to get build number from release title format "Omi Desktop vX.X.X (BUILD_NUM)"
               LATEST_BUILD=$(gh release list --repo BasedHardware/omi --limit 100 | grep -i 'desktop\|macos' | head -1 | grep -oE '\([0-9]+\)' | tr -d '()' || echo "0")
@@ -1139,7 +1142,7 @@ workflows:
               LATEST_BUILD=0
             fi
             BUILD_NUMBER=$((LATEST_BUILD + 1))
-            TAG_NAME="v${BUILD_NAME}+${BUILD_NUMBER}-desktop-cm"
+            TAG_NAME="v${BUILD_NAME}+${BUILD_NUMBER}-desktop-auto"
           fi
 
           echo "Building macOS with version $BUILD_NAME ($BUILD_NUMBER)"
