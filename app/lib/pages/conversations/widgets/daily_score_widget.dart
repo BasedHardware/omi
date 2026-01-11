@@ -134,9 +134,9 @@ class _DailyScoreWidgetState extends State<DailyScoreWidget> {
                           ),
                         ),
                       ),
-                      // Score text positioned inside the arc - lower and bigger
+                      // Score text positioned inside the arc - aligned with arch start
                       Positioned(
-                        top: 30,
+                        top: 38,
                         child: Text(
                           _formatScore(score),
                           style: TextStyle(
