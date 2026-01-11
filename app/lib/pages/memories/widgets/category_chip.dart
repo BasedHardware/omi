@@ -21,10 +21,10 @@ class CategoryChip extends StatelessWidget {
 
   Color _getCategoryColor() {
     switch (category) {
-      case MemoryCategory.interesting:
-        return Colors.blue;
       case MemoryCategory.system:
-        return Colors.grey;
+        return Colors.blue;
+      case MemoryCategory.interesting:
+        return Colors.amber;
       case MemoryCategory.manual:
         return Colors.purple;
     }
@@ -32,10 +32,10 @@ class CategoryChip extends StatelessWidget {
 
   IconData _getCategoryIcon() {
     switch (category) {
-      case MemoryCategory.interesting:
-        return Icons.star_outline;
       case MemoryCategory.system:
-        return Icons.settings_outlined;
+        return Icons.person_outlined;
+      case MemoryCategory.interesting:
+        return Icons.lightbulb_outlined;
       case MemoryCategory.manual:
         return Icons.edit_outlined;
     }
@@ -43,15 +43,14 @@ class CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categoryName = category.toString().split('.').last;
     // Use shorter display names for categories
     String displayName;
     switch (category) {
-      case MemoryCategory.interesting:
-        displayName = "Interesting";
-        break;
       case MemoryCategory.system:
-        displayName = "System";
+        displayName = "About You";
+        break;
+      case MemoryCategory.interesting:
+        displayName = "Insights";
         break;
       case MemoryCategory.manual:
         displayName = "Manual";

@@ -267,8 +267,6 @@ class MixpanelManager {
 
   void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
 
-  void memoriesPageReviewBtn() => track('Fact page Review Button Pressed');
-
   void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
 
@@ -302,15 +300,6 @@ class MixpanelManager {
     track('All Facts Visibility Changed', properties: {
       'new_visibility': newVisibility.name,
       'facts_count': count,
-    });
-  }
-
-  void memoryReviewed(Memory memory, bool approved, String source) {
-    track('Fact Reviewed', properties: {
-      'fact_id': memory.id,
-      'fact_category': memory.category.toString().split('.').last,
-      'status': approved ? 'approved' : 'discarded',
-      'source': source,
     });
   }
 

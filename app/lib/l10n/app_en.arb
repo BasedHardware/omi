@@ -2151,13 +2151,13 @@
   "@noMemoriesYet": {
     "description": "Empty state text"
   },
-  "noInterestingMemories": "No interesting memories yet",
-  "@noInterestingMemories": {
-    "description": "Empty state text for interesting category"
+  "noAutoMemories": "No auto-extracted memories yet",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
   },
-  "noSystemMemories": "No system memories yet",
-  "@noSystemMemories": {
-    "description": "Empty state text for system category"
+  "noManualMemories": "No manual memories yet",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
   },
   "noMemoriesInCategories": "No memories in these categories",
   "@noMemoriesInCategories": {
@@ -2258,12 +2258,12 @@
   "@pressDoneToCreate": {"description": "Instruction"},
   "filterAll": "All",
   "@filterAll": {"description": "Filter option"},
-  "filterInteresting": "Interesting",
-  "@filterInteresting": {"description": "Filter option"},
+  "filterSystem": "About You",
+  "@filterSystem": {"description": "Filter option for facts about the user"},
+  "filterInteresting": "Insights",
+  "@filterInteresting": {"description": "Filter option for external wisdom/advice"},
   "filterManual": "Manual",
   "@filterManual": {"description": "Filter option"},
-  "filterSystem": "System",
-  "@filterSystem": {"description": "Filter option"},
   "cancel": "Cancel",
   "@cancel": {"description": "Button label"},
   "done": "Done",

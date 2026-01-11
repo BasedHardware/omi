@@ -16,10 +16,10 @@ class MemoriesProvider extends ChangeNotifier {
   bool _loading = true;
   String _searchQuery = '';
   Set<MemoryCategory> _selectedCategories = {};
-  bool _excludeInteresting = false;
+  bool _showOnlyManual = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
-  
+
   // Connectivity handling for offline sync
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
@@ -28,7 +28,7 @@ class MemoriesProvider extends ChangeNotifier {
   bool get loading => _loading;
   String get searchQuery => _searchQuery;
   Set<MemoryCategory> get selectedCategories => _selectedCategories;
-  bool get excludeInteresting => _excludeInteresting;
+  bool get showOnlyManual => _showOnlyManual;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
 
@@ -40,9 +40,9 @@ class MemoriesProvider extends ChangeNotifier {
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
-      if (_excludeInteresting) {
-        // Show all categories except interesting
-        categoryMatch = memory.category != MemoryCategory.interesting;
+      if (_showOnlyManual) {
+        // Show only manual memories (exclude system and interesting)
+        categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
         // Show only selected categories
         categoryMatch = _selectedCategories.contains(memory.category);
@@ -56,8 +56,8 @@ class MemoriesProvider extends ChangeNotifier {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  void setExcludeInteresting(bool exclude) {
-    _excludeInteresting = exclude;
+  void setShowOnlyManual(bool showOnly) {
+    _showOnlyManual = showOnly;
     notifyListeners();
   }
 
@@ -77,7 +77,7 @@ class MemoriesProvider extends ChangeNotifier {
     } else {
       _selectedCategories.add(category);
     }
-    _excludeInteresting = false; // Reset exclude filter when setting a category filter
+    _showOnlyManual = false; // Reset manual-only filter when setting a category filter
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
@@ -86,7 +86,7 @@ class MemoriesProvider extends ChangeNotifier {
 
   void clearCategoryFilter() async {
     _selectedCategories.clear();
-    _excludeInteresting = false;
+    _showOnlyManual = false;
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
@@ -97,8 +97,8 @@ class MemoriesProvider extends ChangeNotifier {
 
   // Deprecated/Modified: kept as alias if needed but unused internally now
   void setCategoryFilter(MemoryCategory? category) {
-      // Do nothing or migrate logic if called from legacy code?
-      // Assuming we are updating all call sites.
+    // Do nothing or migrate logic if called from legacy code?
+    // Assuming we are updating all call sites.
   }
 
   void _setCategories() {
@@ -137,16 +137,16 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> _loadFilter() async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     final filterList = prefs.getStringList('memories_filter_categories');
-    
+
     if (filterList == null) {
-      _selectedCategories = {MemoryCategory.interesting, MemoryCategory.manual};
+      _selectedCategories = {MemoryCategory.system, MemoryCategory.interesting, MemoryCategory.manual};
     } else {
       _selectedCategories = filterList
           .map((e) => MemoryCategory.values.firstWhere(
                 (c) => c.name == e,
-                orElse: () => MemoryCategory.interesting,
+                orElse: () => MemoryCategory.system,
               ))
           .toSet();
     }
@@ -174,7 +174,7 @@ class MemoriesProvider extends ChangeNotifier {
   /// Sync pending memories to server when online
   Future<void> syncPendingMemories() async {
     if (_isSyncing) return;
-    
+
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     if (pendingMemories.isEmpty) return;
 
@@ -188,7 +188,7 @@ class MemoriesProvider extends ChangeNotifier {
           memory.visibility.name,
           memory.category.name,
         );
-        
+
         if (serverMemory != null) {
           SharedPreferencesUtil().removePendingMemory(memory.id);
           final idx = _memories.indexWhere((m) => m.id == memory.id);
@@ -289,26 +289,9 @@ class MemoriesProvider extends ChangeNotifier {
     _setCategories();
   }
 
-  Future<void> reviewMemory(Memory memory, bool approve, String source) async {
-    await reviewMemoryServer(memory.id, approve);
-    
-    if (!approve) {
-      _memories.remove(memory);
-    } else {
-      final idx = _memories.indexWhere((m) => m.id == memory.id);
-      if (idx != -1) {
-        _memories[idx].reviewed = true;
-      }
-    }
-    
-    _setCategories();
-    notifyListeners();
-  }
-
   /// Create a memory - works offline by saving locally first, then syncing
   Future<bool> createMemory(String content,
-      [MemoryVisibility visibility = MemoryVisibility.public,
-      MemoryCategory category = MemoryCategory.interesting]) async {
+      [MemoryVisibility visibility = MemoryVisibility.public, MemoryCategory category = MemoryCategory.manual]) async {
     // Create the memory object first
     final newMemory = Memory(
       id: const Uuid().v4(),
