@@ -205,41 +205,6 @@ def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit
     return results
 
 
-def find_similar_memories_with_content(uid: str, content: str, threshold: float = 0.7, limit: int = 3) -> List[dict]:
-    """
-    Find memories similar to the given content and fetch their full content from Firestore.
-    Used for LLM-based conflict resolution.
-
-    Args:
-        uid: User ID
-        content: Content to find similar memories for
-        threshold: Minimum similarity score (lower than dedup to catch related memories)
-        limit: Max number of similar memories to return
-
-    Returns:
-        List of dicts with memory_id, category, score, and content
-    """
-    from database.memories import get_memory
-
-    similar = find_similar_memories(uid, content, threshold=threshold, limit=limit)
-
-    # Fetch content for each similar memory
-    results_with_content = []
-    for match in similar:
-        memory_data = get_memory(uid, match['memory_id'])
-        if memory_data:
-            results_with_content.append(
-                {
-                    'memory_id': match['memory_id'],
-                    'category': match['category'],
-                    'score': match['score'],
-                    'content': memory_data.get('content', ''),
-                }
-            )
-
-    return results_with_content
-
-
 def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> dict | None:
     """
     Check if a similar memory already exists.

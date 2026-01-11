@@ -19,7 +19,7 @@ import database.trends as trends_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
-from database.vector_db import find_similar_memories_with_content, upsert_memory_vector, delete_memory_vector
+from database.vector_db import find_similar_memories, upsert_memory_vector, delete_memory_vector
 from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
@@ -363,7 +363,21 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     for memory in new_memories:
         # Find similar existing memories
-        similar_memories = find_similar_memories_with_content(uid, memory.content, threshold=0.7, limit=3)
+        similar_matches = find_similar_memories(uid, memory.content, threshold=0.7, limit=3)
+
+        # Fetch content for each similar memory
+        similar_memories = []
+        for match in similar_matches:
+            memory_data = memories_db.get_memory(uid, match['memory_id'])
+            if memory_data:
+                similar_memories.append(
+                    {
+                        'memory_id': match['memory_id'],
+                        'category': match['category'],
+                        'score': match['score'],
+                        'content': memory_data.get('content', ''),
+                    }
+                )
 
         if similar_memories:
 
