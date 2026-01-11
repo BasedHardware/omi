@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -481,6 +482,22 @@ class SpeechProfileProvider extends ChangeNotifier
     }
   }
 
+  /// Handles onboarding complete event - fetches the created conversation and finalizes
+  Future<void> _handleOnboardingComplete(OnboardingCompleteEvent event) async {
+    // Fetch the created conversation before finalizing
+    if (event.conversationId != null) {
+      try {
+        debugPrint('Fetching onboarding conversation: ${event.conversationId}');
+        conversation = await conversations_api.getConversationById(event.conversationId!);
+        debugPrint('Fetched onboarding conversation: ${conversation?.id}, title: ${conversation?.structured?.title}');
+      } catch (e) {
+        debugPrint('Error fetching onboarding conversation: $e');
+      }
+    }
+    
+    finalize();
+  }
+
   @override
   void onMessageEventReceived(MessageEvent event) {
     debugPrint('onMessageEventReceived: ${event.eventType}');
@@ -496,7 +513,7 @@ class SpeechProfileProvider extends ChangeNotifier
       notifyInfo('NEXT_QUESTION');
     } else if (event is OnboardingCompleteEvent) {
       debugPrint('Onboarding complete from backend: conversationId=${event.conversationId}');
-      finalize();
+      _handleOnboardingComplete(event);
     }
   }
 
