@@ -5,9 +5,11 @@ import android.companion.CompanionDeviceService
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.core.content.edit
 
 /**
  * Background service that receives device presence events from CompanionDeviceManager.
@@ -21,24 +23,23 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
     companion object {
         private const val TAG = "CompanionBgService"
         private const val NOTIFICATION_ID = 9001
+        private const val PREFS_NAME = "companion_device_presence"
 
         // Track whether the app is in the foreground (set by MainActivity)
         @Volatile
         var isAppInForeground: Boolean = false
 
         // Cooldown period after user ignores/dismisses notification
-        private const val NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000L // 30 minutes
+        internal const val NOTIFICATION_COOLDOWN_MS = 30 * 60 * 1000L // 30 minutes
 
         /**
          * Call this from MainActivity when app comes to foreground via notification tap.
          * This resets the "ignored" state so future notifications will work normally.
          */
         fun onUserRespondedToNotification(context: Context, deviceAddress: String) {
-            val prefs = context.getSharedPreferences("companion_device_presence", MODE_PRIVATE)
-            prefs.edit().apply {
+            context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
                 putBoolean("notification_pending_$deviceAddress", false)
                 putLong("notification_cooldown_until_$deviceAddress", 0)
-                apply()
             }
             Log.d(TAG, "User responded to notification for $deviceAddress, reset cooldown")
         }
@@ -48,22 +49,38 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
          * This resets cooldown and cancels any pending notification since user is now in the app.
          */
         fun onAppCameToForeground(context: Context) {
-            val prefs = context.getSharedPreferences("companion_device_presence", MODE_PRIVATE)
+            val prefs = context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             val lastDeviceAddress = prefs.getString("last_device_address", null)
 
             if (lastDeviceAddress != null) {
-                // Reset cooldown - user opened the app, so they're engaged
-                prefs.edit().apply {
-                    putBoolean("notification_pending_$lastDeviceAddress", false)
-                    putLong("notification_cooldown_until_$lastDeviceAddress", 0)
-                    apply()
-                }
+                clearNotificationState(prefs, lastDeviceAddress)
                 Log.d(TAG, "App came to foreground, reset cooldown for $lastDeviceAddress")
             }
 
             // Cancel any pending notification since user is now in the app
             val notificationManager = context.getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             notificationManager.cancel(NOTIFICATION_ID)
+        }
+
+        /**
+         * Clears notification pending state and resets cooldown for a device.
+         */
+        private fun clearNotificationState(prefs: SharedPreferences, deviceAddress: String) {
+            prefs.edit {
+                putBoolean("notification_pending_$deviceAddress", false)
+                putLong("notification_cooldown_until_$deviceAddress", 0)
+            }
+        }
+
+        /**
+         * Sets the cooldown state for a device after user ignores/dismisses notification.
+         */
+        fun enterCooldown(context: Context, deviceAddress: String) {
+            context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+                putBoolean("notification_pending_$deviceAddress", false)
+                putLong("notification_cooldown_until_$deviceAddress", System.currentTimeMillis() + NOTIFICATION_COOLDOWN_MS)
+            }
+            Log.d(TAG, "Entered cooldown for $deviceAddress")
         }
     }
 
@@ -94,16 +111,11 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
 
             // If notification was pending (shown but not acted upon), user ignored it
             // Enter cooldown so we don't spam them
-            val prefs = getSharedPreferences("companion_device_presence", MODE_PRIVATE)
+            val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             val wasPending = prefs.getBoolean("notification_pending_$deviceAddress", false)
             if (wasPending) {
                 Log.d(TAG, "Device disappeared while notification pending - user ignored it, entering cooldown")
-                prefs.edit().apply {
-                    putBoolean("notification_pending_$deviceAddress", false)
-                    putLong("notification_cooldown_until_$deviceAddress",
-                            System.currentTimeMillis() + NOTIFICATION_COOLDOWN_MS)
-                    apply()
-                }
+                enterCooldown(this, deviceAddress)
                 // Cancel the notification since device is gone
                 val notificationManager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
                 notificationManager.cancel(NOTIFICATION_ID)
@@ -115,7 +127,7 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
      * Check if we should show a notification or if we're in cooldown
      */
     private fun shouldShowNotification(deviceAddress: String): Boolean {
-        val prefs = getSharedPreferences("companion_device_presence", MODE_PRIVATE)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val now = System.currentTimeMillis()
 
         val cooldownUntil = prefs.getLong("notification_cooldown_until_$deviceAddress", 0)
@@ -129,12 +141,10 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
     }
 
     private fun storePresenceEvent(deviceAddress: String, appeared: Boolean) {
-        val prefs = getSharedPreferences("companion_device_presence", MODE_PRIVATE)
-        prefs.edit().apply {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
             putString("last_device_address", deviceAddress)
             putBoolean("last_device_appeared", appeared)
             putLong("last_event_timestamp", System.currentTimeMillis())
-            apply()
         }
     }
 
@@ -193,8 +203,9 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
         notificationManager.notify(NOTIFICATION_ID, notification)
 
         // Mark that we have a pending notification
-        val prefs = getSharedPreferences("companion_device_presence", MODE_PRIVATE)
-        prefs.edit().putBoolean("notification_pending_$deviceAddress", true).apply()
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
+            putBoolean("notification_pending_$deviceAddress", true)
+        }
 
         Log.d(TAG, "Showed notification for $deviceAddress")
     }
@@ -208,14 +219,7 @@ class NotificationDismissedReceiver : BroadcastReceiver() {
         if (intent.action == "com.friend.ios.NOTIFICATION_DISMISSED") {
             val deviceAddress = intent.getStringExtra("device_address") ?: return
             Log.d("NotificationDismissed", "User dismissed notification for $deviceAddress, entering cooldown")
-
-            val prefs = context.getSharedPreferences("companion_device_presence", Context.MODE_PRIVATE)
-            prefs.edit().apply {
-                putBoolean("notification_pending_$deviceAddress", false)
-                putLong("notification_cooldown_until_$deviceAddress",
-                        System.currentTimeMillis() + 30 * 60 * 1000L) // 30 minutes cooldown
-                apply()
-            }
+            CompanionDeviceBackgroundService.enterCooldown(context, deviceAddress)
         }
     }
 }
