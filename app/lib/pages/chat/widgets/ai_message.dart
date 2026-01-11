@@ -1210,6 +1210,12 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Clipboard.setData(ClipboardData(text: widget.messageText));
+              
+              // Implicit positive feedback - user copied the message (silent, no UI change)
+              if (_selectedNps == null) {
+                widget.setMessageNps?.call(1, reason: 'user_copied_message');
+              }
+              
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1262,6 +1268,11 @@ class _MessageActionBarState extends State<MessageActionBar> {
             onTap: () async {
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
+              
+              // Implicit positive feedback - user shared the message (silent, no UI change)
+              if (_selectedNps == null) {
+                widget.setMessageNps?.call(1, reason: 'user_shared_message');
+              }
             },
           ),
         ],
