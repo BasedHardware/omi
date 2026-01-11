@@ -363,9 +363,11 @@ class MessageProvider extends ChangeNotifier {
     return messages;
   }
 
-  Future setMessageNps(ServerMessage message, int value) async {
-    await setMessageResponseRating(message.id, value);
+  Future setMessageNps(ServerMessage message, int value, {String? reason}) async {
+    await setMessageResponseRating(message.id, value, reason: reason);
     message.askForNps = false;
+    // Update local message rating so it persists when scrolling
+    message.rating = value == 0 ? null : value;
     notifyListeners();
   }
 

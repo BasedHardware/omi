@@ -855,8 +855,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           context.read<ConversationProvider>().updateConversation(conversation);
         },
         message: message,
-        setMessageNps: (int value) {
-          provider.setMessageNps(message, value);
+        setMessageNps: (int value, {String? reason}) {
+          provider.setMessageNps(message, value, reason: reason);
         },
         date: message.createdAt,
       );
@@ -935,14 +935,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ))
             : const SizedBox.shrink(),
         message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
-        _getNpsWidget(context, message, (int value) {
-          provider.setMessageNps(message, value);
+        _getNpsWidget(context, message, (int value, {String? reason}) {
+          provider.setMessageNps(message, value, reason: reason);
         }),
       ],
     );
   }
 
-  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
+  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int, {String? reason}) setMessageNps) {
     if (!message.askForNps) return const SizedBox();
 
     return Padding(
@@ -960,7 +960,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             iconSize: 14,
             borderRadius: 6,
             onPressed: () {
-              setMessageNps(0);
+              // For desktop, submit thumbs down without reason picker (can be enhanced later)
+              setMessageNps(-1);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Text('Thank you for your feedback!'),

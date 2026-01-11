@@ -403,6 +403,9 @@ def _get_agentic_qa_prompt(
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
+    
+    Uses LangSmith-controlled prompt template with dynamic variable injection.
+    Falls back to hardcoded prompt if LangSmith is unavailable.
 
     Args:
         uid: User ID
@@ -434,9 +437,6 @@ def _get_agentic_qa_prompt(
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
         return app.persona_prompt or app.chat_prompt
-
-    # Citation instruction for referencing conversations from tools
-    cited_instruction = """"""
 
     # Plugin-specific instructions for regular apps
     plugin_info = ""
@@ -491,6 +491,39 @@ Keep this context in mind when answering their question.
 
 """
 
+    # Build conditional instruction hints for the template
+    plugin_instruction_hint = "- Regard the <plugin_instructions>" if plugin_info else ""
+    plugin_personality_hint = f"- Reflect {app.name}'s personality" if app else ""
+
+    # Build template variables dict for LangSmith prompt
+    template_variables = {
+        "user_name": user_name,
+        "tz": tz,
+        "current_datetime_str": current_datetime_str,
+        "current_datetime_iso": current_datetime_iso,
+        "goal_section": goal_section,
+        "file_context_section": file_context_section,
+        "context_section": context_section,
+        "plugin_section": plugin_section,
+        "plugin_instruction_hint": plugin_instruction_hint,
+        "plugin_personality_hint": plugin_personality_hint,
+    }
+
+    # Fetch and render the prompt template from LangSmith (with caching + fallback)
+    try:
+        from utils.observability.langsmith_prompts import get_agentic_system_prompt_template, render_prompt
+        
+        cached_prompt = get_agentic_system_prompt_template()
+        base_prompt = render_prompt(cached_prompt.template_text, template_variables)
+        
+        print(f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})")
+        
+        return base_prompt.strip()
+        
+    except Exception as e:
+        print(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
+
+    # Inline fallback prompt - used when LangSmith is unavailable
     base_prompt = f"""<assistant_role>
 You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
 </assistant_role>
@@ -696,9 +729,9 @@ Answer the user's questions accurately and personally, using the tools when need
 - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way (e.g., "3:45 PM, Tuesday, Oct 16th").
 - If you don’t know, say so honestly.
 - Only suggest truly relevant, context-specific follow-up questions (no generic ones).
-{"- Regard the <plugin_instructions>" if plugin_info else ""}
+{plugin_instruction_hint}
 - Follow <quality_control> rules.
-{"- Reflect " + app.name + "'s personality" if app else ""}
+{plugin_personality_hint}
 </instructions>
 
 {plugin_section}
@@ -706,6 +739,75 @@ Remember: Use tools strategically to provide the best possible answers. For ques
 """
 
     return base_prompt.strip()
+
+
+def _get_agentic_qa_prompt_fallback(variables: dict) -> str:
+    """
+    Fallback prompt template rendered with variables.
+    Used when LangSmith prompt fetching fails.
+    """
+    user_name = variables.get("user_name", "User")
+    tz = variables.get("tz", "UTC")
+    current_datetime_str = variables.get("current_datetime_str", "")
+    current_datetime_iso = variables.get("current_datetime_iso", "")
+    goal_section = variables.get("goal_section", "")
+    file_context_section = variables.get("file_context_section", "")
+    context_section = variables.get("context_section", "")
+    plugin_section = variables.get("plugin_section", "")
+    plugin_instruction_hint = variables.get("plugin_instruction_hint", "")
+    plugin_personality_hint = variables.get("plugin_personality_hint", "")
+    
+    return f"""<assistant_role>
+You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
+</assistant_role>
+{goal_section}{file_context_section}{context_section}
+
+<current_datetime>
+Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
+Current date time ISO format: {current_datetime_iso}
+</current_datetime>
+
+<mentor_behavior>
+You're a mentor, not a yes-man. When you see a critical gap between {user_name}'s plan and their goal:
+- Call it out directly - don't bury it after paragraphs of summary
+- Only challenge when it matters - not every message needs pushback
+- Be direct - "why not just do X?" rather than "Have you considered the alternative approach of X?"
+- Never summarize what they just said - jump straight to your reaction/advice
+- Give one clear recommendation, not 10 options
+</mentor_behavior>
+
+<response_style>
+Write like a real human texting - not an AI writing an essay.
+Default: 2-8 lines. Quick replies: 1-3 lines. "I don't know" responses: 1-2 lines MAX.
+NO essays summarizing their message. NO headers. Just talk like you're texting a friend.
+</response_style>
+
+<tool_instructions>
+DateTime Formatting: Use ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM).
+All datetime calculations in {user_name}'s timezone ({tz}), current time: {current_datetime_iso}
+Use search_conversations_tool for events, get_memories_tool for static facts/preferences.
+</tool_instructions>
+
+<citing_instructions>
+Cite at end of EACH sentence with info from conversations: "text[1]". NO space before citation.
+</citing_instructions>
+
+<critical_accuracy_rules>
+NEVER make up information. If tools return empty, give SHORT 1-2 line response.
+Sound human: "I don't have that" not "no data in logs".
+</critical_accuracy_rules>
+
+<instructions>
+- Be casual, concise, direct—text like a friend
+- Give specific feedback; never generic
+- If you don't know, say so in 1-2 lines max
+{plugin_instruction_hint}
+{plugin_personality_hint}
+</instructions>
+
+{plugin_section}
+Remember: Use tools strategically. Your goal is to help {user_name} in the most personalized way possible.
+"""
 
 
 def qa_rag(

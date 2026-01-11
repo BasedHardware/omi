@@ -251,8 +251,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                             .read<ConversationProvider>()
                                                             .updateConversation(conversation);
                                                       },
-                                                      setMessageNps: (int value) {
-                                                        provider.setMessageNps(message, value);
+                                                      setMessageNps: (int value, {String? reason}) {
+                                                        provider.setMessageNps(message, value, reason: reason);
                                                       },
                                                     );
                                                     
