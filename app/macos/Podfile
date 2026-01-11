@@ -48,7 +48,7 @@ pre_install do |installer|
   podspec_content = <<-PODSPEC
 Pod::Spec.new do |s|
   s.name             = 'flutter_sound'
-  s.version          = '9.11.2'
+  s.version          = '9.25.1'
   s.summary          = 'Flutter Sound - macOS stub'
   s.description      = 'Flutter Sound stub for macOS'
   s.homepage         = 'https://github.com/Canardoux/flutter_sound'
