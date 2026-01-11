@@ -16,11 +16,15 @@ class TodayTasksWidget extends StatelessWidget {
         // Get today's tasks - same logic as action_items_page.dart
         final now = DateTime.now();
         final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
+        // Filter out old tasks (older than 7 days) - same as tasks page
+        final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
-        // Get incomplete tasks due today (including overdue) - matches tasks page logic
+        // Get incomplete tasks due today (including recent overdue) - matches tasks page logic
         final todayTasks = provider.actionItems.where((item) {
           if (item.completed) return false;
           if (item.dueAt == null) return false;
+          // Skip very old overdue tasks (older than 7 days)
+          if (item.dueAt!.isBefore(sevenDaysAgo)) return false;
           // Same as tasks page: dueDate.isBefore(startOfTomorrow)
           return item.dueAt!.isBefore(startOfTomorrow);
         }).toList();
