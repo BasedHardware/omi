@@ -5,7 +5,7 @@ This script:
 1. Fetches all existing memories from Firestore
 2. Generates embeddings for each memory
 3. Upserts the vectors to Pinecone in the 'ns2' namespace
-4. Updates legacy categories to 'auto' or 'manual'
+4. Updates legacy categories to 'system', 'interesting', or 'manual'
 
 Usage:
     python 005_backfill_memory_vectors.py [--dry-run] [--batch-size 100] [--uid USER_ID]
@@ -64,15 +64,18 @@ def get_user_memories(uid: str):
 
 
 def normalize_category(category: str) -> str:
-    """Normalize legacy categories to new format."""
+    """Normalize legacy categories to new format (system/interesting/manual)."""
     if category == 'manual':
         return 'manual'
-    if category == 'auto':
-        return 'auto'
-    # All legacy categories map to 'auto'
+    if category == 'system':
+        return 'system'
+    if category == 'interesting':
+        return 'interesting'
+    # Legacy categories map via LEGACY_TO_NEW_CATEGORY (to system or interesting)
     if category in LEGACY_TO_NEW_CATEGORY:
         return LEGACY_TO_NEW_CATEGORY[category]
-    return 'auto'
+    # Default to system for unknown categories (including 'auto')
+    return 'system'
 
 
 def update_memory_category(uid: str, memory_id: str, new_category: str):
@@ -85,7 +88,7 @@ def process_memory(uid: str, memory: dict, dry_run: bool = False) -> dict:
     """Process a single memory - generate embedding and upsert to Pinecone."""
     memory_id = memory['id']
     content = memory.get('content', '')
-    old_category = memory.get('category', 'auto')
+    old_category = memory.get('category', 'system')
     new_category = normalize_category(old_category)
 
     if not content:

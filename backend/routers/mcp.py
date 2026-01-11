@@ -14,6 +14,7 @@ import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation import CategoryEnum
 from utils.apps import update_personas_async
+from utils.llm.memories import identify_category_for_memory
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
@@ -43,7 +44,8 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Depends(get_uid_from_mcp_api_key)):
-    memory.category = MemoryCategory.manual
+    # Auto-categorize memories from external sources
+    memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
     threading.Thread(target=update_personas_async, args=(uid,)).start()

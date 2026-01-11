@@ -25,6 +25,7 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 def create_memory(memory: Memory, uid: str = Depends(auth.get_current_user_uid)):
+    memory.category = MemoryCategory.manual
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.dict())
 

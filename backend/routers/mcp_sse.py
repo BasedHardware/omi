@@ -23,6 +23,7 @@ import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation import CategoryEnum
+from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()
 
@@ -184,7 +185,9 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not content:
             raise ToolExecutionError("Content is required")
 
-        memory = Memory(content=content, category=MemoryCategory.manual)
+        # Auto-categorize memories from MCP clients
+        category = identify_category_for_memory(content)
+        memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
         memories_db.create_memory(user_id, memory_db.model_dump())
 

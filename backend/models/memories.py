@@ -9,10 +9,10 @@ from database._client import document_id_from_seed
 
 
 class MemoryCategory(str, Enum):
-    # Primary categories
-    interesting = "interesting"  # External wisdom/advice FROM others (with attribution) - actionable insights
-    system = "system"  # Facts ABOUT the user - preferences, opinions, realizations, network, projects
-    manual = "manual"  # User-created memories (highest priority)
+    # New primary categories
+    interesting = "interesting"
+    system = "system"
+    manual = "manual"
 
     # Legacy categories for backward compatibility
     core = "core"
@@ -26,68 +26,63 @@ class MemoryCategory(str, Enum):
     other = "other"
 
 
-# Legacy category mapping - old categories map to system (facts about user)
-LEGACY_TO_NEW_CATEGORY = {
-    'core': 'system',
-    'hobbies': 'system',
-    'lifestyle': 'system',
-    'interests': 'system',
-    'work': 'system',
-    'skills': 'system',
-    'learnings': 'interesting',  # learnings are external insights
-    'habits': 'system',
-    'other': 'system',
-}
-
-
-# Priority scoring - manual memories always rank highest
-CATEGORY_PRIORITY = {
-    MemoryCategory.manual.value: 100,  # User-created, always trusted
-    MemoryCategory.interesting.value: 60,  # External insights
-    MemoryCategory.system.value: 50,  # Facts about user
-    # Legacy categories get mapped priority
-    'core': 50,
-    'hobbies': 50,
-    'lifestyle': 50,
-    'interests': 50,
-    'work': 50,
-    'skills': 50,
-    'learnings': 60,
-    'habits': 50,
-    'other': 50,
+# Only define boosts for the primary categories
+CATEGORY_BOOSTS = {
+    MemoryCategory.interesting.value: 1,
+    MemoryCategory.system.value: 0,
+    MemoryCategory.manual.value: 1,
+    # Map legacy categories to appropriate new categories
+    MemoryCategory.core.value: 1,
+    MemoryCategory.hobbies.value: 1,
+    MemoryCategory.lifestyle.value: 1,
+    MemoryCategory.interests.value: 1,
+    MemoryCategory.work.value: 1,
+    MemoryCategory.skills.value: 1,
+    MemoryCategory.learnings.value: 1,
+    MemoryCategory.habits.value: 0,
+    MemoryCategory.other.value: 0,
 }
 
 
 class Memory(BaseModel):
     content: str = Field(description="The content of the memory")
-    category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.system)
+    category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.interesting)
     visibility: str = Field(description="The visibility of the memory", default='private')
     tags: List[str] = Field(description="The tags of the memory and learning", default=[])
 
     @validator('category', pre=True)
     def map_legacy_categories(cls, v):
-        """Map legacy categories to system/interesting/manual"""
+        """Map legacy categories to new ones when creating memories"""
         if isinstance(v, MemoryCategory):
-            # Primary categories stay as-is
-            if v in [MemoryCategory.system, MemoryCategory.interesting, MemoryCategory.manual]:
-                return v
-            # Legacy enum values map via LEGACY_TO_NEW_CATEGORY
-            return MemoryCategory(LEGACY_TO_NEW_CATEGORY.get(v.value, 'system'))
+            return v
+
+        # If it's a string value
+        legacy_to_new = {
+            'core': 'system',
+            'hobbies': 'system',
+            'lifestyle': 'system',
+            'interests': 'system',
+            'work': 'system',
+            'skills': 'system',
+            'learnings': 'system',
+            'habits': 'system',
+            'other': 'system',
+        }
 
         if isinstance(v, str):
-            # Primary categories
-            if v in ['system', 'interesting', 'manual']:
+            # If it's already one of our main categories, use it directly
+            if v in ['interesting', 'system', 'manual']:
                 return v
 
-            # Legacy categories map to new ones
-            if v in LEGACY_TO_NEW_CATEGORY:
-                return LEGACY_TO_NEW_CATEGORY[v]
+            # For legacy categories, map them to new ones
+            if v in legacy_to_new:
+                return legacy_to_new[v]
 
-            # Unknown defaults to 'system'
-            return 'system'
+            # For any unknown string value, default to "interesting"
+            return 'interesting'
 
-        # For any other unexpected type, default to system
-        return 'system'
+        # For any other unexpected type, default to interesting
+        return 'interesting'
 
     @staticmethod
     def get_memories_as_str(memories: List):
@@ -131,38 +126,28 @@ class MemoryDB(Memory):
         self.memory_id = self.conversation_id
 
     @staticmethod
-    def calculate_score(memory: 'MemoryDB') -> str:
-        """
-        Calculate score for memory ordering.
-        Manual memories always rank highest, then by timestamp (newer first).
-        Format: {priority}_{timestamp}
-        """
-        # Get category priority (manual=100, interesting=60, system/legacy=50)
-        cat_value = memory.category.value if isinstance(memory.category, MemoryCategory) else str(memory.category)
-        priority = CATEGORY_PRIORITY.get(cat_value, 50)
+    def calculate_score(memory: 'MemoryDB') -> 'MemoryDB':
+        cat_boost = (999 - CATEGORY_BOOSTS[memory.category.value]) if memory.category.value in CATEGORY_BOOSTS else 0
 
-        # Timestamp for ordering within same priority
-        timestamp = int(memory.created_at.timestamp())
+        user_manual_added_boost = 1
+        if memory.manually_added is False:
+            user_manual_added_boost = 0
 
-        return "{:03d}_{:010d}".format(priority, timestamp)
+        return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(memory.created_at.timestamp()))
 
     @staticmethod
     def from_memory(memory: Memory, uid: str, conversation_id: str, manually_added: bool) -> 'MemoryDB':
-        # Manual memories always get 'manual' category
-        # System-extracted memories preserve their category (system/interesting)
-        category = MemoryCategory.manual if manually_added else memory.category
-
         memory_db = MemoryDB(
             id=document_id_from_seed(memory.content),
             uid=uid,
             content=memory.content,
-            category=category,
+            category=memory.category,
             tags=memory.tags,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
             conversation_id=conversation_id,
             manually_added=manually_added,
-            user_review=True,
+            user_review=True if manually_added else None,
             reviewed=True,
             visibility=memory.visibility,
         )

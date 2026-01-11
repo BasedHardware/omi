@@ -157,6 +157,46 @@ def new_learnings_extractor(
         return []
 
 
+def identify_category_for_memory(memory: str) -> MemoryCategory:
+    """
+    Identify the category for an externally-provided memory.
+    Used when memories come from MCP or developer API where we don't know
+    if it's a fact about the user (system) or external insight (interesting).
+
+    Args:
+        memory: The memory content to categorize
+
+    Returns:
+        MemoryCategory.system or MemoryCategory.interesting
+    """
+    prompt = f"""You are categorizing a memory into one of two categories:
+
+- "system": Facts ABOUT the user - their preferences, opinions, realizations, relationships, projects, personal details
+- "interesting": External wisdom/advice FROM others - actionable insights, tips, learnings with attribution
+
+Examples:
+- "John prefers morning meetings" → system (fact about John)
+- "Sarah's colleague recommended using Notion for project management" → interesting (advice from someone)
+- "Lives in San Francisco" → system (personal fact)
+- "Naval: read what you love until you love to read" → interesting (wisdom from Naval)
+- "Works at Google as a software engineer" → system (career fact)
+- "YC tip: talk to users every week" → interesting (advice from YC)
+
+Memory: "{memory}"
+
+Respond with ONLY "system" or "interesting" - nothing else."""
+
+    try:
+        response = llm_mini.invoke(prompt)
+        category_str = response.content.strip().lower()
+        if category_str == 'interesting':
+            return MemoryCategory.interesting
+        return MemoryCategory.system
+    except Exception as e:
+        print(f'Error identifying category for memory: {e}')
+        return MemoryCategory.system
+
+
 class MemoryResolution(BaseModel):
     """Result of resolving a new memory against similar existing memories."""
 

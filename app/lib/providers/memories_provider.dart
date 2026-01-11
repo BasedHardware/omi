@@ -16,7 +16,7 @@ class MemoriesProvider extends ChangeNotifier {
   bool _loading = true;
   String _searchQuery = '';
   Set<MemoryCategory> _selectedCategories = {};
-  bool _excludeAuto = false;
+  bool _showOnlyManual = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
 
@@ -28,7 +28,7 @@ class MemoriesProvider extends ChangeNotifier {
   bool get loading => _loading;
   String get searchQuery => _searchQuery;
   Set<MemoryCategory> get selectedCategories => _selectedCategories;
-  bool get excludeAuto => _excludeAuto;
+  bool get showOnlyManual => _showOnlyManual;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
 
@@ -40,7 +40,7 @@ class MemoriesProvider extends ChangeNotifier {
 
       // Apply category filter or exclusion logic
       bool categoryMatch;
-      if (_excludeAuto) {
+      if (_showOnlyManual) {
         // Show only manual memories (exclude system and interesting)
         categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
@@ -56,8 +56,8 @@ class MemoriesProvider extends ChangeNotifier {
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  void setExcludeAuto(bool exclude) {
-    _excludeAuto = exclude;
+  void setShowOnlyManual(bool showOnly) {
+    _showOnlyManual = showOnly;
     notifyListeners();
   }
 
@@ -77,7 +77,7 @@ class MemoriesProvider extends ChangeNotifier {
     } else {
       _selectedCategories.add(category);
     }
-    _excludeAuto = false; // Reset exclude filter when setting a category filter
+    _showOnlyManual = false; // Reset manual-only filter when setting a category filter
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
@@ -86,7 +86,7 @@ class MemoriesProvider extends ChangeNotifier {
 
   void clearCategoryFilter() async {
     _selectedCategories.clear();
-    _excludeAuto = false;
+    _showOnlyManual = false;
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
@@ -188,7 +188,7 @@ class MemoriesProvider extends ChangeNotifier {
           memory.visibility.name,
           memory.category.name,
         );
-        
+
         if (serverMemory != null) {
           SharedPreferencesUtil().removePendingMemory(memory.id);
           final idx = _memories.indexWhere((m) => m.id == memory.id);

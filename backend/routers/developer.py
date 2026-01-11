@@ -38,6 +38,7 @@ from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()
 
@@ -180,10 +181,13 @@ def create_memory(
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
+    # Auto-categorize if no category provided
+    category = request.category if request.category else identify_category_for_memory(request.content.strip())
+
     # Create Memory object
     memory = Memory(
         content=request.content.strip(),
-        category=request.category if request.category else MemoryCategory.manual,
+        category=category,
         visibility=request.visibility,
         tags=request.tags,
     )
@@ -235,10 +239,13 @@ def create_memories_batch(
         if not mem_req.content or len(mem_req.content.strip()) == 0:
             raise HTTPException(status_code=422, detail="All memories must have non-empty content")
 
+        # Auto-categorize if no category provided
+        category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
+
         # Create Memory object
         memory = Memory(
             content=mem_req.content.strip(),
-            category=mem_req.category if mem_req.category else MemoryCategory.manual,
+            category=category,
             visibility=mem_req.visibility,
             tags=mem_req.tags,
         )
