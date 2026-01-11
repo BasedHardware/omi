@@ -1592,11 +1592,16 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Callback for external components to reset their freemium session state
+  VoidCallback? onFreemiumSessionReset;
+
   /// Reset freemium threshold state (e.g., when credits reset or on new session)
   void resetFreemiumThresholdState() {
     _freemiumThresholdReached = false;
     _freemiumRemainingSeconds = 0;
     _freemiumRequiresUserAction = false;
+    // Notify external handlers (e.g., FreemiumSwitchHandler)
+    onFreemiumSessionReset?.call();
     notifyListeners();
   }
 
