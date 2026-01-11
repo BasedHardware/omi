@@ -43,6 +43,9 @@ class MainActivity: FlutterFragmentActivity() {
             register(flutterEngine)
         }
 
+        // Initialize WiFi Network plugin for device AP connection
+        WifiNetworkPlugin.registerWith(flutterEngine, this)
+
         // Set up presence listener to forward events to Flutter
         CompanionDevicePresenceReceiver.setPresenceListener(object : CompanionDevicePresenceReceiver.Companion.PresenceListener {
             override fun onDeviceAppeared(deviceAddress: String) {

@@ -1,4 +1,3 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -18,7 +17,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
-import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
 Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
@@ -569,37 +567,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
-    // Check if device supports WiFi but no credentials configured
     if (sdCardWals.isNotEmpty) {
-      final walService = ServiceManager.instance().wal;
-      final syncs = walService.getSyncs();
-      final deviceId = SharedPreferencesUtil().btDevice.id;
-
-      if (deviceId.isNotEmpty) {
-        final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-        if (connection != null) {
-          final wifiSupported = await connection.isWifiSyncSupported();
-          final wifiConfigured = await syncs.sdcard.isWifiSyncSupported(); // This checks both support AND credentials
-
-          // If firmware supports WiFi but credentials not set
-          if (wifiSupported && !wifiConfigured) {
-            if (context.mounted) {
-              final shouldConfigure = await _showWifiSyncPromptDialog(context);
-              if (shouldConfigure == null) {
-                return; // Dialog dismissed, do nothing
-              }
-              if (shouldConfigure == true && context.mounted) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const WifiSyncSettingsPage()),
-                );
-                return;
-              }
-              // User chose "Continue with Bluetooth" (false)
-            }
-          }
-        }
-      }
-
       // Show SD card warning dialog
       if (context.mounted) {
         _showSdCardWarningDialog(context, syncProvider, sdCardWals.length);
@@ -609,7 +577,7 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
     }
   }
 
-  Future<bool?> _showWifiSyncPromptDialog(BuildContext context) {
+  Future<bool?> _showWifiSyncInfoDialog(BuildContext context) {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -620,26 +588,66 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
             Icon(Icons.wifi, size: 24, color: Colors.blue.shade300),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('WiFi Sync Available', style: TextStyle(color: Colors.white, fontSize: 18)),
+              child: Text('WiFi Sync', style: TextStyle(color: Colors.white, fontSize: 18)),
             ),
           ],
         ),
         content: Text(
-          'Your device supports WiFi sync which is ~10x faster than Bluetooth. Would you like to set it up?',
+          'Your device supports WiFi sync which is ~10x faster than Bluetooth. WiFi sync will be used automatically when available.',
           style: TextStyle(color: Colors.grey.shade300, fontSize: 14),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Continue with Bluetooth', style: TextStyle(color: Colors.grey.shade400)),
-          ),
-          TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Setup WiFi', style: TextStyle(color: Colors.blue.shade300, fontWeight: FontWeight.w600)),
+            child: Text('OK', style: TextStyle(color: Colors.blue.shade300, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
+  }
+
+  bool _isWifiSyncError(String errorMessage) {
+    final lowerMessage = errorMessage.toLowerCase();
+    return lowerMessage.contains('wifi') ||
+        lowerMessage.contains('hotspot') ||
+        lowerMessage.contains('ssid') ||
+        lowerMessage.contains('password') ||
+        lowerMessage.contains('tcp');
+  }
+
+  String _formatErrorMessage(String errorMessage) {
+    // Clean up WifiSyncException prefix if present
+    if (errorMessage.startsWith('WifiSyncException: ')) {
+      errorMessage = errorMessage.substring('WifiSyncException: '.length);
+    }
+    if (errorMessage.startsWith('Exception: ')) {
+      errorMessage = errorMessage.substring('Exception: '.length);
+    }
+
+    // Map known error patterns to user-friendly messages
+    if (errorMessage.contains('does not support WiFi')) {
+      return 'Your device hardware does not support WiFi sync. Use Bluetooth instead.';
+    }
+    if (errorMessage.contains('Hotspot name must be')) {
+      return errorMessage;
+    }
+    if (errorMessage.contains('Password must be')) {
+      return errorMessage;
+    }
+    if (errorMessage.contains('hotspot') && errorMessage.contains('enable')) {
+      return 'Please enable your phone\'s hotspot and try again.';
+    }
+    if (errorMessage.contains('TCP server')) {
+      return 'Failed to start network server. Please try again.';
+    }
+    if (errorMessage.contains('timeout') || errorMessage.contains('did not respond')) {
+      return 'Device did not respond. Please try again.';
+    }
+    if (errorMessage.contains('credentials')) {
+      return 'Invalid WiFi credentials. Check your hotspot settings.';
+    }
+
+    return errorMessage;
   }
 
   void _showSdCardWarningDialog(BuildContext context, SyncProvider syncProvider, int sdCardCount) {
@@ -678,44 +686,72 @@ class _SyncPageState extends State<SyncPage> with TickerProviderStateMixin {
   Widget _buildProcessCard(SyncProvider syncProvider) {
     // Error state
     if (syncProvider.syncError != null && syncProvider.failedWal == null) {
+      final errorMessage = syncProvider.syncError!;
+      final isWifiError = _isWifiSyncError(errorMessage);
+
       return Container(
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                  width: 24, height: 24, child: _buildFaIcon(FontAwesomeIcons.circleExclamation, color: Colors.red)),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Processing Failed',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 2),
-                    Text(syncProvider.syncError!,
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => syncProvider.retrySync(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(100),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: _buildFaIcon(
+                      isWifiError ? FontAwesomeIcons.wifi : FontAwesomeIcons.circleExclamation,
+                      color: Colors.red,
+                    ),
                   ),
-                  child: const Text('Retry',
-                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
-                ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isWifiError ? 'WiFi Sync Failed' : 'Processing Failed',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _formatErrorMessage(errorMessage),
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => syncProvider.retrySync(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2E),
+                          borderRadius: BorderRadius.circular(100),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Retry',
+                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

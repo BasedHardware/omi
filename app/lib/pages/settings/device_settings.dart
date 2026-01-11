@@ -7,7 +7,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
-import 'package:omi/pages/settings/wifi_sync_settings_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/companion_device_manager.dart';
@@ -39,8 +38,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // WiFi sync state
   bool _isWifiSupported = false;
-  String? _wifiSsid;
-  String? _wifiPassword;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -147,18 +144,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           setState(() {
             _isWifiSupported = wifiSupported;
           });
-
-          if (wifiSupported) {
-            final walService = ServiceManager.instance().wal;
-            final syncs = walService.getSyncs();
-            final credentials = syncs.sdcard.getWifiCredentials();
-            if (mounted && credentials != null) {
-              setState(() {
-                _wifiSsid = credentials['ssid'];
-                _wifiPassword = credentials['password'];
-              });
-            }
-          }
         }
       }
     }
@@ -750,29 +735,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  void _showWifiSyncSheet() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => WifiSyncSettingsPage(
-          initialSsid: _wifiSsid,
-          initialPassword: _wifiPassword,
-          onCredentialsSaved: (ssid, password) {
-            setState(() {
-              _wifiSsid = ssid;
-              _wifiPassword = password;
-            });
-          },
-          onCredentialsCleared: () {
-            setState(() {
-              _wifiSsid = null;
-              _wifiPassword = null;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
   Widget _buildPresetButton(String label, int level, int currentLevel, VoidCallback onTap) {
     final isSelected = level == currentLevel;
     return GestureDetector(
@@ -849,8 +811,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.wifi,
               title: 'WiFi Sync',
-              chipValue: _wifiSsid != null ? 'Configured' : 'Not Set',
-              onTap: _showWifiSyncSheet,
+              chipValue: 'Available',
+              showChevron: false,
             ),
           ],
         ],

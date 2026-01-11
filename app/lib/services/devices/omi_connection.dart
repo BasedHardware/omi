@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:version/version.dart';
 
@@ -619,9 +620,18 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   @override
-  Future<bool> performSetupWifiSync(String ssid, String password, String serverIp, int port) async {
+  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid) async {
     try {
-      // Format: [0x01][ssid_len][ssid][pwd_len][pwd][ip_len][ip][port_high][port_low]
+      // Validate SSID length (1-32 characters)
+      if (ssid.isEmpty || ssid.length > 32) {
+        debugPrint('OmiDeviceConnection: Invalid SSID length: ${ssid.length}');
+        return WifiSyncSetupResult.failure(
+          WifiSyncErrorCode.ssidLengthInvalid,
+          customMessage: 'SSID must be 1-32 characters',
+        );
+      }
+
+      // Format for AP mode: [0x01][ssid_len][ssid]
       final List<int> command = [];
 
       command.add(0x01);
@@ -631,26 +641,43 @@ class OmiDeviceConnection extends DeviceConnection {
       command.add(ssidBytes.length);
       command.addAll(ssidBytes);
 
-      // Password
-      final passwordBytes = password.codeUnits;
-      command.add(passwordBytes.length);
-      command.addAll(passwordBytes);
+      // Set up listener for the response before sending the command
+      final completer = Completer<WifiSyncSetupResult>();
+      StreamSubscription? responseSubscription;
 
-      // Server IP
-      final ipBytes = serverIp.codeUnits;
-      command.add(ipBytes.length);
-      command.addAll(ipBytes);
+      try {
+        final stream = transport.getCharacteristicStream(storageDataStreamServiceUuid, storageWifiCharacteristicUuid);
 
-      // Port (big endian - high byte first)
-      command.add((port >> 8) & 0xFF);
-      command.add(port & 0xFF);
+        responseSubscription = stream.listen((value) {
+          if (value.isNotEmpty && !completer.isCompleted) {
+            final responseCode = value[0];
+            final errorCode = WifiSyncErrorCode.fromCode(responseCode);
+            if (errorCode.isSuccess) {
+              completer.complete(WifiSyncSetupResult.success());
+            } else {
+              completer.complete(WifiSyncSetupResult.failure(errorCode));
+            }
+          }
+        });
 
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
+        await Future.delayed(const Duration(milliseconds: 100));
 
-      return true;
+        // Send the setup command
+        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
+
+        // Wait for response with timeout
+        final result = await completer.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => WifiSyncSetupResult.timeout(),
+        );
+
+        return result;
+      } finally {
+        await responseSubscription?.cancel();
+      }
     } catch (e) {
       debugPrint('OmiDeviceConnection: Error setting up WiFi sync: $e');
-      return false;
+      return WifiSyncSetupResult.connectionFailed();
     }
   }
 
