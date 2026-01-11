@@ -12,7 +12,7 @@ import '../utils/conversation_sync_utils.dart';
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
-  final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils();
+  final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
 
   // WAL management
   List<Wal> _allWals = [];
@@ -369,7 +369,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   @override
   void dispose() {
     _audioPlayerUtils.removeListener(_onAudioPlayerStateChanged);
-    _audioPlayerUtils.dispose();
     WaveformUtils.clearCache();
     _walService.unsubscribe(this);
     super.dispose();
