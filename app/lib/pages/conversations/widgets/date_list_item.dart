@@ -11,7 +11,12 @@ class DateListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     var now = DateTime.now();
     var yesterday = now.subtract(const Duration(days: 1));
+    var isToday = date.month == now.month && date.day == now.day && date.year == now.year;
     var isYesterday = date.month == yesterday.month && date.day == yesterday.day && date.year == yesterday.year;
+
+    if (isToday) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: EdgeInsets.fromLTRB(24, isFirst ? 0 : 20, 16, 4),
