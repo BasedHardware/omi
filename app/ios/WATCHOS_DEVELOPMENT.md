@@ -25,15 +25,17 @@ In Xcode:
 3. Choose a watchOS simulator or device as the run destination
 4. Build and run
 
-### Option 2: Modify the dev/prod schemes temporarily
+### Option 2: Build watchOS alongside iOS app
 
 If you need both iOS and watchOS to build together:
 
-1. Open `Runner.xcodeproj/xcshareddata/xcschemes/dev.xcscheme` (or `prod.xcscheme`)
-2. Change `buildImplicitDependencies = "NO"` to `buildImplicitDependencies = "YES"` in the `<BuildAction>` tag
-3. Build your iOS app - the watchOS app will now build alongside it
+1. Open `Runner.xcodeproj/project.pbxproj` in a text editor
+2. Find the line with `/* watchOS dependency disabled by default - uncomment to enable: 42A7BA3D2E788BD400138969 */`
+3. Uncomment it to restore: `42A7BA3D2E788BD400138969 /* PBXTargetDependency */,`
+4. Find the line with `/* watchOS embed disabled by default - uncomment to enable: 42A7BA3E2E788BD400138969 */`
+5. Uncomment it to restore: `42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */,`
 
-**Important**: Don't commit this change. Revert it after watchOS development to keep the default behavior for other developers.
+**Important**: Don't commit these changes. Revert them after watchOS development to keep the default behavior for other developers.
 
 ## Why is this disabled by default?
 
