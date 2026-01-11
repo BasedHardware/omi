@@ -45,7 +45,6 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
   );
   if (response == null) return [];
   if (response.statusCode == 200) {
-    debugPrint('getMemories response: ${response.body}');
     var decoded = json.decode(response.body);
     if (decoded is List) {
       return decoded.map((e) => Memory.fromJson(e)).toList();
