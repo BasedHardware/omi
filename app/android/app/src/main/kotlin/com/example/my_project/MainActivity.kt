@@ -61,22 +61,11 @@ class MainActivity: FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         // Initialize CompanionDeviceService for battery-efficient device presence detection
+        // This also sets up the presence listener to forward events to Flutter
         companionDeviceService = CompanionDeviceService(this).apply {
             setAssociationLauncher(associationLauncher)
             register(flutterEngine)
         }
-
-        // Set up presence listener to forward events to Flutter
-        CompanionDevicePresenceReceiver.setPresenceListener(object : CompanionDevicePresenceReceiver.Companion.PresenceListener {
-            override fun onDeviceAppeared(deviceAddress: String) {
-                // This will be handled by the EventChannel in CompanionDeviceService
-                // The event is sent via the broadcast receiver
-            }
-
-            override fun onDeviceDisappeared(deviceAddress: String) {
-                // This will be handled by the EventChannel in CompanionDeviceService
-            }
-        })
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->

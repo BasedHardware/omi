@@ -92,6 +92,9 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
             // Store the event for Flutter to pick up
             storePresenceEvent(deviceAddress, true)
 
+            // Forward to presence listener (for Flutter event channel when app is running)
+            CompanionDevicePresenceReceiver.notifyDeviceAppeared(deviceAddress)
+
             // Only show notification if:
             // 1. App is NOT in foreground
             // 2. We're not in a cooldown period (user previously ignored notification)
@@ -108,6 +111,9 @@ class CompanionDeviceBackgroundService : CompanionDeviceService() {
 
         if (deviceAddress != null) {
             storePresenceEvent(deviceAddress, false)
+
+            // Forward to presence listener (for Flutter event channel when app is running)
+            CompanionDevicePresenceReceiver.notifyDeviceDisappeared(deviceAddress)
 
             // If notification was pending (shown but not acted upon), user ignored it
             // Enter cooldown so we don't spam them
