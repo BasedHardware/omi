@@ -9,6 +9,20 @@ project 'Runner', {
   'Release' => :release,
 }
 
+# Workaround: flutter_sound's macOS podspec is named taudio.podspec with s.name='taudio',
+# but Flutter expects flutter_sound.podspec with s.name='flutter_sound'
+flutter_sound_dirs = Dir.glob(File.expand_path('~/.pub-cache/hosted/pub.dev/flutter_sound-*/macos'))
+flutter_sound_dirs.each do |dir|
+  taudio = File.join(dir, 'taudio.podspec')
+  flutter_sound = File.join(dir, 'flutter_sound.podspec')
+  if File.exist?(taudio) && !File.exist?(flutter_sound)
+    content = File.read(taudio)
+    content = content.gsub("s.name             = 'taudio'", "s.name             = 'flutter_sound'")
+    File.write(flutter_sound, content)
+    puts "Fixed flutter_sound podspec: created flutter_sound.podspec from taudio.podspec"
+  end
+end
+
 def flutter_root
   generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'ephemeral', 'Flutter-Generated.xcconfig'), __FILE__)
   unless File.exist?(generated_xcode_build_settings_path)
@@ -33,54 +47,7 @@ target 'Runner' do
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
   
   pod 'Mixpanel-swift', :git => 'https://github.com/beastoin/mixpanel-swift.git', :commit => '5fd6584'
-  pod 'Sparkle', '~> 2.0'
-end
-
-pre_install do |installer|
-  # Stub flutter_sound for macOS since it's not natively supported
-  flutter_sound_path = File.expand_path('../LocalPods/flutter_sound', __FILE__)
-  symlink_path = File.expand_path('../Flutter/ephemeral/.symlinks/plugins/flutter_sound/macos', __FILE__)
-  
-  # Create the stub files in the symlink path
-  FileUtils.mkdir_p(File.join(symlink_path, 'Classes'))
-  
-  # Copy podspec
-  podspec_content = <<-PODSPEC
-Pod::Spec.new do |s|
-  s.name             = 'flutter_sound'
-  s.version          = '9.11.2'
-  s.summary          = 'Flutter Sound - macOS stub'
-  s.description      = 'Flutter Sound stub for macOS'
-  s.homepage         = 'https://github.com/Canardoux/flutter_sound'
-  s.license          = { :type => 'MIT' }
-  s.author           = { 'Stub' => 'stub@example.com' }
-  s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
-  s.dependency 'FlutterMacOS'
-  s.platform = :osx, '10.13'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
-  s.swift_version = '5.0'
-end
-PODSPEC
-  File.write(File.join(symlink_path, 'flutter_sound.podspec'), podspec_content)
-  
-  # Copy swift stub
-  swift_content = <<-SWIFT
-import FlutterMacOS
-
-public class FlutterSoundPlugin: NSObject, FlutterPlugin {
-    public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(name: "com.dooboolab.flutter_sound", binaryMessenger: registrar.messenger)
-        let instance = FlutterSoundPlugin()
-        registrar.addMethodCallDelegate(instance, channel: channel)
-    }
-    
-    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        result(FlutterMethodNotImplemented)
-    }
-}
-SWIFT
-  File.write(File.join(symlink_path, 'Classes', 'FlutterSoundPlugin.swift'), swift_content)
+  pod 'Sparkle', '2.8.1'
 end
 
 post_install do |installer|
