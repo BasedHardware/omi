@@ -261,7 +261,7 @@
   "managePlan": "योजना प्रबंधित करें",
   "cancelAtPeriodEnd": "आपकी योजना {date} को समाप्त हो रही है।",
   "renewsOn": "आपकी योजना {date} को नवीनीकृत होती है।",
-  "basicPlan": "मूल योजना",
+  "basicPlan": "निःशुल्क योजना",
   "usageLimitMessage": "{used} / {limit} मिनट उपयोग किए गए",
   "upgrade": "अपग्रेड करें",
   "upgradeToUnlimited": "असीमित में अपग्रेड करें",

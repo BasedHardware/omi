@@ -248,6 +248,12 @@ export function MemoriesPage() {
     setIsSelectMode(!isSelectMode);
   }, [isSelectMode]);
 
+  // Enter selection mode and select the specified memory (for double-click)
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
   // Handle select all visible memories
   const handleSelectAll = useCallback(() => {
     if (selectedIds.size === filteredMemories.length) {
@@ -554,6 +560,8 @@ export function MemoriesPage() {
                     // Only pass selection props when in select mode
                     selectedIds={isSelectMode ? selectedIds : undefined}
                     onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
+                    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+                    onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
                   />
                 )}
               </>

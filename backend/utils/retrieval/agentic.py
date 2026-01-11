@@ -29,13 +29,13 @@ from models.chat import Message, ChatSession, PageContext
 from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
-    vector_search_conversations_tool,
+    search_conversations_tool,
     get_memories_tool,
     get_action_items_tool,
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
-    perplexity_search_tool,
+    perplexity_web_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
     update_calendar_event_tool,
@@ -95,9 +95,9 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'update_calendar_event_tool': 'Updating calendar event',
         'delete_calendar_event_tool': 'Deleting calendar event',
         'get_gmail_messages_tool': 'Checking Gmail',
-        'perplexity_search_tool': 'Searching the web',
+        'perplexity_web_search_tool': 'Searching the web',
         'get_conversations_tool': 'Searching conversations',
-        'vector_search_conversations_tool': 'Searching conversations',
+        'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
@@ -220,13 +220,13 @@ def execute_agentic_chat(
     # Get all tools
     tools = [
         get_conversations_tool,
-        vector_search_conversations_tool,
+        search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
         update_action_item_tool,
         get_omi_product_info_tool,
-        perplexity_search_tool,
+        perplexity_web_search_tool,
         get_calendar_events_tool,
         create_calendar_event_tool,
         update_calendar_event_tool,
@@ -322,13 +322,13 @@ async def execute_agentic_chat_stream(
     # Get all tools
     tools = [
         get_conversations_tool,
-        vector_search_conversations_tool,
+        search_conversations_tool,
         get_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
         update_action_item_tool,
         get_omi_product_info_tool,
-        perplexity_search_tool,
+        perplexity_web_search_tool,
         get_calendar_events_tool,
         create_calendar_event_tool,
         update_calendar_event_tool,
@@ -373,7 +373,7 @@ async def execute_agentic_chat_stream(
     conversations_collected = []
 
     # Initialize safety guard
-    safety_guard = AgentSafetyGuard(max_tool_calls=10, max_context_tokens=500000)
+    safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
 
     config = {
         "configurable": {
@@ -493,13 +493,13 @@ async def _run_agent_stream(
                 # Standard tool names that don't come from apps
                 standard_tool_names = {
                     'get_conversations_tool',
-                    'vector_search_conversations_tool',
+                    'search_conversations_tool',
                     'get_memories_tool',
                     'get_action_items_tool',
                     'create_action_item_tool',
                     'update_action_item_tool',
                     'get_omi_product_info_tool',
-                    'perplexity_search_tool',
+                    'perplexity_web_search_tool',
                     'get_calendar_events_tool',
                     'create_calendar_event_tool',
                     'update_calendar_event_tool',

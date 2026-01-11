@@ -726,7 +726,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => '基础套餐';
+  String get basicPlan => '免费套餐';
 
   @override
   String usageLimitMessage(String used, int limit) {

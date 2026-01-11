@@ -727,7 +727,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => 'ベーシックプラン';
+  String get basicPlan => '無料プラン';
 
   @override
   String usageLimitMessage(String used, int limit) {

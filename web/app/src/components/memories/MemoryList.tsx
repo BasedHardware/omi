@@ -20,6 +20,8 @@ interface MemoryListProps {
   highlightedMemoryId?: string | null;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 export function MemoryList({
@@ -35,6 +37,7 @@ export function MemoryList({
   highlightedMemoryId,
   selectedIds,
   onToggleSelect,
+  onEnterSelectionMode,
 }: MemoryListProps) {
   const [loadingMore, setLoadingMore] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -111,6 +114,7 @@ export function MemoryList({
               isHighlighted={highlightedMemoryId === memory.id}
               isSelected={selectedIds?.has(memory.id)}
               onToggleSelect={onToggleSelect}
+              onEnterSelectionMode={onEnterSelectionMode}
             />
           </motion.div>
         ))}

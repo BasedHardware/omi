@@ -105,6 +105,7 @@ class HomeProvider extends ChangeNotifier {
 
   void setIndex(int index) {
     selectedIndex = index;
+    onSelectedIndexChanged?.call(index);
     notifyListeners();
   }
 

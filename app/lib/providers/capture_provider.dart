@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,18 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/message_event.dart'
+    show
+        MessageEvent,
+        MessageServiceStatusEvent,
+        ConversationProcessingStartedEvent,
+        ConversationEvent,
+        LastConversationEvent,
+        SpeakerLabelSuggestionEvent,
+        TranslationEvent,
+        PhotoProcessingEvent,
+        PhotoDescribedEvent,
+        FreemiumThresholdReachedEvent;
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -24,6 +36,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -35,6 +48,7 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class CaptureProvider extends ChangeNotifier
@@ -73,6 +87,17 @@ class CaptureProvider extends ChangeNotifier
   bool get isAutoReconnecting => _isAutoReconnecting;
 
   bool get outOfCredits => usageProvider?.isOutOfCredits ?? false;
+
+  // Freemium: Threshold notification state
+  bool _freemiumThresholdReached = false;
+  int _freemiumRemainingSeconds = 0;
+  bool _freemiumRequiresUserAction = false;
+
+  bool get freemiumThresholdReached => _freemiumThresholdReached;
+  int get freemiumRemainingSeconds => _freemiumRemainingSeconds;
+
+  /// Whether user needs to take action (e.g., setup on-device STT)
+  bool get freemiumRequiresUserAction => _freemiumRequiresUserAction;
 
   Timer? _reconnectTimer;
   int _reconnectCountdown = 5;
@@ -1317,9 +1342,24 @@ class CaptureProvider extends ChangeNotifier
     }
 
     if (event is MessageServiceStatusEvent) {
+      // Handle freemium threshold event via status field
+      if (event.status == 'freemium_threshold_reached') {
+        // Parse as FreemiumThresholdReachedEvent for consistent handling
+        final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({
+          'status_text': event.statusText,
+        });
+        _handleFreemiumThresholdReached(thresholdEvent);
+        return;
+      }
+
       _transcriptionServiceStatuses.add(event);
       _transcriptionServiceStatuses = List.from(_transcriptionServiceStatuses);
       notifyListeners();
+      return;
+    }
+
+    if (event is FreemiumThresholdReachedEvent) {
+      _handleFreemiumThresholdReached(event);
       return;
     }
 
@@ -1525,6 +1565,53 @@ class CaptureProvider extends ChangeNotifier
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
     notifyListeners();
+  }
+
+  // ============== Freemium: Threshold Notification ==============
+
+  /// Handle freemium threshold reached: Notify user based on required action
+  void _handleFreemiumThresholdReached(FreemiumThresholdReachedEvent event) {
+    if (_freemiumThresholdReached) return;
+
+    _freemiumThresholdReached = true;
+    _freemiumRemainingSeconds = event.remainingSeconds;
+    _freemiumRequiresUserAction = event.requiresUserAction;
+
+    debugPrint('[Freemium] Threshold reached - ${event.remainingSeconds} seconds remaining');
+    debugPrint('[Freemium] Action required: ${event.action.name}, requires user action: ${event.requiresUserAction}');
+
+    if (event.requiresUserAction) {
+      debugPrint('[Freemium] User should setup on-device transcription in Settings > Transcription');
+    } else {
+      debugPrint('[Freemium] No user action required - backend will handle fallback');
+    }
+
+    // Update usage provider to reflect approaching limit
+    usageProvider?.refreshSubscription();
+
+    notifyListeners();
+  }
+
+  /// Callback for external components to reset their freemium session state
+  VoidCallback? onFreemiumSessionReset;
+
+  /// Reset freemium threshold state (e.g., when credits reset or on new session)
+  void resetFreemiumThresholdState() {
+    _freemiumThresholdReached = false;
+    _freemiumRemainingSeconds = 0;
+    _freemiumRequiresUserAction = false;
+    // Notify external handlers (e.g., FreemiumSwitchHandler)
+    onFreemiumSessionReset?.call();
+    notifyListeners();
+  }
+
+  /// Check if credits were restored and reset threshold state
+  Future<void> checkCreditsAndResetThresholdIfNeeded() async {
+    await usageProvider?.fetchSubscription();
+    if (usageProvider?.isOutOfCredits == false && _freemiumThresholdReached) {
+      debugPrint('[Freemium] Credits restored! Resetting threshold state.');
+      resetFreemiumThresholdState();
+    }
   }
 
   void setIsWalSupported(bool value) {

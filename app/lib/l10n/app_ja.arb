@@ -288,7 +288,7 @@
   "managePlan": "プランの管理",
   "cancelAtPeriodEnd": "プランは{date}にキャンセルされます。",
   "renewsOn": "プランは{date}に更新されます。",
-  "basicPlan": "ベーシックプラン",
+  "basicPlan": "無料プラン",
   "usageLimitMessage": "{limit}分中{used}分使用済み",
   "upgrade": "アップグレード",
   "upgradeToUnlimited": "無制限プランにアップグレード",

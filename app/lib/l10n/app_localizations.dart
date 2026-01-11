@@ -1518,7 +1518,7 @@ abstract class AppLocalizations {
   /// Basic plan name
   ///
   /// In en, this message translates to:
-  /// **'Basic Plan'**
+  /// **'Free Plan'**
   String get basicPlan;
 
   /// Usage limit message
