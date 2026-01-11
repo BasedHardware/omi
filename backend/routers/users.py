@@ -373,8 +373,12 @@ def set_chat_message_analytics(
             - 'didnt_follow_instructions': Response didn't follow user instructions
             - 'other': Other reason
     """
-    # Always store feedback in Firestore
+    # Always store feedback in Firestore analytics collection
     set_chat_message_rating_score(uid, message_id, value, reason)
+    
+    # Also update the rating directly on the message document for persistence
+    rating_value = None if value == 0 else value
+    chat_db.update_message_rating(uid, message_id, rating_value)
     
     # Try to submit feedback to LangSmith if the message has a run_id
     try:

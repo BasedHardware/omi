@@ -605,6 +605,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
           MessageActionBar(
             messageText: widget.messageText,
             setMessageNps: widget.setMessageNps,
+            currentNps: widget.message.rating,
           ),
       ],
     );
@@ -803,6 +804,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
           MessageActionBar(
             messageText: widget.messageText,
             setMessageNps: widget.setMessageNps,
+            currentNps: widget.message.rating,
           ),
         const SizedBox(height: 16),
         for (var data in widget.messageMemories.indexed) ...[
