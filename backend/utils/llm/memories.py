@@ -28,19 +28,20 @@ class MemoriesByTexts(BaseModel):
     )
 
 
-# Map for converting categories from old to new format (all legacy -> auto)
+# Map for converting legacy categories to new format
+# - system: Facts ABOUT the user (preferences, opinions, realizations, network, projects)
+# - interesting: External wisdom/advice FROM others (with attribution) - actionable insights
 LEGACY_TO_NEW_CATEGORY = {
-    'interesting': MemoryCategory.auto,
-    'system': MemoryCategory.auto,
-    'core': MemoryCategory.auto,
-    'hobbies': MemoryCategory.auto,
-    'lifestyle': MemoryCategory.auto,
-    'interests': MemoryCategory.auto,
-    'work': MemoryCategory.auto,
-    'skills': MemoryCategory.auto,
-    'learnings': MemoryCategory.auto,
-    'habits': MemoryCategory.auto,
-    'other': MemoryCategory.auto,
+    'auto': MemoryCategory.system,
+    'core': MemoryCategory.system,
+    'hobbies': MemoryCategory.system,
+    'lifestyle': MemoryCategory.system,
+    'interests': MemoryCategory.system,
+    'work': MemoryCategory.system,
+    'skills': MemoryCategory.system,
+    'habits': MemoryCategory.system,
+    'other': MemoryCategory.system,
+    'learnings': MemoryCategory.interesting,  # learnings are external insights
 }
 
 
@@ -150,7 +151,7 @@ def new_learnings_extractor(
                 'format_instructions': parser.get_format_instructions(),
             }
         )
-        return list(map(lambda x: Memory(content=x, category=MemoryCategory.auto), response.result))
+        return list(map(lambda x: Memory(content=x, category=MemoryCategory.interesting), response.result))
     except Exception as e:
         print(f'Error extracting new facts: {e}')
         return []

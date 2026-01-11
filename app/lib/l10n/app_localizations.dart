@@ -4155,11 +4155,17 @@ abstract class AppLocalizations {
   /// **'All'**
   String get filterAll;
 
-  /// Filter option for auto-extracted memories
+  /// Filter option for facts about the user
   ///
   /// In en, this message translates to:
-  /// **'Auto'**
-  String get filterAuto;
+  /// **'About You'**
+  String get filterSystem;
+
+  /// Filter option for external wisdom/advice
+  ///
+  /// In en, this message translates to:
+  /// **'Insights'**
+  String get filterInteresting;
 
   /// Filter option
   ///

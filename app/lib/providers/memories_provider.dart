@@ -41,8 +41,8 @@ class MemoriesProvider extends ChangeNotifier {
       // Apply category filter or exclusion logic
       bool categoryMatch;
       if (_excludeAuto) {
-        // Show all categories except auto (only manual)
-        categoryMatch = memory.category != MemoryCategory.auto;
+        // Show only manual memories (exclude system and interesting)
+        categoryMatch = memory.category == MemoryCategory.manual;
       } else if (_selectedCategories.isNotEmpty) {
         // Show only selected categories
         categoryMatch = _selectedCategories.contains(memory.category);
@@ -141,12 +141,12 @@ class MemoriesProvider extends ChangeNotifier {
     final filterList = prefs.getStringList('memories_filter_categories');
 
     if (filterList == null) {
-      _selectedCategories = {MemoryCategory.auto, MemoryCategory.manual};
+      _selectedCategories = {MemoryCategory.system, MemoryCategory.interesting, MemoryCategory.manual};
     } else {
       _selectedCategories = filterList
           .map((e) => MemoryCategory.values.firstWhere(
                 (c) => c.name == e,
-                orElse: () => MemoryCategory.auto,
+                orElse: () => MemoryCategory.system,
               ))
           .toSet();
     }

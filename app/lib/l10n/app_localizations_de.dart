@@ -2208,7 +2208,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get filterAll => 'Alle';
 
   @override
-  String get filterAuto => 'Automatisch';
+  String get filterSystem => 'About You';
+
+  @override
+  String get filterInteresting => 'Insights';
 
   @override
   String get filterManual => 'Manuell';

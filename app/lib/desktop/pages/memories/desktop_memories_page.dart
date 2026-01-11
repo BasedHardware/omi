@@ -17,7 +17,7 @@ import 'package:omi/ui/atoms/omi_search_input.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_empty_state.dart';
 
-enum FilterOption { auto, manual, all }
+enum FilterOption { system, interesting, manual, all }
 
 class DesktopMemoriesPage extends StatefulWidget {
   const DesktopMemoriesPage({super.key});
@@ -138,8 +138,11 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     setState(() {
       _currentFilter = option;
       switch (option) {
-        case FilterOption.auto:
-          _selectedCategory = MemoryCategory.auto;
+        case FilterOption.system:
+          _selectedCategory = MemoryCategory.system;
+          break;
+        case FilterOption.interesting:
+          _selectedCategory = MemoryCategory.interesting;
           break;
         case FilterOption.manual:
           _selectedCategory = MemoryCategory.manual;
@@ -156,9 +159,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     if (!mounted) return;
 
     switch (option) {
-      case FilterOption.auto:
-        provider.toggleCategoryFilter(MemoryCategory.auto);
-        MixpanelManager().memoriesFiltered('auto');
+      case FilterOption.system:
+        provider.toggleCategoryFilter(MemoryCategory.system);
+        MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.interesting:
+        provider.toggleCategoryFilter(MemoryCategory.interesting);
+        MixpanelManager().memoriesFiltered('interesting');
         break;
       case FilterOption.manual:
         provider.toggleCategoryFilter(MemoryCategory.manual);
@@ -391,7 +398,8 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         offset: const Offset(0, 48),
         itemBuilder: (context) => [
           _buildFilterItem(FilterOption.all, 'All Memories'),
-          _buildFilterItem(FilterOption.auto, 'Auto'),
+          _buildFilterItem(FilterOption.system, 'About You'),
+          _buildFilterItem(FilterOption.interesting, 'Insights'),
           _buildFilterItem(FilterOption.manual, 'Manual'),
         ],
         onSelected: _applyFilter,
@@ -453,8 +461,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
 
   String _getFilterText() {
     switch (_currentFilter) {
-      case FilterOption.auto:
-        return 'Auto';
+      case FilterOption.system:
+        return 'About You';
+      case FilterOption.interesting:
+        return 'Insights';
       case FilterOption.manual:
         return 'Manual';
       case FilterOption.all:

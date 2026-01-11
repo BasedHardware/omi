@@ -1,12 +1,19 @@
-enum MemoryCategory { auto, manual }
+enum MemoryCategory { system, interesting, manual }
 
 enum MemoryVisibility { private, public }
 
 // Maps legacy category strings to new categories
 MemoryCategory _parseMemoryCategory(String? category) {
-  if (category == null) return MemoryCategory.auto;
+  if (category == null) return MemoryCategory.system;
   if (category == 'manual') return MemoryCategory.manual;
-  return MemoryCategory.auto;
+  if (category == 'interesting') return MemoryCategory.interesting;
+  if (category == 'system') return MemoryCategory.system;
+  // Legacy categories map to system (facts about user)
+  if (['core', 'hobbies', 'lifestyle', 'interests', 'work', 'skills', 'habits', 'other'].contains(category)) {
+    return MemoryCategory.system;
+  }
+  // 'learnings' and 'auto' map to system as well
+  return MemoryCategory.system;
 }
 
 class Memory {

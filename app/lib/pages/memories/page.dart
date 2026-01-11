@@ -363,13 +363,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
                                         ? context.l10n.noMemoriesYet
                                         : provider.selectedCategories.isNotEmpty
-                                            ? provider.selectedCategories.contains(MemoryCategory.auto) &&
+                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
                                                     provider.selectedCategories.length == 1
-                                                ? context.l10n.noAutoMemories
-                                                : provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noManualMemories
-                                                    : context.l10n.noMemoriesInCategories
+                                                ? context.l10n.noManualMemories
+                                                : context.l10n.noMemoriesInCategories
                                             : context.l10n.noMemoriesFound,
                                     style: TextStyle(
                                       color: Colors.grey.shade400,
