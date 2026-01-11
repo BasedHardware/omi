@@ -11,6 +11,16 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
         p: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
         a: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
         listBullet: const TextStyle(color: Colors.white, fontSize: 16),
+        blockquote: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          height: 1.4,
+          backgroundColor: Colors.transparent,
+        ),
+        blockquoteDecoration: BoxDecoration(
+          color: const Color(0xFF35343B),
+          borderRadius: BorderRadius.circular(4),
+        ),
         code: const TextStyle(
           color: Colors.white,
           backgroundColor: Colors.transparent,
