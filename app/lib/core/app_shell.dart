@@ -62,7 +62,7 @@ class _AppShellState extends State<AppShell> {
 
       if (app != null) {
         PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
-          Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
       } else {
         debugPrint('App not found: ${uri.pathSegments[1]}');
         AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
@@ -364,7 +364,6 @@ class _AppShellState extends State<AppShell> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-
       final auth = context.read<AuthenticationProvider>();
 
       if (auth.isSignedIn()) {
