@@ -120,6 +120,8 @@ def send_message(
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
         langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -147,6 +149,8 @@ def send_message(
             type='text',
             memories_id=memories_id,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
+            prompt_name=prompt_name,  # LangSmith prompt name for versioning
+            prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id

@@ -216,6 +216,14 @@ def execute_agentic_chat(
     """
     # Build system prompt
     system_prompt = _get_agentic_qa_prompt(uid, app)
+    
+    # Get prompt metadata for tracing/versioning
+    try:
+        from utils.observability.langsmith_prompts import get_prompt_metadata
+        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
+    except Exception as e:
+        print(f"⚠️ Could not get prompt metadata: {e}")
+        prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Get all tools
     tools = [
@@ -276,6 +284,9 @@ def execute_agentic_chat(
             "uid": uid,
             "app_id": app.id if app else None,
             "app_name": app.name if app else None,
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
         },
     }
 
@@ -325,6 +336,14 @@ async def execute_agentic_chat_stream(
     """
     # Build system prompt with file context and page context
     system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
+    
+    # Get prompt metadata for tracing/versioning
+    try:
+        from utils.observability.langsmith_prompts import get_prompt_metadata
+        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
+    except Exception as e:
+        print(f"⚠️ Could not get prompt metadata: {e}")
+        prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Get all tools
     tools = [
@@ -406,12 +425,17 @@ async def execute_agentic_chat_stream(
             "has_context": context is not None,
             "context_type": context.type if context else None,
             "num_tools": len(tools),
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
         },
     }
 
-    # Store run_id in callback_data for message persistence
+    # Store run_id and prompt metadata in callback_data for message persistence
     if callback_data is not None:
         callback_data['langsmith_run_id'] = langsmith_run_id
+        callback_data['prompt_name'] = prompt_name
+        callback_data['prompt_commit'] = prompt_commit
 
     # Store config in context for tools to access
     agent_config_context.set(config)
