@@ -10,6 +10,7 @@ import database.conversations as conversations_db
 import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.users as users_db
+import database.daily_summaries as daily_summaries_db
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
@@ -31,6 +32,7 @@ from dependencies import (
     get_uid_with_memories_write,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
+    get_uid_with_daily_summaries_read,
 )
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
@@ -67,6 +69,7 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
       - memories:write
       - action_items:read
       - action_items:write
+      - daily_summaries:read
     """
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
@@ -1055,3 +1058,26 @@ def update_conversation_endpoint(
             conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
 
     return conversations_db.get_conversation(uid, conversation_id)
+
+
+# ******************************************************
+# ***************** DAILY SUMMARIES ********************
+# ******************************************************
+
+
+@router.get("/v1/dev/user/daily-summaries", tags=["developer"])
+def get_daily_summaries(
+    uid: str = Depends(get_uid_with_daily_summaries_read),
+    limit: int = 30,
+    offset: int = 0,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    summaries = daily_summaries_db.get_daily_summaries(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return summaries
