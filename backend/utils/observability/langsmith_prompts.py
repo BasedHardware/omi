@@ -12,7 +12,7 @@ import time
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 
-from utils.observability.langsmith import is_langsmith_enabled, has_langsmith_api_key
+from utils.observability.langsmith import has_langsmith_api_key
 
 
 @dataclass
@@ -56,9 +56,12 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
     Fetch a prompt from LangSmith by name.
     
     Returns CachedPrompt if successful, None if failed.
+    
+    Note: Prompt fetching only requires an API key, not tracing to be enabled.
+    This allows prompt versioning to work even when global tracing is disabled.
     """
-    if not is_langsmith_enabled() or not has_langsmith_api_key():
-        print(f"⚠️  LangSmith not configured, cannot fetch prompt: {prompt_name}")
+    if not has_langsmith_api_key():
+        print(f"⚠️  LangSmith API key not configured, cannot fetch prompt: {prompt_name}")
         return None
     
     try:

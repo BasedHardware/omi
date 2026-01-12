@@ -2,11 +2,12 @@
 LangSmith observability configuration and status logging.
 
 This module provides utilities for checking and logging LangSmith tracing status
-at application startup, and for submitting feedback to LangSmith.
+at application startup, creating per-request tracers for scoped tracing,
+and for submitting feedback to LangSmith.
 """
 
 import os
-from typing import Optional
+from typing import Optional, List, Any
 
 
 def is_langsmith_enabled() -> bool:
@@ -80,21 +81,64 @@ def log_langsmith_status() -> None:
     This should be called at application startup to provide visibility
     into whether tracing is properly configured.
     """
-    enabled = is_langsmith_enabled()
+    global_enabled = is_langsmith_enabled()
     has_key = has_langsmith_api_key()
     project = get_langsmith_project()
     endpoint = get_langsmith_endpoint()
     
-    if enabled and has_key:
-        print(f"🔍 LangSmith tracing: ENABLED")
+    if global_enabled and has_key:
+        print(f"🔍 LangSmith: GLOBAL tracing ENABLED")
         print(f"   Project: {project}")
         print(f"   Endpoint: {endpoint}")
-    elif enabled and not has_key:
-        print(f"⚠️  LangSmith tracing: ENABLED but API key missing/invalid")
-        print(f"   Set LANGSMITH_API_KEY to enable tracing")
+    elif has_key:
+        # Global tracing off but API key present - per-request tracing for chat
+        print(f"🔍 LangSmith: Per-request tracing (chat only)")
+        print(f"   Project: {project}")
+        print(f"   Prompt Hub: enabled")
     else:
-        print(f"📊 LangSmith tracing: DISABLED")
-        print(f"   Set LANGSMITH_TRACING=true and LANGSMITH_API_KEY to enable")
+        print(f"📊 LangSmith: DISABLED (no API key)")
+        print(f"   Set LANGSMITH_API_KEY to enable tracing and prompt fetching")
+
+
+def get_chat_tracer_callbacks(
+    run_id: Optional[str] = None,
+    run_name: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    metadata: Optional[dict] = None,
+) -> List[Any]:
+    """
+    Create LangSmith tracer callbacks for per-request tracing.
+    
+    This enables tracing for specific requests (e.g., chat) without enabling
+    global tracing. Returns an empty list if API key is not configured.
+    
+    Args:
+        run_id: Optional explicit run ID for the trace (for feedback attachment)
+        run_name: Optional name for the run (e.g., "chat.agentic.stream")
+        tags: Optional tags for the run (e.g., ["chat", "agentic"])
+        metadata: Optional metadata dict for the run
+    
+    Returns:
+        List containing LangChainTracer callback if API key is set, else empty list
+    """
+    if not has_langsmith_api_key():
+        return []
+    
+    try:
+        from langchain_core.tracers import LangChainTracer
+        
+        project = get_langsmith_project()
+        
+        tracer = LangChainTracer(
+            project_name=project,
+            tags=tags or [],
+        )
+        
+        return [tracer]
+        
+    except Exception as e:
+        print(f"⚠️  Failed to create LangSmith tracer: {e}")
+        return []
 
 
 def submit_langsmith_feedback(
@@ -114,9 +158,12 @@ def submit_langsmith_feedback(
     
     Returns:
         True if feedback was successfully submitted, False otherwise
+    
+    Note: Feedback submission only requires an API key, not global tracing.
+    The run_id must be from a traced run (e.g., chat requests with per-request tracing).
     """
-    if not is_langsmith_enabled() or not has_langsmith_api_key():
-        print(f"⚠️  LangSmith feedback skipped: tracing not properly configured")
+    if not has_langsmith_api_key():
+        print(f"⚠️  LangSmith feedback skipped: API key not configured")
         return False
     
     try:

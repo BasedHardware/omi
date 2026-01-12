@@ -57,6 +57,7 @@ from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_mess
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
+from utils.observability.langsmith import get_chat_tracer_callbacks
 from utils.other.endpoints import timeit
 
 
@@ -272,12 +273,27 @@ def execute_agentic_chat(
         tools=tools,
     )
 
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_name="chat.agentic",
+        tags=["chat", "agentic"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
+        },
+    )
+
     # Run agent with LangSmith tracing metadata
     config = {
         "configurable": {
             "user_id": uid,
             "thread_id": str(uuid.uuid4()),
         },
+        "callbacks": tracer_callbacks,
         "run_name": "chat.agentic",
         "tags": ["chat", "agentic"],
         "metadata": {
@@ -404,6 +420,25 @@ async def execute_agentic_chat_stream(
     # Generate run_id for LangSmith tracing (allows feedback attachment later)
     langsmith_run_id = str(uuid.uuid4())
 
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.agentic.stream",
+        tags=["chat", "agentic", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+            "num_tools": len(tools),
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
+        },
+    )
+
     # LangSmith tracing metadata
     config = {
         "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
@@ -415,6 +450,7 @@ async def execute_agentic_chat_stream(
             "chat_session_id": chat_session.id if chat_session else None,
             "tools": tools,  # Store tools for status message lookup
         },
+        "callbacks": tracer_callbacks,
         "run_name": "chat.agentic.stream",
         "tags": ["chat", "agentic", "streaming"],
         "metadata": {
