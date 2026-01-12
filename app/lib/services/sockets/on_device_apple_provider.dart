@@ -15,6 +15,19 @@ class OnDeviceAppleProvider implements ISttProvider {
     this.language = 'en',
   });
 
+  static Future<bool> requestPermission() async {
+    try {
+      final bool? granted = await _channel.invokeMethod('requestPermission');
+      if (granted == false) {
+        CustomSttLogService.instance.warning('OnDeviceApple', 'Speech recognition permission not granted.');
+      }
+      return granted ?? false;
+    } catch (e) {
+      CustomSttLogService.instance.error('OnDeviceApple', 'Permission request error: $e');
+      return false;
+    }
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(
     Uint8List audioData, {

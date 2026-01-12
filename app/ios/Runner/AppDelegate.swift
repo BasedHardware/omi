@@ -396,6 +396,19 @@ class SpeechRecognitionHandler: NSObject {
             
             let language = args["language"] as? String ?? "en-US"
             transcribe(filePath: path, language: language, result: result)
+        } else if call.method == "requestPermission" {
+            SFSpeechRecognizer.requestAuthorization { authStatus in
+                DispatchQueue.main.async {
+                    switch authStatus {
+                    case .authorized:
+                        result(true)
+                    case .denied, .restricted, .notDetermined:
+                        result(false)
+                    @unknown default:
+                        result(false)
+                    }
+                }
+            }
         } else {
             result(FlutterMethodNotImplemented)
         }
