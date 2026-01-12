@@ -16,11 +16,11 @@ users_collection = 'users'
 
 
 def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
-    """Get the current active goal for a user."""
+    """Get the current active goal for a user (backward compatibility - returns first active goal)."""
     user_ref = db.collection(users_collection).document(uid)
     goals_ref = user_ref.collection(goals_collection)
     
-    # Get the active goal (there should be only one active at a time)
+    # Get the first active goal (for backward compatibility)
     query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(1)
     docs = list(query.stream())
     
@@ -29,17 +29,37 @@ def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def create_goal(uid: str, goal_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Create a new goal for a user. Deactivates any existing active goal."""
+def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
+    """Get all active goals for a user (up to limit)."""
     user_ref = db.collection(users_collection).document(uid)
     goals_ref = user_ref.collection(goals_collection)
     
-    # Deactivate existing active goals
-    active_goals = goals_ref.where(filter=FieldFilter('is_active', '==', True)).stream()
-    batch = db.batch()
-    for doc in active_goals:
-        batch.update(doc.reference, {'is_active': False, 'ended_at': datetime.now(timezone.utc)})
-    batch.commit()
+    # Get all active goals
+    query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
+    docs = list(query.stream())
+    
+    # Sort in Python instead of Firestore (avoids composite index requirement)
+    goals = [doc.to_dict() for doc in docs]
+    goals.sort(key=lambda x: x.get('created_at') or '', reverse=False)
+    
+    return goals
+
+
+def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict[str, Any]:
+    """Create a new goal for a user. Supports up to max_goals active goals."""
+    user_ref = db.collection(users_collection).document(uid)
+    goals_ref = user_ref.collection(goals_collection)
+    
+    # Check current active goal count
+    active_goals = list(goals_ref.where(filter=FieldFilter('is_active', '==', True)).stream())
+    
+    # If at max, deactivate the oldest one
+    if len(active_goals) >= max_goals:
+        # Sort by created_at and deactivate oldest
+        active_goals_data = [(doc, doc.to_dict().get('created_at')) for doc in active_goals]
+        active_goals_data.sort(key=lambda x: x[1] if x[1] else datetime.min.replace(tzinfo=timezone.utc))
+        oldest_doc = active_goals_data[0][0]
+        oldest_doc.reference.update({'is_active': False, 'ended_at': datetime.now(timezone.utc)})
     
     # Create new goal
     goal_id = goal_data.get('id') or f"goal_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"

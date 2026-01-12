@@ -34,6 +34,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   TextEditingController textController = TextEditingController();
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+  
+  void _refreshGoals() {
+    _goalsWidgetKey.currentState?.refresh();
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -160,6 +165,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         onRefresh: () async {
           HapticFeedback.mediumImpact();
           Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+          // Refresh goals widget
+          _refreshGoals();
           await Future.wait([
             convoProvider.getInitialConversations(),
             Provider.of<FolderProvider>(context, listen: false).loadFolders(),
@@ -214,7 +221,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             
             // Goals Widget (up to 3 goals)
-            const SliverToBoxAdapter(child: GoalsWidget()),
+            SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
             
             // Conversations section header
             const SliverToBoxAdapter(
