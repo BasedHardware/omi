@@ -259,14 +259,6 @@ class _FreemiumPaywallPageState extends State<FreemiumPaywallPage> with TickerPr
   Widget _buildPremiumBenefits() {
     return Column(
       children: [
-        _buildBenefitRow(Icons.all_inclusive, 'Unlimited transcription'),
-        const SizedBox(height: 16),
-        _buildBenefitRow(Icons.bolt, 'Fastest & most accurate'),
-        const SizedBox(height: 16),
-        _buildBenefitRow(Icons.people_outline, 'Speaker detection'),
-        const SizedBox(height: 16),
-        _buildBenefitRow(Icons.psychology_outlined, 'Unlimited AI memory'),
-        const SizedBox(height: 24),
         _buildComparisonTable(),
       ],
     );
@@ -299,32 +291,34 @@ class _FreemiumPaywallPageState extends State<FreemiumPaywallPage> with TickerPr
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
               color: Colors.grey.shade900,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Row(
               children: [
-                const Expanded(flex: 2, child: SizedBox()),
-                Expanded(
+                Expanded(flex: 3, child: Container()),
+                const Expanded(
+                  flex: 2,
                   child: Text(
                     'Premium',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.deepPurple.shade300,
-                      fontSize: 11,
+                      color: Colors.white,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
                 Expanded(
+                  flex: 2,
                   child: Text(
                     'On-Device',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.grey.shade500,
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -332,52 +326,128 @@ class _FreemiumPaywallPageState extends State<FreemiumPaywallPage> with TickerPr
               ],
             ),
           ),
-          _buildComparisonRow('Speed', 'Instant', 'Slower', true),
-          _buildComparisonRow('Accuracy', 'Best', '6/10', true),
-          _buildComparisonRow('Speaker ID', '✓', '✗', true),
-          _buildComparisonRow('Battery', 'Low', '30%/hour', true),
-          _buildComparisonRow('Offline', '✗', '✓', false),
-          _buildComparisonRow('Price', 'Paid', 'Free', false, isLast: true),
+          _buildComparisonRow(
+            feature: 'Speed',
+            subtitle: 'How fast you see text',
+            premium: 'Real-time',
+            free: '5-7s delay',
+            premiumWins: true,
+          ),
+          _buildComparisonRow(
+            feature: 'Accuracy',
+            subtitle: 'Transcription quality',
+            premium: '99%+',
+            free: '~60%',
+            premiumWins: true,
+          ),
+          _buildComparisonRow(
+            feature: 'Speakers',
+            subtitle: 'Identify who said what',
+            premium: 'Multi-person',
+            free: 'No detection',
+            premiumWins: true,
+          ),
+          _buildComparisonRow(
+            feature: 'Battery',
+            subtitle: 'Power consumption',
+            premium: '1-3%/hr',
+            free: '~30%/hr',
+            premiumWins: true,
+          ),
+          _buildComparisonRow(
+            feature: 'Offline',
+            subtitle: 'Works without internet',
+            premium: 'No',
+            free: 'Yes',
+            premiumWins: false,
+          ),
+          _buildComparisonRow(
+            feature: 'Cost',
+            subtitle: '',
+            premium: 'Subscription',
+            free: 'Free forever',
+            premiumWins: false,
+            isLast: true,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildComparisonRow(String feature, String premium, String free, bool premiumBetter, {bool isLast = false}) {
+  Widget _buildComparisonRow({
+    required String feature,
+    required String subtitle,
+    required String premium,
+    required String free,
+    required bool premiumWins,
+    bool isLast = false,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         border: isLast ? null : Border(bottom: BorderSide(color: Colors.grey.shade800, width: 0.5)),
       ),
       child: Row(
         children: [
           Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  feature,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
+                if (subtitle.isNotEmpty)
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
             flex: 2,
-            child: Text(
-              feature,
-              style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    premium,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: premiumWins ? Colors.white : Colors.grey.shade600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (premiumWins) ...[
+                  const SizedBox(width: 3),
+                  const Text('👍', style: TextStyle(fontSize: 10)),
+                ],
+              ],
             ),
           ),
           Expanded(
-            child: Text(
-              premium,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: premiumBetter ? Colors.green.shade400 : Colors.grey.shade500,
-                fontSize: 12,
-                fontWeight: premiumBetter ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              free,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: !premiumBetter ? Colors.green.shade400 : Colors.grey.shade500,
-                fontSize: 12,
-                fontWeight: !premiumBetter ? FontWeight.w600 : FontWeight.normal,
-              ),
+            flex: 2,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(
+                    free,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: !premiumWins ? Colors.white : Colors.grey.shade600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                if (!premiumWins) ...[
+                  const SizedBox(width: 3),
+                  const Text('👍', style: TextStyle(fontSize: 10)),
+                ],
+              ],
             ),
           ),
         ],
