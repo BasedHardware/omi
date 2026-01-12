@@ -194,7 +194,7 @@ def get_memories_tool(
 @tool
 def search_memories_tool(
     query: str,
-    limit: int = 10,
+    limit: int = 5,
     config: RunnableConfig = None,
 ) -> str:
     """
@@ -220,7 +220,7 @@ def search_memories_tool(
 
     Args:
         query: Natural language description of what to search for (required)
-        limit: Number of memories to retrieve (default: 10, max: 50)
+        limit: Number of memories to retrieve (default: 5, max: 20)
 
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
@@ -252,13 +252,12 @@ def search_memories_tool(
         return "Error: User ID not found in configuration"
     print(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
 
-    # Cap limit at 50
-    limit = min(limit, 50)
+    # Cap limit at 20
+    limit = min(limit, 20)
 
     try:
-        # Perform vector search on memories
-        # Use a lower threshold for search (0.5) to get more results
-        matches = vector_db.find_similar_memories(uid, query, threshold=0.5, limit=limit)
+        # Perform vector search on memories (no threshold, just return top matches)
+        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
 
         print(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
 
