@@ -60,51 +60,46 @@ class _GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   Future<void> _loadGoals() async {
     try {
-      // Load from local storage first - this is the source of truth for multi-goal
+      // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
-      final goalsJson = prefs.getString(_goalsStorageKey);
       final emojisJson = prefs.getString(_goalsEmojiKey);
       
-      // Load emojis
       if (emojisJson != null) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
         _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
       }
       
-      bool hasLocalGoals = false;
-      if (goalsJson != null) {
-        try {
-          final List<dynamic> decoded = json.decode(goalsJson);
-          final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
-          if (localGoals.isNotEmpty) {
-            hasLocalGoals = true;
-            if (mounted) {
+      // Fetch goals from backend (source of truth for cross-device sync)
+      final backendGoals = await getAllGoals();
+      
+      if (backendGoals.isNotEmpty && mounted) {
+        setState(() {
+          _goals = backendGoals;
+          _isLoading = false;
+        });
+        // Save to local storage as cache
+        await _saveGoalsLocally();
+      } else {
+        // Fallback: try to load from local storage if backend is empty/unavailable
+        final goalsJson = prefs.getString(_goalsStorageKey);
+        if (goalsJson != null) {
+          try {
+            final List<dynamic> decoded = json.decode(goalsJson);
+            final localGoals = decoded.map((e) => Goal.fromJson(e)).toList();
+            if (localGoals.isNotEmpty && mounted) {
               setState(() {
                 _goals = localGoals;
                 _isLoading = false;
               });
+              return;
             }
+          } catch (e) {
+            debugPrint('[GOALS] Error parsing local goals: $e');
           }
-        } catch (e) {
-          debugPrint('[GOALS] Error parsing local goals: $e');
         }
-      }
-
-      // Only try backend if no local goals exist (backward compatibility)
-      // Backend only supports 1 goal, so don't let it overwrite our multi-goal local storage
-      if (!hasLocalGoals) {
-        final backendGoal = await getCurrentGoal();
-        if (backendGoal != null && mounted) {
-          setState(() {
-            _goals = [backendGoal];
-            _isLoading = false;
-          });
-          await _saveGoalsLocally();
-        } else if (mounted) {
+        if (mounted) {
           setState(() => _isLoading = false);
         }
-      } else if (mounted) {
-        setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint('[GOALS] Error loading goals: $e');
