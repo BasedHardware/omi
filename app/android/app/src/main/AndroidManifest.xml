@@ -16,6 +16,8 @@
         android:required="false" />
 
     <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+    <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
 
     <!-- New Bluetooth permissions in Android 12
     https://developer.android.com/about/versions/12/features/bluetooth-permissions -->
