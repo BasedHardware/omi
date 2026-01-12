@@ -121,6 +121,12 @@
             android:name=".NotificationDismissedReceiver"
             android:exported="false" />
 
+        <!-- Foreground service for keeping BLE connections alive -->
+        <service
+            android:name=".ConnectionForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
