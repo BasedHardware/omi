@@ -29,18 +29,28 @@ def get_memories_tool(
     config: RunnableConfig = None,
 ) -> str:
     """
-    Retrieve structured facts and insights about the user extracted from their conversations.
+    Retrieve structured FACTS and PREFERENCES about the user (NOT events/incidents).
 
-    Memories are facts about the user (preferences, habits, goals, relationships, personal details)
-    that the system has learned over time. This is different from conversation transcripts which
-    show what was actually said.
+    Memories are STATIC FACTS about the user (name, age, preferences, habits, goals, relationships)
+    that the system has learned over time. This is DIFFERENT from events/incidents that happened.
 
-    Use this tool when:
+    **CRITICAL DISTINCTION - Use the right tool:**
+    - "What's my favorite food?" → USE THIS TOOL (preference/fact)
+    - "When did I get food poisoning?" → DO NOT USE THIS - use search_conversations_tool (event)
+    - "Do I like dogs?" → USE THIS TOOL (preference)
+    - "When did a dog bite me?" → DO NOT USE THIS - use search_conversations_tool (event)
+    - "What are my hobbies?" → USE THIS TOOL (facts about user)
+    - "What happened at the party?" → DO NOT USE THIS - use search_conversations_tool (event)
+
+    Use this tool ONLY when:
     - User asks "what do you know about me?" or "tell me about my preferences"
-    - You need background context about the user to personalize responses
-    - User asks about their interests, goals, or habits
-    - You want to understand the user better to give more personalized advice
-    - **ALWAYS use this tool to learn about the user before answering personal questions**
+    - You need background context about the user's preferences to personalize responses
+    - User asks about their interests, goals, habits, or relationships (static facts)
+    - Questions like "do I like X?", "what's my favorite Y?", "what are my Z?"
+
+    DO NOT use this tool when:
+    - User asks about specific events/incidents (use search_conversations_tool instead)
+    - Questions like "when did X happen?", "what happened at Y?", "when did I get Z?"
 
     Memory retrieval guidance - choosing the right limit:
     - **CRITICAL**: For ANY question asking about basic personal information (name, age, location, background, etc.) or multiple personal facts together, you MUST use limit=5000 to get ALL memories

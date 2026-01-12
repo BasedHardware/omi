@@ -8,7 +8,6 @@ The LLM decides which tools to use and extracts the parameters needed.
 from .conversation_tools import (
     get_conversations_tool,
     search_conversations_tool,
-    vector_search_conversations_tool,
 )
 from .memory_tools import (
     get_memories_tool,
@@ -22,7 +21,7 @@ from .omi_tools import (
     get_omi_product_info_tool,
 )
 from .perplexity_tools import (
-    perplexity_search_tool,
+    perplexity_web_search_tool,
 )
 from .calendar_tools import (
     get_calendar_events_tool,
@@ -60,13 +59,12 @@ from .notification_settings_tools import (
 __all__ = [
     'get_conversations_tool',
     'search_conversations_tool',
-    'vector_search_conversations_tool',
     'get_memories_tool',
     'get_action_items_tool',
     'create_action_item_tool',
     'update_action_item_tool',
     'get_omi_product_info_tool',
-    'perplexity_search_tool',
+    'perplexity_web_search_tool',
     'get_calendar_events_tool',
     'create_calendar_event_tool',
     'update_calendar_event_tool',

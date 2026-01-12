@@ -33,7 +33,6 @@ from utils.chat import (
 )
 from utils.llm.persona import initial_persona_chat_message
 from utils.llm.chat import initial_chat_message
-from utils.llm.tasks import extract_tasks_from_chat, extract_tasks_from_conversation
 from utils.llm.goals import extract_and_update_goal_progress
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
@@ -106,9 +105,8 @@ def send_message(
 
     chat_db.add_message(uid, message.dict())
     
-    # Check for goal progress and extract tasks from user message (background)
+    # Check for goal progress (background)
     threading.Thread(target=extract_and_update_goal_progress, args=(uid, data.text)).start()
-    threading.Thread(target=extract_tasks_from_chat, args=(uid, data.text)).start()
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
@@ -117,12 +115,13 @@ def send_message(
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
 
-    # Capture user message text for task extraction
-    user_message_text = data.text
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
+        langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
@@ -149,6 +148,9 @@ def send_message(
             app_id=app_id_from_app,
             type='text',
             memories_id=memories_id,
+            langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
+            prompt_name=prompt_name,  # LangSmith prompt name for versioning
+            prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
         if chat_session:
             ai_message.chat_session_id = chat_session.id
@@ -158,9 +160,6 @@ def send_message(
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
-
-        # Extract tasks from full conversation context (user message + AI response) in background
-        threading.Thread(target=extract_tasks_from_conversation, args=(uid, user_message_text, response)).start()
 
         return ai_message, ask_for_nps
 
@@ -295,6 +294,14 @@ def get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
     )
     print('get_messages', len(messages), compat_app_id)
+    
+    # Debug: Check for messages with ratings
+    rated_messages = [m for m in messages if m.get('rating') is not None]
+    if rated_messages:
+        print(f'📊 Messages with ratings: {len(rated_messages)}')
+        for m in rated_messages[:5]:  # Show first 5
+            print(f"  - Message {m.get('id')}: rating={m.get('rating')}")
+    
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
     return messages

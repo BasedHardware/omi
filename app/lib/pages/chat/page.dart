@@ -20,6 +20,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -45,7 +46,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
 
-  bool _showVoiceRecorder = false;
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
 
@@ -82,7 +82,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       // Auto-focus the text field only on initial load, not on app switches
       if (_isInitialLoad) {
         Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted && !_showVoiceRecorder && _isInitialLoad) {
+          final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
+          if (mounted && !voiceRecorderProvider.isActive && _isInitialLoad) {
             textFieldFocusNode.requestFocus();
           }
         });
@@ -251,8 +252,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                             .read<ConversationProvider>()
                                                             .updateConversation(conversation);
                                                       },
-                                                      setMessageNps: (int value) {
-                                                        provider.setMessageNps(message, value);
+                                                      setMessageNps: (int value, {String? reason}) {
+                                                        provider.setMessageNps(message, value, reason: reason);
                                                       },
                                                     );
                                                     
@@ -291,17 +292,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       topRight: Radius.circular(22),
                     ),
                   ),
-                  child: Consumer<HomeProvider>(builder: (context, home, child) {
+                  child: Consumer2<HomeProvider, VoiceRecorderProvider>(builder: (context, home, voiceRecorderProvider, child) {
                     bool shouldShowSendButton(MessageProvider p) {
-                      return !p.sendingMessage && !_showVoiceRecorder;
+                      return !p.sendingMessage && !voiceRecorderProvider.isActive;
                     }
 
                     bool shouldShowVoiceRecorderButton() {
-                      return !_showVoiceRecorder;
+                      return !voiceRecorderProvider.isActive;
                     }
 
                     bool shouldShowMenuButton() {
-                      return !_showVoiceRecorder;
+                      return !voiceRecorderProvider.isActive;
                     }
 
                     return Column(
@@ -461,7 +462,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       mainAxisSize: MainAxisSize.min,
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        if (_selectedContext != null && !_showVoiceRecorder)
+                                        if (_selectedContext != null && !voiceRecorderProvider.isActive)
                                           Padding(
                                             padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
                                             child: Container(
@@ -508,19 +509,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               ),
                                             ),
                                           ),
-                                        _showVoiceRecorder
+                                        voiceRecorderProvider.isActive
                                       ? VoiceRecorderWidget(
                                           onTranscriptReady: (transcript) {
-                                            setState(() {
-                                              textController.text = transcript;
-                                              _showVoiceRecorder = false;
-                                              context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                            });
+                                            textController.text = transcript;
+                                            voiceRecorderProvider.setActive(false);
+                                            context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
                                           },
                                           onClose: () {
-                                            setState(() {
-                                              _showVoiceRecorder = false;
-                                            });
+                                            voiceRecorderProvider.setActive(false);
                                           },
                                         )
                                       : Theme(
@@ -561,9 +558,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       onTap: () {
                                         HapticFeedback.lightImpact();
                                         FocusScope.of(context).unfocus();
-                                        setState(() {
-                                          _showVoiceRecorder = true;
-                                        });
+                                        voiceRecorderProvider.setActive(true);
                                       },
                                       child: Container(
                                         height: 44,

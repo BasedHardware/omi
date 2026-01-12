@@ -9,11 +9,12 @@ from fastapi.responses import JSONResponse
 import database.apps as apps_db
 import database.conversations as conversations_db
 import utils.apps as apps_utils
-from utils.apps import verify_api_key
+from utils.apps import verify_api_key, app_can_read_tasks
 import database.redis_db as redis_db
 import database.memories as memory_db
 from database.redis_db import get_enabled_apps, r as redis_client
 import database.notifications as notification_db
+import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.conversation import SearchRequest
@@ -549,3 +550,138 @@ async def send_notification_via_integration(
 
     send_app_notification(uid, app.name, app.id, message)
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
+
+
+@router.get(
+    '/v2/integrations/{app_id}/tasks',
+    response_model=integration_models.TasksResponse,
+    response_model_exclude_none=True,
+    tags=['integration', 'tasks'],
+)
+async def get_tasks_via_integration(
+    request: Request,
+    app_id: str,
+    uid: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    completed: Optional[bool] = Query(None, description="Filter by completion status"),
+    conversation_id: Optional[str] = Query(None, description="Filter by conversation ID"),
+    start_date: Optional[Union[datetime, str]] = Query(
+        None, description="Filter by creation start date (ISO format or YYYY-MM-DD)"
+    ),
+    end_date: Optional[Union[datetime, str]] = Query(
+        None, description="Filter by creation end date (ISO format or YYYY-MM-DD)"
+    ),
+    due_start_date: Optional[Union[datetime, str]] = Query(
+        None, description="Filter by due start date (ISO format or YYYY-MM-DD)"
+    ),
+    due_end_date: Optional[Union[datetime, str]] = Query(
+        None, description="Filter by due end date (ISO format or YYYY-MM-DD)"
+    ),
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Get all tasks (action items) for a user via integration API.
+    Authentication is required via API key in the Authorization header.
+
+    Optional filters:
+    - **completed**: Filter by completion status (true/false/null for all)
+    - **conversation_id**: Filter by conversation ID
+    - **start_date**: Filter by creation start date (ISO format or YYYY-MM-DD)
+    - **end_date**: Filter by creation end date (ISO format or YYYY-MM-DD)
+    - **due_start_date**:  Filter by due start date (ISO format or YYYY-MM-DD)
+    - **due_end_date**: Filter by due end date (ISO format or YYYY-MM-DD)
+    """
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not verify_api_key(app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    app = apps_db.get_app_by_id_db(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    enabled_plugins = redis_db.get_enabled_apps(uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    if not apps_utils.app_can_read_tasks(app):
+        raise HTTPException(status_code=403, detail="App does not have the capability to read tasks")
+
+    if isinstance(start_date, str) and start_date:
+        try:
+            if len(start_date) == 10:  # YYYY-MM-DD
+                dt = datetime.strptime(start_date, '%Y-%m-%d')
+                start_date = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+            else:
+                start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
+            )
+
+    if isinstance(end_date, str) and end_date:
+        try:
+            if len(end_date) == 10:  # YYYY-MM-DD
+                dt = datetime.strptime(end_date, '%Y-%m-%d')
+                end_date = dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+            else:
+                end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
+            )
+
+    if isinstance(due_start_date, str) and due_start_date:
+        try:
+            if len(due_start_date) == 10:  # YYYY-MM-DD
+                dt = datetime.strptime(due_start_date, '%Y-%m-%d')
+                due_start_date = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+            else:
+                due_start_date = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid due_start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
+            )
+
+    if isinstance(due_end_date, str) and due_end_date:
+        try:
+            if len(due_end_date) == 10:  # YYYY-MM-DD
+                dt = datetime.strptime(due_end_date, '%Y-%m-%d')
+                due_end_date = dt.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=timezone.utc)
+            else:
+                due_end_date = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid due_end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ) or YYYY-MM-DD",
+            )
+
+    tasks = action_items_db.get_action_items(
+        uid=uid,
+        conversation_id=conversation_id,
+        completed=completed,
+        start_date=start_date,
+        end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
+        limit=limit,
+        offset=offset,
+    )
+
+    task_items = []
+    for task in tasks:
+        task_data = task.copy()
+        if task_data.get('is_locked', False):
+            description = task_data.get('description', '')
+            task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
+        item = integration_models.TaskItem(**task_data)
+        task_items.append(item)
+
+    response = integration_models.TasksResponse(tasks=task_items)
+    return response.dict(exclude_none=True)

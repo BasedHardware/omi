@@ -162,7 +162,7 @@ env:
   - name: BUCKET_PLUGINS_LOGOS
     value: "omi_plugins"
   - name: LANGCHAIN_TRACING_V2
-    value: "false"
+    value: "true"
   - name: LANGCHAIN_ENDPOINT
     value: "https://api.smith.langchain.com"
   - name: LANGCHAIN_API_KEY

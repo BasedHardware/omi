@@ -23,8 +23,8 @@ import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -119,8 +119,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
 
-  // Track if freemium threshold dialog has been shown this session
-  bool _freemiumDialogShown = false;
+  // Freemium switch handler for auto-switch dialogs
+  final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -247,8 +247,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
+        if (SharedPreferencesUtil().locationEnabled) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        } else {
+          debugPrint('Skipping foreground service: location is not enabled');
+        }
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -413,112 +417,20 @@ break;
 
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       captureProvider.addListener(_onCaptureProviderChanged);
+      // Connect freemium session reset callback
+      captureProvider.onFreemiumSessionReset = () {
+        _freemiumHandler.resetDialogFlag();
+      };
     });
   }
 
   void _onCaptureProviderChanged() {
-    if (!mounted || _freemiumDialogShown) return;
+    if (!mounted) return;
 
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-
-    if (captureProvider.freemiumThresholdReached && captureProvider.freemiumRequiresUserAction) {
-      _freemiumDialogShown = true;
-      _showFreemiumThresholdDialog(captureProvider.freemiumRemainingSeconds);
-    }
-  }
-
-  void _showFreemiumThresholdDialog(int remainingSeconds) {
-    final minutes = (remainingSeconds / 60).ceil();
-    final timeText = minutes > 0 ? '$minutes minute${minutes != 1 ? 's' : ''}' : 'less than a minute';
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 24),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade700,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const Text(
-                'Premium Minutes Running Low',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'You have $timeText of premium minutes left. Omi is free forever—setup on-device transcription for unlimited minutes.',
-                style: TextStyle(
-                  color: Colors.grey.shade400,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const TranscriptionSettingsPage(),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Get Unlimited Free',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(
-                  'Later',
-                  style: TextStyle(
-                    color: Colors.grey.shade500,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
+      debugPrint('[Freemium] Error checking dialog: $e');
+    });
   }
 
   void _listenToMessagesFromNotification() {
@@ -1264,7 +1176,10 @@ break;
     try {
       final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       captureProvider.removeListener(_onCaptureProviderChanged);
+      captureProvider.onFreemiumSessionReset = null;
     } catch (_) {}
+    // Clean up freemium handler
+    _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();
