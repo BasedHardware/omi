@@ -55,17 +55,17 @@ class _AppShellState extends State<AppShell> {
     }
 
     if (uri.pathSegments.first == 'apps') {
-      if (mounted) {
-        var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
-        if (app != null) {
-          PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
-          if (mounted) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
-          }
-        } else {
-          debugPrint('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
-        }
+      final appProvider = context.read<AppProvider>();
+      final app = await appProvider.getAppFromId(uri.pathSegments[1]);
+
+      if (!mounted) return;
+
+      if (app != null) {
+        PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+      } else {
+        debugPrint('App not found: ${uri.pathSegments[1]}');
+        AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
       }
     } else if (uri.pathSegments.first == 'wrapped') {
       if (mounted) {
@@ -364,23 +364,34 @@ class _AppShellState extends State<AppShell> {
     initDeepLinks();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (context.read<AuthenticationProvider>().isSignedIn()) {
-        context.read<HomeProvider>().setupHasSpeakerProfile();
-        context.read<HomeProvider>().setupUserPrimaryLanguage();
-        context.read<UserProvider>().initialize();
-        context.read<PeopleProvider>().initialize();
+      final auth = context.read<AuthenticationProvider>();
+
+      if (auth.isSignedIn()) {
+        final homeProvider = context.read<HomeProvider>();
+        final userProvider = context.read<UserProvider>();
+        final peopleProvider = context.read<PeopleProvider>();
+        homeProvider.setupHasSpeakerProfile();
+        homeProvider.setupUserPrimaryLanguage();
+        userProvider.initialize();
+        peopleProvider.initialize();
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
           debugPrint('Failed to login to Intercom: $e');
         }
 
-        context.read<MessageProvider>().setMessagesFromCache();
-        context.read<AppProvider>().setAppsFromCache();
-        context.read<MessageProvider>().refreshMessages();
-        context.read<UsageProvider>().fetchSubscription();
-        context.read<TaskIntegrationProvider>().loadFromBackend();
+        if (!mounted) return;
 
+        final messageProvider = context.read<MessageProvider>();
+        final appProvider = context.read<AppProvider>();
+        final usageProvider = context.read<UsageProvider>();
+        final taskIntegrationProvider = context.read<TaskIntegrationProvider>();
+
+        messageProvider.setMessagesFromCache();
+        appProvider.setAppsFromCache();
+        messageProvider.refreshMessages();
+        usageProvider.fetchSubscription();
+        taskIntegrationProvider.loadFromBackend();
         NotificationService.instance.saveNotificationToken();
       } else {
         if (!PlatformManager.instance.isAnalyticsSupported) {
