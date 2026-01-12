@@ -218,6 +218,7 @@ DISCARD (output: discard = True) if the content is:
 • Very brief interactions (5-10 seconds) that lack actionable content or meaningful context.
 • Casual acknowledgments, greetings, or passing comments that don't contain useful information.
 • Blurry photos, uninteresting scenery with no context, or content that doesn't meet the KEEP criteria above.
+• Feels like asking Siri or other AI assistant something in 1-2 sentences or using voice to type something in a chat for 5-10 seconds.
 
 Return exactly one line:
 discard = <True|False>
