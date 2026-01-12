@@ -41,6 +41,7 @@ from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 from utils.retrieval.agentic import execute_agentic_chat_stream
+from utils.observability.langsmith import get_chat_tracer_callbacks
 
 model = ChatOpenAI(model="gpt-4.1-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
@@ -485,9 +486,22 @@ def execute_graph_chat(
     print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_name="chat.graph",
+        tags=["chat", "graph"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "cited": cited,
+            "tz": tz,
+        },
+    )
+    
     # LangSmith tracing metadata
     run_config = {
         "configurable": {"thread_id": str(uuid.uuid4())},
+        "callbacks": tracer_callbacks,
         "run_name": "chat.graph",
         "tags": ["chat", "graph"],
         "metadata": {
@@ -521,10 +535,27 @@ async def execute_graph_chat_stream(
     # Generate run_id for LangSmith tracing (allows feedback attachment later)
     langsmith_run_id = str(uuid.uuid4())
 
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.graph.stream",
+        tags=["chat", "graph", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "cited": cited,
+            "tz": tz,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+        },
+    )
+
     # LangSmith tracing metadata
     run_config = {
         "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
         "configurable": {"thread_id": str(uuid.uuid4())},
+        "callbacks": tracer_callbacks,
         "run_name": "chat.graph.stream",
         "tags": ["chat", "graph", "streaming"],
         "metadata": {
@@ -602,6 +633,22 @@ async def execute_persona_chat_stream(
     # Generate run_id for LangSmith tracing (allows feedback attachment later)
     langsmith_run_id = str(uuid.uuid4())
 
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.persona.stream",
+        tags=["chat", "persona", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "cited": cited,
+        },
+    )
+
+    # Combine streaming callback with tracer callbacks
+    all_callbacks = [callback] + tracer_callbacks
+
     # LangSmith tracing metadata
     run_metadata = {
         "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
@@ -622,7 +669,7 @@ async def execute_persona_chat_stream(
     try:
         task = asyncio.create_task(llm_medium_stream.agenerate(
             messages=[formatted_messages], 
-            callbacks=[callback],
+            callbacks=all_callbacks,
             **run_metadata
         ))
 

@@ -305,148 +305,125 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          // Top row with status tag and controls
-          Padding(
-            padding: const EdgeInsets.only(left: 8, right: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Left: Status tag + Star indicator
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
-                            style: const TextStyle(
-                              color: Color(0xFFC9CBCF),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ),
+      return Padding(
+        padding: const EdgeInsets.only(left: 8, right: 6),
+        child: Row(
+          children: [
+            // Left: Status tag
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF35343B),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
+                    style: const TextStyle(
+                      color: Color(0xFFC9CBCF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    // Star indicator when conversation is marked for starring
-                    if (provider.isConversationMarkedForStarring) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FaIcon(
-                              FontAwesomeIcons.solidStar,
-                              size: 12,
-                              color: Colors.amber,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Starred',
-                              style: TextStyle(
-                                color: Colors.amber,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                // Right: Control buttons for both device and phone recording
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Pause/Resume button
-                    GestureDetector(
-                      onTap: () async {
-                        if (!isPaused) {
-                          // Muting: double impact for a satisfying "click-click" feel
-                          HapticFeedback.heavyImpact();
-                          await Future.delayed(const Duration(milliseconds: 80));
-                          HapticFeedback.lightImpact();
-                          // User is pausing/muting
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: true,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        } else {
-                          // Unmuting: standard haptic feedback
-                          HapticFeedback.mediumImpact();
-                          // User is resuming
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: false,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        }
-                        _toggleRecording(context, provider);
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isPaused
-                              ? isDeviceRecording
-                                  ? const Color(0xFFFE5D50)
-                                  : const Color(0xFF7C3AED)
-                              : isDeviceRecording
-                                  ? const Color(0xFF35343B)
-                                  : const Color(0xFFFF9500),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: FaIcon(
-                            isPaused
-                                ? isDeviceRecording
-                                    ? FontAwesomeIcons.microphoneSlash
-                                    : FontAwesomeIcons.play
-                                : isDeviceRecording
-                                    ? FontAwesomeIcons.microphone
-                                    : FontAwesomeIcons.pause,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
-                      ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          if (provider.photos.isNotEmpty || provider.segments.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const LiteCaptureWidget(),
+            // Star indicator when conversation is marked for starring
+            if (provider.isConversationMarkedForStarring) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FaIcon(
+                      FontAwesomeIcons.solidStar,
+                      size: 12,
+                      color: Colors.amber,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Starred',
+                      style: TextStyle(
+                        color: Colors.amber,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Middle: Transcript text (takes remaining space)
+            if (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+              const Expanded(child: LiteCaptureWidget())
+            else
+              const Spacer(),
+            // Right: Pause/Resume button
+            GestureDetector(
+              onTap: () async {
+                if (!isPaused) {
+                  HapticFeedback.heavyImpact();
+                  await Future.delayed(const Duration(milliseconds: 80));
+                  HapticFeedback.lightImpact();
+                  MixpanelManager().recordingMuteToggled(
+                    isMuted: true,
+                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                  );
+                } else {
+                  HapticFeedback.mediumImpact();
+                  MixpanelManager().recordingMuteToggled(
+                    isMuted: false,
+                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                  );
+                }
+                _toggleRecording(context, provider);
+              },
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: isPaused
+                      ? isDeviceRecording
+                          ? const Color(0xFFFE5D50)
+                          : const Color(0xFF7C3AED)
+                      : isDeviceRecording
+                          ? const Color(0xFF35343B)
+                          : const Color(0xFFFF9500),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: FaIcon(
+                    isPaused
+                        ? isDeviceRecording
+                            ? FontAwesomeIcons.microphoneSlash
+                            : FontAwesomeIcons.play
+                        : isDeviceRecording
+                            ? FontAwesomeIcons.microphone
+                            : FontAwesomeIcons.pause,
+                    color: Colors.white,
+                    size: 12,
+                  ),
+                ),
+              ),
+            ),
           ],
-        ],
+        ),
       );
     } else {
       // For non-recording states, show the original header-based UI

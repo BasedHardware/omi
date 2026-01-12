@@ -513,11 +513,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       ? VoiceRecorderWidget(
                                           onTranscriptReady: (transcript) {
                                             textController.text = transcript;
-                                            voiceRecorderProvider.setActive(false);
+                                            voiceRecorderProvider.close();
                                             context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
                                           },
                                           onClose: () {
-                                            voiceRecorderProvider.setActive(false);
+                                            voiceRecorderProvider.close();
                                           },
                                         )
                                       : Theme(
@@ -558,7 +558,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       onTap: () {
                                         HapticFeedback.lightImpact();
                                         FocusScope.of(context).unfocus();
-                                        voiceRecorderProvider.setActive(true);
+                                        voiceRecorderProvider.startRecording();
                                       },
                                       child: Container(
                                         height: 44,
