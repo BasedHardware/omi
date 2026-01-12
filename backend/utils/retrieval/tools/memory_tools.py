@@ -269,19 +269,24 @@ def search_memories_tool(
             print(f"⚠️ search_memories_tool - {msg}")
             return msg
 
-        # Fetch full memory data for each match
+        memory_ids = [match.get('memory_id') for match in matches if match.get('memory_id')]
+        scores_by_id = {match.get('memory_id'): match.get('score', 0) for match in matches}
+
+        if not memory_ids:
+            return f"Found matches but no valid memory IDs for query: '{query}'"
+
+        memories_data = memory_db.get_memories_by_ids(uid, memory_ids)
+
+        # Convert to MemoryDB objects with scores
         memory_objects = []
-        for match in matches:
-            memory_id = match.get('memory_id')
-            if memory_id:
-                memory_data = memory_db.get_memory(uid, memory_id)
-                if memory_data:
-                    try:
-                        memory_obj = MemoryDB(**memory_data)
-                        memory_objects.append({'memory': memory_obj, 'score': match.get('score', 0)})
-                    except Exception as e:
-                        print(f"Error creating MemoryDB object for {memory_id}: {e}")
-                        continue
+        for memory_data in memories_data:
+            try:
+                memory_obj = MemoryDB(**memory_data)
+                score = scores_by_id.get(memory_data.get('id'), 0)
+                memory_objects.append({'memory': memory_obj, 'score': score})
+            except Exception as e:
+                print(f"Error creating MemoryDB object: {e}")
+                continue
 
         if not memory_objects:
             return f"Found matches but could not retrieve memory details for query: '{query}'"
