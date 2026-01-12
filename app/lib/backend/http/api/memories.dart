@@ -77,18 +77,6 @@ Future<bool> deleteAllMemoriesServer() async {
   return response.statusCode == 200;
 }
 
-Future<bool> reviewMemoryServer(String memoryId, bool value) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories/$memoryId/review?value=$value',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  debugPrint('reviewMemory response: ${response.body}');
-  return response.statusCode == 200;
-}
-
 Future<bool> editMemoryServer(String memoryId, String value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v3/memories/$memoryId?value=$value',

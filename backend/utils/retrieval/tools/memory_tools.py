@@ -3,13 +3,14 @@ Tools for accessing user memories and facts.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 import contextvars
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
+import database.vector_db as vector_db
 from models.memories import MemoryDB
 
 # Import agent_config_context for fallback config access
@@ -188,3 +189,128 @@ def get_memories_tool(
     result += MemoryDB.get_memories_as_str(memory_objects)
 
     return result.strip()
+
+
+@tool
+def search_memories_tool(
+    query: str,
+    limit: int = 10,
+    config: RunnableConfig = None,
+) -> str:
+    """
+    Search memories using semantic vector search to find relevant facts about the user.
+
+    This tool uses AI embeddings to find memories (facts/preferences) that are semantically
+    similar to your query, even if they don't contain the exact keywords.
+
+    **When to use this tool:**
+    - Searching for specific facts or preferences about the user
+    - Finding memories related to a concept or theme
+    - Looking up what the user knows/likes/dislikes about a topic
+    - Questions like "what do I know about cooking?", "my preferences for travel"
+
+    **When NOT to use this tool:**
+    - For finding when specific events happened (use search_conversations_tool instead)
+    - Questions like "when did X happen?", "what happened at Y?"
+
+    **Examples:**
+    - "cooking preferences" → finds memories about food, cooking habits
+    - "work goals" → finds career-related facts and goals
+    - "family members" → finds memories about relationships
+
+    Args:
+        query: Natural language description of what to search for (required)
+        limit: Number of memories to retrieve (default: 10, max: 50)
+
+    Returns:
+        Formatted string with semantically matching memories ranked by relevance.
+    """
+    print(f"🔧 search_memories_tool called with query: {query}")
+
+    # Get config from parameter or context variable
+    if config is None:
+        try:
+            config = agent_config_context.get()
+            if config:
+                print(f"🔧 search_memories_tool - got config from context variable")
+        except LookupError:
+            print(f"❌ search_memories_tool - config not found in context variable")
+            config = None
+
+    if config is None:
+        print(f"❌ search_memories_tool - config is None")
+        return "Error: Configuration not available"
+
+    try:
+        uid = config['configurable'].get('user_id')
+    except (KeyError, TypeError) as e:
+        print(f"❌ search_memories_tool - error accessing config: {e}")
+        return "Error: Configuration not available"
+
+    if not uid:
+        print(f"❌ search_memories_tool - no user_id in config")
+        return "Error: User ID not found in configuration"
+    print(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
+
+    # Cap limit at 50
+    limit = min(limit, 50)
+
+    try:
+        # Perform vector search on memories
+        # Use a lower threshold for search (0.5) to get more results
+        matches = vector_db.find_similar_memories(uid, query, threshold=0.5, limit=limit)
+
+        print(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
+
+        if not matches:
+            msg = (
+                f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
+            )
+            print(f"⚠️ search_memories_tool - {msg}")
+            return msg
+
+        memory_ids = [match.get('memory_id') for match in matches if match.get('memory_id')]
+        scores_by_id = {match.get('memory_id'): match.get('score', 0) for match in matches}
+
+        if not memory_ids:
+            return f"Found matches but no valid memory IDs for query: '{query}'"
+
+        memories_data = memory_db.get_memories_by_ids(uid, memory_ids)
+
+        # Convert to MemoryDB objects with scores
+        memory_objects = []
+        for memory_data in memories_data:
+            try:
+                memory_obj = MemoryDB(**memory_data)
+                score = scores_by_id.get(memory_data.get('id'), 0)
+                memory_objects.append({'memory': memory_obj, 'score': score})
+            except Exception as e:
+                print(f"Error creating MemoryDB object: {e}")
+                continue
+
+        if not memory_objects:
+            return f"Found matches but could not retrieve memory details for query: '{query}'"
+
+        print(f"🔍 search_memories_tool - Loaded {len(memory_objects)} full memories")
+
+        # Format results with relevance scores
+        result = f"Found {len(memory_objects)} memories matching '{query}':\n\n"
+        for item in memory_objects:
+            memory = item['memory']
+            score = item['score']
+            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            result += (
+                f"- {memory.content} (relevance: {score:.2f}, category: {memory.category.value}, date: {date_str})\n"
+            )
+
+        print(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
+
+        return result.strip()
+
+    except Exception as e:
+        error_msg = f"Error performing memory search: {str(e)}"
+        print(f"❌ search_memories_tool - {error_msg}")
+        import traceback
+
+        traceback.print_exc()
+        return f"Error searching memories: {str(e)}"

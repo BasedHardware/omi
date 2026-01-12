@@ -70,9 +70,9 @@ class MemoryManagementSheet extends StatelessWidget {
           child: Text(context.l10n.filterMemories, style: AppStyles.title),
         ),
         _buildFilterOption(context, context.l10n.filterAll, null),
+        _buildFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
         _buildFilterOption(context, context.l10n.filterInteresting, MemoryCategory.interesting),
         _buildFilterOption(context, context.l10n.filterManual, MemoryCategory.manual),
-        _buildFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
         const SizedBox(height: 16),
       ],
     );

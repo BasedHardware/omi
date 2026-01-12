@@ -138,17 +138,24 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
             Row(
               children: [
                 OmiChoiceChip(
+                  selected: _selectedCategory == MemoryCategory.system,
+                  label: 'About You',
+                  icon: Icons.person_outlined,
+                  onTap: () => setState(() => _selectedCategory = MemoryCategory.system),
+                ),
+                const SizedBox(width: 8),
+                OmiChoiceChip(
                   selected: _selectedCategory == MemoryCategory.interesting,
-                  label: 'Interesting',
-                  icon: Icons.lightbulb_outline,
+                  label: 'Insights',
+                  icon: Icons.lightbulb_outlined,
                   onTap: () => setState(() => _selectedCategory = MemoryCategory.interesting),
                 ),
                 const SizedBox(width: 8),
                 OmiChoiceChip(
-                  selected: _selectedCategory == MemoryCategory.system,
-                  label: 'System',
-                  icon: Icons.settings_outlined,
-                  onTap: () => setState(() => _selectedCategory = MemoryCategory.system),
+                  selected: _selectedCategory == MemoryCategory.manual,
+                  label: 'Manual',
+                  icon: Icons.edit_outlined,
+                  onTap: () => setState(() => _selectedCategory = MemoryCategory.manual),
                 ),
               ],
             ),

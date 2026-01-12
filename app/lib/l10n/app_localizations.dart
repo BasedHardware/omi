@@ -3903,17 +3903,17 @@ abstract class AppLocalizations {
   /// **'No memories yet'**
   String get noMemoriesYet;
 
-  /// Empty state text for interesting category
+  /// Empty state text for auto category
   ///
   /// In en, this message translates to:
-  /// **'No interesting memories yet'**
-  String get noInterestingMemories;
+  /// **'No auto-extracted memories yet'**
+  String get noAutoMemories;
 
-  /// Empty state text for system category
+  /// Empty state text for manual category
   ///
   /// In en, this message translates to:
-  /// **'No system memories yet'**
-  String get noSystemMemories;
+  /// **'No manual memories yet'**
+  String get noManualMemories;
 
   /// Empty state text for filtered categories
   ///
@@ -4155,10 +4155,16 @@ abstract class AppLocalizations {
   /// **'All'**
   String get filterAll;
 
-  /// Filter option
+  /// Filter option for facts about the user
   ///
   /// In en, this message translates to:
-  /// **'Interesting'**
+  /// **'About You'**
+  String get filterSystem;
+
+  /// Filter option for external wisdom/advice
+  ///
+  /// In en, this message translates to:
+  /// **'Insights'**
   String get filterInteresting;
 
   /// Filter option
@@ -4166,12 +4172,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manual'**
   String get filterManual;
-
-  /// Filter option
-  ///
-  /// In en, this message translates to:
-  /// **'System'**
-  String get filterSystem;
 
   /// Status label
   ///

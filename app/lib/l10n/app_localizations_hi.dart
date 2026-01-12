@@ -2035,10 +2035,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noMemoriesYet => 'अभी तक कोई यादें नहीं';
 
   @override
-  String get noInterestingMemories => 'कोई दिलचस्प यादें नहीं';
+  String get noAutoMemories => 'कोई स्वतः यादें नहीं';
 
   @override
-  String get noSystemMemories => 'कोई सिस्टम यादें नहीं';
+  String get noManualMemories => 'कोई मैनुअल यादें नहीं';
 
   @override
   String get noMemoriesInCategories => 'इन श्रेणियों में कोई यादें नहीं';
@@ -2163,13 +2163,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get filterAll => 'सभी';
 
   @override
-  String get filterInteresting => 'दिलचस्प';
+  String get filterSystem => 'About You';
+
+  @override
+  String get filterInteresting => 'Insights';
 
   @override
   String get filterManual => 'मैनुअल';
-
-  @override
-  String get filterSystem => 'सिस्टम';
 
   @override
   String get completed => 'पूर्ण';
