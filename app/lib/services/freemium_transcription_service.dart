@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -13,9 +12,6 @@ enum FreemiumTranscriptionState {
 
   /// Using free (on-device) STT
   free,
-
-  /// Auto-switching countdown in progress
-  switching,
 }
 
 /// Enum for freemium readiness status
@@ -30,8 +26,8 @@ enum FreemiumReadiness {
   notSupported,
 }
 
-/// Service to manage freemium transcription switching
-/// Handles auto-switch countdown when premium minutes are low
+/// Service to manage freemium transcription state
+/// Handles checking on-device readiness and config generation
 class FreemiumTranscriptionService extends ChangeNotifier {
   static final FreemiumTranscriptionService _instance = FreemiumTranscriptionService._internal();
   factory FreemiumTranscriptionService() => _instance;
@@ -39,28 +35,24 @@ class FreemiumTranscriptionService extends ChangeNotifier {
 
   FreemiumTranscriptionState _state = FreemiumTranscriptionState.premium;
   FreemiumReadiness _readiness = FreemiumReadiness.requiresSetup;
-  Timer? _countdownTimer;
-  int _countdownSeconds = 10;
-  bool _dialogShownThisSession = false;
+  bool _paywallShownThisSession = false;
   String? _cachedModelPath;
 
-  /// Callback when auto-switch should happen
+  /// Callback when user switches to free (optional)
   VoidCallback? onAutoSwitch;
 
   FreemiumTranscriptionState get state => _state;
   FreemiumReadiness get readiness => _readiness;
-  int get countdownSeconds => _countdownSeconds;
-  bool get isCountdownActive => _countdownTimer?.isActive ?? false;
-  bool get dialogShownThisSession => _dialogShownThisSession;
+  bool get dialogShownThisSession => _paywallShownThisSession;
 
-  /// Mark dialog as shown for this session
+  /// Mark paywall as shown for this session
   void markDialogShown() {
-    _dialogShownThisSession = true;
+    _paywallShownThisSession = true;
   }
 
-  /// Reset dialog shown flag (e.g., for new recording session)
+  /// Reset paywall shown flag (e.g., for new recording session)
   void resetDialogShownFlag() {
-    _dialogShownThisSession = false;
+    _paywallShownThisSession = false;
   }
 
   /// Check if freemium (on-device) STT is ready to use
@@ -183,52 +175,8 @@ class FreemiumTranscriptionService extends ChangeNotifier {
     return createOnDeviceSttConfig(modelPath: _cachedModelPath);
   }
 
-  /// Start the auto-switch countdown
-  /// Returns true if countdown started, false if not ready
-  bool startAutoSwitchCountdown({int seconds = 10}) {
-    if (_readiness != FreemiumReadiness.ready) {
-      return false;
-    }
-
-    cancelCountdown();
-    _countdownSeconds = seconds;
-    _state = FreemiumTranscriptionState.switching;
-    notifyListeners();
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      _countdownSeconds--;
-      notifyListeners();
-
-      if (_countdownSeconds <= 0) {
-        timer.cancel();
-        _performAutoSwitch();
-      }
-    });
-
-    return true;
-  }
-
-  /// Cancel the countdown and stay on premium
-  void cancelCountdown() {
-    _countdownTimer?.cancel();
-    _countdownTimer = null;
-    _countdownSeconds = 10;
-    if (_state == FreemiumTranscriptionState.switching) {
-      _state = FreemiumTranscriptionState.premium;
-      notifyListeners();
-    }
-  }
-
-  /// Perform the auto-switch to free STT
-  void _performAutoSwitch() {
-    _state = FreemiumTranscriptionState.free;
-    notifyListeners();
-    onAutoSwitch?.call();
-  }
-
-  /// Manually switch to free STT immediately
-  void switchToFreeNow() {
-    cancelCountdown();
+  /// Switch to free (on-device) STT
+  void switchToFree() {
     _state = FreemiumTranscriptionState.free;
     notifyListeners();
     onAutoSwitch?.call();
@@ -236,7 +184,6 @@ class FreemiumTranscriptionService extends ChangeNotifier {
 
   /// Switch back to premium STT
   void switchToPremium() {
-    cancelCountdown();
     _state = FreemiumTranscriptionState.premium;
     notifyListeners();
   }
@@ -247,18 +194,11 @@ class FreemiumTranscriptionService extends ChangeNotifier {
   /// Check if currently using premium (Omi) STT
   bool get isUsingPremiumStt => _state == FreemiumTranscriptionState.premium;
 
-  /// Reset state (e.g., when user logs out or recording stops)
+  /// Reset state
   void reset() {
-    cancelCountdown();
     _state = FreemiumTranscriptionState.premium;
     _readiness = FreemiumReadiness.requiresSetup;
-    _dialogShownThisSession = false;
+    _paywallShownThisSession = false;
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    cancelCountdown();
-    super.dispose();
   }
 }
