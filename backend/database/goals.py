@@ -34,11 +34,15 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     user_ref = db.collection(users_collection).document(uid)
     goals_ref = user_ref.collection(goals_collection)
     
-    # Get all active goals, ordered by creation date
-    query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).order_by('created_at').limit(limit)
+    # Get all active goals
+    query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
     docs = list(query.stream())
     
-    return [doc.to_dict() for doc in docs]
+    # Sort in Python instead of Firestore (avoids composite index requirement)
+    goals = [doc.to_dict() for doc in docs]
+    goals.sort(key=lambda x: x.get('created_at') or '', reverse=False)
+    
+    return goals
 
 
 def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 3) -> Dict[str, Any]:

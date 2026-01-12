@@ -6,13 +6,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
 class GoalsWidget extends StatefulWidget {
-  const GoalsWidget({super.key});
+  const GoalsWidget({super.key, this.onRefresh});
+
+  final VoidCallback? onRefresh;
 
   @override
-  State<GoalsWidget> createState() => _GoalsWidgetState();
+  State<GoalsWidget> createState() => GoalsWidgetState();
 }
 
-class _GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
+class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   List<Goal> _goals = [];
   bool _isLoading = true;
   bool _isExpanded = false;
@@ -39,6 +41,10 @@ class _GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadGoals();
+  }
+  
+  void refresh() {
     _loadGoals();
   }
 
