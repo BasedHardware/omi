@@ -190,10 +190,10 @@ def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
     """
     Generate signed URLs for speech samples given their GCS paths.
     Uses the paths stored in Firestore instead of listing GCS blobs.
-    
+
     Args:
         paths: List of GCS paths (e.g., '{uid}/people_profiles/{person_id}/{filename}')
-    
+
     Returns:
         List of signed URLs
     """
@@ -398,6 +398,23 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
 
     # Delete merged files
     audio_prefix = f'audio/{uid}/{conversation_id}/'
+    for blob in bucket.list_blobs(prefix=audio_prefix):
+        blob.delete()
+
+
+def delete_all_user_private_cloud_sync_data(uid: str) -> None:
+    """Delete all private cloud sync data (chunks and merged audio) for a user."""
+    if not uid:
+        return
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+
+    # Delete all chunks for this user
+    chunks_prefix = f'chunks/{uid}/'
+    for blob in bucket.list_blobs(prefix=chunks_prefix):
+        blob.delete()
+
+    # Delete all merged audio files for this user
+    audio_prefix = f'audio/{uid}/'
     for blob in bucket.list_blobs(prefix=audio_prefix):
         blob.delete()
 
