@@ -10,7 +10,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/devices/companion_device_manager.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -40,16 +39,6 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
-    if (PlatformService.isAndroid) {
-      try {
-        final companionService = CompanionDeviceManagerService.instance;
-        await companionService.stopObservingDevicePresence(btDevice.id);
-        await companionService.disassociate(btDevice.id);
-      } catch (e) {
-        Logger.debug('CompanionDevice: Error disassociating during unpair: $e');
-      }
-    }
-
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
     if (connection == null) {
       return Future.value(null);

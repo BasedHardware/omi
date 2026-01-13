@@ -25,11 +25,8 @@ class OmiDeviceConnection extends DeviceConnection {
   get deviceId => device.id;
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-    bool autoConnect = false,
-  }) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged, autoConnect: autoConnect);
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
   }
 
   @override

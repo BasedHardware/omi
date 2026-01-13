@@ -25,9 +25,8 @@ class FriendPendantDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-    bool autoConnect = false,
   }) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged, autoConnect: autoConnect);
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     await Future.delayed(const Duration(seconds: 1));
 
     // Subscribe to audio stream
