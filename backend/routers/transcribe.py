@@ -21,6 +21,9 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
 
+from firebase_admin import auth as firebase_auth
+from firebase_admin.auth import InvalidIdTokenError
+
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
 import database.users as user_db
@@ -139,11 +142,13 @@ async def _listen(
     if onboarding_mode:
         include_speech_profile = False
 
-    try:
-        await websocket.accept()
-    except RuntimeError as e:
-        print(e, uid, session_id)
-        return
+    # Skip accept if already connected (web endpoint pre-accepts for first-message auth)
+    if websocket.client_state != WebSocketState.CONNECTED:
+        try:
+            await websocket.accept()
+        except RuntimeError as e:
+            print(e, uid, session_id)
+            return
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -1969,6 +1974,102 @@ async def listen_handler(
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
+    await _listen(
+        websocket,
+        uid,
+        language,
+        sample_rate,
+        codec,
+        channels,
+        include_speech_profile,
+        None,
+        conversation_timeout=conversation_timeout,
+        source=source,
+        custom_stt_mode=custom_stt_mode,
+        onboarding_mode=onboarding_mode,
+    )
+
+
+@router.websocket("/v4/web/listen")
+async def web_listen_handler(
+    websocket: WebSocket,
+    language: str = 'en',
+    sample_rate: int = 8000,
+    codec: str = 'pcm8',
+    channels: int = 1,
+    include_speech_profile: bool = True,
+    conversation_timeout: int = 120,
+    source: Optional[str] = None,
+    custom_stt: str = 'disabled',
+    onboarding: str = 'disabled',
+):
+    """
+    WebSocket endpoint for web browser clients using first-message authentication.
+
+    First message must be: {"type": "auth", "token": "<firebase_token>"}
+    Response: {"type": "auth_response", "success": true/false}
+    """
+    try:
+        await websocket.accept()
+    except RuntimeError as e:
+        print(f"web_listen_handler: accept error {e}")
+        return
+
+    # Wait for auth message with timeout
+    try:
+        first_message = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+    except asyncio.TimeoutError:
+        await websocket.close(code=1008, reason="Auth timeout")
+        return
+    except WebSocketDisconnect:
+        return
+
+    if first_message.get("type") == "websocket.disconnect":
+        return
+
+    if first_message.get("text") is None:
+        await websocket.close(code=1008, reason="Expected JSON auth message")
+        return
+
+    try:
+        auth_data = json.loads(first_message.get("text"))
+    except json.JSONDecodeError:
+        await websocket.close(code=1008, reason="Invalid JSON")
+        return
+
+    if auth_data.get("type") != "auth":
+        await websocket.close(code=1008, reason="First message must be auth")
+        return
+
+    token = auth_data.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="Missing token")
+        return
+
+    # Verify Firebase token (same pattern as utils/other/endpoints.py)
+    try:
+        decoded_token = firebase_auth.verify_id_token(token)
+        uid = decoded_token['uid']
+    except InvalidIdTokenError:
+        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+            uid = '123'
+        else:
+            await websocket.send_json({"type": "auth_response", "success": False})
+            await websocket.close(code=1008, reason="Invalid token")
+            return
+    except Exception as e:
+        print(f"web_listen_handler: token verification error {e}")
+        await websocket.send_json({"type": "auth_response", "success": False})
+        await websocket.close(code=1008, reason="Auth error")
+        return
+
+    # Send success response
+    await websocket.send_json({"type": "auth_response", "success": True})
+
+    # Proceed with existing listen logic
+    custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
+    onboarding_mode = onboarding == 'enabled'
+
     await _listen(
         websocket,
         uid,
