@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useCallback, useState, useRef, type CSSProperties, type ReactElement } from 'react';
-import { List, type ListImperativeAPI } from 'react-window';
+import { useEffect, useCallback, useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Brain, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MemoryCard } from './MemoryCard';
@@ -20,69 +20,8 @@ interface MemoryListProps {
   highlightedMemoryId?: string | null;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
-}
-
-// Row height for each memory card (approximate)
-const ROW_HEIGHT = 120;
-const OVERSCAN_COUNT = 5;
-
-// Row props passed to each row
-interface RowData {
-  memories: Memory[];
-  onEdit: (id: string, content: string) => Promise<boolean>;
-  onDelete: (id: string) => Promise<boolean>;
-  onToggleVisibility: (id: string, visibility: MemoryVisibility) => Promise<boolean>;
-  onAccept?: (id: string) => Promise<boolean>;
-  onReject?: (id: string) => Promise<boolean>;
-  highlightedMemoryId?: string | null;
-  selectedIds?: Set<string>;
-  onToggleSelect?: (id: string) => void;
-}
-
-// Row component for virtualized list - react-window v2 injects ariaAttributes, index, style
-function MemoryRow(props: {
-  ariaAttributes: {
-    'aria-posinset': number;
-    'aria-setsize': number;
-    role: 'listitem';
-  };
-  index: number;
-  style: CSSProperties;
-} & RowData): ReactElement {
-  const {
-    index,
-    style,
-    memories,
-    onEdit,
-    onDelete,
-    onToggleVisibility,
-    onAccept,
-    onReject,
-    highlightedMemoryId,
-    selectedIds,
-    onToggleSelect,
-  } = props;
-
-  const memory = memories[index];
-  if (!memory) {
-    return <div style={style} />;
-  }
-
-  return (
-    <div style={{ ...style, paddingBottom: 12, paddingRight: 8 }}>
-      <MemoryCard
-        memory={memory}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onToggleVisibility={onToggleVisibility}
-        onAccept={onAccept}
-        onReject={onReject}
-        isHighlighted={highlightedMemoryId === memory.id}
-        isSelected={selectedIds?.has(memory.id)}
-        onToggleSelect={onToggleSelect}
-      />
-    </div>
-  );
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 export function MemoryList({
@@ -98,52 +37,41 @@ export function MemoryList({
   highlightedMemoryId,
   selectedIds,
   onToggleSelect,
+  onEnterSelectionMode,
 }: MemoryListProps) {
-  const listRef = useRef<ListImperativeAPI>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [containerHeight, setContainerHeight] = useState(600);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Handle scroll to load more
-  const handleRowsRendered = useCallback(
-    (visibleRows: { startIndex: number; stopIndex: number }) => {
-      // Load more when near the end
-      if (
-        hasMore &&
-        !loading &&
-        !loadingMore &&
-        visibleRows.stopIndex >= memories.length - 5
-      ) {
-        setLoadingMore(true);
-        onLoadMore().finally(() => {
-          setLoadingMore(false);
-        });
-      }
-    },
-    [hasMore, loading, loadingMore, memories.length, onLoadMore]
-  );
+  // Infinite scroll using IntersectionObserver
+  useEffect(() => {
+    if (!bottomRef.current || loading || loadingMore || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          setLoadingMore(true);
+          onLoadMore().finally(() => {
+            setLoadingMore(false);
+          });
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(bottomRef.current);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, onLoadMore]);
 
   // Scroll to highlighted memory
   useEffect(() => {
-    if (highlightedMemoryId && listRef.current) {
-      const index = memories.findIndex((m) => m.id === highlightedMemoryId);
-      if (index !== -1) {
-        listRef.current.scrollToRow({ index, align: 'center' });
+    if (highlightedMemoryId) {
+      const element = document.getElementById(`memory-${highlightedMemoryId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-  }, [highlightedMemoryId, memories, listRef]);
-
-  // Calculate container height based on viewport
-  useEffect(() => {
-    const updateHeight = () => {
-      // Use viewport height minus some padding for header/footer
-      const height = Math.max(400, window.innerHeight - 350);
-      setContainerHeight(height);
-    };
-
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
-  }, []);
+  }, [highlightedMemoryId]);
 
   // Empty state
   if (!loading && memories.length === 0) {
@@ -161,29 +89,39 @@ export function MemoryList({
   }
 
   return (
-    <div className="relative">
-      <List
-        listRef={listRef}
-        defaultHeight={containerHeight}
-        rowCount={memories.length}
-        rowHeight={ROW_HEIGHT}
-        rowComponent={MemoryRow}
-        rowProps={{
-          memories,
-          onEdit,
-          onDelete,
-          onToggleVisibility,
-          onAccept,
-          onReject,
-          highlightedMemoryId,
-          selectedIds,
-          onToggleSelect,
-        }}
-        overscanCount={OVERSCAN_COUNT}
-        onRowsRendered={handleRowsRendered}
-        className="scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
-        style={{ height: containerHeight }}
-      />
+    <div
+      ref={containerRef}
+      className="flex flex-col gap-3 overflow-y-auto scrollbar-thin scrollbar-thumb-bg-quaternary scrollbar-track-transparent"
+      style={{ maxHeight: 'calc(100vh - 350px)' }}
+    >
+      <AnimatePresence mode="popLayout">
+        {memories.map((memory) => (
+          <motion.div
+            key={memory.id}
+            layout
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.15 }}
+          >
+            <MemoryCard
+              memory={memory}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onToggleVisibility={onToggleVisibility}
+              onAccept={onAccept}
+              onReject={onReject}
+              isHighlighted={highlightedMemoryId === memory.id}
+              isSelected={selectedIds?.has(memory.id)}
+              onToggleSelect={onToggleSelect}
+              onEnterSelectionMode={onEnterSelectionMode}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* Infinite scroll trigger */}
+      <div ref={bottomRef} className="h-1" />
 
       {/* Loading indicator */}
       {(loading || loadingMore) && (

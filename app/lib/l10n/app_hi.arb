@@ -90,7 +90,9 @@
   "selectedCount": "{count} चयनित",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "विलय करें",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "यह {count} बातचीतों को एक में मिला देगा। सभी सामग्री विलय और पुन: उत्पन्न की जाएगी।",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "बैकग्राउंड में विलय हो रहा है। इसमें थोड़ा समय लग सकता है।",
@@ -208,11 +212,9 @@
   "pauseResume": "रोकें/दोबारा शुरू करें",
   "starConversation": "बातचीत को तारांकित करें",
   "doubleTapAction": "डबल टैप क्रिया",
-  "doubleTapActionDesc": "चुनें कि डबल टैप होने पर क्या होता है",
   "endAndProcess": "समाप्त करें और संसाधित करें",
   "pauseResumeRecording": "रिकॉर्डिंग रोकें/दोबारा शुरू करें",
   "starOngoing": "चल रही बातचीत को तारांकित करें",
-  "starOngoingDesc": "समाप्त होने पर इसे पसंदीदा के रूप में सहेजने के लिए चिह्नित करें",
   "off": "बंद",
   "max": "अधिकतम",
   "mute": "म्यूट",
@@ -263,7 +265,7 @@
   "managePlan": "योजना प्रबंधित करें",
   "cancelAtPeriodEnd": "आपकी योजना {date} को समाप्त हो रही है।",
   "renewsOn": "आपकी योजना {date} को नवीनीकृत होती है।",
-  "basicPlan": "मूल योजना",
+  "basicPlan": "निःशुल्क योजना",
   "usageLimitMessage": "{used} / {limit} मिनट उपयोग किए गए",
   "upgrade": "अपग्रेड करें",
   "upgradeToUnlimited": "असीमित में अपग्रेड करें",
@@ -410,7 +412,6 @@
   "defaultProjectOptional": "डिफ़ॉल्ट प्रोजेक्ट (वैकल्पिक)",
   "leaveUnselectedTasks": "बिना प्रोजेक्ट वाले कार्यों के लिए चयनित न छोड़ें",
   "noProjectsInWorkspace": "इस कार्यक्षेत्र में कोई प्रोजेक्ट नहीं मिला",
-  "conversationTimeout": "बातचीत समय समाप्त",
   "conversationTimeoutDesc": "स्वचालित रूप से समाप्त होने से पहले कितनी देर तक मौन रहना है, यह चुनें:",
   "timeout2Minutes": "2 मिनट",
   "timeout2MinutesDesc": "2 मिनट के मौन के बाद समाप्त",
@@ -655,8 +656,8 @@
   "memoryDeleted": "याद हटा दी गई।",
   "undo": "पूर्ववत करें",
   "noMemoriesYet": "अभी तक कोई यादें नहीं",
-  "noInterestingMemories": "कोई दिलचस्प यादें नहीं",
-  "noSystemMemories": "कोई सिस्टम यादें नहीं",
+  "noAutoMemories": "कोई स्वतः यादें नहीं",
+  "noManualMemories": "कोई मैनुअल यादें नहीं",
   "noMemoriesInCategories": "इन श्रेणियों में कोई यादें नहीं",
   "noMemoriesFound": "कोई यादें नहीं मिलीं",
   "addFirstMemory": "अपनी पहली याद जोड़ें",
@@ -697,9 +698,10 @@
   "pressDoneToSave": "सहेजने के लिए पूर्ण दबाएं",
   "pressDoneToCreate": "बनाने के लिए पूर्ण दबाएं",
   "filterAll": "सभी",
-  "filterInteresting": "दिलचस्प",
+  "filterAuto": "स्वतः",
+  "filterInteresting": "अंतर्दृष्टि",
+  "filterSystem": "आपके बारे में",
   "filterManual": "मैनुअल",
-  "filterSystem": "सिस्टम",
   "completed": "पूर्ण",
   "markComplete": "पूर्ण चिह्नित करें",
   "actionItemDeleted": "कार्य हटाया गया",
@@ -732,5 +734,8 @@
       }
     }
   },
-  "continueButton": "जारी रखें"
+  "continueButton": "जारी रखें",
+  "appInterfaceSectionTitle": "ऐप इंटरफ़ेस",
+  "speechTranscriptionSectionTitle": "वाणी और ट्रांसक्रिप्शन",
+  "languageSettingsHelperText": "ऐप भाषा मेनू और बटन बदलती है। वाणी भाषा आपकी रिकॉर्डिंग के ट्रांसक्रिप्शन को प्रभावित करती है।"
 }

@@ -90,7 +90,9 @@
   "selectedCount": "{count} ausgewählt",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "Zusammenführen",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "Dies wird {count} Unterhaltungen zu einer zusammenfassen. Alle Inhalte werden zusammengeführt und neu generiert.",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "Zusammenführung im Hintergrund. Dies kann einen Moment dauern.",
@@ -106,7 +110,7 @@
   "askAnything": "Frag irgendetwas",
   "noMessagesYet": "Noch keine Nachrichten!\nWarum starten Sie keine Unterhaltung?",
   "deletingMessages": "Lösche Ihre Nachrichten aus Omis Gedächtnis...",
-  "messageCopied": "Nachricht in die Zwischenablage kopiert.",  
+  "messageCopied": "Nachricht in die Zwischenablage kopiert.",
   "cannotReportOwnMessage": "Sie können Ihre eigenen Nachrichten nicht melden.",
   "reportMessage": "Nachricht melden",
   "reportMessageConfirm": "Sind Sie sicher, dass Sie diese Nachricht melden möchten?",
@@ -208,11 +212,9 @@
   "pauseResume": "Pause/Fortsetzen",
   "starConversation": "Unterhaltung favorisieren",
   "doubleTapAction": "Doppeltippen-Aktion",
-  "doubleTapActionDesc": "Wählen Sie, was passiert, wenn Sie doppelt tippen",
   "endAndProcess": "Beenden & Verarbeiten",
   "pauseResumeRecording": "Aufnahme pausieren/fortsetzen",
   "starOngoing": "Laufende Unterhaltung favorisieren",
-  "starOngoingDesc": "Markieren, um beim Beenden zu favorisieren",
   "off": "Aus",
   "max": "Max",
   "mute": "Stumm",
@@ -263,7 +265,7 @@
   "managePlan": "Plan verwalten",
   "cancelAtPeriodEnd": "Ihr Plan endet am {date}.",
   "renewsOn": "Ihr Plan verlängert sich am {date}.",
-  "basicPlan": "Basic Plan",
+  "basicPlan": "Kostenloser Plan",
   "usageLimitMessage": "{used} von {limit} Minuten verbraucht",
   "upgrade": "Upgrade",
   "upgradeToUnlimited": "Upgrade auf Unlimited",
@@ -410,7 +412,6 @@
   "defaultProjectOptional": "Standardprojekt (Optional)",
   "leaveUnselectedTasks": "Unmarkiert lassen, um Aufgaben ohne Projekt zu erstellen",
   "noProjectsInWorkspace": "Keine Projekte in diesem Arbeitsbereich gefunden",
-  "conversationTimeout": "Unterhaltungs-Timeout",
   "conversationTimeoutDesc": "Wählen Sie, wie lange bei Stille gewartet werden soll, bevor eine Unterhaltung automatisch beendet wird:",
   "timeout2Minutes": "2 Minuten",
   "timeout2MinutesDesc": "Unterhaltung nach 2 Minuten Stille beenden",
@@ -463,15 +464,14 @@
   "configureSettings": "Einstellungen konfigurieren",
   "completeAuthBrowser": "Bitte schließen Sie die Authentifizierung in Ihrem Browser ab. Kehren Sie danach zur App zurück.",
   "failedToStartAppAuth": "Authentifizierung für {appName} konnte nicht gestartet werden",
-  "connectToAppTitle": "Verbinden mit {appName}",
-  "authorizeOmiForTasks": "Sie müssen Omi autorisieren, Aufgaben in Ihrem {appName}-Konto zu erstellen. Dies öffnet Ihren Browser für die Authentifizierung.",
+  "connectToAppTitle": "Mit {appName} verbinden",
+  "authorizeOmiForTasks": "Sie müssen Omi autorisieren, Aufgaben in Ihrem {appName}-Konto zu erstellen. Dies öffnet Ihren Browser zur Authentifizierung.",
   "continueButton": "Weiter",
   "appIntegration": "{appName}-Integration",
   "integrationComingSoon": "Integration mit {appName} kommt bald! Wir arbeiten hart daran, Ihnen mehr Aufgabenmanagement-Optionen zu bieten.",
   "gotIt": "Verstanden",
   "tasksExportedOneApp": "Aufgaben können jeweils nur in eine App exportiert werden.",
   "completeYourUpgrade": "Vervollständigen Sie Ihr Upgrade",
-  "transcription": "Transkription",
   "importConfiguration": "Konfiguration importieren",
   "exportConfiguration": "Konfiguration exportieren",
   "bringYourOwn": "Bring Your Own",
@@ -661,8 +661,8 @@
   "memoryDeleted": "Erinnerung gelöscht.",
   "undo": "Rückgängig",
   "noMemoriesYet": "Noch keine Erinnerungen",
-  "noInterestingMemories": "Noch keine interessanten Erinnerungen",
-  "noSystemMemories": "Noch keine Systemerinnerungen",
+  "noAutoMemories": "Noch keine automatischen Erinnerungen",
+  "noManualMemories": "Noch keine manuellen Erinnerungen",
   "noMemoriesInCategories": "Keine Erinnerungen in diesen Kategorien",
   "noMemoriesFound": "Keine Erinnerungen gefunden",
   "addFirstMemory": "Fügen Sie Ihre erste Erinnerung hinzu",
@@ -703,9 +703,10 @@
   "pressDoneToSave": "Drücken Sie Fertig zum Speichern",
   "pressDoneToCreate": "Drücken Sie Fertig zum Erstellen",
   "filterAll": "Alle",
-  "filterInteresting": "Interessant",
+  "filterAuto": "Automatisch",
+  "filterInteresting": "Einblicke",
+  "filterSystem": "Über Sie",
   "filterManual": "Manuell",
-  "filterSystem": "System",
   "completed": "Erledigt",
   "markComplete": "Als erledigt markieren",
   "actionItemDeleted": "Aufgabe gelöscht",
@@ -713,8 +714,6 @@
   "deleteActionItemConfirmTitle": "Aufgabe löschen",
   "deleteActionItemConfirmMessage": "Sind Sie sicher, dass Sie diese Aufgabe löschen möchten?",
   "appLanguage": "App-Sprache",
-  "completeAuthBrowser": "Bitte schließen Sie die Authentifizierung in Ihrem Browser ab. Kehren Sie danach zur App zurück.",
-  "failedToStartAppAuth": "Authentifizierung für {appName} konnte nicht gestartet werden",
   "@failedToStartAppAuth": {
     "placeholders": {
       "appName": {
@@ -722,7 +721,6 @@
       }
     }
   },
-  "connectToAppTitle": "Mit {appName} verbinden",
   "@connectToAppTitle": {
     "placeholders": {
       "appName": {
@@ -730,7 +728,6 @@
       }
     }
   },
-  "authorizeOmiForTasks": "Sie müssen Omi autorisieren, Aufgaben in Ihrem {appName}-Konto zu erstellen. Dies öffnet Ihren Browser zur Authentifizierung.",
   "@authorizeOmiForTasks": {
     "placeholders": {
       "appName": {
@@ -738,5 +735,7 @@
       }
     }
   },
-  "continueButton": "Weiter"
+  "appInterfaceSectionTitle": "APP-OBERFLÄCHE",
+  "speechTranscriptionSectionTitle": "SPRACHE UND TRANSKRIPTION",
+  "languageSettingsHelperText": "Die App-Sprache ändert Menüs und Schaltflächen. Die Sprachsprache beeinflusst, wie Ihre Aufnahmen transkribiert werden."
 }

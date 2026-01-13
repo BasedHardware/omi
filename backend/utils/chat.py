@@ -153,6 +153,9 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
+        langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
         memories_id = []
         # check if the items in the conversations list are dict
         if memories:
@@ -171,6 +174,9 @@ async def process_voice_message_segment_stream(path: str, uid: str) -> AsyncGene
             app_id=app_id,
             type='text',
             memories_id=memories_id,
+            langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
+            prompt_name=prompt_name,  # LangSmith prompt name for versioning
+            prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
 
         chat_session = chat_db.get_chat_session(uid)

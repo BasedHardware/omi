@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/conversation.dart';
 
-import 'date_list_item.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'conversation_list_item.dart';
+import 'date_list_item.dart';
 
 class ConversationsGroupWidget extends StatelessWidget {
   final List<ServerConversation> conversations;

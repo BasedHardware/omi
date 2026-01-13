@@ -1,11 +1,15 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -15,11 +19,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:omi/utils/file.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/file.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:uuid/uuid.dart';
 
 class MessageProvider extends ChangeNotifier {
   static late MethodChannel _askAIChannel;
@@ -40,6 +43,7 @@ class MessageProvider extends ChangeNotifier {
   bool isClearingChat = false;
   bool showTypingIndicator = false;
   bool sendingMessage = false;
+  double aiStreamProgress = 1.0;
 
   String firstTimeLoadingText = '';
 
@@ -56,6 +60,16 @@ class MessageProvider extends ChangeNotifier {
     appProvider = p;
   }
 
+  void setChatApps(List<App> apps) {
+    chatApps = apps;
+    notifyListeners();
+  }
+
+  void removeChatApp(String appId) {
+    chatApps.removeWhere((app) => app.id == appId);
+    notifyListeners();
+  }
+
   Future<void> fetchChatApps() async {
     if (isLoadingChatApps) return;
 
@@ -70,7 +84,7 @@ class MessageProvider extends ChangeNotifier {
 
       chatApps = result.apps.where((app) => app.worksWithChat()).toList();
     } catch (e) {
-      debugPrint('Error fetching chat apps: $e');
+      Logger.debug('Error fetching chat apps: $e');
       chatApps = [];
     } finally {
       isLoadingChatApps = false;
@@ -187,7 +201,7 @@ class MessageProvider extends ChangeNotifier {
           AppSnackbar.showSnackbarError('Error opening file picker: ${e.message}');
           return;
         } catch (e) {
-          debugPrint('FilePicker general error: $e');
+          Logger.debug('FilePicker general error: $e');
           AppSnackbar.showSnackbarError('Error selecting images: $e');
           return;
         }
@@ -214,14 +228,14 @@ class MessageProvider extends ChangeNotifier {
       }
       notifyListeners();
     } on PlatformException catch (e) {
-      debugPrint('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
+      Logger.debug('🖼️ PlatformException during image picking: ${e.code} - ${e.message}');
       if (e.code == 'photo_access_denied') {
         AppSnackbar.showSnackbarError('Photos permission denied. Please allow access to photos to select images');
       } else {
         AppSnackbar.showSnackbarError('Error selecting images: ${e.message ?? e.code}');
       }
     } catch (e) {
-      debugPrint('🖼️ General exception during image picking: $e');
+      Logger.debug('🖼️ General exception during image picking: $e');
       AppSnackbar.showSnackbarError('Error selecting images. Please try again.');
     }
   }
@@ -352,9 +366,11 @@ class MessageProvider extends ChangeNotifier {
     return messages;
   }
 
-  Future setMessageNps(ServerMessage message, int value) async {
-    await setMessageResponseRating(message.id, value);
+  Future setMessageNps(ServerMessage message, int value, {String? reason}) async {
+    await setMessageResponseRating(message.id, value, reason: reason);
     message.askForNps = false;
+    // Update local message rating so it persists when scrolling
+    message.rating = value == 0 ? null : value;
     notifyListeners();
   }
 
@@ -424,13 +440,15 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.add(message);
-    final aiIndex = messages.length - 1;
+    var aiIndex = messages.length - 1;
     notifyListeners();
 
     try {
       bool firstChunkRecieved = false;
       await for (var chunk in sendVoiceMessageStreamServer([file])) {
-        if (!firstChunkRecieved && [MessageChunkType.data, MessageChunkType.done].contains(chunk.type)) {
+        if (!firstChunkRecieved &&
+            [MessageChunkType.message, MessageChunkType.data, MessageChunkType.done, MessageChunkType.think]
+                .contains(chunk.type)) {
           firstChunkRecieved = true;
           if (onFirstChunkRecived != null) {
             onFirstChunkRecived();
@@ -457,7 +475,8 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(1, chunk.message!);
+          messages.insert(aiIndex, chunk.message!);
+          aiIndex++;
           notifyListeners();
           continue;
         }
@@ -477,6 +496,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future sendMessageStreamToServer(String text) async {
+    aiStreamProgress = 0.0;
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -511,6 +531,7 @@ class MessageProvider extends ChangeNotifier {
       if (textBuffer.isNotEmpty) {
         message.text += textBuffer;
         textBuffer = '';
+        aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
         HapticFeedback.lightImpact();
         notifyListeners();
       }
@@ -556,7 +577,9 @@ class MessageProvider extends ChangeNotifier {
     } finally {
       timer?.cancel();
       flushBuffer();
+      aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
+      setSendingMessage(false);
     }
   }
 

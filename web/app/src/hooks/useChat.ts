@@ -7,6 +7,7 @@ import {
   clearMessages as clearMessagesApi,
 } from '@/lib/api';
 import type { ServerMessage, MessageChunk } from '@/types/conversation';
+import type { ChatContextInfo } from '@/components/chat/ChatContext';
 
 interface UseChatOptions {
   appId?: string;
@@ -19,7 +20,7 @@ interface UseChatReturn {
   streamingText: string;
   currentThinking: string;
   error: string | null;
-  sendMessage: (text: string, fileIds?: string[]) => Promise<void>;
+  sendMessage: (text: string, fileIds?: string[], context?: ChatContextInfo | null) => Promise<void>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
 }
@@ -73,7 +74,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
   /**
    * Send a message and handle streaming response
    */
-  const sendMessage = useCallback(async (text: string, fileIds?: string[]) => {
+  const sendMessage = useCallback(async (text: string, fileIds?: string[], context?: ChatContextInfo | null) => {
     if (!text.trim() || isStreaming) return;
 
     setError(null);
@@ -133,7 +134,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
               break;
           }
         },
-        { appId, fileIds }
+        { appId, fileIds, context: context || null }
       );
     } catch (err) {
       console.error('Failed to send message:', err);

@@ -237,7 +237,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get searchConversations => 'Unterhaltungen durchsuchen';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count ausgewählt';
   }
 
@@ -581,9 +581,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get doubleTapAction => 'Doppeltippen-Aktion';
 
   @override
-  String get doubleTapActionDesc => 'Wählen Sie, was passiert, wenn Sie doppelt tippen';
-
-  @override
   String get endAndProcess => 'Beenden & Verarbeiten';
 
   @override
@@ -591,9 +588,6 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get starOngoing => 'Laufende Unterhaltung favorisieren';
-
-  @override
-  String get starOngoingDesc => 'Markieren, um beim Beenden zu favorisieren';
 
   @override
   String get off => 'Aus';
@@ -751,7 +745,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => 'Basic Plan';
+  String get basicPlan => 'Kostenloser Plan';
 
   @override
   String usageLimitMessage(String used, int limit) {
@@ -2085,10 +2079,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noMemoriesYet => 'Noch keine Erinnerungen';
 
   @override
-  String get noInterestingMemories => 'Noch keine interessanten Erinnerungen';
+  String get noAutoMemories => 'Noch keine automatischen Erinnerungen';
 
   @override
-  String get noSystemMemories => 'Noch keine Systemerinnerungen';
+  String get noManualMemories => 'Noch keine manuellen Erinnerungen';
 
   @override
   String get noMemoriesInCategories => 'Keine Erinnerungen in diesen Kategorien';
@@ -2214,13 +2208,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get filterAll => 'Alle';
 
   @override
-  String get filterInteresting => 'Interessant';
+  String get filterSystem => 'Über Sie';
+
+  @override
+  String get filterInteresting => 'Einblicke';
 
   @override
   String get filterManual => 'Manuell';
-
-  @override
-  String get filterSystem => 'System';
 
   @override
   String get completed => 'Erledigt';
@@ -2242,4 +2236,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get appLanguage => 'App-Sprache';
+
+  @override
+  String get appInterfaceSectionTitle => 'APP-OBERFLÄCHE';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'SPRACHE UND TRANSKRIPTION';
+
+  @override
+  String get languageSettingsHelperText =>
+      'Die App-Sprache ändert Menüs und Schaltflächen. Die Sprachsprache beeinflusst, wie Ihre Aufnahmen transkribiert werden.';
 }

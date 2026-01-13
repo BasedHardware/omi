@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ConversationCard, ConversationCardSkeleton } from './ConversationCard';
@@ -17,6 +18,8 @@ interface DateGroupProps {
   selectedIds?: Set<string>;
   onSelect?: (id: string) => void;
   mergingIds?: Set<string>;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 const containerVariants = {
@@ -41,7 +44,7 @@ const itemVariants = {
   },
 };
 
-export function DateGroup({
+export const DateGroup = memo(function DateGroup({
   dateLabel,
   conversations,
   onConversationClick,
@@ -52,9 +55,10 @@ export function DateGroup({
   selectedIds,
   onSelect,
   mergingIds,
+  onEnterSelectionMode,
 }: DateGroupProps) {
   return (
-    <section className="space-y-1.5">
+    <section className="space-y-2">
       {/* Date header */}
       <h2
         className={cn(
@@ -72,7 +76,7 @@ export function DateGroup({
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="space-y-1.5"
+        className="space-y-4"
       >
         {conversations.map((conversation) => (
           <motion.div key={conversation.id} variants={itemVariants}>
@@ -86,13 +90,14 @@ export function DateGroup({
               isChecked={selectedIds?.has(conversation.id) ?? false}
               onSelect={onSelect}
               isMerging={mergingIds?.has(conversation.id) ?? false}
+              onEnterSelectionMode={onEnterSelectionMode}
             />
           </motion.div>
         ))}
       </motion.div>
     </section>
   );
-}
+});
 
 // Skeleton loader for date groups
 interface DateGroupSkeletonProps {
@@ -101,12 +106,12 @@ interface DateGroupSkeletonProps {
 
 export function DateGroupSkeleton({ count = 3 }: DateGroupSkeletonProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {/* Date header skeleton */}
       <div className="h-4 w-16 bg-bg-tertiary rounded animate-pulse" />
 
       {/* Card skeletons */}
-      <div className="space-y-1.5">
+      <div className="space-y-4">
         {Array.from({ length: count }).map((_, i) => (
           <ConversationCardSkeleton key={i} />
         ))}

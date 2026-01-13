@@ -232,7 +232,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchConversations => '搜索对话';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '已选择 $count 项';
   }
 
@@ -563,9 +563,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get doubleTapAction => '双击操作';
 
   @override
-  String get doubleTapActionDesc => '选择双击时发生的操作';
-
-  @override
   String get endAndProcess => '结束并处理';
 
   @override
@@ -573,9 +570,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get starOngoing => '星标当前对话';
-
-  @override
-  String get starOngoingDesc => '标记以便在结束时加星标';
 
   @override
   String get off => '关闭';
@@ -732,7 +726,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => '基础套餐';
+  String get basicPlan => '免费套餐';
 
   @override
   String usageLimitMessage(String used, int limit) {
@@ -2024,10 +2018,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMemoriesYet => '暂无记忆';
 
   @override
-  String get noInterestingMemories => '暂无有趣记忆';
+  String get noAutoMemories => '暂无自动记忆';
 
   @override
-  String get noSystemMemories => '暂无系统记忆';
+  String get noManualMemories => '暂无手动记忆';
 
   @override
   String get noMemoriesInCategories => '此类目无记忆';
@@ -2152,13 +2146,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get filterAll => '全部';
 
   @override
-  String get filterInteresting => '有趣';
+  String get filterSystem => '关于你';
+
+  @override
+  String get filterInteresting => '见解';
 
   @override
   String get filterManual => '手动';
-
-  @override
-  String get filterSystem => '系统';
 
   @override
   String get completed => '已完成';
@@ -2180,4 +2174,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appLanguage => '应用语言';
+
+  @override
+  String get appInterfaceSectionTitle => '应用界面';
+
+  @override
+  String get speechTranscriptionSectionTitle => '语音与转录';
+
+  @override
+  String get languageSettingsHelperText => '应用语言更改菜单和按钮。语音语言影响录音的转录方式。';
 }

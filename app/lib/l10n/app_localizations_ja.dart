@@ -232,7 +232,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchConversations => '会話を検索';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count件選択中';
   }
 
@@ -564,9 +564,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get doubleTapAction => 'ダブルタップアクション';
 
   @override
-  String get doubleTapActionDesc => 'ダブルタップ時の動作を選択';
-
-  @override
   String get endAndProcess => '終了して会話を処理';
 
   @override
@@ -574,9 +571,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get starOngoing => '進行中の会話にスターを付ける';
-
-  @override
-  String get starOngoingDesc => '会話終了時にスターを付けるようにマーク';
 
   @override
   String get off => 'オフ';
@@ -733,7 +727,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => 'ベーシックプラン';
+  String get basicPlan => '無料プラン';
 
   @override
   String usageLimitMessage(String used, int limit) {
@@ -2028,10 +2022,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noMemoriesYet => 'メモリはまだありません';
 
   @override
-  String get noInterestingMemories => '興味深いメモリはまだありません';
+  String get noAutoMemories => '自動メモリはまだありません';
 
   @override
-  String get noSystemMemories => 'システムメモリはまだありません';
+  String get noManualMemories => '手動メモリはまだありません';
 
   @override
   String get noMemoriesInCategories => 'このカテゴリのメモリはありません';
@@ -2156,13 +2150,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get filterAll => 'すべて';
 
   @override
-  String get filterInteresting => '興味深い';
+  String get filterSystem => 'あなたについて';
+
+  @override
+  String get filterInteresting => 'インサイト';
 
   @override
   String get filterManual => '手動';
-
-  @override
-  String get filterSystem => 'システム';
 
   @override
   String get completed => '完了';
@@ -2184,4 +2178,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appLanguage => 'アプリ言語';
+
+  @override
+  String get appInterfaceSectionTitle => 'アプリインターフェース';
+
+  @override
+  String get speechTranscriptionSectionTitle => '音声と文字起こし';
+
+  @override
+  String get languageSettingsHelperText => 'アプリ言語はメニューとボタンを変更します。音声言語は録音の文字起こし方法に影響します。';
 }

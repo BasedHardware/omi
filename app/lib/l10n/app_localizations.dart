@@ -5,12 +5,39 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
+import 'app_localizations_ar.dart';
+import 'app_localizations_bg.dart';
+import 'app_localizations_ca.dart';
+import 'app_localizations_cs.dart';
+import 'app_localizations_da.dart';
 import 'app_localizations_de.dart';
+import 'app_localizations_el.dart';
 import 'app_localizations_en.dart';
 import 'app_localizations_es.dart';
+import 'app_localizations_et.dart';
+import 'app_localizations_fi.dart';
+import 'app_localizations_fr.dart';
 import 'app_localizations_hi.dart';
+import 'app_localizations_hu.dart';
+import 'app_localizations_id.dart';
+import 'app_localizations_it.dart';
 import 'app_localizations_ja.dart';
+import 'app_localizations_ko.dart';
+import 'app_localizations_lt.dart';
+import 'app_localizations_lv.dart';
+import 'app_localizations_ms.dart';
+import 'app_localizations_nl.dart';
+import 'app_localizations_no.dart';
+import 'app_localizations_pl.dart';
 import 'app_localizations_pt.dart';
+import 'app_localizations_ro.dart';
+import 'app_localizations_ru.dart';
+import 'app_localizations_sk.dart';
+import 'app_localizations_sv.dart';
+import 'app_localizations_th.dart';
+import 'app_localizations_tr.dart';
+import 'app_localizations_uk.dart';
+import 'app_localizations_vi.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -96,12 +123,39 @@ abstract class AppLocalizations {
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
+    Locale('ar'),
+    Locale('bg'),
+    Locale('ca'),
+    Locale('cs'),
+    Locale('da'),
     Locale('de'),
+    Locale('el'),
     Locale('en'),
     Locale('es'),
+    Locale('et'),
+    Locale('fi'),
+    Locale('fr'),
     Locale('hi'),
+    Locale('hu'),
+    Locale('id'),
+    Locale('it'),
     Locale('ja'),
+    Locale('ko'),
+    Locale('lt'),
+    Locale('lv'),
+    Locale('ms'),
+    Locale('nl'),
+    Locale('no'),
+    Locale('pl'),
     Locale('pt'),
+    Locale('ro'),
+    Locale('ru'),
+    Locale('sk'),
+    Locale('sv'),
+    Locale('th'),
+    Locale('tr'),
+    Locale('uk'),
+    Locale('vi'),
     Locale('zh')
   ];
 
@@ -547,7 +601,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count);
+  String selectedCount(int count, Object s);
 
   /// Merge button label
   ///
@@ -1197,12 +1251,6 @@ abstract class AppLocalizations {
   /// **'Double Tap Action'**
   String get doubleTapAction;
 
-  /// Double tap action description
-  ///
-  /// In en, this message translates to:
-  /// **'Choose what happens when you double tap'**
-  String get doubleTapActionDesc;
-
   /// End and process action
   ///
   /// In en, this message translates to:
@@ -1220,12 +1268,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Star Ongoing Conversation'**
   String get starOngoing;
-
-  /// Star ongoing conversation description
-  ///
-  /// In en, this message translates to:
-  /// **'Mark to star when conversation ends'**
-  String get starOngoingDesc;
 
   /// Off state
   ///
@@ -1530,7 +1572,7 @@ abstract class AppLocalizations {
   /// Basic plan name
   ///
   /// In en, this message translates to:
-  /// **'Basic Plan'**
+  /// **'Free Plan'**
   String get basicPlan;
 
   /// Usage limit message
@@ -3915,17 +3957,17 @@ abstract class AppLocalizations {
   /// **'No memories yet'**
   String get noMemoriesYet;
 
-  /// Empty state text for interesting category
+  /// Empty state text for auto category
   ///
   /// In en, this message translates to:
-  /// **'No interesting memories yet'**
-  String get noInterestingMemories;
+  /// **'No auto-extracted memories yet'**
+  String get noAutoMemories;
 
-  /// Empty state text for system category
+  /// Empty state text for manual category
   ///
   /// In en, this message translates to:
-  /// **'No system memories yet'**
-  String get noSystemMemories;
+  /// **'No manual memories yet'**
+  String get noManualMemories;
 
   /// Empty state text for filtered categories
   ///
@@ -4167,10 +4209,16 @@ abstract class AppLocalizations {
   /// **'All'**
   String get filterAll;
 
-  /// Filter option
+  /// Filter option for facts about the user
   ///
   /// In en, this message translates to:
-  /// **'Interesting'**
+  /// **'About You'**
+  String get filterSystem;
+
+  /// Filter option for external wisdom/advice
+  ///
+  /// In en, this message translates to:
+  /// **'Insights'**
   String get filterInteresting;
 
   /// Filter option
@@ -4178,12 +4226,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manual'**
   String get filterManual;
-
-  /// Filter option
-  ///
-  /// In en, this message translates to:
-  /// **'System'**
-  String get filterSystem;
 
   /// Status label
   ///
@@ -4226,6 +4268,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'App Language'**
   String get appLanguage;
+
+  /// Section title for app interface language settings
+  ///
+  /// In en, this message translates to:
+  /// **'APP INTERFACE'**
+  String get appInterfaceSectionTitle;
+
+  /// Section title for speech and transcription language settings
+  ///
+  /// In en, this message translates to:
+  /// **'SPEECH & TRANSCRIPTION'**
+  String get speechTranscriptionSectionTitle;
+
+  /// Helper text explaining the difference between app language and speech language
+  ///
+  /// In en, this message translates to:
+  /// **'App Language changes menus and buttons. Speech Language affects how your recordings are transcribed.'**
+  String get languageSettingsHelperText;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -4237,7 +4297,42 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
   }
 
   @override
-  bool isSupported(Locale locale) => <String>['de', 'en', 'es', 'hi', 'ja', 'pt', 'zh'].contains(locale.languageCode);
+  bool isSupported(Locale locale) => <String>[
+        'ar',
+        'bg',
+        'ca',
+        'cs',
+        'da',
+        'de',
+        'el',
+        'en',
+        'es',
+        'et',
+        'fi',
+        'fr',
+        'hi',
+        'hu',
+        'id',
+        'it',
+        'ja',
+        'ko',
+        'lt',
+        'lv',
+        'ms',
+        'nl',
+        'no',
+        'pl',
+        'pt',
+        'ro',
+        'ru',
+        'sk',
+        'sv',
+        'th',
+        'tr',
+        'uk',
+        'vi',
+        'zh'
+      ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -4246,18 +4341,72 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 AppLocalizations lookupAppLocalizations(Locale locale) {
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
+    case 'ar':
+      return AppLocalizationsAr();
+    case 'bg':
+      return AppLocalizationsBg();
+    case 'ca':
+      return AppLocalizationsCa();
+    case 'cs':
+      return AppLocalizationsCs();
+    case 'da':
+      return AppLocalizationsDa();
     case 'de':
       return AppLocalizationsDe();
+    case 'el':
+      return AppLocalizationsEl();
     case 'en':
       return AppLocalizationsEn();
     case 'es':
       return AppLocalizationsEs();
+    case 'et':
+      return AppLocalizationsEt();
+    case 'fi':
+      return AppLocalizationsFi();
+    case 'fr':
+      return AppLocalizationsFr();
     case 'hi':
       return AppLocalizationsHi();
+    case 'hu':
+      return AppLocalizationsHu();
+    case 'id':
+      return AppLocalizationsId();
+    case 'it':
+      return AppLocalizationsIt();
     case 'ja':
       return AppLocalizationsJa();
+    case 'ko':
+      return AppLocalizationsKo();
+    case 'lt':
+      return AppLocalizationsLt();
+    case 'lv':
+      return AppLocalizationsLv();
+    case 'ms':
+      return AppLocalizationsMs();
+    case 'nl':
+      return AppLocalizationsNl();
+    case 'no':
+      return AppLocalizationsNo();
+    case 'pl':
+      return AppLocalizationsPl();
     case 'pt':
       return AppLocalizationsPt();
+    case 'ro':
+      return AppLocalizationsRo();
+    case 'ru':
+      return AppLocalizationsRu();
+    case 'sk':
+      return AppLocalizationsSk();
+    case 'sv':
+      return AppLocalizationsSv();
+    case 'th':
+      return AppLocalizationsTh();
+    case 'tr':
+      return AppLocalizationsTr();
+    case 'uk':
+      return AppLocalizationsUk();
+    case 'vi':
+      return AppLocalizationsVi();
     case 'zh':
       return AppLocalizationsZh();
   }

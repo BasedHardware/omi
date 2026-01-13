@@ -32,7 +32,7 @@ class ShortcutService {
 
   static void initialize() {
     if (!isSupported) return;
-    
+
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'openKeyboardShortcutsPage') {
         onOpenKeyboardShortcutsPage?.call();
@@ -77,6 +77,29 @@ class ShortcutService {
     if (!isSupported) return false;
     try {
       final result = await _channel.invokeMethod('resetAskAIShortcut');
+      return result == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> setToggleControlBarShortcut(int keyCode, int modifiers) async {
+    if (!isSupported) return false;
+    try {
+      final result = await _channel.invokeMethod('setToggleControlBarShortcut', {
+        'keyCode': keyCode,
+        'modifiers': modifiers,
+      });
+      return result == true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<bool> resetToggleControlBarShortcut() async {
+    if (!isSupported) return false;
+    try {
+      final result = await _channel.invokeMethod('resetToggleControlBarShortcut');
       return result == true;
     } catch (e) {
       return false;

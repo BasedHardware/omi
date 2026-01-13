@@ -235,7 +235,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchConversations => 'Buscar conversaciones';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count seleccionados';
   }
 
@@ -575,9 +575,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get doubleTapAction => 'Acción de doble toque';
 
   @override
-  String get doubleTapActionDesc => 'Elige qué sucede al hacer doble toque';
-
-  @override
   String get endAndProcess => 'Terminar y procesar';
 
   @override
@@ -585,9 +582,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get starOngoing => 'Marcar conversación actual';
-
-  @override
-  String get starOngoingDesc => 'Marcar para guardar como favorita al terminar';
 
   @override
   String get off => 'Apagado';
@@ -744,7 +738,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => 'Plan Básico';
+  String get basicPlan => 'Plan Gratuito';
 
   @override
   String usageLimitMessage(String used, int limit) {
@@ -2049,10 +2043,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get noMemoriesYet => 'No hay recuerdos aún';
 
   @override
-  String get noInterestingMemories => 'No hay recuerdos interesantes';
+  String get noAutoMemories => 'No hay recuerdos automáticos';
 
   @override
-  String get noSystemMemories => 'No hay recuerdos del sistema';
+  String get noManualMemories => 'No hay recuerdos manuales';
 
   @override
   String get noMemoriesInCategories => 'No hay recuerdos en estas categorías';
@@ -2177,13 +2171,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get filterAll => 'Todos';
 
   @override
-  String get filterInteresting => 'Interesante';
+  String get filterSystem => 'Sobre ti';
+
+  @override
+  String get filterInteresting => 'Perspectivas';
 
   @override
   String get filterManual => 'Manual';
-
-  @override
-  String get filterSystem => 'Sistema';
 
   @override
   String get completed => 'Completado';
@@ -2205,4 +2199,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get appLanguage => 'Idioma de la App';
+
+  @override
+  String get appInterfaceSectionTitle => 'INTERFAZ DE LA APLICACIÓN';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'VOZ Y TRANSCRIPCIÓN';
+
+  @override
+  String get languageSettingsHelperText =>
+      'El idioma de la aplicación cambia los menús y botones. El idioma de voz afecta cómo se transcriben tus grabaciones.';
 }

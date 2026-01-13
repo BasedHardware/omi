@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/base_provider.dart';
@@ -101,9 +102,7 @@ class DeveloperModeProvider extends BaseProvider {
     followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
-    // Goal tracker should be enabled by default
-    final savedValue = SharedPreferencesUtil().showGoalTrackerEnabled;
-    showGoalTrackerEnabled = savedValue; // Use saved value, which defaults to true
+    showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -239,14 +238,14 @@ class DeveloperModeProvider extends BaseProvider {
   void onDailyReflectionChanged(var value) {
     dailyReflectionEnabled = value;
     SharedPreferencesUtil().dailyReflectionEnabled = value; // Save immediately
-    
+
     // Schedule or cancel the notification based on the setting
     if (value) {
       DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
     } else {
       DailyReflectionNotification.cancelNotification();
     }
-    
+
     notifyListeners();
   }
 }

@@ -1,14 +1,11 @@
 {
   "@@locale": "ja",
-
   "appTitle": "Omi",
   "conversationTab": "会話",
   "transcriptTab": "トランスクリプト",
   "actionItemsTab": "アクションアイテム",
-
   "deleteConversationTitle": "会話を削除しますか？",
   "deleteConversationMessage": "この会話を削除してもよろしいですか？この操作は元に戻せません。",
-
   "confirm": "確認",
   "cancel": "キャンセル",
   "ok": "OK",
@@ -18,25 +15,20 @@
   "save": "保存",
   "edit": "編集",
   "close": "閉じる",
-
   "copyTranscript": "トランスクリプトをコピー",
   "copySummary": "サマリーをコピー",
   "testPrompt": "プロンプトをテスト",
   "reprocessConversation": "会話を再処理",
   "deleteConversation": "会話を削除",
-
   "contentCopied": "クリップボードにコピーしました",
   "failedToUpdateStarred": "スター状態の更新に失敗しました。",
   "conversationUrlNotShared": "会話URLを共有できませんでした。",
   "errorProcessingConversation": "会話の処理中にエラーが発生しました。後でもう一度お試しください。",
-
   "noInternetConnection": "インターネット接続を確認して、もう一度お試しください。",
   "unableToDeleteConversation": "会話を削除できません",
-
   "somethingWentWrong": "問題が発生しました！後でもう一度お試しください。",
   "copyErrorMessage": "エラーメッセージをコピー",
   "errorCopied": "エラーメッセージをクリップボードにコピーしました",
-
   "remaining": "残り",
   "loading": "読み込み中...",
   "loadingDuration": "再生時間を読み込み中...",
@@ -48,12 +40,11 @@
       }
     }
   },
-
   "people": "ピープル",
   "addNewPerson": "新しい人を追加",
   "editPerson": "人を編集",
   "createPersonHint": "新しい人を作成して、Omiにその人の声も認識させましょう！",
-  "speechProfile": "音声プロファイル",
+  "speechProfile": "音声プロフィール",
   "sampleNumber": "サンプル {number}",
   "@sampleNumber": {
     "placeholders": {
@@ -62,18 +53,15 @@
       }
     }
   },
-
   "settings": "設定",
   "language": "言語",
   "selectLanguage": "言語を選択",
-
   "deleting": "削除中...",
   "pleaseCompleteAuthentication": "ブラウザで認証を完了してください。完了したらアプリに戻ってください。",
   "failedToStartAuthentication": "認証の開始に失敗しました",
   "importStarted": "インポートを開始しました！完了したら通知されます。",
   "failedToStartImport": "インポートの開始に失敗しました。もう一度お試しください。",
   "couldNotAccessFile": "選択したファイルにアクセスできませんでした",
-
   "askOmi": "Omiに聞く",
   "done": "完了",
   "disconnected": "切断済み",
@@ -94,7 +82,6 @@
   "everythingSynced": "すべて同期済みです。",
   "recordingsNotSynced": "まだ同期されていない録音があります。",
   "syncingBackground": "バックグラウンドで録音を同期し続けます。",
-
   "noConversationsYet": "まだ会話がありません。",
   "noStarredConversations": "スター付きの会話はまだありません。",
   "starConversationHint": "会話をスターするには、会話を開いてヘッダーのスターアイコンをタップしてください。",
@@ -102,7 +89,9 @@
   "selectedCount": "{count}件選択中",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "マージ",
@@ -110,12 +99,13 @@
   "mergeConversationsMessage": "{count}件の会話が1つにまとめられます。すべてのコンテンツがマージされ、再生成されます。",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "バックグラウンドでマージ中。しばらくお待ちください。",
   "failedToStartMerge": "マージの開始に失敗しました",
-
   "askAnything": "何でも聞いてください",
   "noMessagesYet": "まだメッセージがありません！\n会話を始めてみませんか？",
   "deletingMessages": "Omiのメモリからメッセージを削除中...",
@@ -129,7 +119,6 @@
   "clearChatConfirm": "チャットを消去してもよろしいですか？この操作は元に戻せません。",
   "maxFilesLimit": "一度にアップロードできるファイルは4つまでです",
   "chatWithOmi": "Omiとチャット",
-
   "apps": "アプリ",
   "noAppsFound": "アプリが見つかりません",
   "tryAdjustingSearch": "検索やフィルターを調整してみてください",
@@ -139,7 +128,6 @@
   "myApps": "マイアプリ",
   "installedApps": "インストール済みアプリ",
   "unableToFetchApps": "アプリを取得できません :(\n\nインターネット接続を確認して、もう一度お試しください。",
-
   "aboutOmi": "Omiについて",
   "privacyPolicy": "プライバシーポリシー",
   "visitWebsite": "ウェブサイトを訪問",
@@ -158,13 +146,10 @@
   "deleteNow": "今すぐ削除",
   "goBack": "戻る",
   "checkBoxToConfirm": "アカウントの削除が永久的かつ取り消し不可能であることを確認するため、チェックボックスにチェックを入れてください。",
-
   "profile": "プロフィール",
   "name": "名前",
   "email": "メール",
-  "language": "言語",
   "customVocabulary": "カスタム語彙",
-  "speechProfile": "音声プロフィール",
   "identifyingOthers": "他者の識別",
   "paymentMethods": "お支払い方法",
   "conversationDisplay": "会話の表示",
@@ -172,8 +157,6 @@
   "userId": "ユーザーID",
   "notSet": "未設定",
   "userIdCopied": "ユーザーIDをクリップボードにコピーしました",
-
-  "selectLanguage": "言語を選択",
   "systemDefault": "システムの既定",
   "planAndUsage": "プランと使用状況",
   "offlineSync": "オフライン同期",
@@ -187,7 +170,6 @@
   "signOut": "ログアウト",
   "appAndDeviceCopied": "アプリとデバイスの詳細をコピーしました",
   "wrapped2025": "Wrapped 2025",
-
   "yourPrivacyYourControl": "プライバシーはあなたの手に",
   "privacyIntro": "Omiでは、あなたのプライバシーを守ることに尽力しています。このページでは、データの保存と使用方法を管理できます。",
   "learnMore": "詳細を見る...",
@@ -210,7 +192,6 @@
   "connect": "接続",
   "comingSoon": "近日公開",
   "forgetDevice": "デバイスを忘れる",
-
   "chargingIssues": "充電の問題",
   "disconnectDevice": "デバイスを切断",
   "unpairDevice": "デバイスのペアリング解除",
@@ -230,18 +211,15 @@
   "pauseResume": "一時停止/再開",
   "starConversation": "会話にスターを付ける",
   "doubleTapAction": "ダブルタップアクション",
-  "doubleTapActionDesc": "ダブルタップ時の動作を選択",
   "endAndProcess": "終了して会話を処理",
   "pauseResumeRecording": "録音の一時停止/再開",
   "starOngoing": "進行中の会話にスターを付ける",
-  "starOngoingDesc": "会話終了時にスターを付けるようにマーク",
   "off": "オフ",
   "max": "最大",
   "mute": "ミュート",
   "quiet": "静か",
   "normal": "通常",
   "high": "高",
-
   "micGainDescMuted": "マイクはミュートされています",
   "micGainDescLow": "非常に静か - 騒がしい環境向け",
   "micGainDescModerate": "静か - 適度な騒音向け",
@@ -251,15 +229,13 @@
   "micGainDescHigh": "高 - 遠くの声や柔らかい声向け",
   "micGainDescVeryHigh": "非常に高 - 非常に静かな音源向け",
   "micGainDescMax": "最大 - 注意して使用してください",
-
   "developerSettingsTitle": "開発者設定",
-  "save": "保存",
   "saving": "保存中...",
   "personaConfig": "AIペルソナを設定",
   "beta": "ベータ",
   "transcription": "文字起こし",
   "transcriptionConfig": "STTプロバイダーを設定",
-  "conversationTimeout": "会話タイムアウト",
+  "conversationTimeout": "会話のタイムアウト",
   "conversationTimeoutConfig": "会話の自動終了時間を設定",
   "importData": "データのインポート",
   "importDataConfig": "他のソースからデータをインポート",
@@ -269,7 +245,6 @@
   "createKeyToStart": "キーを作成して開始",
   "createKey": "キーを作成",
   "docs": "ドキュメント",
-
   "yourOmiInsights": "Omiの分析情報",
   "today": "今日",
   "thisMonth": "今月",
@@ -285,17 +260,15 @@
   "providingSubtitle": "自動的にキャプチャされたアクションアイテムとメモ。",
   "remembering": "記憶",
   "rememberingSubtitle": "あなたのために記憶された事実と詳細。",
-
   "unlimitedPlan": "無制限プラン",
   "managePlan": "プランの管理",
   "cancelAtPeriodEnd": "プランは{date}にキャンセルされます。",
   "renewsOn": "プランは{date}に更新されます。",
-  "basicPlan": "ベーシックプラン",
+  "basicPlan": "無料プラン",
   "usageLimitMessage": "{limit}分中{used}分使用済み",
   "upgrade": "アップグレード",
   "upgradeToUnlimited": "無制限プランにアップグレード",
   "basicPlanDesc": "プランには月{limit}分の無料枠が含まれています。無制限にするにはアップグレードしてください。",
-
   "shareStatsMessage": "Omiの統計をシェア！(omi.me - 常時ONのAIアシスタント)",
   "sharePeriodToday": "今日、Omiは:",
   "sharePeriodMonth": "今月、Omiは:",
@@ -305,7 +278,6 @@
   "shareStatsWords": "🧠 {words}語を理解しました",
   "shareStatsInsights": "✨ {count}個のインサイトを提供しました",
   "shareStatsMemories": "📚 {count}個の記憶を保存しました",
-
   "debugLogs": "デバッグログ",
   "debugLogsAutoDelete": "3日後に自動削除されます。",
   "debugLogsDesc": "問題の診断に役立ちます",
@@ -323,8 +295,6 @@
   "exportShared": "エクスポートを共有しました",
   "deleteKnowledgeGraphTitle": "ナレッジグラフを削除しますか？",
   "deleteKnowledgeGraphMessage": "これにより、派生したすべてのナレッジグラフデータ（ノードと接続）が削除されます。元の記憶は安全なままです。グラフは時間の経過とともに、または次のリクエスト時に再構築されます。",
-  "cancel": "キャンセル",
-  "delete": "削除",
   "knowledgeGraphDeleted": "ナレッジグラフが正常に削除されました",
   "deleteGraphFailed": "グラフの削除に失敗しました: {error}",
   "deleteKnowledgeGraph": "ナレッジグラフを削除",
@@ -355,7 +325,6 @@
   "addToClaudeConfig": "claude_desktop_config.jsonに追加",
   "copyConfig": "設定をコピー",
   "configCopied": "設定をクリップボードにコピーしました",
-
   "listeningMins": "リスニング（分）",
   "understandingWords": "理解（語数）",
   "insights": "インサイト",
@@ -364,7 +333,6 @@
   "wordsUsedThisMonth": "今月 {limit}語中{used}語使用済み",
   "insightsUsedThisMonth": "今月 {limit}個中{used}個のインサイト取得済み",
   "memoriesUsedThisMonth": "今月 {limit}個中{used}個の記憶作成済み",
-
   "visibility": "表示設定",
   "visibilitySubtitle": "リストに表示する会話を管理します",
   "showShortConversations": "短い会話を表示",
@@ -376,12 +344,10 @@
   "durationThreshold": "時間のしきい値",
   "durationThresholdDesc": "これより短い会話を非表示にします",
   "minLabel": "{count}分",
-
   "customVocabularyTitle": "カスタム語彙",
   "addWords": "単語を追加",
   "addWordsDesc": "名前、用語、珍しい単語",
   "vocabularyHint": "Omi, Callie, OpenAI",
-
   "chatToolsFooter": "アプリを接続して、チャットでデータや指標を表示できます。",
   "completeAuthInBrowser": "ブラウザで認証を完了してください。完了したらアプリに戻ってください。",
   "failedToStartAuth": "{appName}の認証開始に失敗しました",
@@ -392,12 +358,10 @@
   "connectTo": "{appName}に接続",
   "authAccessMessage": "Omiが{appName}のデータにアクセスすることを許可する必要があります。ブラウザで認証が開きます。",
   "continueAction": "続行",
-
   "languageTitle": "言語",
   "primaryLanguage": "主要言語",
   "automaticTranslation": "自動翻訳",
   "detectLanguages": "10以上の言語を検出",
-
   "authorizeSavingRecordings": "録音の保存を許可",
   "thanksForAuthorizing": "許可いただきありがとうございます！",
   "needYourPermission": "許可が必要です",
@@ -421,13 +385,11 @@
   "permissionRevokedTitle": "許可が取り消されました",
   "permissionRevokedMessage": "既存の録音もすべて削除しますか？",
   "yes": "はい",
-
   "editName": "名前を編集",
   "howShouldOmiCallYou": "Omiはあなたをどう呼べばいいですか？",
   "enterYourName": "名前を入力",
   "nameCannotBeEmpty": "名前を空にすることはできません",
   "nameUpdatedSuccessfully": "名前が正常に更新されました！",
-
   "calendarSettings": "カレンダー設定",
   "calendarProviders": "カレンダープロバイダー",
   "macOsCalendar": "macOSカレンダー",
@@ -444,15 +406,12 @@
   "checkingNextDays": "次の30日間を確認中",
   "tomorrow": "明日",
   "googleCalendarComingSoon": "Googleカレンダー連携は近日公開予定です！",
-
   "connectedAsUser": "ユーザーとして接続: {userId}",
   "defaultWorkspace": "デフォルトのワークスペース",
   "tasksCreatedInWorkspace": "タスクはこのワークスペースに作成されます",
   "defaultProjectOptional": "デフォルトプロジェクト（任意）",
   "leaveUnselectedTasks": "プロジェクトなしでタスクを作成するには、選択を解除したままにしてください",
   "noProjectsInWorkspace": "このワークスペースにはプロジェクトがありません",
-
-  "conversationTimeout": "会話のタイムアウト",
   "conversationTimeoutDesc": "会話を自動終了するまでの無音時間を選択してください：",
   "timeout2Minutes": "2分",
   "timeout2MinutesDesc": "2分の無音で会話を終了",
@@ -466,30 +425,26 @@
   "timeout4HoursDesc": "4時間の無音で会話を終了",
   "conversationEndAfterHours": "4時間の無音後に会話が終了します",
   "conversationEndAfterMinutes": "{minutes}分の無音後に会話が終了します",
-
   "tellUsPrimaryLanguage": "主要言語を教えてください",
   "languageForTranscription": "より正確な文字起こしとパーソナライズされた体験のために言語を設定してください。",
   "singleLanguageModeInfo": "単一言語モードが有効です。より高い精度のため翻訳は無効になっています。",
-  "searchLanguageHint": "名前またはコードで言語を検索",
+  "searchLanguageHint": "言語名またはコードで検索",
   "noLanguagesFound": "言語が見つかりません",
   "skip": "スキップ",
   "languageSetTo": "言語を{language}に設定しました",
   "failedToSetLanguage": "言語の設定に失敗しました",
-
   "appSettings": "{appName}設定",
   "disconnectFromApp": "{appName}から切断しますか？",
   "disconnectFromAppDesc": "{appName}の認証が削除されます。再利用するには再接続が必要です。",
   "connectedToApp": "{appName}に接続済み",
   "account": "アカウント",
   "actionItemsSyncedTo": "アクションアイテムは{appName}アカウントに同期されます",
-
   "defaultSpace": "デフォルトスペース",
   "selectSpaceInWorkspace": "ワークスペース内のスペースを選択",
   "noSpacesInWorkspace": "このワークスペースにスペースが見つかりません",
   "defaultList": "デフォルトリスト",
   "tasksAddedToList": "タスクはこのリストに追加されます",
   "noListsInSpace": "このスペースにリストが見つかりません",
-
   "failedToLoadRepos": "リポジトリの読み込みに失敗しました: {error}",
   "defaultRepoSaved": "デフォルトリポジトリを保存しました",
   "failedToSaveDefaultRepo": "デフォルトリポジトリの保存に失敗しました",
@@ -505,29 +460,24 @@
   "oneMonthAgo": "1ヶ月前",
   "monthsAgo": "{count}ヶ月前",
   "issuesCreatedInRepo": "イシューはデフォルトリポジトリに作成されます",
-
   "taskIntegrations": "タスク連携",
   "configureSettings": "設定を構成",
   "completeAuthBrowser": "ブラウザで認証を完了してください。完了したらアプリに戻ってください。",
   "failedToStartAppAuth": "{appName}の認証開始に失敗しました",
   "connectToAppTitle": "{appName}に接続",
   "authorizeOmiForTasks": "Omiが{appName}アカウントでタスクを作成することを許可する必要があります。ブラウザで認証が開きます。",
-  "continueButton": "続行",
+  "continueButton": "続ける",
   "appIntegration": "{appName}連携",
   "integrationComingSoon": "{appName}との連携は近日公開予定です！より多くのタスク管理オプションを提供するため取り組んでいます。",
   "gotIt": "了解",
   "tasksExportedOneApp": "タスクは一度に1つのアプリにのみエクスポートできます。",
-
   "completeYourUpgrade": "アップグレードを完了",
-
-  "transcription": "文字起こし",
   "importConfiguration": "設定をインポート",
   "exportConfiguration": "設定をエクスポート",
   "bringYourOwn": "自分で用意",
   "payYourSttProvider": "omiを無料で使用。STTプロバイダーに直接支払います。",
   "freeMinutesMonth": "月1,200分無料。無制限は",
   "omiUnlimited": "Omi Unlimited",
-  
   "hostRequired": "ホストが必要です",
   "validPortRequired": "有効なポートが必要です",
   "validWebsocketUrlRequired": "有効なWebSocket URL（wss://）が必要です",
@@ -543,7 +493,6 @@
   "invalidProviderInConfig": "設定内の無効なプロバイダー",
   "importedConfig": "{providerName}設定をインポートしました",
   "invalidJson": "無効なJSON: {error}",
-  
   "provider": "プロバイダー",
   "live": "ライブ",
   "onDevice": "オンデバイス",
@@ -566,7 +515,6 @@
   "logsCopied": "ログをコピーしました",
   "noLogsYet": "ログはまだありません。録音を開始するとカスタムSTTアクティビティが表示されます。",
   "deviceUsesCodec": "{deviceName}は{codecReason}を使用しています。Omiが使用されます。",
-  
   "omiTranscription": "Omi文字起こし",
   "bestInClassTranscription": "設定不要で最高クラスの文字起こし",
   "instantSpeakerLabels": "即座に話者ラベル付け",
@@ -575,12 +523,9 @@
   "autoLanguageDetection": "自動言語検出",
   "highAccuracy": "高精度",
   "privacyFirst": "プライバシー優先",
-  
   "saveChanges": "変更を保存",
-  "saving": "保存中...",
   "resetToDefault": "デフォルトにリセット",
   "viewTemplate": "テンプレートを表示",
-
   "trySomethingLike": "例えば...",
   "tryIt": "試す",
   "creatingPlan": "プランを作成中",
@@ -610,15 +555,12 @@
   "perMonthLabel": "/月",
   "creating": "作成中...",
   "createApp": "アプリを作成",
-
-  "connect": "接続",
   "searchingForDevices": "デバイスを検索中...",
   "devicesFoundNearby": "{count}台のデバイスが近くに見つかりました",
   "pairingSuccessful": "ペアリング成功",
   "errorConnectingAppleWatch": "Apple Watchへの接続エラー: {error}",
   "dontShowAgain": "今後表示しない",
   "iUnderstand": "理解しました",
-
   "enableBluetooth": "Bluetoothを有効にする",
   "bluetoothNeeded": "Omiはウェアラブルに接続するためにBluetoothが必要です。Bluetoothを有効にして再試行してください。",
   "contactSupport": "サポートに連絡しますか？",
@@ -630,19 +572,16 @@
   "locationAccessDesc": "完全な体験のためにバックグラウンド位置情報を有効にする",
   "notifications": "通知",
   "notificationsDesc": "最新情報を受け取るために通知を有効にする",
-  "continueButton": "続ける",
   "locationServiceDisabled": "位置情報サービスが無効",
   "locationServiceDisabledDesc": "位置情報サービスが無効です。設定 > プライバシーとセキュリティ > 位置情報サービスに移動して有効にしてください",
   "backgroundLocationDenied": "バックグラウンド位置情報アクセスが拒否されました",
   "backgroundLocationDeniedDesc": "デバイスの設定に移動して、位置情報の権限を「常に許可」に設定してください",
-
   "lovingOmi": "Omiを楽しんでいますか？",
   "leaveReviewIos": "App Storeでレビューを残して、より多くの人に届けるお手伝いをしてください。皆様のフィードバックは私たちにとって非常に大切です！",
   "leaveReviewAndroid": "Google Playストアでレビューを残して、より多くの人に届けるお手伝いをしてください。皆様のフィードバックは私たちにとって非常に大切です！",
   "rateOnAppStore": "App Storeで評価",
   "rateOnGooglePlay": "Google Playで評価",
   "maybeLater": "後で",
-
   "speechProfileIntro": "Omiはあなたの目標と声を学習する必要があります。後から変更することもできます。",
   "getStarted": "始める",
   "allDone": "完了しました！",
@@ -660,8 +599,6 @@
   "connectionLost": "接続が切断されました",
   "connectionLostDesc": "接続が中断されました。インターネット接続を確認してもう一度お試しください。",
   "tryAgain": "再試行",
-  "ok": "OK",
-
   "connectOmiOmiGlass": "Omi / OmiGlassを接続",
   "continueWithoutDevice": "デバイスなしで続ける",
   "permissionsRequired": "権限が必要です",
@@ -669,13 +606,10 @@
   "openSettings": "設定を開く",
   "wantDifferentName": "別の名前を使いますか？",
   "whatsYourName": "お名前は？",
-  "enterYourName": "名前を入力",
-
   "speakTranscribeSummarize": "話す。文字起こし。要約。",
   "signInWithApple": "Appleでサインイン",
   "signInWithGoogle": "Googleでサインイン",
   "byContinuingAgree": "続行することで、",
-  "privacyPolicy": "プライバシーポリシー",
   "termsOfUse": "利用規約",
   "omiYourAiCompanion": "Omi – あなたのAIコンパニオン",
   "captureEveryMoment": "すべての瞬間を記録。AI搭載のサマリーで、もうメモを取る必要はありません。",
@@ -687,17 +621,12 @@
   "grantPermissionButton": "許可する",
   "needHelp": "ヘルプ",
   "troubleshootingSteps": "トラブルシューティング：\n\n1. WatchにOmiがインストールされているか確認\n2. WatchでOmiアプリを開く\n3. 許可のポップアップを探す\n4. 「許可」をタップ\n5. Watchアプリが閉じたら再度開く\n6. iPhoneに戻り「続ける」をタップ",
-  "gotIt": "了解",
   "recordingStartedSuccessfully": "録音が正常に開始されました！",
   "permissionNotGrantedYet": "許可がまだ付与されていません。マイクアクセスを許可し、Watchでアプリを再度開いたことを確認してください。",
   "errorRequestingPermission": "許可のリクエスト中にエラーが発生しました：{error}",
   "errorStartingRecording": "録音の開始中にエラーが発生しました：{error}",
-
   "selectPrimaryLanguage": "主要言語を選択",
-  "done": "完了",
   "languageBenefits": "言語を設定すると、より正確な文字起こしとパーソナライズされた体験が得られます",
-  "searchLanguageHint": "言語名またはコードで検索",
-  "noLanguagesFound": "言語が見つかりません",
   "whatsYourPrimaryLanguage": "主要言語は何ですか？",
   "selectYourLanguage": "言語を選択",
   "personalGrowthJourney": "あなたの言葉すべてに耳を傾けるAIと共に、個人の成長の旅へ。",
@@ -732,8 +661,8 @@
   "memoryDeleted": "メモリを削除しました",
   "undo": "元に戻す",
   "noMemoriesYet": "メモリはまだありません",
-  "noInterestingMemories": "興味深いメモリはまだありません",
-  "noSystemMemories": "システムメモリはまだありません",
+  "noAutoMemories": "自動メモリはまだありません",
+  "noManualMemories": "手動メモリはまだありません",
   "noMemoriesInCategories": "このカテゴリのメモリはありません",
   "noMemoriesFound": "メモリが見つかりません",
   "addFirstMemory": "最初のメモリを追加",
@@ -774,17 +703,18 @@
   "pressDoneToSave": "完了を押して保存",
   "pressDoneToCreate": "完了を押して作成",
   "filterAll": "すべて",
-  "filterInteresting": "興味深い",
+  "filterAuto": "自動",
+  "filterInteresting": "インサイト",
+  "filterSystem": "あなたについて",
   "filterManual": "手動",
-  "filterSystem": "システム",
-  "cancel": "キャンセル",
-  "done": "完了",
   "completed": "完了",
   "markComplete": "完了としてマーク",
   "actionItemDeleted": "アクションアイテムを削除しました",
   "failedToDeleteActionItem": "アクションアイテムの削除に失敗しました",
-  "delete": "削除",
   "deleteActionItemConfirmTitle": "アクションアイテムの削除",
   "deleteActionItemConfirmMessage": "このアクションアイテムを削除してもよろしいですか？",
-  "appLanguage": "アプリ言語"
+  "appLanguage": "アプリ言語",
+  "appInterfaceSectionTitle": "アプリインターフェース",
+  "speechTranscriptionSectionTitle": "音声と文字起こし",
+  "languageSettingsHelperText": "アプリ言語はメニューとボタンを変更します。音声言語は録音の文字起こし方法に影響します。"
 }

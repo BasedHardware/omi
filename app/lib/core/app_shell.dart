@@ -1,10 +1,13 @@
 import 'dart:async';
-import 'package:app_links/app_links.dart';
+
 import 'package:flutter/material.dart';
+
+import 'package:app_links/app_links.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/mobile/mobile_app.dart';
-import 'package:omi/desktop/desktop_app.dart';
+
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/desktop/desktop_app.dart';
+import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
@@ -13,6 +16,7 @@ import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -23,8 +27,8 @@ import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 class AppShell extends StatefulWidget {
@@ -43,14 +47,14 @@ class _AppShellState extends State<AppShell> {
 
     // Handle links
     _linkSubscription = _appLinks.uriLinkStream.distinct().listen((uri) {
-      debugPrint('onAppLink: $uri');
+      Logger.debug('onAppLink: $uri');
       openAppLink(uri);
     });
   }
 
   void openAppLink(Uri uri) async {
     if (uri.pathSegments.isEmpty) {
-      debugPrint('No path segments in URI: $uri');
+      Logger.debug('No path segments in URI: $uri');
       return;
     }
 
@@ -63,7 +67,7 @@ class _AppShellState extends State<AppShell> {
             Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
           }
         } else {
-          debugPrint('App not found: ${uri.pathSegments[1]}');
+          Logger.debug('App not found: ${uri.pathSegments[1]}');
           AppSnackbar.showSnackbarError('Oops! Looks like the app you are looking for is not available.');
         }
       }
@@ -80,23 +84,23 @@ class _AppShellState extends State<AppShell> {
       // Handle Todoist OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
-        debugPrint('Todoist OAuth error: $error');
+        Logger.debug('Todoist OAuth error: $error');
         AppSnackbar.showSnackbarError('Failed to connect to Todoist');
         return;
       }
 
       final success = uri.queryParameters['success'];
       if (success == 'true') {
-        debugPrint('Todoist OAuth successful (tokens in Firebase)');
+        Logger.debug('Todoist OAuth successful (tokens in Firebase)');
         _handleTodoistCallback();
       } else {
-        debugPrint('Todoist callback received but no success flag');
+        Logger.debug('Todoist callback received but no success flag');
       }
     } else if (uri.host == 'asana' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Asana OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
-        debugPrint('Asana OAuth error: $error');
+        Logger.debug('Asana OAuth error: $error');
         AppSnackbar.showSnackbarError('Failed to connect to Asana');
         return;
       }
@@ -104,32 +108,32 @@ class _AppShellState extends State<AppShell> {
       final success = uri.queryParameters['success'];
       final requiresSetup = uri.queryParameters['requires_setup'];
       if (success == 'true') {
-        debugPrint('Asana OAuth successful (tokens in Firebase)');
+        Logger.debug('Asana OAuth successful (tokens in Firebase)');
         _handleAsanaCallback(requiresSetup == 'true');
       } else {
-        debugPrint('Asana callback received but no success flag');
+        Logger.debug('Asana callback received but no success flag');
       }
     } else if (uri.host == 'google-tasks' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Google Tasks OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
-        debugPrint('Google Tasks OAuth error: $error');
+        Logger.debug('Google Tasks OAuth error: $error');
         AppSnackbar.showSnackbarError('Failed to connect to Google Tasks');
         return;
       }
 
       final success = uri.queryParameters['success'];
       if (success == 'true') {
-        debugPrint('Google Tasks OAuth successful (tokens in Firebase)');
+        Logger.debug('Google Tasks OAuth successful (tokens in Firebase)');
         _handleGoogleTasksCallback();
       } else {
-        debugPrint('Google Tasks callback received but no success flag');
+        Logger.debug('Google Tasks callback received but no success flag');
       }
     } else if (uri.host == 'clickup' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle ClickUp OAuth callback
       final error = uri.queryParameters['error'];
       if (error != null) {
-        debugPrint('ClickUp OAuth error: $error');
+        Logger.debug('ClickUp OAuth error: $error');
         AppSnackbar.showSnackbarError('Failed to connect to ClickUp');
         return;
       }
@@ -137,10 +141,10 @@ class _AppShellState extends State<AppShell> {
       final success = uri.queryParameters['success'];
       final requiresSetup = uri.queryParameters['requires_setup'];
       if (success == 'true') {
-        debugPrint('ClickUp OAuth successful (tokens in Firebase)');
+        Logger.debug('ClickUp OAuth successful (tokens in Firebase)');
         _handleClickUpCallback(requiresSetup == 'true');
       } else {
-        debugPrint('ClickUp callback received but no success flag');
+        Logger.debug('ClickUp callback received but no success flag');
       }
     } else if (uri.host == 'notion' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       await _handleOAuthCallback(uri, 'Notion', 'Notion', _handleNotionCallback);
@@ -151,7 +155,7 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.host == 'github' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       await _handleOAuthCallback(uri, 'GitHub', 'GitHub', _handleGitHubCallback);
     } else {
-      debugPrint('Unknown link: $uri');
+      Logger.debug('Unknown link: $uri');
     }
   }
 
@@ -159,17 +163,17 @@ class _AppShellState extends State<AppShell> {
       Uri uri, String errorDisplayName, String oauthLogName, Future<void> Function() onSuccess) async {
     final error = uri.queryParameters['error'];
     if (error != null) {
-      debugPrint('$oauthLogName OAuth error: $error');
+      Logger.debug('$oauthLogName OAuth error: $error');
       AppSnackbar.showSnackbarError('Failed to connect to $errorDisplayName: $error');
       return;
     }
 
     final success = uri.queryParameters['success'];
     if (success == 'true') {
-      debugPrint('$oauthLogName OAuth successful (tokens in Firebase)');
+      Logger.debug('$oauthLogName OAuth successful (tokens in Firebase)');
       await onSuccess();
     } else {
-      debugPrint('$oauthLogName callback received but no success flag');
+      Logger.debug('$oauthLogName callback received but no success flag');
     }
   }
 
@@ -180,14 +184,14 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
-      debugPrint('✓ Todoist authentication completed successfully');
-      debugPrint('✓ Task integration enabled: Todoist - authentication complete');
+      Logger.debug('✓ Todoist authentication completed successfully');
+      Logger.debug('✓ Task integration enabled: Todoist - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to Todoist!');
 
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
-      debugPrint('Failed to complete Todoist authentication');
+      Logger.debug('Failed to complete Todoist authentication');
       AppSnackbar.showSnackbarError('Failed to connect to Todoist. Please try again.');
     }
   }
@@ -199,8 +203,8 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
-      debugPrint('✓ Asana authentication completed successfully');
-      debugPrint('✓ Task integration enabled: Asana - authentication complete');
+      Logger.debug('✓ Asana authentication completed successfully');
+      Logger.debug('✓ Task integration enabled: Asana - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to Asana!');
 
       // Notify task integration provider to refresh UI from Firebase
@@ -211,7 +215,7 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
       }
     } else {
-      debugPrint('Failed to complete Asana authentication');
+      Logger.debug('Failed to complete Asana authentication');
       AppSnackbar.showSnackbarError('Failed to connect to Asana. Please try again.');
     }
   }
@@ -223,14 +227,14 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
-      debugPrint('✓ Google Tasks authentication completed successfully');
-      debugPrint('✓ Task integration enabled: Google Tasks - authentication complete');
+      Logger.debug('✓ Google Tasks authentication completed successfully');
+      Logger.debug('✓ Task integration enabled: Google Tasks - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to Google Tasks!');
 
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
-      debugPrint('Failed to complete Google Tasks authentication');
+      Logger.debug('Failed to complete Google Tasks authentication');
       AppSnackbar.showSnackbarError('Failed to connect to Google Tasks. Please try again.');
     }
   }
@@ -242,8 +246,8 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
-      debugPrint('✓ ClickUp authentication completed successfully');
-      debugPrint('✓ Task integration enabled: ClickUp - authentication complete');
+      Logger.debug('✓ ClickUp authentication completed successfully');
+      Logger.debug('✓ Task integration enabled: ClickUp - authentication complete');
       AppSnackbar.showSnackbar('Successfully connected to ClickUp!');
 
       // Notify task integration provider to refresh UI from Firebase
@@ -254,7 +258,7 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
       }
     } else {
-      debugPrint('Failed to complete ClickUp authentication');
+      Logger.debug('Failed to complete ClickUp authentication');
       AppSnackbar.showSnackbarError('Failed to connect to ClickUp. Please try again.');
     }
   }
@@ -271,10 +275,10 @@ class _AppShellState extends State<AppShell> {
       await integrationProvider.loadFromBackend();
 
       if (!mounted) return;
-      debugPrint('✓ Notion authentication completed successfully');
+      Logger.debug('✓ Notion authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to Notion!');
     } catch (e) {
-      debugPrint('Error handling Notion callback: $e');
+      Logger.debug('Error handling Notion callback: $e');
       if (mounted) {
         AppSnackbar.showSnackbarError('Failed to refresh Notion connection status.');
       }
@@ -293,10 +297,10 @@ class _AppShellState extends State<AppShell> {
       await integrationProvider.loadFromBackend();
 
       if (!mounted) return;
-      debugPrint('✓ Google authentication completed successfully');
+      Logger.debug('✓ Google authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to Google!');
     } catch (e) {
-      debugPrint('Error handling Google Calendar callback: $e');
+      Logger.debug('Error handling Google Calendar callback: $e');
       if (mounted) {
         AppSnackbar.showSnackbarError('Failed to refresh Google connection status.');
       }
@@ -315,10 +319,10 @@ class _AppShellState extends State<AppShell> {
       await integrationProvider.loadFromBackend();
 
       if (!mounted) return;
-      debugPrint('✓ Whoop authentication completed successfully');
+      Logger.debug('✓ Whoop authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to Whoop!');
     } catch (e) {
-      debugPrint('Error handling Whoop callback: $e');
+      Logger.debug('Error handling Whoop callback: $e');
       if (mounted) {
         AppSnackbar.showSnackbarError('Failed to refresh Whoop connection status.');
       }
@@ -337,7 +341,7 @@ class _AppShellState extends State<AppShell> {
       await integrationProvider.loadFromBackend();
 
       if (!mounted) return;
-      debugPrint('✓ GitHub authentication completed successfully');
+      Logger.debug('✓ GitHub authentication completed successfully');
       AppSnackbar.showSnackbar('Successfully connected to GitHub!');
 
       // Open GitHub settings page to select default repository
@@ -352,7 +356,7 @@ class _AppShellState extends State<AppShell> {
         }
       }
     } catch (e) {
-      debugPrint('Error handling GitHub callback: $e');
+      Logger.debug('Error handling GitHub callback: $e');
       if (mounted) {
         AppSnackbar.showSnackbarError('Failed to refresh GitHub connection status.');
       }
@@ -372,7 +376,7 @@ class _AppShellState extends State<AppShell> {
         try {
           await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
         } catch (e) {
-          debugPrint('Failed to login to Intercom: $e');
+          Logger.debug('Failed to login to Intercom: $e');
         }
 
         context.read<MessageProvider>().setMessagesFromCache();

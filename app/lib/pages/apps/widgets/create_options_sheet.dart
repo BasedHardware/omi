@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/persona/persona_profile.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 

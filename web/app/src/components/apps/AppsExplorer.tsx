@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -22,6 +22,31 @@ import type {
 import { AppCard } from './AppCard';
 import { AppGridSection } from './AppGridSection';
 import { PageHeader } from '@/components/layout/PageHeader';
+
+// Module-level cache for apps data
+interface AppsCache {
+  appGroups: AppGroup[];
+  popularApps: App[];
+  categories: AppCategory[];
+  capabilities: AppCapability[];
+  installedApps: App[];
+  myApps: App[];
+  timestamp: number;
+}
+
+const appsCache: Partial<AppsCache> = {};
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function isCacheValid(key: keyof AppsCache): boolean {
+  if (!appsCache.timestamp) return false;
+  if (!appsCache[key]) return false;
+  return Date.now() - appsCache.timestamp < CACHE_TTL;
+}
+
+function isCacheStale(): boolean {
+  if (!appsCache.timestamp) return true;
+  return Date.now() - appsCache.timestamp > CACHE_TTL;
+}
 
 type Tab = 'explore' | 'installed' | 'my-apps';
 
@@ -225,17 +250,23 @@ export function AppsExplorer() {
   const [activeTab, setActiveTab] = useState<Tab>('explore');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+
+  // Initialize from cache - only show loading if no cached data
+  const hasExploreCache = isCacheValid('appGroups');
+  const [isLoading, setIsLoading] = useState(!hasExploreCache);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Data
-  const [appGroups, setAppGroups] = useState<AppGroup[]>([]);
-  const [popularApps, setPopularApps] = useState<App[]>([]);
+  // Data - initialize from cache
+  const [appGroups, setAppGroups] = useState<AppGroup[]>(appsCache.appGroups || []);
+  const [popularApps, setPopularApps] = useState<App[]>(appsCache.popularApps || []);
   const [searchResults, setSearchResults] = useState<App[]>([]);
-  const [installedApps, setInstalledApps] = useState<App[]>([]);
-  const [myApps, setMyApps] = useState<App[]>([]);
-  const [categories, setCategories] = useState<AppCategory[]>([]);
-  const [capabilities, setCapabilities] = useState<AppCapability[]>([]);
+  const [installedApps, setInstalledApps] = useState<App[]>(appsCache.installedApps || []);
+  const [myApps, setMyApps] = useState<App[]>(appsCache.myApps || []);
+  const [categories, setCategories] = useState<AppCategory[]>(appsCache.categories || []);
+  const [capabilities, setCapabilities] = useState<AppCapability[]>(appsCache.capabilities || []);
+
+  // Track if fetch is in progress
+  const fetchingRef = useRef(false);
 
   // Filters
   const [filters, setFilters] = useState<AppsFilters>({});
@@ -258,8 +289,14 @@ export function AppsExplorer() {
 
   // Load initial data
   useEffect(() => {
-    async function loadData() {
-      setIsLoading(true);
+    async function loadData(backgroundRefresh = false) {
+      if (fetchingRef.current) return;
+      fetchingRef.current = true;
+
+      if (!backgroundRefresh) {
+        setIsLoading(true);
+      }
+
       try {
         const [groupedData, popular, cats, caps] = await Promise.all([
           getAppsGrouped(),
@@ -267,17 +304,41 @@ export function AppsExplorer() {
           getAppCategories(),
           getAppCapabilities(),
         ]);
-        console.log('Grouped data:', groupedData);
-        setAppGroups(groupedData.groups || []);
-        setPopularApps(popular || []);
-        setCategories(cats || []);
-        setCapabilities(caps || []);
+
+        const groups = groupedData.groups || [];
+        const popularList = popular || [];
+        const catsList = cats || [];
+        const capsList = caps || [];
+
+        setAppGroups(groups);
+        setPopularApps(popularList);
+        setCategories(catsList);
+        setCapabilities(capsList);
+
+        // Update cache
+        appsCache.appGroups = groups;
+        appsCache.popularApps = popularList;
+        appsCache.categories = catsList;
+        appsCache.capabilities = capsList;
+        appsCache.timestamp = Date.now();
       } catch (err) {
         console.error('Failed to load apps:', err);
       } finally {
         setIsLoading(false);
+        fetchingRef.current = false;
       }
     }
+
+    // If we have fresh cache, skip fetch
+    if (isCacheValid('appGroups')) {
+      setIsLoading(false);
+      // If stale, do background refresh
+      if (isCacheStale()) {
+        loadData(true);
+      }
+      return;
+    }
+
     loadData();
   }, []);
 
@@ -316,38 +377,74 @@ export function AppsExplorer() {
 
   // Load installed apps when switching to installed tab
   useEffect(() => {
-    async function loadInstalled() {
+    async function loadInstalled(backgroundRefresh = false) {
       if (activeTab !== 'installed') return;
 
-      setIsLoading(true);
+      if (!backgroundRefresh) {
+        setIsLoading(true);
+      }
+
       try {
         const response = await searchApps({ installed_apps: true, limit: 100 });
-        setInstalledApps(response.data || []);
+        const apps = response.data || [];
+        setInstalledApps(apps);
+        appsCache.installedApps = apps;
+        appsCache.timestamp = Date.now();
       } catch (err) {
         console.error('Failed to load installed apps:', err);
       } finally {
         setIsLoading(false);
       }
     }
-    loadInstalled();
+
+    if (activeTab === 'installed') {
+      // Check cache first
+      if (isCacheValid('installedApps')) {
+        setInstalledApps(appsCache.installedApps!);
+        setIsLoading(false);
+        if (isCacheStale()) {
+          loadInstalled(true);
+        }
+        return;
+      }
+      loadInstalled();
+    }
   }, [activeTab]);
 
   // Load my apps when switching to my-apps tab
   useEffect(() => {
-    async function loadMyApps() {
+    async function loadMyApps(backgroundRefresh = false) {
       if (activeTab !== 'my-apps') return;
 
-      setIsLoading(true);
+      if (!backgroundRefresh) {
+        setIsLoading(true);
+      }
+
       try {
         const response = await searchApps({ my_apps: true, limit: 100 });
-        setMyApps(response.data || []);
+        const apps = response.data || [];
+        setMyApps(apps);
+        appsCache.myApps = apps;
+        appsCache.timestamp = Date.now();
       } catch (err) {
         console.error('Failed to load my apps:', err);
       } finally {
         setIsLoading(false);
       }
     }
-    loadMyApps();
+
+    if (activeTab === 'my-apps') {
+      // Check cache first
+      if (isCacheValid('myApps')) {
+        setMyApps(appsCache.myApps!);
+        setIsLoading(false);
+        if (isCacheStale()) {
+          loadMyApps(true);
+        }
+        return;
+      }
+      loadMyApps();
+    }
   }, [activeTab]);
 
   const clearFilters = useCallback(() => {
@@ -359,17 +456,28 @@ export function AppsExplorer() {
   const handleAppUpdate = useCallback(async () => {
     if (activeTab === 'installed') {
       const response = await searchApps({ installed_apps: true, limit: 100 });
-      setInstalledApps(response.data || []);
+      const apps = response.data || [];
+      setInstalledApps(apps);
+      appsCache.installedApps = apps;
     } else if (activeTab === 'my-apps') {
       const response = await searchApps({ my_apps: true, limit: 100 });
-      setMyApps(response.data || []);
+      const apps = response.data || [];
+      setMyApps(apps);
+      appsCache.myApps = apps;
     }
     // Refresh groups to update enabled state
     const groupedData = await getAppsGrouped();
-    setAppGroups(groupedData.groups || []);
+    const groups = groupedData.groups || [];
+    setAppGroups(groups);
+    appsCache.appGroups = groups;
+
     // Refresh popular apps too
     const popular = await getPopularApps();
-    setPopularApps(popular || []);
+    const popularList = popular || [];
+    setPopularApps(popularList);
+    appsCache.popularApps = popularList;
+
+    appsCache.timestamp = Date.now();
   }, [activeTab]);
 
   const isShowingSearchResults = debouncedQuery.trim().length > 0 || activeFilterCount > 0;

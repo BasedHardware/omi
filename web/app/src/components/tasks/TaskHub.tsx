@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { LayoutGrid, List, RefreshCw, CheckSquare, Square, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionItems } from '@/hooks/useActionItems';
@@ -12,6 +12,7 @@ import { TaskRightPanel } from './TaskRightPanel';
 import { BulkActionBar } from './BulkActionBar';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { copyTasksToClipboard, downloadTasks } from '@/lib/taskExport';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 type ViewMode = 'hub' | 'list';
 
@@ -45,6 +46,41 @@ export function TaskHub() {
     bulkSetDueDate,
   } = useActionItems();
 
+  // Chat context for passing selected task info
+  const { setContext } = useChatContext();
+
+  // Set chat context when a single task is selected
+  useEffect(() => {
+    if (selectedIds.size === 1) {
+      const taskId = Array.from(selectedIds)[0];
+      const task = items.find((t) => t.id === taskId);
+      if (task) {
+        setContext({
+          type: 'task',
+          id: task.id,
+          title: task.description,
+          summary: task.completed ? 'Completed' : `Due: ${task.due_at || 'No due date'}`,
+        });
+      } else {
+        setContext(null);
+      }
+    } else {
+      setContext(null);
+    }
+  }, [selectedIds, items, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
+
+  // Enter selection mode and select the specified task (for double-click)
+  // Defined early because it's used in taskGroupProps
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
   // Common props for all TaskGroup components
   const taskGroupProps = {
     onToggleComplete: toggleComplete,
@@ -56,6 +92,10 @@ export function TaskHub() {
     ...(isSelectMode && {
       selectedIds,
       onSelect: handleSelect,
+    }),
+    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+    ...(!isSelectMode && {
+      onEnterSelectionMode: enterSelectionModeWithId,
     }),
   };
 
@@ -503,6 +543,7 @@ export function TaskHub() {
                   onUpdateDescription={updateDescription}
                   onSetDueDate={setDueDate}
                   searchQuery={searchQuery}
+                  onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
                 />
               ) : filteredView ? (
                 /* Filtered view (when date is selected in Hub view) */

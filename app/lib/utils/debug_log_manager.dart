@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 
 /// Lightweight debug log manager to persist important diagnostics when

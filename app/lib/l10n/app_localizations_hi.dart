@@ -233,7 +233,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchConversations => 'बातचीत खोजें';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count चयनित';
   }
 
@@ -573,9 +573,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get doubleTapAction => 'डबल टैप क्रिया';
 
   @override
-  String get doubleTapActionDesc => 'चुनें कि डबल टैप होने पर क्या होता है';
-
-  @override
   String get endAndProcess => 'समाप्त करें और संसाधित करें';
 
   @override
@@ -583,9 +580,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get starOngoing => 'चल रही बातचीत को तारांकित करें';
-
-  @override
-  String get starOngoingDesc => 'समाप्त होने पर इसे पसंदीदा के रूप में सहेजने के लिए चिह्नित करें';
 
   @override
   String get off => 'बंद';
@@ -742,7 +736,7 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get basicPlan => 'मूल योजना';
+  String get basicPlan => 'निःशुल्क योजना';
 
   @override
   String usageLimitMessage(String used, int limit) {
@@ -2041,10 +2035,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noMemoriesYet => 'अभी तक कोई यादें नहीं';
 
   @override
-  String get noInterestingMemories => 'कोई दिलचस्प यादें नहीं';
+  String get noAutoMemories => 'कोई स्वतः यादें नहीं';
 
   @override
-  String get noSystemMemories => 'कोई सिस्टम यादें नहीं';
+  String get noManualMemories => 'कोई मैनुअल यादें नहीं';
 
   @override
   String get noMemoriesInCategories => 'इन श्रेणियों में कोई यादें नहीं';
@@ -2169,13 +2163,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get filterAll => 'सभी';
 
   @override
-  String get filterInteresting => 'दिलचस्प';
+  String get filterSystem => 'आपके बारे में';
+
+  @override
+  String get filterInteresting => 'अंतर्दृष्टि';
 
   @override
   String get filterManual => 'मैनुअल';
-
-  @override
-  String get filterSystem => 'सिस्टम';
 
   @override
   String get completed => 'पूर्ण';
@@ -2197,4 +2191,14 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get appLanguage => 'ऐप भाषा';
+
+  @override
+  String get appInterfaceSectionTitle => 'ऐप इंटरफ़ेस';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'वाणी और ट्रांसक्रिप्शन';
+
+  @override
+  String get languageSettingsHelperText =>
+      'ऐप भाषा मेनू और बटन बदलती है। वाणी भाषा आपकी रिकॉर्डिंग के ट्रांसक्रिप्शन को प्रभावित करती है।';
 }

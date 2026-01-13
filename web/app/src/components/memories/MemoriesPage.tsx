@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useTransition } from 'react';
+import { useState, useCallback, useMemo, useTransition, useEffect, useDeferredValue } from 'react';
 import { motion } from 'framer-motion';
 import { List, Network, Search, RefreshCw, Loader2, Tag, Flame, TrendingUp, Plus, ArrowUpDown, ChevronDown, CheckSquare, Square, Brain, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 
 type ViewMode = 'list' | 'graph' | 'tags';
 type SortOption = 'score' | 'created_desc' | 'created_asc' | 'updated_desc';
@@ -56,13 +57,44 @@ export function MemoriesPage() {
     activeCategories,
   } = useMemories();
 
-  // Get insights data for sidebar
-  const { lifeBalance, risingTags, fadingTags, summary } = useInsightsDashboard(memories);
+  // Chat context for passing selected memory info
+  const { setContext } = useChatContext();
+
+  // Set chat context when a memory is highlighted or single selected
+  useEffect(() => {
+    const targetId = highlightedMemoryId || (selectedIds.size === 1 ? Array.from(selectedIds)[0] : null);
+    if (targetId) {
+      const memory = memories.find((m) => m.id === targetId);
+      if (memory) {
+        setContext({
+          type: 'memory',
+          id: memory.id,
+          title: memory.content.substring(0, 50) + (memory.content.length > 50 ? '...' : ''),
+          summary: memory.content,
+        });
+      } else {
+        setContext(null);
+      }
+    } else {
+      setContext(null);
+    }
+  }, [highlightedMemoryId, selectedIds, memories, setContext]);
+
+  // Clear chat context when component unmounts
+  useEffect(() => {
+    return () => setContext(null);
+  }, [setContext]);
+
+  // Defer memories to prevent blocking UI during heavy computations
+  const deferredMemories = useDeferredValue(memories);
+
+  // Get insights data for sidebar - uses deferred memories to not block UI
+  const { lifeBalance, risingTags, fadingTags } = useInsightsDashboard(deferredMemories);
 
   // Calculate tag stats from all memories
   const tagStats = useMemo(() => {
     const tagCounts: Record<string, number> = {};
-    memories.forEach((memory) => {
+    deferredMemories.forEach((memory) => {
       if (memory.tags && Array.isArray(memory.tags)) {
         memory.tags.forEach((tag) => {
           tagCounts[tag] = (tagCounts[tag] || 0) + 1;
@@ -72,33 +104,29 @@ export function MemoriesPage() {
     return Object.entries(tagCounts)
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count);
-  }, [memories]);
+  }, [deferredMemories]);
 
   // Get top tags for display
   const topTags = tagStats.slice(0, 12);
   const allTags = tagStats;
 
-  // Get recent memories count (last 7 days) - sample first 500 for performance
+  // Get recent memories count (last 7 days) - uses deferred value
   const recentMemoriesCount = useMemo(() => {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString();
-    // Sample for performance - recent memories are likely at the start
-    const sample = memories.slice(0, 500);
-    return sample.filter((m) => m.created_at >= sevenDaysAgoStr).length;
-  }, [memories]);
+    return deferredMemories.filter((m) => m.created_at >= sevenDaysAgoStr).length;
+  }, [deferredMemories]);
 
-  // Get today's memories - sample first 200 for performance
+  // Get today's memories - uses deferred value
   const todayMemories = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString();
-    // Today's memories are likely at the start of the sorted list
-    const sample = memories.slice(0, 200);
-    return sample.filter((m) => m.created_at >= todayStr);
-  }, [memories]);
+    return deferredMemories.filter((m) => m.created_at >= todayStr);
+  }, [deferredMemories]);
 
-  // Calculate activity data for chart (last 30 days) - O(n) single pass
+  // Calculate activity data for chart (last 30 days) - uses deferred value
   const activityData = useMemo(() => {
     const now = new Date();
     now.setHours(23, 59, 59, 999);
@@ -114,9 +142,8 @@ export function MemoriesPage() {
       dayCounts[date.toISOString().split('T')[0]] = 0;
     }
 
-    // Single pass through memories (sample first 1000 for performance)
-    const sample = memories.slice(0, 1000);
-    sample.forEach((m) => {
+    // Single pass through deferred memories
+    deferredMemories.forEach((m) => {
       const dateKey = m.created_at.split('T')[0];
       if (dateKey in dayCounts) {
         dayCounts[dateKey]++;
@@ -126,7 +153,7 @@ export function MemoriesPage() {
     return Object.entries(dayCounts)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, count]) => ({ date, count }));
-  }, [memories]);
+  }, [deferredMemories]);
 
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {
@@ -220,6 +247,12 @@ export function MemoriesPage() {
     }
     setIsSelectMode(!isSelectMode);
   }, [isSelectMode]);
+
+  // Enter selection mode and select the specified memory (for double-click)
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
 
   // Handle select all visible memories
   const handleSelectAll = useCallback(() => {
@@ -527,6 +560,8 @@ export function MemoriesPage() {
                     // Only pass selection props when in select mode
                     selectedIds={isSelectMode ? selectedIds : undefined}
                     onToggleSelect={isSelectMode ? handleToggleSelect : undefined}
+                    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+                    onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
                   />
                 )}
               </>

@@ -73,6 +73,38 @@ export function formatTime(date: Date): string {
 }
 
 /**
+ * Format notification timestamp with time (e.g., "2:30 PM" for today, "Yesterday 2:30 PM", or "Jan 15, 2:30 PM")
+ */
+export function formatNotificationTimestamp(date: Date): string {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const inputDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const timeStr = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  if (inputDate.getTime() === today.getTime()) {
+    return timeStr;
+  }
+
+  if (inputDate.getTime() === yesterday.getTime()) {
+    return `Yesterday ${timeStr}`;
+  }
+
+  // Format as "Jan 15, 2:30 PM"
+  const dateStr = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+  return `${dateStr}, ${timeStr}`;
+}
+
+/**
  * Group items by a key function
  */
 export function groupBy<T, K extends string>(

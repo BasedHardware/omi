@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'desktop_conversation_detail_page.dart';
 import 'widgets/desktop_conversation_card.dart';
+import 'widgets/desktop_daily_score_widget.dart';
 import 'widgets/desktop_empty_conversations.dart';
-import 'widgets/desktop_search_widget.dart';
-import 'widgets/desktop_search_result_header.dart';
+import 'widgets/desktop_goals_widget.dart';
 import 'widgets/desktop_recording_widget.dart';
+import 'widgets/desktop_search_result_header.dart';
+import 'widgets/desktop_search_widget.dart';
+import 'widgets/desktop_today_tasks_widget.dart';
 
 class DesktopConversationsPage extends StatefulWidget {
   const DesktopConversationsPage({
@@ -150,8 +155,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
 
     // If conversation has no app results, update details
     if (detailProvider.conversation.appResults.isEmpty) {
-      await conversationProvider.updateSearchedConvoDetails(
-          detailProvider.conversation.id, date, index);
+      await conversationProvider.updateSearchedConvoDetails(detailProvider.conversation.id, date, index);
       detailProvider.updateConversation(detailProvider.conversation.id, date);
     }
 
@@ -287,7 +291,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                             child: CustomScrollView(
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
-                                const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                                const SliverToBoxAdapter(child: SizedBox(height: 48)),
 
                                 // Header section (only show if there are conversations in system)
                                 if (hasAnyConversationsInSystem)
@@ -314,11 +318,40 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                     ),
                                   ),
 
+                                // Daily Score + Today Tasks + Goals section (only when not searching)
+                                if (hasAnyConversationsInSystem && !isSearchActive)
+                                  SliverToBoxAdapter(
+                                    child: FadeTransition(
+                                      opacity: _fadeAnimation,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                                        height: 260, // Height to fit 3 tasks/goals
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            // Daily Score Widget
+                                            const Expanded(
+                                              child: DesktopDailyScoreWidget(),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            // Today Tasks Widget
+                                            const Expanded(
+                                              child: DesktopTodayTasksWidget(),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            // Goals Widget
+                                            const Expanded(
+                                              child: DesktopGoalsWidget(),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
                                 // Search result header (only show if there are conversations in system)
                                 if (hasAnyConversationsInSystem)
                                   const SliverToBoxAdapter(child: DesktopSearchResultHeader()),
-
-                                getProcessingConversationsWidget(convoProvider.processingConversations),
 
                                 // Main conversations content
                                 if (convoProvider.groupedConversations.isEmpty && !convoProvider.isLoadingConversations)
@@ -328,35 +361,7 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(vertical: 80),
                                         child: Center(
-                                          child: isSearchActive
-                                              ? const Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      Icons.search_off_rounded,
-                                                      size: 48,
-                                                      color: ResponsiveHelper.textTertiary,
-                                                    ),
-                                                    SizedBox(height: 16),
-                                                    Text(
-                                                      'No results found',
-                                                      style: TextStyle(
-                                                        fontSize: 18,
-                                                        fontWeight: FontWeight.w600,
-                                                        color: ResponsiveHelper.textSecondary,
-                                                      ),
-                                                    ),
-                                                    SizedBox(height: 8),
-                                                    Text(
-                                                      'Try adjusting your search terms',
-                                                      style: TextStyle(
-                                                        fontSize: 14,
-                                                        color: ResponsiveHelper.textTertiary,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                )
-                                              : const DesktopEmptyConversations(),
+                                          child: _buildEmptyState(convoProvider, isSearchActive),
                                         ),
                                       ),
                                     ),
@@ -465,59 +470,301 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
   }
 
   Widget _buildHeader() {
-    final responsive = ResponsiveHelper(context);
+    final userName = SharedPreferencesUtil().givenName;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        responsive.spacing(baseSpacing: 40),
-        responsive.spacing(baseSpacing: 0),
-        responsive.spacing(baseSpacing: 40),
-        responsive.spacing(baseSpacing: 24),
-      ),
+      padding: const EdgeInsets.fromLTRB(32, 8, 32, 16),
       child: Consumer<ConversationProvider>(
         builder: (context, convoProvider, _) {
-          final totalConversations = convoProvider.groupedConversations.values
-              .fold<int>(0, (sum, conversations) => sum + conversations.length);
-
           return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Left side - Title and subtitle
+              // Left side - Welcome message
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Conversations',
-                      style: responsive.headlineLarge.copyWith(
-                        color: ResponsiveHelper.textPrimary,
+                      'Welcome back, ${userName.isNotEmpty ? userName : 'User'}',
+                      style: const TextStyle(
+                        fontSize: 26,
                         fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    SizedBox(height: responsive.spacing(baseSpacing: 4)),
-                    Text(
-                      convoProvider.previousQuery.isNotEmpty
-                          ? 'Search results for "${convoProvider.previousQuery}"'
-                          : totalConversations > 0
-                              ? 'Your conversation history'
-                              : 'No conversations yet',
-                      style: responsive.bodyMedium.copyWith(
-                        color: ResponsiveHelper.textTertiary,
+                        color: ResponsiveHelper.textPrimary,
+                        letterSpacing: -0.5,
                       ),
                     ),
                   ],
                 ),
               ),
-              // Right side - Search bar
-              const SizedBox(width: 20),
-              const SizedBox(
-                width: 320,
-                child: DesktopSearchWidget(),
-              ),
+
+              // Right side - Search + Filters
+              const DesktopSearchWidget(),
+              const SizedBox(width: 8),
+
+              // Starred filter button
+              _buildStarredFilterButton(convoProvider),
+              const SizedBox(width: 8),
+
+              // Date filter button
+              _buildDateFilterButton(convoProvider),
             ],
           );
         },
       ),
     );
+  }
+
+  Widget _buildStarredFilterButton(ConversationProvider convoProvider) {
+    final isActive = convoProvider.showStarredOnly;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          convoProvider.toggleStarredFilter();
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.amber.withValues(alpha: 0.15)
+                : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isActive ? Colors.amber.withValues(alpha: 0.4) : ResponsiveHelper.backgroundTertiary,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FaIcon(
+                isActive ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
+                size: 14,
+                color: isActive ? Colors.amber : ResponsiveHelper.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Starred',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isActive ? Colors.amber : ResponsiveHelper.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateFilterButton(ConversationProvider convoProvider) {
+    final selectedDate = convoProvider.selectedDate;
+    final hasDateFilter = selectedDate != null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _showDatePicker(convoProvider),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: hasDateFilter
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.15)
+                : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: hasDateFilter
+                  ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.4)
+                  : ResponsiveHelper.backgroundTertiary,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.calendar_today_rounded,
+                size: 15,
+                color: hasDateFilter ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                hasDateFilter ? DateFormat('MMM d').format(selectedDate) : 'Date',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: hasDateFilter ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary,
+                ),
+              ),
+              // Clear button when date is selected
+              if (hasDateFilter) ...[
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () {
+                    convoProvider.clearDateFilter();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      size: 12,
+                      color: ResponsiveHelper.purplePrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDatePicker(ConversationProvider convoProvider) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: convoProvider.selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: ResponsiveHelper.purplePrimary,
+              onPrimary: Colors.white,
+              surface: ResponsiveHelper.backgroundSecondary,
+              onSurface: ResponsiveHelper.textPrimary,
+            ),
+            dialogBackgroundColor: ResponsiveHelper.backgroundSecondary,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      await convoProvider.filterConversationsByDate(picked);
+    }
+  }
+
+  Widget _buildEmptyState(ConversationProvider convoProvider, bool isSearchActive) {
+    // Search empty state
+    if (isSearchActive) {
+      return const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.search_off_rounded,
+            size: 48,
+            color: ResponsiveHelper.textTertiary,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'No results found',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: ResponsiveHelper.textSecondary,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Try adjusting your search terms',
+            style: TextStyle(
+              fontSize: 14,
+              color: ResponsiveHelper.textTertiary,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Starred filter empty state
+    if (convoProvider.showStarredOnly) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const FaIcon(
+              FontAwesomeIcons.star,
+              color: Colors.amber,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No starred conversations',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: ResponsiveHelper.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Star conversations to find them quickly here',
+            style: TextStyle(
+              fontSize: 14,
+              color: ResponsiveHelper.textTertiary,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Date filter empty state
+    if (convoProvider.selectedDate != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.calendar_today_rounded,
+              color: ResponsiveHelper.purplePrimary,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No conversations on ${DateFormat('MMM d, yyyy').format(convoProvider.selectedDate!)}',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: ResponsiveHelper.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Try selecting a different date',
+            style: TextStyle(
+              fontSize: 14,
+              color: ResponsiveHelper.textTertiary,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Default empty state
+    return const DesktopEmptyConversations();
   }
 
   Widget _buildConversationGroup(
@@ -526,37 +773,33 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
     bool isFirst,
   ) {
     return Container(
-      margin: EdgeInsets.only(top: isFirst ? 16 : 32),
+      margin: EdgeInsets.only(top: isFirst ? 8 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.only(
-              left: 2,
-              bottom: 12,
-            ),
+          // Date header - "Tue, Jan 6" format
+          Padding(
+            padding: const EdgeInsets.only(left: 12, bottom: 8),
             child: Text(
-              DateFormat('MMM d, yyyy').format(date),
+              DateFormat('EEE, MMM d').format(date),
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: ResponsiveHelper.textTertiary,
-                letterSpacing: 0.1,
+                letterSpacing: 0.2,
               ),
             ),
           ),
+          // Conversations list - no gaps between items
           ...conversations.asMap().entries.map((entry) {
             final index = entry.key;
             final conversation = entry.value;
 
-            return Container(
-              margin: EdgeInsets.only(bottom: index == conversations.length - 1 ? 0 : 8),
-              child: DesktopConversationCard(
-                conversation: conversation,
-                onTap: () => _navigateToConversationDetail(conversation, index, date),
-                index: index,
-                date: date,
-              ),
+            return DesktopConversationCard(
+              conversation: conversation,
+              onTap: () => _navigateToConversationDetail(conversation, index, date),
+              index: index,
+              date: date,
             );
           }),
         ],

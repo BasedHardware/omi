@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -14,6 +15,8 @@ import {
   MapPin,
   Sparkles,
   Volume2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
@@ -27,7 +30,17 @@ import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
 import { usePeople } from '@/hooks/usePeople';
 import { precacheConversationAudio, getConversationAudioUrls } from '@/lib/api';
-import type { Conversation, ActionItem, AppResponse, TranscriptSegment, AudioFile } from '@/types/conversation';
+import type { Conversation, ActionItem, AppResponse, TranscriptSegment, AudioFile, Geolocation } from '@/types/conversation';
+
+// Dynamic import for Leaflet map (SSR not supported)
+const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center rounded-r-xl">
+      <MapPin className="w-8 h-8 text-text-quaternary" />
+    </div>
+  ),
+});
 
 interface ConversationDetailPanelProps {
   conversationId: string;
@@ -39,7 +52,7 @@ interface ConversationDetailPanelProps {
   onDelete?: () => void;
 }
 
-type TabId = 'summary' | 'actions' | 'transcript' | 'location';
+type TabId = 'summary' | 'actions' | 'transcript';
 
 interface Tab {
   id: TabId;
@@ -124,7 +137,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
 }
 
 /**
- * Summary tab content with app summaries
+ * Summary tab content with app summaries and optional location map
  */
 interface SummaryTabProps {
   overview: string;
@@ -133,6 +146,7 @@ interface SummaryTabProps {
   appResults: AppResponse[];
   suggestedAppIds: string[];
   onGenerateComplete?: (conversation: Conversation) => void;
+  geolocation?: Geolocation | null;
 }
 
 function SummaryTab({
@@ -142,25 +156,124 @@ function SummaryTab({
   appResults,
   suggestedAppIds,
   onGenerateComplete,
+  geolocation,
 }: SummaryTabProps) {
   const hasAppSummaries = appResults && appResults.length > 0;
   const hasSuggestedApps = suggestedAppIds && suggestedAppIds.length > 0;
+  const hasLocation = geolocation && geolocation.latitude && geolocation.longitude;
+
+  // State for expandable text
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [needsTruncation, setNeedsTruncation] = useState(false);
+  const [mapHeight, setMapHeight] = useState(0);
+  const textRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+
+  // Check if text overflows the map height
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (textRef.current && mapRef.current && hasLocation) {
+        const actualMapHeight = mapRef.current.clientHeight;
+        setMapHeight(actualMapHeight);
+        // Only truncate if text is taller than the map (minus some padding for the button)
+        setNeedsTruncation(textRef.current.scrollHeight > actualMapHeight - 40);
+      }
+    };
+
+    // Small delay to ensure map has rendered
+    const timer = setTimeout(checkOverflow, 100);
+    window.addEventListener('resize', checkOverflow);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', checkOverflow);
+    };
+  }, [overview, hasLocation]);
 
   return (
     <div className="space-y-6">
-      {/* Default Summary Section */}
-      <div>
-        {category && (
-          <div className="mb-3">
-            <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
-              {category}
-            </span>
+      {/* Summary Section with optional Map */}
+      {hasLocation ? (
+        <div className="noise-overlay rounded-xl overflow-hidden border border-white/[0.04]">
+          <div className="grid grid-cols-1 md:grid-cols-2 md:items-start min-h-[280px]">
+            {/* Left: Overview content */}
+            <div className="p-5 pt-4 relative">
+              <div
+                ref={textRef}
+                className={cn(
+                  'transition-all duration-300',
+                  !isExpanded && needsTruncation && 'overflow-hidden'
+                )}
+                style={!isExpanded && needsTruncation && mapHeight > 0 ? { maxHeight: mapHeight - 56 } : undefined}
+              >
+                {category && (
+                  <div className="mb-3">
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                      {category}
+                    </span>
+                  </div>
+                )}
+                <p className="text-text-secondary leading-relaxed text-lg">
+                  {overview}
+                </p>
+                {geolocation.address && (
+                  <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
+                    <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{geolocation.address}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Gradient fade and Show more button */}
+              {needsTruncation && (
+                <div className={cn(
+                  'mt-2',
+                  !isExpanded && 'absolute bottom-0 left-0 right-0 pt-12 pb-4 px-5 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent'
+                )}>
+                  <button
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
+                  >
+                    {isExpanded ? (
+                      <>
+                        <ChevronUp className="w-4 h-4" />
+                        <span>Show less</span>
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-4 h-4" />
+                        <span>Show more</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* Right: Map */}
+            <div ref={mapRef} className="relative overflow-hidden aspect-video">
+              <SingleLocationMap
+                latitude={geolocation.latitude}
+                longitude={geolocation.longitude}
+                address={geolocation.address}
+                height="100%"
+              />
+            </div>
           </div>
-        )}
-        <p className="text-text-secondary leading-relaxed text-lg">
-          {overview}
-        </p>
-      </div>
+        </div>
+      ) : (
+        /* Full-width overview when no location */
+        <div>
+          {category && (
+            <div className="mb-3">
+              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                {category}
+              </span>
+            </div>
+          )}
+          <p className="text-text-secondary leading-relaxed text-lg">
+            {overview}
+          </p>
+        </div>
+      )}
 
       {/* App Summaries Section */}
       {(hasAppSummaries || hasSuggestedApps) && (
@@ -169,7 +282,7 @@ function SummaryTab({
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-primary" />
-              <h3 className="text-sm font-medium text-text-primary">App Summaries</h3>
+              <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
             </div>
             {hasSuggestedApps && (
               <GenerateSummaryButton
@@ -193,10 +306,10 @@ function SummaryTab({
             </div>
           )}
 
-          {/* Empty state for app summaries */}
+          {/* Empty state for templates */}
           {!hasAppSummaries && hasSuggestedApps && (
             <p className="text-sm text-text-tertiary mt-2">
-              No app summaries yet. Click the button above to generate one.
+              No summaries yet. Click the button above to generate one or create a custom template.
             </p>
           )}
         </div>
@@ -233,70 +346,6 @@ function ActionItemsTab({ items }: { items: ActionItem[] }) {
         {items.map((item, index) => (
           <ActionItemRow key={index} item={item} />
         ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Location/Map tab content
- */
-function LocationTab({ geolocation, address }: {
-  geolocation: { latitude: number; longitude: number } | null;
-  address?: string | null;
-}) {
-  if (!geolocation) {
-    return (
-      <div className="text-center py-12 text-text-tertiary">
-        <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
-        <p>No location data available for this conversation</p>
-      </div>
-    );
-  }
-
-  const { latitude, longitude } = geolocation;
-  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.01}%2C${latitude - 0.01}%2C${longitude + 0.01}%2C${latitude + 0.01}&layer=mapnik&marker=${latitude}%2C${longitude}`;
-  const linkUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=15/${latitude}/${longitude}`;
-
-  return (
-    <div className="space-y-4">
-      {/* Address if available */}
-      {address && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-bg-tertiary">
-          <MapPin className="w-5 h-5 text-purple-primary flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-text-primary font-medium">Location</p>
-            <p className="text-text-secondary text-sm">{address}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Map embed */}
-      <div className="rounded-xl overflow-hidden border border-bg-tertiary">
-        <iframe
-          src={mapUrl}
-          width="100%"
-          height="300"
-          style={{ border: 0 }}
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          title="Conversation location"
-        />
-      </div>
-
-      {/* Coordinates and link */}
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-text-quaternary">
-          {latitude.toFixed(6)}, {longitude.toFixed(6)}
-        </span>
-        <a
-          href={linkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-purple-primary hover:text-purple-secondary transition-colors"
-        >
-          Open in OpenStreetMap
-        </a>
       </div>
     </div>
   );
@@ -365,7 +414,8 @@ export function ConversationDetailPanel({
 
   useEffect(() => {
     if (!conversation) return;
-    let cancelled = false;
+    const abortController = new AbortController();
+    const signal = abortController.signal;
 
     async function checkAudioAvailability() {
       // Helper to map audio URLs to AudioFile format
@@ -381,8 +431,8 @@ export function ConversationDetailPanel({
         setAudioAvailable(true);
 
         // Try to get URLs immediately (might already be cached)
-        const cachedUrls = await getConversationAudioUrls(conversationId);
-        if (cancelled) return;
+        const cachedUrls = await getConversationAudioUrls(conversationId, signal);
+        if (signal.aborted) return;
 
         // Check if we got valid signed URLs
         if (cachedUrls && cachedUrls.length > 0 && cachedUrls[0].signed_url) {
@@ -391,12 +441,12 @@ export function ConversationDetailPanel({
         }
 
         // URLs not cached - trigger precache and wait
-        await precacheConversationAudio(conversationId);
-        if (cancelled) return;
+        await precacheConversationAudio(conversationId, signal);
+        if (signal.aborted) return;
 
         // Fetch signed URLs after precaching
-        const audioUrls = await getConversationAudioUrls(conversationId);
-        if (cancelled) return;
+        const audioUrls = await getConversationAudioUrls(conversationId, signal);
+        if (signal.aborted) return;
 
         if (audioUrls && audioUrls.length > 0) {
           setFetchedAudioFiles(mapAudioUrls(audioUrls));
@@ -406,13 +456,13 @@ export function ConversationDetailPanel({
 
       // Otherwise, try to fetch audio URLs with retries
       for (let attempt = 0; attempt < 3; attempt++) {
-        if (cancelled) return;
+        if (signal.aborted) return;
         if (attempt > 0) {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        const audioUrls = await getConversationAudioUrls(conversationId);
-        if (cancelled) return;
+        const audioUrls = await getConversationAudioUrls(conversationId, signal);
+        if (signal.aborted) return;
 
         if (audioUrls && audioUrls.length > 0) {
           setAudioAvailable(true);
@@ -424,7 +474,7 @@ export function ConversationDetailPanel({
     }
 
     checkAudioAvailability();
-    return () => { cancelled = true; };
+    return () => abortController.abort();
   }, [conversationId, conversation, hasAudioFiles]);
 
   const handleAudioTimeUpdate = useCallback((time: number) => {
@@ -521,12 +571,6 @@ export function ConversationDetailPanel({
       icon: <MessageSquare className="w-4 h-4" />,
       count: transcript_segments?.length || 0,
       disabled: !hasTranscript,
-    },
-    {
-      id: 'location',
-      label: 'Location',
-      icon: <MapPin className="w-4 h-4" />,
-      disabled: !hasLocation,
     },
   ];
 
@@ -663,6 +707,7 @@ export function ConversationDetailPanel({
                 appResults={conversation.apps_results || []}
                 suggestedAppIds={conversation.suggested_summarization_apps || []}
                 onGenerateComplete={onConversationUpdate}
+                geolocation={geolocation}
               />
             )}
 
@@ -703,13 +748,6 @@ export function ConversationDetailPanel({
                   onSeekTo={handleSeekTo}
                 />
               </div>
-            )}
-
-            {activeTab === 'location' && (
-              <LocationTab
-                geolocation={geolocation}
-                address={geolocation?.address}
-              />
             )}
           </motion.div>
         </AnimatePresence>

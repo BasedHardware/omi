@@ -1,4 +1,5 @@
 import { getIdToken } from './firebase';
+import { invalidateCache, invalidationPatterns } from './cache';
 import type {
   Conversation,
   ConversationSearchResponse,
@@ -212,6 +213,7 @@ export async function toggleStarred(
   await fetchWithAuth(`/v1/conversations/${id}/starred?starred=${starred}`, {
     method: 'PATCH',
   });
+  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**
@@ -221,6 +223,7 @@ export async function deleteConversation(id: string): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**
@@ -247,6 +250,38 @@ export async function mergeConversations(
       reprocess,
     }),
   });
+}
+
+/**
+ * Response from processing an in-progress conversation
+ */
+export interface CreateConversationResponse {
+  conversation: Conversation;
+  messages: ServerMessage[];
+}
+
+/**
+ * Finalize an in-progress conversation from a recording session.
+ * This processes the transcript, generates title/summary/action items,
+ * and creates audio file records from stored chunks.
+ *
+ * @returns The processed conversation, or null if no in-progress conversation exists
+ */
+export async function processInProgressConversation(): Promise<CreateConversationResponse | null> {
+  try {
+    const result = await fetchWithAuth<CreateConversationResponse>('/v1/conversations', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    // 404 means no in-progress conversation exists
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 // ============================================================================
@@ -351,6 +386,7 @@ export async function deleteActionItem(id: string): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.actionItems);
 }
 
 // ============================================================================
@@ -395,7 +431,7 @@ export interface CreateMemoryParams {
 export async function createMemory(
   params: CreateMemoryParams
 ): Promise<Memory> {
-  return fetchWithAuth<Memory>('/v3/memories', {
+  const memory = await fetchWithAuth<Memory>('/v3/memories', {
     method: 'POST',
     body: JSON.stringify({
       content: params.content,
@@ -403,6 +439,8 @@ export async function createMemory(
       category: params.category || 'manual',
     }),
   });
+  invalidateCache(invalidationPatterns.memories);
+  return memory;
 }
 
 /**
@@ -416,6 +454,7 @@ export async function updateMemoryContent(
   await fetchWithAuth(`/v3/memories/${id}?value=${encodedValue}`, {
     method: 'PATCH',
   });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 /**
@@ -428,6 +467,7 @@ export async function updateMemoryVisibility(
   await fetchWithAuth(`/v3/memories/${id}/visibility?value=${visibility}`, {
     method: 'PATCH',
   });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 /**
@@ -437,6 +477,7 @@ export async function deleteMemory(id: string): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.memories);
 }
 
 /**
@@ -576,6 +617,12 @@ export async function sendMessageStream(
   options?: {
     appId?: string;
     fileIds?: string[];
+    context?: {
+      type: string;
+      id?: string;
+      title?: string;
+      summary?: string;
+    } | null;
   }
 ): Promise<void> {
   let token: string | null = null;
@@ -607,6 +654,7 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
+      context: options?.context || null,
     }),
   });
 
@@ -890,7 +938,7 @@ export async function getChatApps(): Promise<App[]> {
  * Create a new app
  */
 export async function createApp(
-  data: CreateAppRequest,
+  data: CreateAppRequest & { deleted?: boolean; price?: number; thumbnails?: string[]; uid?: string },
   imageFile?: File
 ): Promise<{ app_id: string }> {
   let token: string | null = null;
@@ -1052,6 +1100,33 @@ export async function generateAppDescription(
     body: JSON.stringify({ name, description: currentDescription }),
   });
   return response.description;
+}
+
+/**
+ * Generate app description and emoji using AI
+ * Used for quick template creation (matches mobile app behavior)
+ */
+export async function generateAppDescriptionAndEmoji(
+  name: string,
+  prompt: string
+): Promise<{ description: string; emoji: string }> {
+  try {
+    const response = await fetchWithAuth<{ description: string; emoji: string }>(
+      '/v1/app/generate-description-emoji',
+      {
+        method: 'POST',
+        body: JSON.stringify({ name, prompt }),
+      }
+    );
+    return {
+      description: response.description || '',
+      emoji: response.emoji || '✨',
+    };
+  } catch {
+    // Fallback: generate description only and use default emoji
+    const description = await generateAppDescription(name, prompt);
+    return { description, emoji: '✨' };
+  }
 }
 
 /**
@@ -1892,14 +1967,19 @@ export function getAudioStreamUrl(
  * @param conversationId - The conversation ID
  */
 export async function getConversationAudioUrls(
-  conversationId: string
+  conversationId: string,
+  signal?: AbortSignal
 ): Promise<AudioFileUrlInfo[]> {
   try {
     const response = await fetchWithAuth<{ audio_files: AudioFileUrlInfo[] }>(
-      `/v1/sync/audio/${conversationId}/urls`
+      `/v1/sync/audio/${conversationId}/urls`,
+      { signal }
     );
     return response.audio_files || [];
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return []; // Silently return empty for aborted requests
+    }
     console.error('Error fetching audio URLs:', error);
     return [];
   }
@@ -1911,13 +1991,18 @@ export async function getConversationAudioUrls(
  * @param conversationId - The conversation ID
  */
 export async function precacheConversationAudio(
-  conversationId: string
+  conversationId: string,
+  signal?: AbortSignal
 ): Promise<void> {
   try {
     await fetchWithAuth(`/v1/sync/audio/${conversationId}/precache`, {
       method: 'POST',
+      signal,
     });
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return; // Silently return for aborted requests
+    }
     console.error('Error pre-caching audio:', error);
   }
 }
@@ -2001,6 +2086,7 @@ export async function createFolder(data: CreateFolderRequest): Promise<Folder> {
     method: 'POST',
     body: JSON.stringify(data),
   });
+  invalidateCache(invalidationPatterns.folders);
   return mapFolderResponse(folder);
 }
 
@@ -2015,6 +2101,7 @@ export async function updateFolder(
     method: 'PATCH',
     body: JSON.stringify(data),
   });
+  invalidateCache(invalidationPatterns.folders);
   return mapFolderResponse(folder);
 }
 
@@ -2026,6 +2113,8 @@ export async function deleteFolder(folderId: string): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}`, {
     method: 'DELETE',
   });
+  invalidateCache(invalidationPatterns.folders);
+  invalidateCache(invalidationPatterns.conversations); // Conversations move back to "All"
 }
 
 /**
@@ -2041,6 +2130,7 @@ export async function moveConversationToFolder(
     method: 'PATCH',
     body: JSON.stringify({ folder_id: folderId }),
   });
+  invalidateCache(invalidationPatterns.conversations);
 }
 
 /**
@@ -2067,4 +2157,80 @@ export async function reorderFolders(folderIds: string[]): Promise<void> {
     method: 'POST',
     body: JSON.stringify({ folder_ids: folderIds }),
   });
+}
+
+// ============================================================================
+// FCM Token Registration API
+// ============================================================================
+
+const WEB_DEVICE_ID_KEY = 'omi-web-device-id';
+
+/**
+ * Get or generate a unique device ID for this browser
+ * This is used to identify the device when registering FCM tokens
+ */
+function getWebDeviceIdHash(): string {
+  if (typeof window === 'undefined') return 'server';
+
+  let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
+  if (!deviceId) {
+    // Generate a unique ID for this browser
+    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
+  }
+
+  // Create a simple hash of the device ID
+  let hash = 0;
+  for (let i = 0; i < deviceId.length; i++) {
+    const char = deviceId.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(16);
+}
+
+/**
+ * Register FCM token for push notifications
+ * This is the same endpoint used by the mobile app
+ * @param fcmToken - The FCM registration token
+ */
+export async function registerFCMToken(fcmToken: string): Promise<void> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const deviceIdHash = getWebDeviceIdHash();
+
+  await fetchWithAuth('/v1/users/fcm-token', {
+    method: 'POST',
+    headers: {
+      'X-App-Platform': 'web',
+      'X-Device-Id-Hash': deviceIdHash,
+    },
+    body: JSON.stringify({
+      fcm_token: fcmToken,
+      time_zone: timeZone,
+    }),
+  });
+}
+
+/**
+ * Unregister FCM token (called on sign out)
+ * @param fcmToken - The FCM registration token to remove
+ */
+export async function unregisterFCMToken(fcmToken: string): Promise<void> {
+  try {
+    const deviceIdHash = getWebDeviceIdHash();
+
+    await fetchWithAuth('/v1/users/fcm-token', {
+      method: 'DELETE',
+      headers: {
+        'X-App-Platform': 'web',
+        'X-Device-Id-Hash': deviceIdHash,
+      },
+      body: JSON.stringify({
+        fcm_token: fcmToken,
+      }),
+    });
+  } catch (error) {
+    // Silently fail on logout - token cleanup is best-effort
+    console.warn('Failed to unregister FCM token:', error);
+  }
 }

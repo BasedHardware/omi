@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/ui/atoms/omi_choice_chip.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/ui/atoms/omi_choice_chip.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 import '../../../../pages/apps/providers/add_app_provider.dart';
 
 class DesktopNotificationScopesChipsWidget extends StatelessWidget {

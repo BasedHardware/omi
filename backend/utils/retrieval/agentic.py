@@ -11,7 +11,7 @@ import uuid
 import asyncio
 import contextvars
 from datetime import datetime, timezone
-from typing import List, Optional, AsyncGenerator, Tuple, Any
+from typing import List, Optional, AsyncGenerator, Any, Tuple
 
 import database.notifications as notification_db
 
@@ -25,17 +25,18 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
-from models.chat import Message, ChatSession
+from models.chat import Message, ChatSession, PageContext
 from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
-    vector_search_conversations_tool,
+    search_conversations_tool,
     get_memories_tool,
+    search_memories_tool,
     get_action_items_tool,
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
-    perplexity_search_tool,
+    perplexity_web_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
     update_calendar_event_tool,
@@ -57,6 +58,7 @@ from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_mess
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import llm_agent, llm_agent_stream
 from utils.llm.chat import _get_agentic_qa_prompt
+from utils.observability.langsmith import get_chat_tracer_callbacks
 from utils.other.endpoints import timeit
 
 
@@ -95,10 +97,11 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'update_calendar_event_tool': 'Updating calendar event',
         'delete_calendar_event_tool': 'Deleting calendar event',
         'get_gmail_messages_tool': 'Checking Gmail',
-        'perplexity_search_tool': 'Searching the web',
+        'perplexity_web_search_tool': 'Searching the web',
         'get_conversations_tool': 'Searching conversations',
-        'vector_search_conversations_tool': 'Searching conversations',
+        'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
+        'search_memories_tool': 'Searching memories',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
@@ -216,17 +219,26 @@ def execute_agentic_chat(
     """
     # Build system prompt
     system_prompt = _get_agentic_qa_prompt(uid, app)
+    
+    # Get prompt metadata for tracing/versioning
+    try:
+        from utils.observability.langsmith_prompts import get_prompt_metadata
+        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
+    except Exception as e:
+        print(f"⚠️ Could not get prompt metadata: {e}")
+        prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Get all tools
     tools = [
         get_conversations_tool,
-        vector_search_conversations_tool,
+        search_conversations_tool,
         get_memories_tool,
+        search_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
         update_action_item_tool,
         get_omi_product_info_tool,
-        perplexity_search_tool,
+        perplexity_web_search_tool,
         get_calendar_events_tool,
         create_calendar_event_tool,
         update_calendar_event_tool,
@@ -264,12 +276,37 @@ def execute_agentic_chat(
         tools=tools,
     )
 
-    # Run agent
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_name="chat.agentic",
+        tags=["chat", "agentic"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
+        },
+    )
+
+    # Run agent with LangSmith tracing metadata
     config = {
         "configurable": {
             "user_id": uid,
             "thread_id": str(uuid.uuid4()),
-        }
+        },
+        "callbacks": tracer_callbacks,
+        "run_name": "chat.agentic",
+        "tags": ["chat", "agentic"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
+        },
     }
 
     # Store config in context for tools to access
@@ -300,6 +337,7 @@ async def execute_agentic_chat_stream(
     app: Optional[App] = None,
     callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
+    context: Optional[PageContext] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Execute an agentic chat interaction with streaming.
@@ -310,23 +348,33 @@ async def execute_agentic_chat_stream(
         app: Optional app/plugin
         callback_data: Dict to store callback data (answer, memories, etc.)
         chat_session: Optional chat session for file context
+        context: Optional page context (type, id, title)
 
     Yields:
         Formatted chunks with "data: " or "think: " prefixes
     """
-    # Build system prompt with file context
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages)
+    # Build system prompt with file context and page context
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
+    
+    # Get prompt metadata for tracing/versioning
+    try:
+        from utils.observability.langsmith_prompts import get_prompt_metadata
+        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
+    except Exception as e:
+        print(f"⚠️ Could not get prompt metadata: {e}")
+        prompt_name, prompt_commit, prompt_source = None, None, None
 
     # Get all tools
     tools = [
         get_conversations_tool,
-        vector_search_conversations_tool,
+        search_conversations_tool,
         get_memories_tool,
+        search_memories_tool,
         get_action_items_tool,
         create_action_item_tool,
         update_action_item_tool,
         get_omi_product_info_tool,
-        perplexity_search_tool,
+        perplexity_web_search_tool,
         get_calendar_events_tool,
         create_calendar_event_tool,
         update_calendar_event_tool,
@@ -371,9 +419,33 @@ async def execute_agentic_chat_stream(
     conversations_collected = []
 
     # Initialize safety guard
-    safety_guard = AgentSafetyGuard(max_tool_calls=10, max_context_tokens=500000)
+    safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
 
+    # Generate run_id for LangSmith tracing (allows feedback attachment later)
+    langsmith_run_id = str(uuid.uuid4())
+
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.agentic.stream",
+        tags=["chat", "agentic", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+            "num_tools": len(tools),
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
+        },
+    )
+
+    # LangSmith tracing metadata
     config = {
+        "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
         "configurable": {
             "user_id": uid,
             "thread_id": str(uuid.uuid4()),
@@ -381,8 +453,29 @@ async def execute_agentic_chat_stream(
             "safety_guard": safety_guard,
             "chat_session_id": chat_session.id if chat_session else None,
             "tools": tools,  # Store tools for status message lookup
-        }
+        },
+        "callbacks": tracer_callbacks,
+        "run_name": "chat.agentic.stream",
+        "tags": ["chat", "agentic", "streaming"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+            "num_tools": len(tools),
+            "prompt_name": prompt_name,
+            "prompt_commit": prompt_commit,
+            "prompt_source": prompt_source,
+        },
     }
+
+    # Store run_id and prompt metadata in callback_data for message persistence
+    if callback_data is not None:
+        callback_data['langsmith_run_id'] = langsmith_run_id
+        callback_data['prompt_name'] = prompt_name
+        callback_data['prompt_commit'] = prompt_commit
 
     # Store config in context for tools to access
     agent_config_context.set(config)
@@ -491,13 +584,14 @@ async def _run_agent_stream(
                 # Standard tool names that don't come from apps
                 standard_tool_names = {
                     'get_conversations_tool',
-                    'vector_search_conversations_tool',
+                    'search_conversations_tool',
                     'get_memories_tool',
+                    'search_memories_tool',
                     'get_action_items_tool',
                     'create_action_item_tool',
                     'update_action_item_tool',
                     'get_omi_product_info_tool',
-                    'perplexity_search_tool',
+                    'perplexity_web_search_tool',
                     'get_calendar_events_tool',
                     'create_calendar_event_tool',
                     'update_calendar_event_tool',

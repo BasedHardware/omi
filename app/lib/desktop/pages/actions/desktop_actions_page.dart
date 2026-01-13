@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
@@ -409,9 +410,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
                 padding: const EdgeInsets.all(8),
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
-                  color: _showCompleted
-                      ? ResponsiveHelper.purplePrimary.withOpacity(0.2)
-                      : Colors.transparent,
+                  color: _showCompleted ? ResponsiveHelper.purplePrimary.withOpacity(0.2) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -486,7 +485,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
       controller: _scrollController,
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
-
         for (final category in TaskCategory.values)
           SliverToBoxAdapter(
             child: _buildCategorySection(
@@ -495,7 +493,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               provider: provider,
             ),
           ),
-
         if (provider.isFetching)
           SliverToBoxAdapter(
             child: Container(
@@ -507,7 +504,6 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
               ),
             ),
           ),
-
         const SliverPadding(padding: EdgeInsets.only(bottom: 20)),
       ],
     );
@@ -702,9 +698,7 @@ class DesktopActionsPageState extends State<DesktopActionsPage>
         ),
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
-      child: isCompleted
-          ? const Icon(Icons.check, size: 12, color: Colors.black)
-          : null,
+      child: isCompleted ? const Icon(Icons.check, size: 12, color: Colors.black) : null,
     );
   }
 

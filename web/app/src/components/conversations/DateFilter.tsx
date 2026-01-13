@@ -186,16 +186,25 @@ export function DateFilter({
         <Calendar className="w-4 h-4" />
         <span>{formatButtonLabel(selectedDate)}</span>
         {selectedDate && (
-          <button
+          <span
+            role="button"
+            tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
               handleClear();
             }}
-            className="p-0.5 rounded hover:bg-bg-quaternary"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                handleClear();
+              }
+            }}
+            className="p-0.5 rounded hover:bg-bg-quaternary cursor-pointer"
             aria-label="Clear date filter"
           >
             <X className="w-3 h-3" />
-          </button>
+          </span>
         )}
       </button>
 

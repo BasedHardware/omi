@@ -62,11 +62,19 @@ interface LocationMapProps {
 // Component to fit bounds when locations change
 function FitBounds({ locations }: { locations: LocationPin[] }) {
   const map = useMap();
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (locations.length === 0) return;
 
+    // Stop any ongoing animations
+    map.stop();
+
     const fitMapBounds = () => {
+      if (!isMountedRef.current) return;
+
       const bounds = L.latLngBounds(
         locations.map((loc) => [loc.latitude, loc.longitude])
       );
@@ -76,6 +84,7 @@ function FitBounds({ locations }: { locations: LocationPin[] }) {
         paddingTopLeft: [50, 50],
         paddingBottomRight: [50, 100], // Extra bottom padding for controls
         maxZoom: 14,
+        animate: false, // Disable animation to prevent unmount errors
       });
     };
 
@@ -85,7 +94,16 @@ function FitBounds({ locations }: { locations: LocationPin[] }) {
     // Also re-fit when map container is resized
     map.invalidateSize();
 
-    return () => clearTimeout(timeout);
+    return () => {
+      isMountedRef.current = false;
+      clearTimeout(timeout);
+      // Wrap in try-catch as map may be in invalid state during unmount
+      try {
+        map.stop();
+      } catch {
+        // Ignore - map already disposed
+      }
+    };
   }, [map, locations]);
 
   return null;
@@ -94,10 +112,29 @@ function FitBounds({ locations }: { locations: LocationPin[] }) {
 // Component to pan to current location during playback
 function PanToLocation({ location, enabled }: { location: LocationPin | null; enabled: boolean }) {
   const map = useMap();
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (!enabled || !location) return;
-    map.panTo([location.latitude, location.longitude], { animate: true, duration: 0.5 });
+
+    // Use requestAnimationFrame to ensure we're in a valid state
+    const frameId = requestAnimationFrame(() => {
+      if (isMountedRef.current) {
+        map.panTo([location.latitude, location.longitude], { animate: true, duration: 0.5 });
+      }
+    });
+
+    return () => {
+      isMountedRef.current = false;
+      cancelAnimationFrame(frameId);
+      try {
+        map.stop();
+      } catch {
+        // Ignore - map already disposed
+      }
+    };
   }, [map, location, enabled]);
 
   return null;

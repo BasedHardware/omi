@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Goal model
 class Goal {
@@ -43,12 +45,8 @@ class Goal {
       maxValue: (json['max_value'] ?? 10).toDouble(),
       unit: json['unit'],
       isActive: json['is_active'] ?? true,
-      createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at']) 
-          : DateTime.now(),
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at']) 
-          : DateTime.now(),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
+      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
     );
   }
 
@@ -89,9 +87,7 @@ class GoalHistoryEntry {
     return GoalHistoryEntry(
       date: json['date'] ?? '',
       value: (json['value'] ?? 0).toDouble(),
-      recordedAt: json['recorded_at'] != null 
-          ? DateTime.parse(json['recorded_at']) 
-          : DateTime.now(),
+      recordedAt: json['recorded_at'] != null ? DateTime.parse(json['recorded_at']) : DateTime.now(),
     );
   }
 }
@@ -126,7 +122,7 @@ class GoalSuggestion {
   }
 }
 
-/// Get current active goal
+/// Get current active goal (backward compatibility - returns first goal)
 Future<Goal?> getCurrentGoal() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/goals',
@@ -142,6 +138,25 @@ Future<Goal?> getCurrentGoal() async {
     }
   }
   return null;
+}
+
+/// Get all active goals (up to 3)
+Future<List<Goal>> getAllGoals() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/goals/all',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  Logger.debug('getAllGoals response: ${response.body}');
+  if (response.statusCode == 200) {
+    var decoded = json.decode(response.body);
+    if (decoded != null && decoded is List) {
+      return decoded.map((e) => Goal.fromJson(e)).toList();
+    }
+  }
+  return [];
 }
 
 /// Create a new goal
@@ -169,7 +184,7 @@ Future<Goal?> createGoal({
     }),
   );
   if (response == null) return null;
-  debugPrint('createGoal response: ${response.body}');
+  Logger.debug('createGoal response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return Goal.fromJson(decoded);
@@ -178,7 +193,8 @@ Future<Goal?> createGoal({
 }
 
 /// Update an existing goal
-Future<Goal?> updateGoal(String goalId, {
+Future<Goal?> updateGoal(
+  String goalId, {
   String? title,
   double? targetValue,
   double? currentValue,
@@ -201,7 +217,7 @@ Future<Goal?> updateGoal(String goalId, {
     body: json.encode(updates),
   );
   if (response == null) return null;
-  debugPrint('updateGoal response: ${response.body}');
+  Logger.debug('updateGoal response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return Goal.fromJson(decoded);
@@ -218,7 +234,7 @@ Future<Goal?> updateGoalProgress(String goalId, double currentValue) async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('updateGoalProgress response: ${response.body}');
+  Logger.debug('updateGoalProgress response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return Goal.fromJson(decoded);
@@ -265,7 +281,7 @@ Future<GoalSuggestion?> suggestGoal() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('suggestGoal response: ${response.body}');
+  Logger.debug('suggestGoal response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return GoalSuggestion.fromJson(decoded);
@@ -282,7 +298,7 @@ Future<String?> getGoalAdvice() async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getGoalAdvice response: ${response.body}');
+  Logger.debug('getGoalAdvice response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return decoded['advice'];
@@ -299,11 +315,10 @@ Future<String?> getGoalAdviceById(String goalId) async {
     body: '',
   );
   if (response == null) return null;
-  debugPrint('getGoalAdviceById response: ${response.body}');
+  Logger.debug('getGoalAdviceById response: ${response.body}');
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     return decoded['advice'];
   }
   return null;
 }
-

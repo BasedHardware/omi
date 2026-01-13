@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/settings/language_selection_dialog.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/logger.dart';
 
 class HomeProvider extends ChangeNotifier {
   int selectedIndex = 0;
@@ -105,6 +107,7 @@ class HomeProvider extends ChangeNotifier {
 
   void setIndex(int index) {
     selectedIndex = index;
+    onSelectedIndexChanged?.call(index);
     notifyListeners();
   }
 
@@ -146,7 +149,7 @@ class HomeProvider extends ChangeNotifier {
     var res = await userHasSpeakerProfile();
     setSpeakerProfile(res);
     SharedPreferencesUtil().hasSpeakerProfile = res;
-    debugPrint('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
+    Logger.debug('_setupHasSpeakerProfile: ${SharedPreferencesUtil().hasSpeakerProfile}');
     AnalyticsManager().setUserAttribute('Speaker Profile', SharedPreferencesUtil().hasSpeakerProfile);
 
     setIsLoading(false);
@@ -178,9 +181,9 @@ class HomeProvider extends ChangeNotifier {
         SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         AnalyticsManager().setUserAttribute('Primary Language', language);
       }
-      debugPrint('setupUserPrimaryLanguage: $language, hasSet: $hasSetPrimaryLanguage');
+      Logger.debug('setupUserPrimaryLanguage: $language, hasSet: $hasSetPrimaryLanguage');
     } catch (e) {
-      debugPrint('Error setting up user primary language: $e');
+      Logger.debug('Error setting up user primary language: $e');
       userPrimaryLanguage = '';
       hasSetPrimaryLanguage = false;
     }
@@ -208,7 +211,7 @@ class HomeProvider extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      debugPrint('Error setting user primary language: $e');
+      Logger.debug('Error setting user primary language: $e');
       return false;
     }
   }

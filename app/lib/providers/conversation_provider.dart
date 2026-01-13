@@ -1,14 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/logger.dart';
 
 class ConversationProvider extends ChangeNotifier {
   List<ServerConversation> conversations = [];
@@ -221,8 +223,11 @@ class ConversationProvider extends ChangeNotifier {
     if (showStarredOnly) {
       showDailySummaries = false;
     }
-    groupConversationsByDate();
+
+    // Clear and refetch conversations to get starred from server
+    groupedConversations = {};
     notifyListeners();
+    fetchConversations();
   }
 
   void toggleDailySummaries() {
@@ -271,7 +276,7 @@ class ConversationProvider extends ChangeNotifier {
     // Debounce mechanism: only refresh if enough time has passed since last refresh
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      debugPrint(
+      Logger.debug(
           'Skipping conversations refresh - too soon since last refresh (${now.difference(_lastRefreshTime!).inSeconds}s ago)');
       return;
     }
@@ -504,6 +509,7 @@ class ConversationProvider extends ChangeNotifier {
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
+      starred: showStarredOnly ? true : null,
     );
   }
 
@@ -528,6 +534,7 @@ class ConversationProvider extends ChangeNotifier {
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
+      starred: showStarredOnly ? true : null,
     );
     conversations.addAll(newConversations);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -764,7 +771,7 @@ class ConversationProvider extends ChangeNotifier {
       }
       notifyListeners();
     } else {
-      debugPrint("Error: Conversation or action item not found for updateGlobalActionItemState.");
+      Logger.debug("Error: Conversation or action item not found for updateGlobalActionItemState.");
     }
   }
 
@@ -810,13 +817,16 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  (DateTime, int) getConversationDateAndIndex(ServerConversation conversation) {
-    var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-    var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-    var idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
-    if (idx == -1 && groupedConversations.containsKey(date)) {
-      groupedConversations[date]!.add(conversation);
-    }
+  (DateTime, int)? getConversationDateAndIndex(ServerConversation conversation) {
+    final effectiveDate = conversation.startedAt ?? conversation.createdAt;
+    final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+
+    final list = groupedConversations[date];
+    if (list == null) return null;
+
+    final idx = list.indexWhere((e) => e.id == conversation.id);
+    if (idx == -1) return null;
+
     return (date, idx);
   }
 
@@ -824,6 +834,72 @@ class ConversationProvider extends ChangeNotifier {
     final normalizedDate = DateTime(date.year, date.month, date.day);
     final list = groupedConversations[normalizedDate] ?? [];
     return list.indexWhere((c) => c.id == id);
+  }
+
+  /// Get adjacent conversation in display order (across date groups).
+  /// [direction]: 1 for older (next in list), -1 for newer (previous in list).
+  /// Returns null if at the boundary (no more conversations in that direction).
+  ({ServerConversation conversation, DateTime date})? getAdjacentConversation(
+    String currentConversationId,
+    DateTime currentDate,
+    int direction,
+  ) {
+    if (groupedConversations.isEmpty) return null;
+
+    // Get sorted date keys (newest first, matching display order)
+    final sortedDates = groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+    if (sortedDates.isEmpty) return null;
+
+    // Normalize current date
+    final normalizedDate = DateTime(currentDate.year, currentDate.month, currentDate.day);
+    final dateIndex = sortedDates.indexWhere(
+      (d) => d.year == normalizedDate.year && d.month == normalizedDate.month && d.day == normalizedDate.day,
+    );
+    if (dateIndex == -1) return null;
+
+    final currentDayList = groupedConversations[sortedDates[dateIndex]] ?? [];
+    final convoIndexInDay = currentDayList.indexWhere((c) => c.id == currentConversationId);
+    if (convoIndexInDay == -1) return null;
+
+    if (direction == 1) {
+      // Moving to older conversation (next in list)
+      if (convoIndexInDay < currentDayList.length - 1) {
+        // There's a next item in the same day
+        return (
+          conversation: currentDayList[convoIndexInDay + 1],
+          date: sortedDates[dateIndex],
+        );
+      } else {
+        // Need to move to the next older day (next date index since dates are sorted newest first)
+        if (dateIndex < sortedDates.length - 1) {
+          final nextDate = sortedDates[dateIndex + 1];
+          final nextDayList = groupedConversations[nextDate] ?? [];
+          if (nextDayList.isNotEmpty) {
+            return (conversation: nextDayList.first, date: nextDate);
+          }
+        }
+      }
+    } else if (direction == -1) {
+      // Moving to newer conversation (previous in list)
+      if (convoIndexInDay > 0) {
+        // There's a previous item in the same day
+        return (
+          conversation: currentDayList[convoIndexInDay - 1],
+          date: sortedDates[dateIndex],
+        );
+      } else {
+        // Need to move to the next newer day (previous date index since dates are sorted newest first)
+        if (dateIndex > 0) {
+          final prevDate = sortedDates[dateIndex - 1];
+          final prevDayList = groupedConversations[prevDate] ?? [];
+          if (prevDayList.isNotEmpty) {
+            return (conversation: prevDayList.last, date: prevDate);
+          }
+        }
+      }
+    }
+
+    return null; // At the boundary
   }
 
   void updateSyncedConversation(ServerConversation conversation) {

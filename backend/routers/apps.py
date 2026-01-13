@@ -425,7 +425,6 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     img_url = upload_app_logo(file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
-
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
         ext_int = data['external_integration']
@@ -955,6 +954,12 @@ def get_app_capabilities():
                     'id': 'read_memories',
                     'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
                     'description': 'Access and read all user memories through the OMI System. This gives the app access to all stored memories.',
+                },
+                {
+                    'title': 'Read tasks',
+                    'id': 'read_tasks',
+                    'doc_url': 'https://docs.omi.me/doc/developer/apps/Import',
+                    'description': 'Access and read all user tasks (to-dos) through the OMI System. This gives the app access to all stored tasks.',
                 },
             ],
         },

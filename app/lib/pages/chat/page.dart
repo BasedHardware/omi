@@ -1,38 +1,33 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
+
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:uuid/uuid.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
-import 'package:omi/pages/chat/select_text_screen.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
-import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/voice_recorder_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-
-import 'widgets/message_action_menu.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -48,12 +43,10 @@ class ChatPage extends StatefulWidget {
   State<ChatPage> createState() => ChatPageState();
 }
 
-class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
+class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   TextEditingController textController = TextEditingController();
   late ScrollController scrollController;
   late FocusNode textFieldFocusNode;
-
-  bool _isScrollingDown = false;
 
   bool _isInitialLoad = true;
   bool _hasInitialScrolled = false;
@@ -65,9 +58,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   // Track which app is pending deletion confirmation
   String? _pendingDeleteAppId;
+  String? _selectedContext;
 
   @override
   bool get wantKeepAlive => true;
+
+  bool _allowSpacer = false;
 
   @override
   void initState() {
@@ -78,33 +74,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       setState(() {});
     });
 
-    scrollController.addListener(() {
-      if (scrollController.position.userScrollDirection == ScrollDirection.reverse) {
-        if (!_isScrollingDown) {
-          _isScrollingDown = true;
-          setState(() {});
-          Future.delayed(const Duration(seconds: 5), () {
-            if (_isScrollingDown) {
-              _isScrollingDown = false;
-              if (mounted) {
-                setState(() {});
-              }
-            }
-          });
-        }
-      }
-
-      if (scrollController.position.userScrollDirection == ScrollDirection.forward) {
-        if (_isScrollingDown) {
-          _isScrollingDown = false;
-          setState(() {});
-        }
-      }
-    });
     SchedulerBinding.instance.addPostFrameCallback((_) async {
       var provider = context.read<MessageProvider>();
       if (provider.messages.isEmpty) {
-        await provider.refreshMessages();
+        provider.refreshMessages();
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
@@ -123,6 +96,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         // Wait for messages to load first, then add auto-message
         Future.delayed(const Duration(milliseconds: 800), () {
           if (mounted) {
+            setState(() {
+              _allowSpacer = true;
+            });
             final aiMessage = ServerMessage(
               const Uuid().v4(),
               DateTime.now(),
@@ -166,7 +142,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       builder: (context, provider, connectivityProvider, child) {
         return Scaffold(
           key: scaffoldKey,
-          resizeToAvoidBottomInset: false,
           backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
@@ -203,13 +178,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                CircularProgressIndicator(
+                                const CircularProgressIndicator(
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
-                                SizedBox(height: 16),
+                                const SizedBox(height: 16),
                                 Text(
                                   context.l10n.deletingMessages,
-                                  style: TextStyle(color: Colors.white),
+                                  style: const TextStyle(color: Colors.white),
                                 ),
                               ],
                             )
@@ -225,159 +200,87 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                         style: const TextStyle(color: Colors.white)),
                                   ),
                                 )
-                              : ListView.builder(
-                                  shrinkWrap: false,
-                                  reverse: false,
-                                  controller: scrollController,
-                                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 30),
-                                  itemCount: provider.messages.length,
-                                  itemBuilder: (context, chatIndex) {
-                                    if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                      _hasInitialScrolled = true;
-                                      SchedulerBinding.instance.addPostFrameCallback((_) {
-                                        if (scrollController.hasClients) {
-                                          scrollController.jumpTo(scrollController.position.maxScrollExtent);
-                                        }
-                                      });
-                                    }
-
-                                    final message = provider.messages[chatIndex];
-                                    double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-
-                                    double bottomPadding = chatIndex == 0 ? 16 : 0;
-                                    return GestureDetector(
-                                      onLongPress: () {
-                                        showModalBottomSheet(
-                                          context: context,
-                                          shape: const RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.vertical(
-                                              top: Radius.circular(20),
-                                            ),
-                                          ),
-                                          builder: (context) => MessageActionMenu(
-                                            message: message.text.decodeString,
-                                            onCopy: () async {
-                                              MixpanelManager()
-                                                  .track('Chat Message Copied', properties: {'message': message.text});
-                                              await Clipboard.setData(ClipboardData(text: message.text.decodeString));
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      context.l10n.messageCopied,
-                                                      style: const TextStyle(
-                                                        color: Color.fromARGB(255, 255, 255, 255),
-                                                        fontSize: 12.0,
-                                                      ),
-                                                    ),
-                                                    duration: const Duration(milliseconds: 2000),
-                                                  ),
-                                                );
-                                                Navigator.pop(context);
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        textSelectionTheme: TextSelectionThemeData(
+                                          selectionColor: Colors.white.withOpacity(0.3),
+                                          selectionHandleColor: Colors.blue,
+                                        ),
+                                      ),
+                                      child: ListView.builder(
+                                        shrinkWrap: false,
+                                        reverse: false,
+                                        controller: scrollController,
+                                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                        itemCount: provider.messages.length,
+                                        itemBuilder: (context, chatIndex) {
+                                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                            _hasInitialScrolled = true;
+                                            SchedulerBinding.instance.addPostFrameCallback((_) {
+                                              if (scrollController.hasClients) {
+                                                scrollController.jumpTo(scrollController.position.maxScrollExtent);
                                               }
-                                            },
-                                            onSelectText: () {
-                                              MixpanelManager().track('Chat Message Text Selected',
-                                                  properties: {'message': message.text});
-                                              routeToPage(context, SelectTextScreen(message: message));
-                                            },
-                                            onShare: () {
-                                              MixpanelManager()
-                                                  .track('Chat Message Shared', properties: {'message': message.text});
-                                              Share.share(
-                                                '${message.text.decodeString}\n\nResponse from Omi. Get yours at https://omi.me',
-                                                subject: 'Chat with Omi',
-                                              );
-                                              Navigator.pop(context);
-                                            },
-                                            onThumbsUp: message.sender == MessageSender.ai && message.askForNps
-                                                ? () {
-                                                    provider.setMessageNps(message, 1);
-                                                    Navigator.pop(context);
-                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                                  }
-                                                : null,
-                                            onThumbsDown: message.sender == MessageSender.ai && message.askForNps
-                                                ? () {
-                                                    provider.setMessageNps(message, 0);
-                                                    Navigator.pop(context);
-                                                    AppSnackbar.showSnackbar('Thank you for your feedback!');
-                                                  }
-                                                : null,
-                                            onReport: () {
-                                              if (message.sender == MessageSender.human) {
-                                                Navigator.pop(context);
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      context.l10n.cannotReportOwnMessage,
-                                                      style: const TextStyle(
-                                                        color: Color.fromARGB(255, 255, 255, 255),
-                                                        fontSize: 12.0,
-                                                      ),
-                                                    ),
-                                                    duration: const Duration(milliseconds: 2000),
-                                                  ),
-                                                );
-                                                return;
-                                              }
-                                              showDialog(
-                                                context: context,
-                                                builder: (context) {
-                                                  return getDialog(
-                                                    context,
-                                                    () {
-                                                      Navigator.of(context).pop();
-                                                    },
-                                                    () {
-                                                      MixpanelManager().track('Chat Message Reported',
-                                                          properties: {'message': message.text});
-                                                      Navigator.of(context).pop();
-                                                      Navigator.of(context).pop();
-                                                      context.read<MessageProvider>().removeLocalMessage(message.id);
-                                                      reportMessageServer(message.id);
-                                                      ScaffoldMessenger.of(context).showSnackBar(
-                                                        SnackBar(
-                                                          content: Text(
-                                                            context.l10n.messageReported,
-                                                            style: const TextStyle(
-                                                              color: Color.fromARGB(255, 255, 255, 255),
-                                                              fontSize: 12.0,
-                                                            ),
-                                                          ),
-                                                          duration: const Duration(milliseconds: 2000),
+                                            });
+                                          }
+
+                                          final message = provider.messages[chatIndex];
+                                          double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                          double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                          return Padding(
+                                            key: ValueKey(message.id),
+                                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                            child: message.sender == MessageSender.ai
+                                                ? Builder(builder: (context) {
+                                                    final child = AIMessage(
+                                                      showTypingIndicator: provider.showTypingIndicator &&
+                                                          chatIndex == provider.messages.length - 1,
+                                                      message: message,
+                                                      sendMessage: _sendMessageUtil,
+                                                      onAskOmi: (text) {
+                                                        setState(() {
+                                                          _selectedContext = text;
+                                                        });
+                                                        textFieldFocusNode.requestFocus();
+                                                      },
+                                                      displayOptions: provider.messages.length <= 1 &&
+                                                          provider.messageSenderApp(message.appId)?.isNotPersona() ==
+                                                              true,
+                                                      appSender: provider.messageSenderApp(message.appId),
+                                                      updateConversation: (ServerConversation conversation) {
+                                                        context
+                                                            .read<ConversationProvider>()
+                                                            .updateConversation(conversation);
+                                                      },
+                                                      setMessageNps: (int value, {String? reason}) {
+                                                        provider.setMessageNps(message, value, reason: reason);
+                                                      },
+                                                    );
+
+                                                    // Dynamic spacer logic
+                                                    if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                      return Container(
+                                                        constraints: BoxConstraints(
+                                                          minHeight: MediaQuery.of(context).size.height * 0.5,
                                                         ),
+                                                        alignment: Alignment.topLeft,
+                                                        child: child,
                                                       );
-                                                    },
-                                                    context.l10n.reportMessage,
-                                                    context.l10n.reportMessageConfirm,
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          ),
-                                        );
-                                      },
-                                      child: Padding(
-                                        key: ValueKey(message.id),
-                                        padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                        child: message.sender == MessageSender.ai
-                                            ? AIMessage(
-                                                showTypingIndicator: provider.showTypingIndicator &&
-                                                    chatIndex == provider.messages.length - 1,
-                                                message: message,
-                                                sendMessage: _sendMessageUtil,
-                                                displayOptions: provider.messages.length <= 1 &&
-                                                    provider.messageSenderApp(message.appId)?.isNotPersona() == true,
-                                                appSender: provider.messageSenderApp(message.appId),
-                                                updateConversation: (ServerConversation conversation) {
-                                                  context.read<ConversationProvider>().updateConversation(conversation);
-                                                },
-                                                setMessageNps: (int value) {
-                                                  provider.setMessageNps(message, value);
-                                                },
-                                              )
-                                            : HumanMessage(message: message),
+                                                    }
+                                                    return child;
+                                                  })
+                                                : HumanMessage(
+                                                    message: message,
+                                                    onAskOmi: (text) {
+                                                      setState(() {
+                                                        _selectedContext = text;
+                                                      });
+                                                      textFieldFocusNode.requestFocus();
+                                                    }),
+                                          );
+                                        },
                                       ),
                                     );
                                   },
@@ -385,7 +288,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 ),
                 // Send message area - fixed at bottom
                 Container(
-                  margin: EdgeInsets.only(top: 10, bottom: MediaQuery.of(context).viewInsets.bottom),
+                  margin: const EdgeInsets.only(top: 10),
                   decoration: const BoxDecoration(
                     color: Colors.transparent,
                     borderRadius: BorderRadius.only(
@@ -393,7 +296,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       topRight: Radius.circular(22),
                     ),
                   ),
-                  child: Consumer2<HomeProvider, VoiceRecorderProvider>(builder: (context, home, voiceRecorderProvider, child) {
+                  child: Consumer2<HomeProvider, VoiceRecorderProvider>(
+                      builder: (context, home, voiceRecorderProvider, child) {
                     bool shouldShowSendButton(MessageProvider p) {
                       return !p.sendingMessage && !voiceRecorderProvider.isActive;
                     }
@@ -406,102 +310,109 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       return !voiceRecorderProvider.isActive;
                     }
 
-                    return Column(
-                      children: [
-                        // Selected images display above the send bar
-                        Consumer<MessageProvider>(builder: (context, provider, child) {
-                          if (provider.selectedFiles.isNotEmpty) {
-                            return Container(
-                              margin: const EdgeInsets.only(top: 16, bottom: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              height: 70,
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: provider.selectedFiles.length,
-                                itemBuilder: (ctx, idx) {
-                                  return Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    width: 60,
-                                    height: 60,
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey[800],
-                                      borderRadius: BorderRadius.circular(16),
-                                      image: provider.selectedFileTypes[idx] == 'image'
-                                          ? DecorationImage(
-                                              image: FileImage(provider.selectedFiles[idx]),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : null,
-                                    ),
-                                    child: Stack(
-                                      children: [
-                                        // File icon for non-images
-                                        if (provider.selectedFileTypes[idx] != 'image')
-                                          const Center(
-                                            child: Icon(
-                                              Icons.insert_drive_file,
-                                              color: Colors.white,
-                                              size: 24,
-                                            ),
+                    return Column(children: [
+                      // Selected images display above the send bar
+                      Consumer<MessageProvider>(builder: (context, provider, child) {
+                        if (provider.selectedFiles.isNotEmpty) {
+                          return Container(
+                            margin: const EdgeInsets.only(top: 16, bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            height: 70,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: provider.selectedFiles.length,
+                              itemBuilder: (ctx, idx) {
+                                return Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[800],
+                                    borderRadius: BorderRadius.circular(16),
+                                    image: provider.selectedFileTypes[idx] == 'image'
+                                        ? DecorationImage(
+                                            image: FileImage(provider.selectedFiles[idx]),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Stack(
+                                    children: [
+                                      // File icon for non-images
+                                      if (provider.selectedFileTypes[idx] != 'image')
+                                        const Center(
+                                          child: Icon(
+                                            Icons.insert_drive_file,
+                                            color: Colors.white,
+                                            size: 24,
                                           ),
-                                        // Loading indicator
-                                        if (provider.isFileUploading(provider.selectedFiles[idx].path))
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.5),
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                            child: const Center(
-                                              child: SizedBox(
-                                                width: 16,
-                                                height: 16,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                                                ),
-                                              ),
-                                            ),
+                                        ),
+                                      // Loading indicator
+                                      if (provider.isFileUploading(provider.selectedFiles[idx].path))
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(0.5),
+                                            borderRadius: BorderRadius.circular(16),
                                           ),
-                                        // Close button
-                                        Positioned(
-                                          top: 4,
-                                          right: 4,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              provider.clearSelectedFile(idx);
-                                            },
-                                            child: Container(
+                                          child: const Center(
+                                            child: SizedBox(
                                               width: 16,
                                               height: 16,
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                              child: const Icon(
-                                                FontAwesomeIcons.xmark,
-                                                size: 10,
-                                                color: Colors.black,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          } else {
-                            return const SizedBox.shrink();
-                          }
-                        }),
-                        // Send bar
-                        Padding(
+                                      // Close button
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            provider.clearSelectedFile(idx);
+                                          },
+                                          child: Container(
+                                            width: 16,
+                                            height: 16,
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: const Icon(
+                                              FontAwesomeIcons.xmark,
+                                              size: 10,
+                                              color: Colors.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        } else {
+                          return const SizedBox.shrink();
+                        }
+                      }),
+                      // Send bar
+                      SafeArea(
+                        bottom: !widget.isPivotBottom,
+                        maintainBottomViewPadding: false,
+                        child: Padding(
                           padding: EdgeInsets.only(
                             left: 8,
                             right: 8,
                             top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                            bottom: widget.isPivotBottom ? 20 : (textFieldFocusNode.hasFocus ? 10 : 40),
+                            bottom: widget.isPivotBottom
+                                ? 20
+                                : (textFieldFocusNode.hasFocus &&
+                                        (textController.text.length > 40 || textController.text.contains('\n'))
+                                    ? 0
+                                    : 10),
                           ),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -532,8 +443,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     child: Container(
                                       height: 44,
                                       width: 44,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF3C3C43),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF3C3C43),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Center(
@@ -548,37 +459,99 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 const SizedBox(width: 12),
                                 // Text field
                                 Expanded(
-                                  child: voiceRecorderProvider.isActive
-                                      ? VoiceRecorderWidget(
-                                          onTranscriptReady: (transcript) {
-                                            textController.text = transcript;
-                                            context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
-                                          },
-                                          onClose: () {
-                                            // Provider handles the state change
-                                          },
-                                        )
-                                      : TextField(
-                                          enabled: true,
-                                          controller: textController,
-                                          focusNode: textFieldFocusNode,
-                                          obscureText: false,
-                                          textAlign: TextAlign.start,
-                                          textAlignVertical: TextAlignVertical.center,
-                                          decoration: InputDecoration(
-                                            hintText: context.l10n.askAnything,
-                                            hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
-                                            focusedBorder: InputBorder.none,
-                                            enabledBorder: InputBorder.none,
-                                            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-                                            isDense: true,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (_selectedContext != null && !voiceRecorderProvider.isActive)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1f1f25),
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Padding(
+                                                  padding: EdgeInsets.only(top: 1),
+                                                  child: Icon(Icons.subdirectory_arrow_right,
+                                                      size: 14, color: Colors.blue),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Text(
+                                                    _selectedContext!.length > 25
+                                                        ? '${_selectedContext!.substring(0, 25)}...'
+                                                        : _selectedContext!,
+                                                    style: const TextStyle(
+                                                      color: Colors.blue,
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _selectedContext = null;
+                                                    });
+                                                  },
+                                                  child: const Icon(Icons.close, size: 14, color: Colors.blue),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                          minLines: 1,
-                                          maxLines: 10,
-                                          keyboardType: TextInputType.multiline,
-                                          textCapitalization: TextCapitalization.sentences,
-                                          style: const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
                                         ),
+                                      voiceRecorderProvider.isActive
+                                          ? VoiceRecorderWidget(
+                                              onTranscriptReady: (transcript) {
+                                                textController.text = transcript;
+                                                voiceRecorderProvider.close();
+                                                context.read<MessageProvider>().setNextMessageOriginIsVoice(true);
+                                              },
+                                              onClose: () {
+                                                voiceRecorderProvider.close();
+                                              },
+                                            )
+                                          : Theme(
+                                              data: Theme.of(context).copyWith(
+                                                textSelectionTheme: TextSelectionThemeData(
+                                                  selectionColor: Colors.grey.withOpacity(0.4),
+                                                  selectionHandleColor: Colors.white,
+                                                ),
+                                              ),
+                                              child: TextField(
+                                                enabled: true,
+                                                controller: textController,
+                                                focusNode: textFieldFocusNode,
+                                                obscureText: false,
+                                                textAlign: TextAlign.start,
+                                                textAlignVertical: TextAlignVertical.center,
+                                                decoration: InputDecoration(
+                                                  hintText: context.l10n.askAnything,
+                                                  hintStyle: const TextStyle(fontSize: 16.0, color: Colors.grey),
+                                                  focusedBorder: InputBorder.none,
+                                                  enabledBorder: InputBorder.none,
+                                                  contentPadding:
+                                                      const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                                                  isDense: true,
+                                                ),
+                                                minLines: 1,
+                                                maxLines: 10,
+                                                keyboardType: TextInputType.multiline,
+                                                textCapitalization: TextCapitalization.sentences,
+                                                style:
+                                                    const TextStyle(fontSize: 16.0, color: Colors.white, height: 1.4),
+                                              ),
+                                            ),
+                                    ],
+                                  ),
                                 ),
                                 // Microphone button
                                 if (shouldShowVoiceRecorderButton() && textController.text.isEmpty)
@@ -643,8 +616,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                             ),
                           ),
                         ),
-                      ],
-                    );
+                      )
+                    ]);
                   }),
                 ),
               ],
@@ -656,20 +629,26 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   _sendMessageUtil(String text) {
+    String? currentContext = _selectedContext;
+    setState(() {
+      _allowSpacer = true;
+      _selectedContext = null;
+    });
+
+    // Remove focus from text field
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    if (currentContext != null) {
+      text = 'Context: "$currentContext"\n\n$text';
+    }
+
     var provider = context.read<MessageProvider>();
     provider.setSendingMessage(true);
-
     provider.addMessageLocally(text);
     textController.clear();
-    textFieldFocusNode.unfocus();
 
     Future.delayed(const Duration(milliseconds: 300), () {
-      if (!mounted || !scrollController.hasClients) return;
-      scrollController.animateTo(
-        scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      if (mounted) scrollToBottomOnSend();
     });
 
     provider.sendMessageStreamToServer(text);
@@ -688,19 +667,84 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
   }
 
-  void _moveListToBottom() {
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (scrollController.hasClients) {
+  void scrollToBottomOnSend() {
+    if (!scrollController.hasClients) return;
+
+    // Wait for the new message to be added to the widget tree
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!scrollController.hasClients) return;
+
+      final currentPosition = scrollController.position.pixels;
+      final maxExtent = scrollController.position.maxScrollExtent;
+      final distance = (maxExtent - currentPosition).abs();
+
+      // If user is very far from bottom, just jump instantly
+      if (distance > 1000) {
+        scrollController.jumpTo(maxExtent);
+        // After jump, check once more after layout settles
+        _ensureAtBottom(delayMs: 100);
+      } else if (distance > 300) {
+        // Medium distance - smooth but quick animation
+        scrollController
+            .animateTo(
+              maxExtent,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOut,
+            )
+            .then((_) => _ensureAtBottom(delayMs: 50));
+      } else {
+        // Already near bottom - gentle animation
+        scrollController
+            .animateTo(
+              maxExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+            )
+            .then((_) => _ensureAtBottom(delayMs: 50));
+      }
+    });
+  }
+
+  void _ensureAtBottom({int delayMs = 50}) {
+    Future.delayed(Duration(milliseconds: delayMs), () {
+      if (!scrollController.hasClients) return;
+
+      final current = scrollController.position.pixels;
+      final max = scrollController.position.maxScrollExtent;
+
+      // Only adjust if we're noticeably not at bottom (more than 20 pixels off)
+      if (max - current > 20) {
         scrollController.animateTo(
-          scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          max,
+          duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
         );
       }
     });
   }
 
-  scrollToBottom() => _moveListToBottom();
+  void scrollToBottom({bool animated = false}) {
+    if (!scrollController.hasClients) return;
+
+    final position = scrollController.position;
+    final target = position.maxScrollExtent;
+    final distance = (target - position.pixels).abs();
+
+    if (distance > 350) {
+      scrollController.jumpTo(target);
+      return;
+    }
+
+    if (animated) {
+      scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      scrollController.jumpTo(target);
+    }
+  }
 
   void _handleAppSelection(String? val, AppProvider provider) {
     if (val == null || val == provider.selectedChatAppId) {
@@ -772,16 +816,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     final localChatApps = appProvider.apps.where((app) => app.enabled && app.worksWithChat()).toList();
 
     // Update immediately with local data
-    messageProvider.chatApps = localChatApps;
-    messageProvider.notifyListeners();
+    messageProvider.setChatApps(localChatApps);
   }
 
   Future<void> _handleAppUninstall(String appId, AppProvider appProvider, MessageProvider messageProvider) async {
     if (!mounted) return;
 
     // Immediately remove from local chat apps list for instant visual feedback
-    messageProvider.chatApps.removeWhere((app) => app.id == appId);
-    messageProvider.notifyListeners();
+    messageProvider.removeChatApp(appId);
 
     // Disable the app on server (runs in background)
     appProvider.toggleApp(appId, false, null);
@@ -789,6 +831,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   void _selectApp(String appId, AppProvider appProvider) async {
     if (!mounted) return;
+
+    setState(() {
+      _allowSpacer = false;
+    });
 
     // Mark that we're no longer on initial load to prevent auto-focus
     _isInitialLoad = false;
@@ -816,6 +862,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Get the selected app and send initial message if needed
     var app = appProvider.getSelectedApp();
     if (messageProvider.messages.isEmpty) {
+      setState(() {
+        _allowSpacer = true;
+      });
       messageProvider.sendInitialAppMessage(app);
     }
   }

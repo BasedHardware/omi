@@ -1,9 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 Future<List<Folder>> getFolders() async {
   var response = await makeApiCall(
@@ -16,10 +18,10 @@ Future<List<Folder>> getFolders() async {
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     var folders = (jsonDecode(body) as List<dynamic>).map((folder) => Folder.fromJson(folder)).toList();
-    debugPrint('getFolders length: ${folders.length}');
+    Logger.debug('getFolders length: ${folders.length}');
     return folders;
   } else {
-    debugPrint('getFolders error ${response.statusCode}');
+    Logger.debug('getFolders error ${response.statusCode}');
   }
   return [];
 }
@@ -43,7 +45,7 @@ Future<Folder?> createFolderApi({
     }),
   );
   if (response == null) return null;
-  debugPrint('createFolderApi: ${response.body}');
+  Logger.debug('createFolderApi: ${response.body}');
   if (response.statusCode == 200) {
     return Folder.fromJson(jsonDecode(response.body));
   }
@@ -73,7 +75,7 @@ Future<Folder?> updateFolderApi(
     body: jsonEncode(body),
   );
   if (response == null) return null;
-  debugPrint('updateFolderApi: ${response.body}');
+  Logger.debug('updateFolderApi: ${response.body}');
   if (response.statusCode == 200) {
     return Folder.fromJson(jsonDecode(response.body));
   }
@@ -94,7 +96,7 @@ Future<bool> deleteFolderApi(String folderId, {String? moveToFolderId}) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('deleteFolderApi: ${response.statusCode}');
+  Logger.debug('deleteFolderApi: ${response.statusCode}');
   return response.statusCode == 204;
 }
 
@@ -110,7 +112,7 @@ Future<bool> moveConversationToFolderApi(
     body: jsonEncode({'folder_id': folderId}),
   );
   if (response == null) return false;
-  debugPrint('moveConversationToFolderApi: ${response.body}');
+  Logger.debug('moveConversationToFolderApi: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -126,7 +128,7 @@ Future<int> bulkMoveConversationsToFolderApi(
     body: jsonEncode({'conversation_ids': conversationIds}),
   );
   if (response == null) return 0;
-  debugPrint('bulkMoveConversationsToFolderApi: ${response.body}');
+  Logger.debug('bulkMoveConversationsToFolderApi: ${response.body}');
   if (response.statusCode == 200) {
     return jsonDecode(response.body)['moved_count'] ?? 0;
   }
@@ -142,6 +144,6 @@ Future<bool> reorderFoldersApi(List<String> folderIds) async {
     body: jsonEncode({'folder_ids': folderIds}),
   );
   if (response == null) return false;
-  debugPrint('reorderFoldersApi: ${response.body}');
+  Logger.debug('reorderFoldersApi: ${response.body}');
   return response.statusCode == 200;
 }

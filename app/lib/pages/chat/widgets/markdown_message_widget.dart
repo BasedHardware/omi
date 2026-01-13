@@ -1,41 +1,42 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Widget getMarkdownWidget(BuildContext context, String content) {
-  var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
+import 'package:omi/utils/platform/platform_service.dart';
+
+Widget getMarkdownWidget(BuildContext context, String message, {Function(String)? onAskOmi}) {
   return MarkdownBody(
-    selectable: false,
-    shrinkWrap: true,
-    onTapLink: (text, href, title) async {
-      if (href != null) {
-        final uri = Uri.parse(href);
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    },
-    styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-      a: style.copyWith(
-        decoration: TextDecoration.underline,
-      ),
-      p: style.copyWith(
-        height: 1.5,
-      ),
-      pPadding: const EdgeInsets.only(bottom: 12),
-      blockquote: style.copyWith(
-        backgroundColor: Colors.transparent,
+    data: message.trimRight(),
+    selectable: PlatformService.isMacOS,
+    styleSheet: MarkdownStyleSheet(
+      p: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+      a: const TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
+      listBullet: const TextStyle(color: Colors.white, fontSize: 16),
+      blockquote: const TextStyle(
         color: Colors.white,
+        fontSize: 16,
+        height: 1.4,
+        backgroundColor: Colors.transparent,
       ),
       blockquoteDecoration: BoxDecoration(
-        color: Color(0xFF35343B),
+        color: const Color(0xFF35343B),
         borderRadius: BorderRadius.circular(4),
       ),
-      code: style.copyWith(
-        backgroundColor: Colors.transparent,
-        decoration: TextDecoration.none,
+      code: const TextStyle(
         color: Colors.white,
-        fontWeight: FontWeight.w500,
+        backgroundColor: Colors.transparent,
+        fontFamily: 'monospace',
+      ),
+      codeblockDecoration: BoxDecoration(
+        color: const Color(0xFF1F1F25),
+        borderRadius: BorderRadius.circular(8),
       ),
     ),
-    data: content,
+    onTapLink: (text, href, title) {
+      if (href != null) {
+        launchUrl(Uri.parse(href));
+      }
+    },
   );
 }

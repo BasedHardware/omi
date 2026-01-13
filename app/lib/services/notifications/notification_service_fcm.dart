@@ -3,18 +3,22 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
+
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
+import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 /// Firebase Cloud Messaging enabled notification service
@@ -68,9 +72,9 @@ class _FCMNotificationService implements NotificationInterface {
         ],
         debug: false);
 
-    debugPrint('initializeNotifications: $initialized');
+    Logger.debug('initializeNotifications: $initialized');
 
-    // Reset badge to clear existing badge count if any
+// Reset badge to clear existing badge count if any
     int badgeCount = await _awesomeNotifications.getGlobalBadgeCounter();
     if (badgeCount > 0) await _awesomeNotifications.resetGlobalBadge();
   }
@@ -124,7 +128,7 @@ class _FCMNotificationService implements NotificationInterface {
         },
       );
     } catch (e) {
-      debugPrint('NotifOnKill error: $e');
+      Logger.debug('NotifOnKill error: $e');
     }
   }
 
@@ -160,7 +164,7 @@ class _FCMNotificationService implements NotificationInterface {
       }
 
       if (apnsToken == null) {
-        debugPrint('APNS token not available yet, will retry on refresh');
+        Logger.debug('APNS token not available yet, will retry on refresh');
         _firebaseMessaging.onTokenRefresh.listen(saveFcmToken);
         return;
       }
@@ -184,9 +188,9 @@ class _FCMNotificationService implements NotificationInterface {
     Map<String, String?>? payload,
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
-    debugPrint('createNotification: $allowed');
+    Logger.debug('createNotification: $allowed');
     if (!allowed) return;
-    debugPrint('createNotification ~ Creating notification: $title');
+    Logger.debug('createNotification ~ Creating notification: $title');
     showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
   }
 
@@ -224,6 +228,13 @@ class _FCMNotificationService implements NotificationInterface {
           return;
         } else if (messageType == 'merge_completed') {
           MergeNotificationHandler.handleMergeCompleted(
+            data,
+            channel.channelKey!,
+            isAppInForeground: true,
+          );
+          return;
+        } else if (messageType == 'important_conversation') {
+          ImportantConversationNotificationHandler.handleImportantConversation(
             data,
             channel.channelKey!,
             isAppInForeground: true,

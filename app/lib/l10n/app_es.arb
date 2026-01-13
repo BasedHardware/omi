@@ -90,7 +90,9 @@
   "selectedCount": "{count} seleccionados",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "Fusionar",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "Esto combinará {count} conversaciones en una sola. Todo el contenido se fusionará y regenerará.",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "Fusionando en segundo plano. Esto puede tardar un momento.",
@@ -208,11 +212,9 @@
   "pauseResume": "Pausar/Reanudar",
   "starConversation": "Marcar conversación",
   "doubleTapAction": "Acción de doble toque",
-  "doubleTapActionDesc": "Elige qué sucede al hacer doble toque",
   "endAndProcess": "Terminar y procesar",
   "pauseResumeRecording": "Pausar/Reanudar grabación",
   "starOngoing": "Marcar conversación actual",
-  "starOngoingDesc": "Marcar para guardar como favorita al terminar",
   "off": "Apagado",
   "max": "Máx",
   "mute": "Silencio",
@@ -263,7 +265,7 @@
   "managePlan": "Gestionar plan",
   "cancelAtPeriodEnd": "Tu plan termina el {date}.",
   "renewsOn": "Tu plan se renueva el {date}.",
-  "basicPlan": "Plan Básico",
+  "basicPlan": "Plan Gratuito",
   "usageLimitMessage": "{used} de {limit} minutos usados",
   "upgrade": "Mejorar",
   "upgradeToUnlimited": "Mejorar a Ilimitado",
@@ -410,7 +412,6 @@
   "defaultProjectOptional": "Proyecto por defecto (Opcional)",
   "leaveUnselectedTasks": "Dejar sin seleccionar para tareas sin proyecto",
   "noProjectsInWorkspace": "No se encontraron proyectos en este espacio",
-  "conversationTimeout": "Tiempo de espera de conversación",
   "conversationTimeoutDesc": "Elige cuánto tiempo esperar en silencio antes de terminar:",
   "timeout2Minutes": "2 minutos",
   "timeout2MinutesDesc": "Terminar tras 2 minutos de silencio",
@@ -655,8 +656,8 @@
   "memoryDeleted": "Recuerdo borrado.",
   "undo": "Deshacer",
   "noMemoriesYet": "No hay recuerdos aún",
-  "noInterestingMemories": "No hay recuerdos interesantes",
-  "noSystemMemories": "No hay recuerdos del sistema",
+  "noAutoMemories": "No hay recuerdos automáticos",
+  "noManualMemories": "No hay recuerdos manuales",
   "noMemoriesInCategories": "No hay recuerdos en estas categorías",
   "noMemoriesFound": "No se encontraron recuerdos",
   "addFirstMemory": "Añade tu primer recuerdo",
@@ -697,9 +698,10 @@
   "pressDoneToSave": "Pulsa Hecho para guardar",
   "pressDoneToCreate": "Pulsa Hecho para crear",
   "filterAll": "Todos",
-  "filterInteresting": "Interesante",
+  "filterAuto": "Auto",
+  "filterInteresting": "Perspectivas",
+  "filterSystem": "Sobre ti",
   "filterManual": "Manual",
-  "filterSystem": "Sistema",
   "completed": "Completado",
   "markComplete": "Marcar como hecho",
   "actionItemDeleted": "Tarea borrada",
@@ -732,5 +734,8 @@
       }
     }
   },
-  "continueButton": "Continuar"
+  "continueButton": "Continuar",
+  "appInterfaceSectionTitle": "INTERFAZ DE LA APLICACIÓN",
+  "speechTranscriptionSectionTitle": "VOZ Y TRANSCRIPCIÓN",
+  "languageSettingsHelperText": "El idioma de la aplicación cambia los menús y botones. El idioma de voz afecta cómo se transcriben tus grabaciones."
 }

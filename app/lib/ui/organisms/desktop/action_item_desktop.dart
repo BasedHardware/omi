@@ -1,21 +1,24 @@
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/cupertino.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/backend/preferences.dart';
-import 'package:provider/provider.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
-import 'package:omi/ui/molecules/omi_popup_menu.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/desktop/pages/actions/widgets/desktop_action_item_form_dialog.dart';
+import 'package:omi/ui/molecules/omi_popup_menu.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopActionItem extends StatefulWidget {
   final ActionItemWithMetadata actionItem;
@@ -131,7 +134,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
       setState(() => _isEditing = false);
       _showSavedMessage();
     } catch (e) {
-      debugPrint('Error updating action item description: $e');
+      Logger.debug('Error updating action item description: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Failed to update action item'),
@@ -327,7 +330,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
         await provider.updateActionItemDueDate(widget.actionItem, result);
         _showSavedMessage();
       } catch (e) {
-        debugPrint('Error updating action item due date: $e');
+        Logger.debug('Error updating action item due date: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Failed to update due date'),
@@ -614,7 +617,7 @@ class _DesktopActionItemState extends State<DesktopActionItem> with AutomaticKee
 
       widget.onChanged?.call();
     } catch (e) {
-      debugPrint('Error clearing action item due date: $e');
+      Logger.debug('Error clearing action item due date: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Failed to clear due date'),

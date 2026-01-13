@@ -1,0 +1,2317 @@
+{
+  "@@locale": "el",
+  "@@last_modified": "2024-12-26",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Συνομιλία",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Απομαγνητοφώνηση",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Ενέργειες",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Διαγραφή Συνομιλίας;",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Επιβεβαίωση",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Ακύρωση",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "Εντάξει",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Διαγραφή",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Προσθήκη",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Ενημέρωση",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Αποθήκευση",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Επεξεργασία",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Κλείσιμο",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Εκκαθάριση",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Αντιγραφή Απομαγνητοφώνησης",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Αντιγραφή Περίληψης",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Δοκιμή Εντολής",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Επανεπεξεργασία Συνομιλίας",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Διαγραφή Συνομιλίας",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Το περιεχόμενο αντιγράφηκε στο πρόχειρο",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Αποτυχία ενημέρωσης της κατάστασης αγαπημένων.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "Δεν ήταν δυνατή η κοινοποίηση του URL της συνομιλίας.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Σφάλμα κατά την επεξεργασία της συνομιλίας. Παρακαλώ δοκιμάστε ξανά αργότερα.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Παρακαλώ ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Αδυναμία Διαγραφής Συνομιλίας",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Κάτι πήγε στραβά! Παρακαλώ δοκιμάστε ξανά αργότερα.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Αντιγραφή μηνύματος σφάλματος",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Το μήνυμα σφάλματος αντιγράφηκε στο πρόχειρο",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Υπολειπόμενα",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Φόρτωση...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Φόρτωση διάρκειας...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} δευτερόλεπτα",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Άτομα",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Προσθήκη Νέου Ατόμου",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Επεξεργασία Ατόμου",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Δημιουργήστε ένα νέο άτομο και εκπαιδεύστε το Omi να αναγνωρίζει και την ομιλία του!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Προφίλ Ομιλίας",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Δείγμα {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Ρυθμίσεις",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Γλώσσα",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Επιλογή Γλώσσας",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Διαγραφή...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Παρακαλώ ολοκληρώστε την πιστοποίηση στο πρόγραμμα περιήγησής σας. Μόλις ολοκληρωθεί, επιστρέψτε στην εφαρμογή.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Αποτυχία έναρξης πιστοποίησης",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Η εισαγωγή ξεκίνησε! Θα ειδοποιηθείτε όταν ολοκληρωθεί.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Αποτυχία έναρξης εισαγωγής. Παρακαλώ δοκιμάστε ξανά.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Δεν ήταν δυνατή η πρόσβαση στο επιλεγμένο αρχείο",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Ρωτήστε το Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Τέλος",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Αποσυνδέθηκε",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Αναζήτηση",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Σύνδεση Συσκευής",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Φτάσατε το μηνιαίο όριό σας.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Έλεγχος Χρήσης",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Συγχρονισμός ηχογραφήσεων",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Ηχογραφήσεις για συγχρονισμό",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Όλα ενημερωμένα",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Συγχρονισμός",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Το περιδέραιο είναι ενημερωμένο",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Όλες οι ηχογραφήσεις συγχρονίστηκαν",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Συγχρονισμός σε εξέλιξη",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Έτοιμο για συγχρονισμό",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Πατήστε Συγχρονισμός για έναρξη",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Το περιδέραιο δεν είναι συνδεδεμένο. Συνδεθείτε για συγχρονισμό.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Όλα είναι ήδη συγχρονισμένα.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Έχετε ηχογραφήσεις που δεν έχουν συγχρονιστεί ακόμα.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Θα συνεχίσουμε να συγχρονίζουμε τις ηχογραφήσεις σας στο παρασκήνιο.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Δεν υπάρχουν συνομιλίες ακόμα.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Δεν υπάρχουν αγαπημένες συνομιλίες ακόμα.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Για να προσθέσετε μια συνομιλία στα αγαπημένα, ανοίξτε τη και πατήστε το εικονίδιο αστεριού στην κεφαλίδα.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Αναζήτηση Συνομιλιών",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count} επιλεγμένα",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Συγχώνευση",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Συγχώνευση Συνομιλιών",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Αυτό θα συνδυάσει {count} συνομιλίες σε μία. Όλο το περιεχόμενο θα συγχωνευτεί και θα αναδημιουργηθεί.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Συγχώνευση στο παρασκήνιο. Μπορεί να πάρει λίγο χρόνο.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Αποτυχία έναρξης συγχώνευσης",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Ρωτήστε οτιδήποτε",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Δεν υπάρχουν μηνύματα ακόμα!\nΓιατί δεν ξεκινάτε μια συνομιλία;",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Διαγραφή των μηνυμάτων σας από τη μνήμη του Omi...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Το μήνυμα αντιγράφηκε στο πρόχειρο.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Δεν μπορείτε να αναφέρετε τα δικά σας μηνύματα.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Αναφορά Μηνύματος",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Είστε βέβαιοι ότι θέλετε να αναφέρετε αυτό το μήνυμα;",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Το μήνυμα αναφέρθηκε επιτυχώς.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Ευχαριστούμε για τα σχόλιά σας!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Εκκαθάριση Συνομιλίας;",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Είστε βέβαιοι ότι θέλετε να εκκαθαρίσετε τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Μπορείτε να ανεβάσετε μόνο 4 αρχεία τη φορά",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Συνομιλία με το Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Εφαρμογές",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Δεν βρέθηκαν εφαρμογές",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Δοκιμάστε να προσαρμόσετε την αναζήτηση ή τα φίλτρα σας",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Δημιουργήστε τη Δική σας Εφαρμογή",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Δημιουργήστε και μοιραστείτε την προσαρμοσμένη εφαρμογή σας",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Αναζήτηση 1500+ Εφαρμογών",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Οι Εφαρμογές μου",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Εγκατεστημένες Εφαρμογές",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Αδυναμία λήψης εφαρμογών :(\n\nΠαρακαλώ ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Σχετικά με το Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Πολιτική Απορρήτου",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Επισκεφτείτε τον Ιστότοπο",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Βοήθεια ή Ερωτήσεις;",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Γίνετε μέλος της κοινότητας!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "8000+ μέλη και συνεχίζουν.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Διαγραφή Λογαριασμού",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Είστε βέβαιοι ότι θέλετε να διαγράψετε τον λογαριασμό σας;",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Αυτό δεν μπορεί να αναιρεθεί.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Όλες οι αναμνήσεις και οι συνομιλίες σας θα διαγραφούν μόνιμα.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Οι Εφαρμογές και οι Ενσωματώσεις σας θα αποσυνδεθούν αμέσως.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Μπορείτε να εξάγετε τα δεδομένα σας πριν διαγράψετε τον λογαριασμό σας, αλλά μόλις διαγραφεί, δεν μπορεί να ανακτηθεί.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Κατανοώ ότι η διαγραφή του λογαριασμού μου είναι μόνιμη και όλα τα δεδομένα, συμπεριλαμβανομένων των αναμνήσεων και των συνομιλιών, θα χαθούν και δεν μπορούν να ανακτηθούν.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Είστε βέβαιοι;",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Αυτή η ενέργεια είναι μη αναστρέψιμη και θα διαγράψει μόνιμα τον λογαριασμό σας και όλα τα σχετικά δεδομένα. Είστε βέβαιοι ότι θέλετε να συνεχίσετε;",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Διαγραφή Τώρα",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Επιστροφή",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Επιλέξτε το πλαίσιο για να επιβεβαιώσετε ότι κατανοείτε ότι η διαγραφή του λογαριασμού σας είναι μόνιμη και μη αναστρέψιμη.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Προφίλ",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Όνομα",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "Email",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Προσαρμοσμένο Λεξιλόγιο",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Αναγνώριση Άλλων",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Μέθοδοι Πληρωμής",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Εμφάνιση Συνομιλίας",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Δεδομένα & Απόρρητο",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "Αναγνωριστικό Χρήστη",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Δεν έχει οριστεί",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "Το αναγνωριστικό χρήστη αντιγράφηκε στο πρόχειρο",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Προεπιλογή Συστήματος",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Πρόγραμμα & Χρήση",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Συγχρονισμός Εκτός Σύνδεσης",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Ρυθμίσεις Συσκευής",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Εργαλεία Συνομιλίας",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Σχόλια / Σφάλμα",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Κέντρο Βοήθειας",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Ρυθμίσεις Προγραμματιστή",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Αποκτήστε το Omi για Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Πρόγραμμα Παραπομπών",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Αποσύνδεση",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Τα στοιχεία εφαρμογής και συσκευής αντιγράφηκαν",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Wrapped 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Το Απόρρητό σας, ο Έλεγχός σας",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Στο Omi, δεσμευόμαστε να προστατεύουμε το απόρρητό σας. Αυτή η σελίδα σας επιτρέπει να ελέγχετε πώς αποθηκεύονται και χρησιμοποιούνται τα δεδομένα σας.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Μάθετε περισσότερα...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Επίπεδο Προστασίας Δεδομένων",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Τα δεδομένα σας είναι ασφαλισμένα από προεπιλογή με ισχυρή κρυπτογράφηση. Ελέγξτε τις ρυθμίσεις σας και τις μελλοντικές επιλογές απορρήτου παρακάτω.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Πρόσβαση Εφαρμογών",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Οι παρακάτω εφαρμογές μπορούν να έχουν πρόσβαση στα δεδομένα σας. Πατήστε σε μια εφαρμογή για να διαχειριστείτε τα δικαιώματά της.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Καμία εγκατεστημένη εφαρμογή δεν έχει εξωτερική πρόσβαση στα δεδομένα σας.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Όνομα Συσκευής",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "Αναγνωριστικό Συσκευής",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Λογισμικό",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "Συγχρονισμός Κάρτας SD",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Αναθεώρηση Υλικού",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Αριθμός Μοντέλου",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Κατασκευαστής",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Διπλό Πάτημα",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "Φωτεινότητα LED",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Ενίσχυση Μικροφώνου",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Αποσύνδεση",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Διαγραφή Συσκευής",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Προβλήματα Φόρτισης",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Αποσύνδεση Συσκευής",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Κατάργηση Σύζευξης Συσκευής",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Κατάργηση Σύζευξης και Διαγραφή Συσκευής",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Το Omi σας έχει αποσυνδεθεί 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Η σύζευξη της συσκευής καταργήθηκε. Μεταβείτε στις Ρυθμίσεις > Bluetooth και διαγράψτε τη συσκευή για να ολοκληρώσετε την κατάργηση της σύζευξης.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Κατάργηση Σύζευξης Συσκευής",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Αυτό θα καταργήσει τη σύζευξη της συσκευής ώστε να μπορεί να συνδεθεί σε άλλο τηλέφωνο. Θα χρειαστεί να μεταβείτε στις Ρυθμίσεις > Bluetooth και να διαγράψετε τη συσκευή για να ολοκληρώσετε τη διαδικασία.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Η Συσκευή Δεν Είναι Συνδεδεμένη",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Συνδέστε τη συσκευή Omi για να αποκτήσετε πρόσβαση\nστις ρυθμίσεις και την προσαρμογή της συσκευής",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Πληροφορίες Συσκευής",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Προσαρμογή",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Υλικό",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "Δεν ανιχνεύτηκε V2",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Βλέπουμε ότι είτε έχετε συσκευή V1 είτε η συσκευή σας δεν είναι συνδεδεμένη. Η λειτουργικότητα κάρτας SD είναι διαθέσιμη μόνο για συσκευές V2.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Τερματισμός Συνομιλίας",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Παύση/Συνέχιση",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Αγαπημένη Συνομιλία",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Ενέργεια Διπλού Πατήματος",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Τερματισμός & Επεξεργασία Συνομιλίας",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Παύση/Συνέχιση Εγγραφής",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Αγαπημένη Τρέχουσα Συνομιλία",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Ανενεργό",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Μέγιστο",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Σίγαση",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Ήσυχο",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Κανονικό",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Υψηλό",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Το μικρόφωνο είναι σε σίγαση",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Πολύ ήσυχο - για θορυβώδη περιβάλλοντα",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Ήσυχο - για μέτριο θόρυβο",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Ουδέτερο - ισορροπημένη εγγραφή",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Ελαφρώς ενισχυμένο - κανονική χρήση",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Ενισχυμένο - για ήσυχα περιβάλλοντα",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Υψηλό - για απομακρυσμένες ή απαλές φωνές",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Πολύ υψηλό - για πολύ ήσυχες πηγές",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Μέγιστο - χρησιμοποιήστε με προσοχή",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Ρυθμίσεις Προγραμματιστή",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Αποθήκευση...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Διαμορφώστε την προσωπικότητα του AI σας",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Απομαγνητοφώνηση",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Διαμόρφωση παρόχου STT",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Λήξη Χρόνου Συνομιλίας",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Ορίστε πότε τελειώνουν αυτόματα οι συνομιλίες",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Εισαγωγή Δεδομένων",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Εισαγωγή δεδομένων από άλλες πηγές",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Εντοπισμός Σφαλμάτων & Διαγνωστικά",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "URL Τελικού Σημείου",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Δεν υπάρχουν κλειδιά API ακόμα",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Δημιουργήστε ένα κλειδί για να ξεκινήσετε",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Δημιουργία Κλειδιού",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Τεκμηρίωση",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Οι Πληροφορίες σας στο Omi",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Σήμερα",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Αυτόν τον Μήνα",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Φέτος",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Συνολικά",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Καμία Δραστηριότητα Ακόμα",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Ξεκινήστε μια συνομιλία με το Omi\nγια να δείτε τις πληροφορίες χρήσης σας εδώ.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Ακρόαση",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Συνολικός χρόνος που το Omi έχει ακούσει ενεργά.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Κατανόηση",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Λέξεις που κατανοήθηκαν από τις συνομιλίες σας.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Παροχή",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Ενέργειες και σημειώσεις που καταγράφονται αυτόματα.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Απομνημόνευση",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Γεγονότα και λεπτομέρειες που απομνημονεύονται για εσάς.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Απεριόριστο Πρόγραμμα",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Διαχείριση Προγράμματος",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Το πρόγραμμά σας θα ακυρωθεί στις {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Το πρόγραμμά σας ανανεώνεται στις {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Δωρεάν Πρόγραμμα",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{used} από {limit} λεπτά χρησιμοποιήθηκαν",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Αναβάθμιση",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Αναβάθμιση σε Απεριόριστο",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Το πρόγραμμά σας περιλαμβάνει {limit} δωρεάν λεπτά ανά μήνα. Αναβαθμίστε για απεριόριστη χρήση.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Μοιράζομαι τα στατιστικά μου στο Omi! (omi.me - ο πάντα ενεργός βοηθός AI σας)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Σήμερα, το omi:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Αυτόν τον μήνα, το omi:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Φέτος, το omi:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Μέχρι τώρα, το omi:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Άκουσε για {minutes} λεπτά",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Κατανόησε {words} λέξεις",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Παρείχε {count} πληροφορίες",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Απομνημόνευσε {count} αναμνήσεις",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Αρχεία Εντοπισμού Σφαλμάτων",
+  "debugLogsAutoDelete": "Αυτόματη διαγραφή μετά από 3 ημέρες.",
+  "debugLogsDesc": "Βοηθά στη διάγνωση προβλημάτων",
+  "noLogFilesFound": "Δεν βρέθηκαν αρχεία καταγραφής.",
+  "omiDebugLog": "Αρχείο εντοπισμού σφαλμάτων Omi",
+  "logShared": "Το αρχείο καταγραφής κοινοποιήθηκε",
+  "selectLogFile": "Επιλογή Αρχείου Καταγραφής",
+  "shareLogs": "Κοινοποίηση Αρχείων Καταγραφής",
+  "debugLogCleared": "Το αρχείο εντοπισμού σφαλμάτων εκκαθαρίστηκε",
+  "exportStarted": "Η εξαγωγή ξεκίνησε. Μπορεί να διαρκέσει μερικά δευτερόλεπτα...",
+  "exportAllData": "Εξαγωγή Όλων των Δεδομένων",
+  "exportDataDesc": "Εξαγωγή συνομιλιών σε αρχείο JSON",
+  "exportedConversations": "Εξαγωγή Συνομιλιών από το Omi",
+  "exportShared": "Η εξαγωγή κοινοποιήθηκε",
+  "deleteKnowledgeGraphTitle": "Διαγραφή Γραφήματος Γνώσης;",
+  "deleteKnowledgeGraphMessage": "Αυτό θα διαγράψει όλα τα παράγωγα δεδομένα του γραφήματος γνώσης (κόμβοι και συνδέσεις). Οι αρχικές αναμνήσεις σας θα παραμείνουν ασφαλείς. Το γράφημα θα ξαναδημιουργηθεί με το χρόνο ή στο επόμενο αίτημα.",
+  "knowledgeGraphDeleted": "Το Γράφημα Γνώσης διαγράφηκε επιτυχώς",
+  "deleteGraphFailed": "Αποτυχία διαγραφής γραφήματος: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Διαγραφή Γραφήματος Γνώσης",
+  "deleteKnowledgeGraphDesc": "Εκκαθάριση όλων των κόμβων και των συνδέσεων",
+  "mcp": "MCP",
+  "mcpServer": "Διακομιστής MCP",
+  "mcpServerDesc": "Συνδέστε βοηθούς AI στα δεδομένα σας",
+  "serverUrl": "URL Διακομιστή",
+  "urlCopied": "Το URL αντιγράφηκε",
+  "apiKeyAuth": "Πιστοποίηση Κλειδιού API",
+  "header": "Κεφαλίδα",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "Αναγνωριστικό Πελάτη",
+  "clientSecret": "Μυστικό Πελάτη",
+  "useMcpApiKey": "Χρησιμοποιήστε το κλειδί MCP API σας",
+  "webhooks": "Webhooks",
+  "conversationEvents": "Συμβάντα Συνομιλίας",
+  "newConversationCreated": "Δημιουργήθηκε νέα συνομιλία",
+  "realtimeTranscript": "Απομαγνητοφώνηση σε Πραγματικό Χρόνο",
+  "transcriptReceived": "Λήφθηκε απομαγνητοφώνηση",
+  "audioBytes": "Bytes Ήχου",
+  "audioDataReceived": "Λήφθηκαν δεδομένα ήχου",
+  "intervalSeconds": "Διάστημα (δευτερόλεπτα)",
+  "daySummary": "Περίληψη Ημέρας",
+  "summaryGenerated": "Δημιουργήθηκε περίληψη",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Προσθήκη στο claude_desktop_config.json",
+  "copyConfig": "Αντιγραφή Διαμόρφωσης",
+  "configCopied": "Η διαμόρφωση αντιγράφηκε στο πρόχειρο",
+  "listeningMins": "Ακρόαση (λεπτά)",
+  "understandingWords": "Κατανόηση (λέξεις)",
+  "insights": "Πληροφορίες",
+  "memories": "Αναμνήσεις",
+  "minsUsedThisMonth": "{used} από {limit} λεπτά χρησιμοποιήθηκαν αυτόν τον μήνα",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used} από {limit} λέξεις χρησιμοποιήθηκαν αυτόν τον μήνα",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used} από {limit} πληροφορίες αποκτήθηκαν αυτόν τον μήνα",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used} από {limit} αναμνήσεις δημιουργήθηκαν αυτόν τον μήνα",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Ορατότητα",
+  "visibilitySubtitle": "Ελέγξτε ποιες συνομιλίες εμφανίζονται στη λίστα σας",
+  "showShortConversations": "Εμφάνιση Σύντομων Συνομιλιών",
+  "showShortConversationsDesc": "Εμφάνιση συνομιλιών συντομότερων από το όριο",
+  "showDiscardedConversations": "Εμφάνιση Απορριφθεισών Συνομιλιών",
+  "showDiscardedConversationsDesc": "Συμπερίληψη συνομιλιών που επισημάνθηκαν ως απορριφθείσες",
+  "shortConversationThreshold": "Όριο Σύντομης Συνομιλίας",
+  "shortConversationThresholdSubtitle": "Οι συνομιλίες συντομότερες από αυτό θα αποκρύπτονται εκτός αν ενεργοποιηθούν παραπάνω",
+  "durationThreshold": "Όριο Διάρκειας",
+  "durationThresholdDesc": "Απόκρυψη συνομιλιών συντομότερων από αυτό",
+  "minLabel": "{count} λεπτά",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Προσαρμοσμένο Λεξιλόγιο",
+  "addWords": "Προσθήκη Λέξεων",
+  "addWordsDesc": "Ονόματα, όροι ή ασυνήθιστες λέξεις",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Σύνδεση",
+  "comingSoon": "Σύντομα Διαθέσιμο",
+  "chatToolsFooter": "Συνδέστε τις εφαρμογές σας για να δείτε δεδομένα και μετρήσεις στη συνομιλία.",
+  "completeAuthInBrowser": "Παρακαλώ ολοκληρώστε την πιστοποίηση στο πρόγραμμα περιήγησής σας. Μόλις ολοκληρωθεί, επιστρέψτε στην εφαρμογή.",
+  "failedToStartAuth": "Αποτυχία έναρξης πιστοποίησης {appName}",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Αποσύνδεση από {appName};",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Είστε βέβαιοι ότι θέλετε να αποσυνδεθείτε από το {appName}; Μπορείτε να επανασυνδεθείτε ανά πάσα στιγμή.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Αποσυνδέθηκε από {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Αποτυχία αποσύνδεσης",
+  "connectTo": "Σύνδεση με {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Θα χρειαστεί να εξουσιοδοτήσετε το Omi να έχει πρόσβαση στα δεδομένα σας στο {appName}. Αυτό θα ανοίξει το πρόγραμμα περιήγησής σας για πιστοποίηση.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Συνέχεια",
+  "languageTitle": "Γλώσσα",
+  "primaryLanguage": "Κύρια Γλώσσα",
+  "automaticTranslation": "Αυτόματη Μετάφραση",
+  "detectLanguages": "Ανίχνευση 10+ γλωσσών",
+  "authorizeSavingRecordings": "Εξουσιοδότηση Αποθήκευσης Εγγραφών",
+  "thanksForAuthorizing": "Ευχαριστούμε για την εξουσιοδότηση!",
+  "needYourPermission": "Χρειαζόμαστε την άδειά σας",
+  "alreadyGavePermission": "Έχετε ήδη δώσει την άδειά σας για αποθήκευση των εγγραφών σας. Ορίστε μια υπενθύμιση γιατί το χρειαζόμαστε:",
+  "wouldLikePermission": "Θα θέλαμε την άδειά σας για αποθήκευση των φωνητικών σας εγγραφών. Εδώ είναι γιατί:",
+  "improveSpeechProfile": "Βελτίωση του Προφίλ Ομιλίας σας",
+  "improveSpeechProfileDesc": "Χρησιμοποιούμε τις εγγραφές για περαιτέρω εκπαίδευση και βελτίωση του προσωπικού σας προφίλ ομιλίας.",
+  "trainFamilyProfiles": "Εκπαίδευση Προφίλ για Φίλους και Οικογένεια",
+  "trainFamilyProfilesDesc": "Οι εγγραφές σας μας βοηθούν να αναγνωρίζουμε και να δημιουργούμε προφίλ για τους φίλους και την οικογένειά σας.",
+  "enhanceTranscriptAccuracy": "Βελτίωση της Ακρίβειας Απομαγνητοφώνησης",
+  "enhanceTranscriptAccuracyDesc": "Καθώς το μοντέλο μας βελτιώνεται, μπορούμε να παρέχουμε καλύτερα αποτελέσματα απομαγνητοφώνησης για τις εγγραφές σας.",
+  "legalNotice": "Νομική Ειδοποίηση: Η νομιμότητα της εγγραφής και αποθήκευσης φωνητικών δεδομένων μπορεί να διαφέρει ανάλογα με την τοποθεσία σας και τον τρόπο χρήσης αυτής της λειτουργίας. Είναι δική σας ευθύνη να διασφαλίσετε τη συμμόρφωση με τους τοπικούς νόμους και κανονισμούς.",
+  "alreadyAuthorized": "Ήδη Εξουσιοδοτημένο",
+  "authorize": "Εξουσιοδότηση",
+  "revokeAuthorization": "Ανάκληση Εξουσιοδότησης",
+  "authorizationSuccessful": "Η εξουσιοδότηση ήταν επιτυχής!",
+  "failedToAuthorize": "Αποτυχία εξουσιοδότησης. Παρακαλώ δοκιμάστε ξανά.",
+  "authorizationRevoked": "Η εξουσιοδότηση ανακλήθηκε.",
+  "recordingsDeleted": "Οι εγγραφές διαγράφηκαν.",
+  "failedToRevoke": "Αποτυχία ανάκλησης εξουσιοδότησης. Παρακαλώ δοκιμάστε ξανά.",
+  "permissionRevokedTitle": "Η Άδεια Ανακλήθηκε",
+  "permissionRevokedMessage": "Θέλετε να αφαιρέσουμε επίσης όλες τις υπάρχουσες εγγραφές σας;",
+  "yes": "Ναι",
+  "editName": "Επεξεργασία Ονόματος",
+  "howShouldOmiCallYou": "Πώς θα πρέπει να σας αποκαλεί το Omi;",
+  "enterYourName": "Εισάγετε το όνομά σας",
+  "nameCannotBeEmpty": "Το όνομα δεν μπορεί να είναι κενό",
+  "nameUpdatedSuccessfully": "Το όνομα ενημερώθηκε επιτυχώς!",
+  "calendarSettings": "Ρυθμίσεις ημερολογίου",
+  "calendarProviders": "Πάροχοι Ημερολογίου",
+  "macOsCalendar": "Ημερολόγιο macOS",
+  "connectMacOsCalendar": "Συνδέστε το τοπικό σας ημερολόγιο macOS",
+  "googleCalendar": "Ημερολόγιο Google",
+  "syncGoogleAccount": "Συγχρονισμός με τον λογαριασμό σας Google",
+  "showMeetingsMenuBar": "Εμφάνιση επερχόμενων συναντήσεων στη γραμμή μενού",
+  "showMeetingsMenuBarDesc": "Εμφάνιση της επόμενης συνάντησής σας και του χρόνου μέχρι να ξεκινήσει στη γραμμή μενού του macOS",
+  "showEventsNoParticipants": "Εμφάνιση συμβάντων χωρίς συμμετέχοντες",
+  "showEventsNoParticipantsDesc": "Όταν είναι ενεργοποιημένο, το Coming Up εμφανίζει συμβάντα χωρίς συμμετέχοντες ή σύνδεσμο βίντεο.",
+  "yourMeetings": "Οι Συναντήσεις σας",
+  "refresh": "Ανανέωση",
+  "noUpcomingMeetings": "Δεν βρέθηκαν επερχόμενες συναντήσεις",
+  "checkingNextDays": "Έλεγχος επόμενων 30 ημερών",
+  "tomorrow": "Αύριο",
+  "googleCalendarComingSoon": "Η ενσωμάτωση με το Ημερολόγιο Google έρχεται σύντομα!",
+  "connectedAsUser": "Συνδεδεμένο ως χρήστης: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Προεπιλεγμένος Χώρος Εργασίας",
+  "tasksCreatedInWorkspace": "Οι εργασίες θα δημιουργηθούν σε αυτόν τον χώρο εργασίας",
+  "defaultProjectOptional": "Προεπιλεγμένο Έργο (Προαιρετικό)",
+  "leaveUnselectedTasks": "Αφήστε το ανεπίλεκτο για δημιουργία εργασιών χωρίς έργο",
+  "noProjectsInWorkspace": "Δεν βρέθηκαν έργα σε αυτόν τον χώρο εργασίας",
+  "conversationTimeoutDesc": "Επιλέξτε πόσο χρόνο να περιμένει σε σιωπή πριν τερματιστεί αυτόματα μια συνομιλία:",
+  "timeout2Minutes": "2 λεπτά",
+  "timeout2MinutesDesc": "Τερματισμός συνομιλίας μετά από 2 λεπτά σιωπής",
+  "timeout5Minutes": "5 λεπτά",
+  "timeout5MinutesDesc": "Τερματισμός συνομιλίας μετά από 5 λεπτά σιωπής",
+  "timeout10Minutes": "10 λεπτά",
+  "timeout10MinutesDesc": "Τερματισμός συνομιλίας μετά από 10 λεπτά σιωπής",
+  "timeout30Minutes": "30 λεπτά",
+  "timeout30MinutesDesc": "Τερματισμός συνομιλίας μετά από 30 λεπτά σιωπής",
+  "timeout4Hours": "4 ώρες",
+  "timeout4HoursDesc": "Τερματισμός συνομιλίας μετά από 4 ώρες σιωπής",
+  "conversationEndAfterHours": "Οι συνομιλίες θα τερματίζονται πλέον μετά από 4 ώρες σιωπής",
+  "conversationEndAfterMinutes": "Οι συνομιλίες θα τερματίζονται πλέον μετά από {minutes} λεπτό(-ά) σιωπής",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Πείτε μας την κύρια γλώσσα σας",
+  "languageForTranscription": "Ορίστε τη γλώσσα σας για πιο ακριβείς απομαγνητοφωνήσεις και εξατομικευμένη εμπειρία.",
+  "singleLanguageModeInfo": "Η Λειτουργία Μονής Γλώσσας είναι ενεργοποιημένη. Η μετάφραση είναι απενεργοποιημένη για μεγαλύτερη ακρίβεια.",
+  "searchLanguageHint": "Αναζήτηση γλώσσας με όνομα ή κωδικό",
+  "noLanguagesFound": "Δεν βρέθηκαν γλώσσες",
+  "skip": "Παράλειψη",
+  "languageSetTo": "Η γλώσσα ορίστηκε σε {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Αποτυχία ορισμού γλώσσας",
+  "appSettings": "Ρυθμίσεις {appName}",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Αποσύνδεση από {appName};",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Αυτό θα αφαιρέσει την πιστοποίησή σας στο {appName}. Θα χρειαστεί να επανασυνδεθείτε για να το χρησιμοποιήσετε ξανά.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Συνδεδεμένο στο {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Λογαριασμός",
+  "actionItemsSyncedTo": "Οι ενέργειές σας θα συγχρονιστούν με τον λογαριασμό σας {appName}",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Προεπιλεγμένος Χώρος",
+  "selectSpaceInWorkspace": "Επιλέξτε έναν χώρο στον χώρο εργασίας σας",
+  "noSpacesInWorkspace": "Δεν βρέθηκαν χώροι σε αυτόν τον χώρο εργασίας",
+  "defaultList": "Προεπιλεγμένη Λίστα",
+  "tasksAddedToList": "Οι εργασίες θα προστεθούν σε αυτή τη λίστα",
+  "noListsInSpace": "Δεν βρέθηκαν λίστες σε αυτόν τον χώρο",
+  "failedToLoadRepos": "Αποτυχία φόρτωσης αποθετηρίων: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Το προεπιλεγμένο αποθετήριο αποθηκεύτηκε",
+  "failedToSaveDefaultRepo": "Αποτυχία αποθήκευσης προεπιλεγμένου αποθετηρίου",
+  "defaultRepository": "Προεπιλεγμένο Αποθετήριο",
+  "selectDefaultRepoDesc": "Επιλέξτε ένα προεπιλεγμένο αποθετήριο για δημιουργία ζητημάτων. Μπορείτε ακόμα να καθορίσετε διαφορετικό αποθετήριο κατά τη δημιουργία ζητημάτων.",
+  "noReposFound": "Δεν βρέθηκαν αποθετήρια",
+  "private": "Ιδιωτικό",
+  "updatedDate": "Ενημερώθηκε {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "χθες",
+  "daysAgo": "πριν από {count} ημέρες",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "πριν από 1 εβδομάδα",
+  "weeksAgo": "πριν από {count} εβδομάδες",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "πριν από 1 μήνα",
+  "monthsAgo": "πριν από {count} μήνες",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Τα ζητήματα θα δημιουργηθούν στο προεπιλεγμένο σας αποθετήριο",
+  "taskIntegrations": "Ενσωματώσεις Εργασιών",
+  "configureSettings": "Διαμόρφωση Ρυθμίσεων",
+  "completeAuthBrowser": "Παρακαλώ ολοκληρώστε την πιστοποίηση στο πρόγραμμα περιήγησής σας. Μόλις ολοκληρωθεί, επιστρέψτε στην εφαρμογή.",
+  "failedToStartAppAuth": "Αποτυχία έναρξης πιστοποίησης {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Σύνδεση με {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Θα χρειαστεί να εξουσιοδοτήσετε το Omi να δημιουργεί εργασίες στον λογαριασμό σας {appName}. Αυτό θα ανοίξει το πρόγραμμα περιήγησής σας για πιστοποίηση.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Συνέχεια",
+  "appIntegration": "Ενσωμάτωση {appName}",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Η ενσωμάτωση με το {appName} έρχεται σύντομα! Εργαζόμαστε σκληρά για να σας φέρουμε περισσότερες επιλογές διαχείρισης εργασιών.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Το κατάλαβα",
+  "tasksExportedOneApp": "Οι εργασίες μπορούν να εξαχθούν σε μία εφαρμογή τη φορά.",
+  "completeYourUpgrade": "Ολοκληρώστε την Αναβάθμισή σας",
+  "importConfiguration": "Εισαγωγή Διαμόρφωσης",
+  "exportConfiguration": "Εξαγωγή διαμόρφωσης",
+  "bringYourOwn": "Φέρτε το δικό σας",
+  "payYourSttProvider": "Χρησιμοποιήστε ελεύθερα το omi. Πληρώνετε μόνο τον πάροχο STT σας απευθείας.",
+  "freeMinutesMonth": "1.200 δωρεάν λεπτά/μήνα συμπεριλαμβάνονται. Απεριόριστο με ",
+  "omiUnlimited": "Omi Απεριόριστο",
+  "hostRequired": "Απαιτείται διακομιστής",
+  "validPortRequired": "Απαιτείται έγκυρη θύρα",
+  "validWebsocketUrlRequired": "Απαιτείται έγκυρο URL WebSocket (wss://)",
+  "apiUrlRequired": "Απαιτείται URL API",
+  "apiKeyRequired": "Απαιτείται κλειδί API",
+  "invalidJsonConfig": "Μη έγκυρη διαμόρφωση JSON",
+  "errorSaving": "Σφάλμα αποθήκευσης: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Η διαμόρφωση αντιγράφηκε στο πρόχειρο",
+  "pasteJsonConfig": "Επικολλήστε τη διαμόρφωση JSON σας παρακάτω:",
+  "addApiKeyAfterImport": "Θα χρειαστεί να προσθέσετε το δικό σας κλειδί API μετά την εισαγωγή",
+  "paste": "Επικόλληση",
+  "import": "Εισαγωγή",
+  "invalidProviderInConfig": "Μη έγκυρος πάροχος στη διαμόρφωση",
+  "importedConfig": "Εισήχθη η διαμόρφωση {providerName}",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "Μη έγκυρο JSON: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Πάροχος",
+  "live": "Ζωντανά",
+  "onDevice": "Στη Συσκευή",
+  "apiUrl": "URL API",
+  "enterSttHttpEndpoint": "Εισάγετε το τελικό σημείο HTTP STT σας",
+  "websocketUrl": "URL WebSocket",
+  "enterLiveSttWebsocket": "Εισάγετε το τελικό σημείο WebSocket STT ζωντανά",
+  "apiKey": "Κλειδί API",
+  "enterApiKey": "Εισάγετε το κλειδί API σας",
+  "storedLocallyNeverShared": "Αποθηκεύεται τοπικά, δεν κοινοποιείται ποτέ",
+  "host": "Διακομιστής",
+  "port": "Θύρα",
+  "advanced": "Προχωρημένα",
+  "configuration": "Διαμόρφωση",
+  "requestConfiguration": "Διαμόρφωση Αιτήματος",
+  "responseSchema": "Σχήμα Απόκρισης",
+  "modified": "Τροποποιημένο",
+  "resetRequestConfig": "Επαναφορά διαμόρφωσης αιτήματος στην προεπιλογή",
+  "logs": "Αρχεία Καταγραφής",
+  "logsCopied": "Τα αρχεία καταγραφής αντιγράφηκαν",
+  "noLogsYet": "Δεν υπάρχουν ακόμα αρχεία καταγραφής. Ξεκινήστε εγγραφή για να δείτε προσαρμοσμένη δραστηριότητα STT.",
+  "deviceUsesCodec": "Το {deviceName} χρησιμοποιεί {codecReason}. Θα χρησιμοποιηθεί το Omi.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Απομαγνητοφώνηση Omi",
+  "bestInClassTranscription": "Κορυφαία απομαγνητοφώνηση χωρίς καμία ρύθμιση",
+  "instantSpeakerLabels": "Άμεσες ετικέτες ομιλητών",
+  "languageTranslation": "Μετάφραση 100+ γλωσσών",
+  "optimizedForConversation": "Βελτιστοποιημένο για συνομιλία",
+  "autoLanguageDetection": "Αυτόματη ανίχνευση γλώσσας",
+  "highAccuracy": "Υψηλή ακρίβεια",
+  "privacyFirst": "Πρώτα το απόρρητο",
+  "saveChanges": "Αποθήκευση Αλλαγών",
+  "resetToDefault": "Επαναφορά στην Προεπιλογή",
+  "viewTemplate": "Προβολή Προτύπου",
+  "trySomethingLike": "Δοκιμάστε κάτι σαν...",
+  "tryIt": "Δοκιμάστε το",
+  "creatingPlan": "Δημιουργία σχεδίου",
+  "developingLogic": "Ανάπτυξη λογικής",
+  "designingApp": "Σχεδιασμός εφαρμογής",
+  "generatingIconStep": "Δημιουργία εικονιδίου",
+  "finalTouches": "Τελικές πινελιές",
+  "processing": "Επεξεργασία...",
+  "features": "Χαρακτηριστικά",
+  "creatingYourApp": "Δημιουργία της εφαρμογής σας...",
+  "generatingIcon": "Δημιουργία εικονιδίου...",
+  "whatShouldWeMake": "Τι να φτιάξουμε;",
+  "appName": "Όνομα Εφαρμογής",
+  "description": "Περιγραφή",
+  "publicLabel": "Δημόσιο",
+  "privateLabel": "Ιδιωτικό",
+  "free": "Δωρεάν",
+  "perMonth": "/ Μήνα",
+  "tailoredConversationSummaries": "Εξατομικευμένες Περιλήψεις Συνομιλιών",
+  "customChatbotPersonality": "Προσαρμοσμένη Προσωπικότητα Chatbot",
+  "makePublic": "Δημοσίευση",
+  "anyoneCanDiscover": "Οποιοσδήποτε μπορεί να ανακαλύψει την εφαρμογή σας",
+  "onlyYouCanUse": "Μόνο εσείς μπορείτε να χρησιμοποιήσετε αυτή την εφαρμογή",
+  "paidApp": "Επί πληρωμή εφαρμογή",
+  "usersPayToUse": "Οι χρήστες πληρώνουν για να χρησιμοποιήσουν την εφαρμογή σας",
+  "freeForEveryone": "Δωρεάν για όλους",
+  "perMonthLabel": "/ μήνα",
+  "creating": "Δημιουργία...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Δημιουργία Εφαρμογής",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Αναζήτηση συσκευών...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count} {count, plural, =1{ΣΥΣΚΕΥΗ} other{ΣΥΣΚΕΥΕΣ}} ΒΡΕΘΗΚΑΝ ΚΟΝΤΑ",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "Η ΣΥΖΕΥΞΗ ΗΤΑΝ ΕΠΙΤΥΧΗΣ",
+  "errorConnectingAppleWatch": "Σφάλμα σύνδεσης με Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Να μην εμφανιστεί ξανά",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Κατάλαβα",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Ενεργοποίηση Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Το Omi χρειάζεται Bluetooth για σύνδεση με τη φορητή σας συσκευή. Παρακαλώ ενεργοποιήστε το Bluetooth και δοκιμάστε ξανά.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Επικοινωνία με Υποστήριξη;",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Σύνδεση Αργότερα",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Χορήγηση αδειών",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Δραστηριότητα παρασκηνίου",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Επιτρέψτε στο Omi να εκτελείται στο παρασκήνιο για καλύτερη σταθερότητα",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Πρόσβαση τοποθεσίας",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Ενεργοποιήστε την τοποθεσία παρασκηνίου για την πλήρη εμπειρία",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Ειδοποιήσεις",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Ενεργοποιήστε τις ειδοποιήσεις για να ενημερώνεστε",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Η Υπηρεσία Τοποθεσίας είναι Απενεργοποιημένη",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Η Υπηρεσία Τοποθεσίας είναι Απενεργοποιημένη. Παρακαλώ μεταβείτε στις Ρυθμίσεις > Απόρρητο & Ασφάλεια > Υπηρεσίες Τοποθεσίας και ενεργοποιήστε την",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Απορρίφθηκε η Πρόσβαση Τοποθεσίας Παρασκηνίου",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Παρακαλώ μεταβείτε στις ρυθμίσεις της συσκευής και ορίστε την άδεια τοποθεσίας σε \"Πάντα Να Επιτρέπεται\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Αγαπάτε το Omi;",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Βοηθήστε μας να φτάσουμε σε περισσότερους ανθρώπους αφήνοντας μια κριτική στο App Store. Τα σχόλιά σας σημαίνουν τα πάντα για εμάς!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Βοηθήστε μας να φτάσουμε σε περισσότερους ανθρώπους αφήνοντας μια κριτική στο Google Play Store. Τα σχόλιά σας σημαίνουν τα πάντα για εμάς!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Αξιολόγηση στο App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Αξιολόγηση στο Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Ίσως αργότερα",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Το Omi πρέπει να μάθει τους στόχους και τη φωνή σας. Θα μπορείτε να το τροποποιήσετε αργότερα.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Ξεκινήστε",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Όλα έτοιμα!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Συνεχίστε, τα πηγαίνετε υπέροχα",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Παράλειψη αυτής της ερώτησης",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Παράλειψη προς το παρόν",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Σφάλμα Σύνδεσης",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Αποτυχία σύνδεσης με τον διακομιστή. Παρακαλώ ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Ανιχνεύθηκε μη έγκυρη εγγραφή",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Φαίνεται ότι υπάρχουν πολλοί ομιλητές στην εγγραφή. Παρακαλώ βεβαιωθείτε ότι βρίσκεστε σε ήσυχο χώρο και δοκιμάστε ξανά.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Δεν ανιχνεύθηκε αρκετή ομιλία. Παρακαλώ μιλήστε περισσότερο και δοκιμάστε ξανά.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Παρακαλώ βεβαιωθείτε ότι μιλάτε για τουλάχιστον 5 δευτερόλεπτα και όχι περισσότερο από 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Είστε εκεί;",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Δεν μπορέσαμε να ανιχνεύσουμε καμία ομιλία. Παρακαλώ βεβαιωθείτε ότι μιλάτε για τουλάχιστον 10 δευτερόλεπτα και όχι περισσότερο από 3 λεπτά.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Η Σύνδεση Χάθηκε",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Η σύνδεση διακόπηκε. Παρακαλώ ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Δοκιμάστε Ξανά",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Σύνδεση Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Συνέχεια Χωρίς Συσκευή",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Απαιτούνται Άδειες",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Αυτή η εφαρμογή χρειάζεται άδειες Bluetooth και Τοποθεσίας για να λειτουργήσει σωστά. Παρακαλώ ενεργοποιήστε τις στις ρυθμίσεις.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Άνοιγμα Ρυθμίσεων",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Θέλετε να αποκαλείστε διαφορετικά;",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Ποιο είναι το όνομά σας;",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Μιλήστε. Απομαγνητοφώνηση. Περίληψη.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Σύνδεση με Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Σύνδεση με Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Συνεχίζοντας, συμφωνείτε με την ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Όροι Χρήσης",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – Ο Βοηθός AI σας",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Καταγράψτε κάθε στιγμή. Λάβετε περιλήψεις\nμε AI. Μην κρατάτε ποτέ ξανά σημειώσεις.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Ρύθμιση Apple Watch",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Ζητήθηκε Άδεια!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Άδεια Μικροφώνου",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Η άδεια χορηγήθηκε! Τώρα:\n\nΑνοίξτε την εφαρμογή Omi στο ρολόι σας και πατήστε \"Συνέχεια\" παρακάτω",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Χρειαζόμαστε άδεια μικροφώνου.\n\n1. Πατήστε \"Χορήγηση Άδειας\"\n2. Επιτρέψτε στο iPhone σας\n3. Η εφαρμογή ρολογιού θα κλείσει\n4. Ανοίξτε ξανά και πατήστε \"Συνέχεια\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Χορήγηση Άδειας",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Χρειάζεστε Βοήθεια;",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Αντιμετώπιση προβλημάτων:\n\n1. Βεβαιωθείτε ότι το Omi είναι εγκατεστημένο στο ρολόι σας\n2. Ανοίξτε την εφαρμογή Omi στο ρολόι σας\n3. Αναζητήστε το αναδυόμενο παράθυρο άδειας\n4. Πατήστε \"Επιτρέπεται\" όταν σας ζητηθεί\n5. Η εφαρμογή στο ρολόι σας θα κλείσει - ανοίξτε την ξανά\n6. Επιστρέψτε και πατήστε \"Συνέχεια\" στο iPhone σας",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Η εγγραφή ξεκίνησε επιτυχώς!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Η άδεια δεν έχει χορηγηθεί ακόμα. Παρακαλώ βεβαιωθείτε ότι επιτρέψατε την πρόσβαση στο μικρόφωνο και ανοίξατε ξανά την εφαρμογή στο ρολόι σας.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Σφάλμα αιτήματος άδειας: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Σφάλμα έναρξης εγγραφής: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Επιλέξτε την κύρια γλώσσα σας",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Ορίστε τη γλώσσα σας για πιο ακριβείς απομαγνητοφωνήσεις και εξατομικευμένη εμπειρία",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Ποια είναι η κύρια γλώσσα σας;",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Επιλέξτε τη γλώσσα σας",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Το προσωπικό σας ταξίδι ανάπτυξης με AI που ακούει κάθε σας λέξη.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Προς Εκτέλεση",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Πατήστε για επεξεργασία • Παρατεταμένο πάτημα για επιλογή • Σύρετε για ενέργειες",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Προς Εκτέλεση",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Ολοκληρωμένα",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Παλιά",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Είστε ενημερωμένοι!\nΔεν υπάρχουν εκκρεμείς ενέργειες",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Δεν υπάρχουν ολοκληρωμένα στοιχεία ακόμα",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Δεν υπάρχουν παλιές εργασίες",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Δεν υπάρχουν στοιχεία",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Η ενέργεια επισημάνθηκε ως ημιτελής",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Η ενέργεια ολοκληρώθηκε",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Διαγραφή Ενέργειας",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την ενέργεια;",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Διαγραφή Επιλεγμένων Στοιχείων",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Είστε βέβαιοι ότι θέλετε να διαγράψετε {count} επιλεγμένες ενέργειες{s};",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Η ενέργεια \"{description}\" διαγράφηκε",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count} ενέργειες{s} διαγράφηκαν",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Αποτυχία διαγραφής ενέργειας",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Αποτυχία διαγραφής στοιχείων",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Αποτυχία διαγραφής ορισμένων στοιχείων",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Έτοιμοι για Ενέργειες",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "Το AI σας θα εξάγει αυτόματα εργασίες και υποχρεώσεις από τις συνομιλίες σας. Θα εμφανιστούν εδώ όταν δημιουργηθούν.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Αυτόματη εξαγωγή από συνομιλίες",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Πατήστε για επεξεργασία, σύρετε για ολοκλήρωση ή διαγραφή",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count} επιλεγμένα",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Επιλογή όλων",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Διαγραφή επιλεγμένων",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Αναζήτηση {count} Αναμνήσεων",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Η ανάμνηση διαγράφηκε.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Αναίρεση",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Δεν υπάρχουν αναμνήσεις ακόμα",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Δεν υπάρχουν αυτόματα εξαγόμενες αναμνήσεις ακόμα",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Δεν υπάρχουν χειροκίνητες αναμνήσεις ακόμα",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Δεν υπάρχουν αναμνήσεις σε αυτές τις κατηγορίες",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Δεν βρέθηκαν αναμνήσεις",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Προσθέστε την πρώτη σας ανάμνηση",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Εκκαθάριση Μνήμης του Omi",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Είστε βέβαιοι ότι θέλετε να εκκαθαρίσετε τη μνήμη του Omi; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Εκκαθάριση Μνήμης",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Η μνήμη του Omi για εσάς έχει εκκαθαριστεί",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Δεν υπάρχουν αναμνήσεις προς διαγραφή",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Δημιουργία νέας ανάμνησης",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Δημιουργία νέας ενέργειας",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Διαχείριση Μνήμης",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Φιλτράρισμα Αναμνήσεων",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Έχετε {count} συνολικές αναμνήσεις",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Δημόσιες αναμνήσεις",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Ιδιωτικές αναμνήσεις",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Κάντε Όλες τις Αναμνήσεις Ιδιωτικές",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Κάντε Όλες τις Αναμνήσεις Δημόσιες",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Διαγραφή Όλων των Αναμνήσεων",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Όλες οι αναμνήσεις είναι πλέον ιδιωτικές",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Όλες οι αναμνήσεις είναι πλέον δημόσιες",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Νέα Ανάμνηση",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Επεξεργασία Ανάμνησης",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Μου αρέσει να τρώω παγωτό...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Αποτυχία αποθήκευσης. Παρακαλώ ελέγξτε τη σύνδεσή σας.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Αποθήκευση Ανάμνησης",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Επανάληψη",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Δημιουργία Ενέργειας",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Επεξεργασία Ενέργειας",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Τι πρέπει να γίνει;",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Η περιγραφή της ενέργειας δεν μπορεί να είναι κενή.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Η ενέργεια ενημερώθηκε",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Αποτυχία ενημέρωσης ενέργειας",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Η ενέργεια δημιουργήθηκε",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Αποτυχία δημιουργίας ενέργειας",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Ημερομηνία Λήξης",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Ώρα",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Προσθήκη ημερομηνίας λήξης",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Πατήστε τέλος για αποθήκευση",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Πατήστε τέλος για δημιουργία",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Όλα",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Σχετικά με Εσάς",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Πληροφορίες",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Χειροκίνητα",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Ολοκληρώθηκε",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Σήμανση ως ολοκληρωμένο",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Η ενέργεια διαγράφηκε",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Αποτυχία διαγραφής ενέργειας",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Διαγραφή Ενέργειας",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Είστε βέβαιοι ότι θέλετε να διαγράψετε αυτή την ενέργεια;",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Γλώσσα Εφαρμογής",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "ΔΙΕΠΑΦΉ ΕΦΑΡΜΟΓΉΣ",
+  "speechTranscriptionSectionTitle": "ΟΜΙΛΊΑ ΚΑΙ ΜΕΤΑΓΡΑΦΉ",
+  "languageSettingsHelperText": "Η γλώσσα της εφαρμογής αλλάζει τα μενού και τα κουμπιά. Η γλώσσα ομιλίας επηρεάζει τον τρόπο μεταγραφής των ηχογραφήσεών σας."
+}

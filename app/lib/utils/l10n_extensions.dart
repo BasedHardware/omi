@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import 'package:omi/l10n/app_localizations.dart';
 
 /// Extension on BuildContext for convenient access to localized strings.

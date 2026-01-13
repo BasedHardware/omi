@@ -90,7 +90,9 @@
   "selectedCount": "已选择 {count} 项",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "合并",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "这将把 {count} 个对话合并为一个。所有内容将被合并并重新生成。",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "后台合并中。这可能需要一点时间。",
@@ -208,11 +212,9 @@
   "pauseResume": "暂停/恢复",
   "starConversation": "星标对话",
   "doubleTapAction": "双击操作",
-  "doubleTapActionDesc": "选择双击时发生的操作",
   "endAndProcess": "结束并处理",
   "pauseResumeRecording": "暂停/恢复录音",
   "starOngoing": "星标当前对话",
-  "starOngoingDesc": "标记以便在结束时加星标",
   "off": "关闭",
   "max": "最大",
   "mute": "静音",
@@ -263,7 +265,7 @@
   "managePlan": "管理套餐",
   "cancelAtPeriodEnd": "您的套餐将于 {date} 结束。",
   "renewsOn": "您的套餐将于 {date} 续订。",
-  "basicPlan": "基础套餐",
+  "basicPlan": "免费套餐",
   "usageLimitMessage": "已使用 {used} / {limit} 分钟",
   "upgrade": "升级",
   "upgradeToUnlimited": "升级到无限版",
@@ -410,7 +412,6 @@
   "defaultProjectOptional": "默认项目（可选）",
   "leaveUnselectedTasks": "如果不选择，任务将没有项目",
   "noProjectsInWorkspace": "在此工作区未找到项目",
-  "conversationTimeout": "对话超时",
   "conversationTimeoutDesc": "选择静音多久后自动结束对话：",
   "timeout2Minutes": "2 分钟",
   "timeout2MinutesDesc": "静音 2 分钟后结束",
@@ -655,8 +656,8 @@
   "memoryDeleted": "记忆已删除。",
   "undo": "撤销",
   "noMemoriesYet": "暂无记忆",
-  "noInterestingMemories": "暂无有趣记忆",
-  "noSystemMemories": "暂无系统记忆",
+  "noAutoMemories": "暂无自动记忆",
+  "noManualMemories": "暂无手动记忆",
   "noMemoriesInCategories": "此类目无记忆",
   "noMemoriesFound": "未找到记忆",
   "addFirstMemory": "添加您的第一条记忆",
@@ -697,9 +698,10 @@
   "pressDoneToSave": "按完成保存",
   "pressDoneToCreate": "按完成创建",
   "filterAll": "全部",
-  "filterInteresting": "有趣",
+  "filterAuto": "自动",
+  "filterInteresting": "见解",
+  "filterSystem": "关于你",
   "filterManual": "手动",
-  "filterSystem": "系统",
   "completed": "已完成",
   "markComplete": "标记为完成",
   "actionItemDeleted": "任务已删除",
@@ -732,5 +734,8 @@
       }
     }
   },
-  "continueButton": "继续"
+  "continueButton": "继续",
+  "appInterfaceSectionTitle": "应用界面",
+  "speechTranscriptionSectionTitle": "语音与转录",
+  "languageSettingsHelperText": "应用语言更改菜单和按钮。语音语言影响录音的转录方式。"
 }

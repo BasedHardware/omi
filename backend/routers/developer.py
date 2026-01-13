@@ -34,11 +34,11 @@ from dependencies import (
 )
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
-from utils.llm.memories import identify_category_for_memory
 from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.llm.memories import identify_category_for_memory
 
 router = APIRouter()
 
@@ -181,19 +181,16 @@ def create_memory(
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
+    # Auto-categorize if no category provided
+    category = request.category if request.category else identify_category_for_memory(request.content.strip())
+
     # Create Memory object
     memory = Memory(
         content=request.content.strip(),
-        category=request.category if request.category else MemoryCategory.manual,
+        category=category,
         visibility=request.visibility,
         tags=request.tags,
     )
-
-    # Auto-categorize if category not manually set
-    if request.category is None:
-        categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
-        category_str = identify_category_for_memory(memory.content, categories)
-        memory.category = MemoryCategory(category_str)
 
     # Convert to MemoryDB object
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -242,19 +239,16 @@ def create_memories_batch(
         if not mem_req.content or len(mem_req.content.strip()) == 0:
             raise HTTPException(status_code=422, detail="All memories must have non-empty content")
 
+        # Auto-categorize if no category provided
+        category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
+
         # Create Memory object
         memory = Memory(
             content=mem_req.content.strip(),
-            category=mem_req.category if mem_req.category else MemoryCategory.manual,
+            category=category,
             visibility=mem_req.visibility,
             tags=mem_req.tags,
         )
-
-        # Auto-categorize if category not manually set
-        if mem_req.category is None:
-            categories = [MemoryCategory.interesting.value, MemoryCategory.system.value]
-            category_str = identify_category_for_memory(memory.content, categories)
-            memory.category = MemoryCategory(category_str)
 
         # Convert to MemoryDB object
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -327,7 +321,9 @@ def update_memory(
         raise HTTPException(status_code=404, detail="Memory not found")
 
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
-        raise HTTPException(status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided")
+        raise HTTPException(
+            status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
+        )
 
     old_visibility = memory.get('visibility')
 
@@ -662,7 +658,9 @@ class ConversationResponse(BaseModel):
 
 
 class UpdateConversationRequest(BaseModel):
-    title: Optional[str] = Field(default=None, description="New title for the conversation", min_length=1, max_length=500)
+    title: Optional[str] = Field(
+        default=None, description="New title for the conversation", min_length=1, max_length=500
+    )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
 
 

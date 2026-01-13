@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
 
 class ActionFieldsWidget extends StatelessWidget {
   const ActionFieldsWidget({super.key});
@@ -126,6 +128,8 @@ class ActionFieldsWidget extends StatelessWidget {
         return FontAwesomeIcons.solidComments;
       case 'read_memories':
         return FontAwesomeIcons.brain;
+      case 'read_tasks':
+        return FontAwesomeIcons.listCheck;
       default:
         return FontAwesomeIcons.puzzlePiece;
     }

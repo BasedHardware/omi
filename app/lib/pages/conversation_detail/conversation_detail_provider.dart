@@ -1,13 +1,14 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+
+import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -16,6 +17,8 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
   AppProvider? appProvider;
@@ -259,7 +262,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   Future<bool> reprocessConversation({String? appId}) async {
-    debugPrint('_reProcessConversation with appId: $appId');
+    Logger.debug('_reProcessConversation with appId: $appId');
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
@@ -352,7 +355,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     try {
       return await getConversationSuggestedApps(conversation.id);
     } catch (e) {
-      debugPrint('Error fetching suggested apps: $e');
+      Logger.debug('Error fetching suggested apps: $e');
       return [];
     }
   }
@@ -363,7 +366,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       final result = await retrieveAppsSearch(installedApps: true, limit: 100);
       return result.apps.where((app) => app.worksWithMemories() && app.enabled).toList();
     } catch (e) {
-      debugPrint('Error fetching enabled conversation apps: $e');
+      Logger.debug('Error fetching enabled conversation apps: $e');
       return [];
     }
   }
@@ -393,7 +396,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
       notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching and caching enabled conversation apps: $e');
+      Logger.debug('Error fetching and caching enabled conversation apps: $e');
     }
   }
 
@@ -405,7 +408,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       _cachedSuggestedApps.addAll(apps);
       notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching and caching suggested apps: $e');
+      Logger.debug('Error fetching and caching suggested apps: $e');
     }
   }
 
@@ -449,7 +452,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
       return success;
     } catch (e) {
-      debugPrint('Error enabling app ${app.id}: $e');
+      Logger.debug('Error enabling app ${app.id}: $e');
       return false;
     }
   }
@@ -494,7 +497,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Error refreshing conversation: $e');
+      Logger.debug('Error refreshing conversation: $e');
     }
   }
 

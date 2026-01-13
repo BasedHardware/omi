@@ -1,12 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/utils/logger.dart';
 
 const String watchBatteryServiceUuid = 'watch-battery-service';
 const String watchBatteryLevelCharacteristicUuid = 'watch-battery-level';
@@ -39,19 +42,19 @@ class AppleWatchDeviceConnection extends DeviceConnection {
       if (transport is WatchTransport) {
         final watchTransport = transport as WatchTransport;
         final bool hasPermission = await watchTransport.checkMainAppMicrophonePermission();
-        debugPrint('Apple Watch: Microphone permission status: $hasPermission');
+        Logger.debug('Apple Watch: Microphone permission status: $hasPermission');
 
         if (hasPermission) {
           await watchTransport.startRecording();
           return true;
         } else {
-          debugPrint('Apple Watch: Microphone permission not granted - need to request');
+          Logger.debug('Apple Watch: Microphone permission not granted - need to request');
           return false;
         }
       }
       return false;
     } catch (e) {
-      debugPrint('Apple Watch: Error checking permission/starting recording: $e');
+      Logger.debug('Apple Watch: Error checking permission/starting recording: $e');
       return false;
     }
   }
@@ -59,7 +62,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   /// Request microphone permission and handle app relaunch
   Future<void> requestPermissionAndStartRecording() async {
     try {
-      debugPrint('Apple Watch: Requesting microphone permission...');
+      Logger.debug('Apple Watch: Requesting microphone permission...');
 
       await _setWaitingForPermissionFlag(true);
 
@@ -68,7 +71,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
         await watchTransport.requestMainAppMicrophonePermission();
       }
     } catch (e) {
-      debugPrint('Apple Watch: Error requesting permission: $e');
+      Logger.debug('Apple Watch: Error requesting permission: $e');
       await _setWaitingForPermissionFlag(false);
     }
   }
@@ -94,7 +97,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
         }
       }
     } catch (e) {
-      debugPrint('Apple Watch: Error checking permission on relaunch: $e');
+      Logger.debug('Apple Watch: Error checking permission on relaunch: $e');
       await _setWaitingForPermissionFlag(false);
     }
   }
@@ -104,7 +107,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('apple_watch_waiting_for_permission', waiting);
     } catch (e) {
-      debugPrint('Apple Watch: Error setting permission flag: $e');
+      Logger.debug('Apple Watch: Error setting permission flag: $e');
     }
   }
 
@@ -113,7 +116,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getBool('apple_watch_waiting_for_permission') ?? false;
     } catch (e) {
-      debugPrint('Apple Watch: Error getting permission flag: $e');
+      Logger.debug('Apple Watch: Error getting permission flag: $e');
       return false;
     }
   }
@@ -135,7 +138,7 @@ class AppleWatchDeviceConnection extends DeviceConnection {
       final result = await transport.readCharacteristic(watchBatteryServiceUuid, watchBatteryLevelCharacteristicUuid);
       return result.isNotEmpty ? result[0] : -1;
     } catch (e) {
-      debugPrint('Apple Watch: Error getting battery level: $e');
+      Logger.debug('Apple Watch: Error getting battery level: $e');
       return -1;
     }
   }

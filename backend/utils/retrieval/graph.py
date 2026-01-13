@@ -1,7 +1,7 @@
 import datetime
 import uuid
 import asyncio
-from typing import List, Optional, Tuple, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Tuple
 
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
@@ -19,7 +19,7 @@ from database.redis_db import get_filter_category_items
 from database.vector_db import query_vectors_by_metadata
 import database.notifications as notification_db
 from models.app import App
-from models.chat import ChatSession, Message
+from models.chat import ChatSession, Message, PageContext
 from models.conversation import Conversation
 from models.other import Person
 from utils.llm.chat import (
@@ -41,6 +41,7 @@ from utils.other.chat_file import FileChatTool
 from utils.other.endpoints import timeit
 from utils.app_integrations import get_github_docs_content
 from utils.retrieval.agentic import execute_agentic_chat_stream
+from utils.observability.langsmith import get_chat_tracer_callbacks
 
 model = ChatOpenAI(model="gpt-4.1-mini")
 llm_medium_stream = ChatOpenAI(model='gpt-4.1', streaming=True)
@@ -111,6 +112,7 @@ class GraphState(TypedDict):
     ask_for_nps: Optional[bool]
 
     chat_session: Optional[ChatSession]
+    context: Optional[PageContext]
 
 
 def determine_conversation(state: GraphState):
@@ -232,6 +234,7 @@ def agentic_context_dependent_conversation(state: GraphState):
                 app,
                 callback_data=callback_data,
                 chat_session=state.get("chat_session"),
+                context=state.get("context"),
             ):
                 if chunk:
                     # Forward streaming chunks through callback
@@ -482,9 +485,36 @@ def execute_graph_chat(
 ) -> Tuple[str, bool, List[Conversation]]:
     print('execute_graph_chat app    :', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
+    
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_name="chat.graph",
+        tags=["chat", "graph"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "cited": cited,
+            "tz": tz,
+        },
+    )
+    
+    # LangSmith tracing metadata
+    run_config = {
+        "configurable": {"thread_id": str(uuid.uuid4())},
+        "callbacks": tracer_callbacks,
+        "run_name": "chat.graph",
+        "tags": ["chat", "graph"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "cited": cited,
+            "tz": tz,
+        },
+    }
+    
     result = graph.invoke(
         {"uid": uid, "tz": tz, "cited": cited, "messages": messages, "plugin_selected": app},
-        {"configurable": {"thread_id": str(uuid.uuid4())}},
+        run_config,
     )
     return result.get("answer"), result.get('ask_for_nps', False), result.get("memories_found", [])
 
@@ -496,10 +526,51 @@ async def execute_graph_chat_stream(
     cited: Optional[bool] = False,
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
+    context: Optional[PageContext] = None,
 ) -> AsyncGenerator[str, None]:
     print('execute_graph_chat_stream app: ', app.id if app else '<none>')
     tz = notification_db.get_user_time_zone(uid)
     callback = AsyncStreamingCallback()
+
+    # Generate run_id for LangSmith tracing (allows feedback attachment later)
+    langsmith_run_id = str(uuid.uuid4())
+
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.graph.stream",
+        tags=["chat", "graph", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "cited": cited,
+            "tz": tz,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+        },
+    )
+
+    # LangSmith tracing metadata
+    run_config = {
+        "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
+        "configurable": {"thread_id": str(uuid.uuid4())},
+        "callbacks": tracer_callbacks,
+        "run_name": "chat.graph.stream",
+        "tags": ["chat", "graph", "streaming"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "cited": cited,
+            "tz": tz,
+            "chat_session_id": chat_session.id if chat_session else None,
+            "has_context": context is not None,
+            "context_type": context.type if context else None,
+        },
+    }
+
+    # Store run_id in callback_data for message persistence
+    callback_data['langsmith_run_id'] = langsmith_run_id
 
     task = asyncio.create_task(
         graph_stream.ainvoke(
@@ -512,8 +583,9 @@ async def execute_graph_chat_stream(
                 "streaming": True,
                 "callback": callback,
                 "chat_session": chat_session,
+                "context": context,
             },
-            {"configurable": {"thread_id": str(uuid.uuid4())}},
+            run_config,
         )
     )
 
@@ -558,8 +630,48 @@ async def execute_persona_chat_stream(
     full_response = []
     callback = AsyncStreamingCallback()
 
+    # Generate run_id for LangSmith tracing (allows feedback attachment later)
+    langsmith_run_id = str(uuid.uuid4())
+
+    # Get per-request LangSmith tracer callbacks (enables tracing without global env)
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.persona.stream",
+        tags=["chat", "persona", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "cited": cited,
+        },
+    )
+
+    # Combine streaming callback with tracer callbacks
+    all_callbacks = [callback] + tracer_callbacks
+
+    # LangSmith tracing metadata
+    run_metadata = {
+        "run_id": langsmith_run_id,  # Explicit run_id for LangSmith feedback
+        "run_name": "chat.persona.stream",
+        "tags": ["chat", "persona", "streaming"],
+        "metadata": {
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "cited": cited,
+        },
+    }
+
+    # Store run_id in callback_data for message persistence
+    if callback_data is not None:
+        callback_data['langsmith_run_id'] = langsmith_run_id
+
     try:
-        task = asyncio.create_task(llm_medium_stream.agenerate(messages=[formatted_messages], callbacks=[callback]))
+        task = asyncio.create_task(llm_medium_stream.agenerate(
+            messages=[formatted_messages], 
+            callbacks=all_callbacks,
+            **run_metadata
+        ))
 
         while True:
             try:

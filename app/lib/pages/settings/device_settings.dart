@@ -2,7 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -13,12 +17,11 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class DeviceSettings extends StatefulWidget {
   const DeviceSettings({super.key});
@@ -59,6 +62,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       return Future.value(null);
     }
     await connection.unpair();
+
     return await connection.disconnect();
   }
 
@@ -424,14 +428,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    context.l10n.doubleTapActionDesc,
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 13,
-                    ),
-                  ),
                   const SizedBox(height: 16),
                   ListTile(
                     title: Text(
@@ -467,13 +463,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    subtitle: Text(
-                      context.l10n.starOngoingDesc,
-                      style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontSize: 12,
                       ),
                     ),
                     trailing: currentAction == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
@@ -1106,11 +1095,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               ],
               if (provider.isConnected) ...[
                 const SizedBox(height: 16),
-                _buildSectionHeader(context.l10n.deviceInfoSection),
-                _buildDeviceInfoSection(provider.pairedDevice, provider),
-                const SizedBox(height: 32),
                 _buildSectionHeader(context.l10n.customizationSection),
                 _buildCustomizationSection(),
+                const SizedBox(height: 32),
+                _buildSectionHeader(context.l10n.deviceInfoSection),
+                _buildDeviceInfoSection(provider.pairedDevice, provider),
                 const SizedBox(height: 32),
                 _buildSectionHeader(context.l10n.hardwareSection),
                 _buildHardwareInfoSection(provider.pairedDevice),
