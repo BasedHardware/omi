@@ -1,10 +1,14 @@
 import 'dart:convert';
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Goal tracker widget with semicircle gauge
 class GoalTrackerWidget extends StatefulWidget {
@@ -14,8 +18,7 @@ class GoalTrackerWidget extends StatefulWidget {
   State<GoalTrackerWidget> createState() => _GoalTrackerWidgetState();
 }
 
-class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
-    with WidgetsBindingObserver {
+class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindingObserver {
   Goal? _goal;
   GoalSuggestion? _suggestion;
   String? _advice;
@@ -23,7 +26,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   bool _isEditingGoal = false;
   bool _isEditingValue = false;
   bool _initialLoadDone = false;
-  
+
   static const String _goalStorageKey = 'goal_tracker_local_goal';
   static const String _adviceStorageKey = 'goal_tracker_local_advice';
 
@@ -46,7 +49,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       final prefs = await SharedPreferences.getInstance();
       final goalJson = prefs.getString(_goalStorageKey);
       final cachedAdvice = prefs.getString(_adviceStorageKey);
-      
+
       if (goalJson != null && mounted) {
         final map = json.decode(goalJson) as Map<String, dynamic>;
         final cachedGoal = Goal.fromJson(map);
@@ -59,7 +62,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         });
       }
     } catch (e) {
-      debugPrint('[GOAL] Error loading cached data: $e');
+      Logger.debug('[GOAL] Error loading cached data: $e');
     }
   }
 
@@ -89,7 +92,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     try {
       // First, try to load from local storage (for offline/temp goals)
       final localGoal = await _loadLocalGoal();
-      
+
       // Then try to get from backend
       final backendGoal = await getCurrentGoal();
 
@@ -106,7 +109,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       } else if (localGoal != null && mounted) {
         // No backend goal but have local - use local (might already be set from cache)
         if (_goal?.id != localGoal.id) {
-          debugPrint('[GOAL] Using local goal: ${localGoal.title}');
+          Logger.debug('[GOAL] Using local goal: ${localGoal.title}');
           setState(() {
             _goal = localGoal;
             _goalTitleController.text = localGoal.title;
@@ -127,7 +130,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         }
       }
     } catch (e) {
-      debugPrint('[GOAL] Error loading goal: $e');
+      Logger.debug('[GOAL] Error loading goal: $e');
       // Keep whatever cached data we have
     } finally {
       if (mounted) {
@@ -138,7 +141,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       }
     }
   }
-  
+
   Future<Goal?> _loadLocalGoal() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -148,24 +151,24 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         return Goal.fromJson(map);
       }
     } catch (e) {
-      debugPrint('[GOAL] Error loading local goal: $e');
+      Logger.debug('[GOAL] Error loading local goal: $e');
     }
     return null;
   }
-  
+
   Future<void> _saveLocalGoal(Goal goal) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_goalStorageKey, json.encode(goal.toJson()));
-      debugPrint('[GOAL] Saved goal locally: ${goal.title}');
+      Logger.debug('[GOAL] Saved goal locally: ${goal.title}');
     } catch (e) {
-      debugPrint('[GOAL] Error saving local goal: $e');
+      Logger.debug('[GOAL] Error saving local goal: $e');
     }
   }
-  
+
   Future<void> _syncLocalGoalToBackend(Goal localGoal) async {
     try {
-      debugPrint('[GOAL] Syncing local goal to backend...');
+      Logger.debug('[GOAL] Syncing local goal to backend...');
       final created = await createGoal(
         title: localGoal.title,
         goalType: localGoal.goalType,
@@ -175,13 +178,13 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         maxValue: localGoal.maxValue,
       );
       if (created != null && mounted) {
-        debugPrint('[GOAL] Synced to backend with ID: ${created.id}');
+        Logger.debug('[GOAL] Synced to backend with ID: ${created.id}');
         setState(() => _goal = created);
         await _saveLocalGoal(created);
         _loadAdvice();
       }
     } catch (e) {
-      debugPrint('[GOAL] Error syncing to backend: $e');
+      Logger.debug('[GOAL] Error syncing to backend: $e');
     }
   }
 
@@ -196,14 +199,14 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         await prefs.setString(_adviceStorageKey, advice);
       }
     } catch (e) {
-      debugPrint('Error loading advice: $e');
+      Logger.debug('Error loading advice: $e');
     }
   }
 
   void _openChatWithAdvice() {
     if (_advice == null || _advice!.isEmpty) return;
     HapticFeedback.lightImpact();
-    
+
     // Navigate to chat and send the advice as a message from Omi AI
     Navigator.push(
       context,
@@ -221,10 +224,10 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       _createDefaultGoal();
       return;
     }
-    
+
     HapticFeedback.lightImpact();
     setState(() => _isLoading = true);
-    
+
     try {
       final goal = await createGoal(
         title: _suggestion!.suggestedTitle,
@@ -233,7 +236,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         minValue: _suggestion!.suggestedMin,
         maxValue: _suggestion!.suggestedMax,
       );
-      
+
       if (goal != null && mounted) {
         setState(() {
           _goal = goal;
@@ -247,7 +250,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         _createDefaultGoal();
       }
     } catch (e) {
-      debugPrint('Error creating goal: $e');
+      Logger.debug('Error creating goal: $e');
       _createDefaultGoal();
     }
   }
@@ -259,9 +262,9 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     }
     HapticFeedback.lightImpact();
     final newTitle = _goalTitleController.text.trim();
-    
+
     if (!mounted) return;
-    
+
     // Update local state immediately so user sees their change
     final oldGoal = _goal!;
     final updatedLocalGoal = Goal(
@@ -277,19 +280,19 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       createdAt: oldGoal.createdAt,
       updatedAt: DateTime.now(),
     );
-    
+
     setState(() {
       _goal = updatedLocalGoal;
       _isEditingGoal = false;
     });
-    
+
     // Save locally immediately
     await _saveLocalGoal(updatedLocalGoal);
-    
+
     try {
       Goal? updatedGoal;
       if (oldGoal.id.startsWith('temp_')) {
-        debugPrint('[GOAL] Creating new goal: $newTitle');
+        Logger.debug('[GOAL] Creating new goal: $newTitle');
         updatedGoal = await createGoal(
           title: newTitle,
           goalType: oldGoal.goalType,
@@ -298,13 +301,13 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
           minValue: oldGoal.minValue,
           maxValue: oldGoal.maxValue,
         );
-        debugPrint('[GOAL] createGoal result: ${updatedGoal?.id ?? 'null'}');
+        Logger.debug('[GOAL] createGoal result: ${updatedGoal?.id ?? 'null'}');
       } else {
-        debugPrint('[GOAL] Updating goal ${oldGoal.id} with title: $newTitle');
+        Logger.debug('[GOAL] Updating goal ${oldGoal.id} with title: $newTitle');
         updatedGoal = await updateGoal(oldGoal.id, title: newTitle);
-        debugPrint('[GOAL] updateGoal result: ${updatedGoal?.id ?? 'null'}');
+        Logger.debug('[GOAL] updateGoal result: ${updatedGoal?.id ?? 'null'}');
       }
-      
+
       // If API succeeded, update with server data (includes real ID)
       if (mounted && updatedGoal != null) {
         setState(() => _goal = updatedGoal);
@@ -312,55 +315,59 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
         _loadAdvice();
       }
     } catch (e) {
-      debugPrint('[GOAL] Error saving title: $e');
+      Logger.debug('[GOAL] Error saving title: $e');
       // Keep local state - user still sees their change
     }
   }
 
   Future<void> _saveValues() async {
-    if (_goal == null) { setState(() => _isEditingValue = false); return; }
+    if (_goal == null) {
+      setState(() => _isEditingValue = false);
+      return;
+    }
     HapticFeedback.lightImpact();
-    
+
     final currentVal = _parseNum(_currentValueController.text) ?? _goal!.currentValue;
     final targetVal = _parseNum(_targetValueController.text) ?? _goal!.targetValue;
-    
+
     // Update local state immediately so user sees their change
     final oldGoal = _goal!;
     final updatedLocalGoal = Goal(
-      id: oldGoal.id, 
-      title: oldGoal.title, 
+      id: oldGoal.id,
+      title: oldGoal.title,
       goalType: oldGoal.goalType,
-      currentValue: currentVal, 
+      currentValue: currentVal,
       targetValue: targetVal,
-      minValue: oldGoal.minValue, 
+      minValue: oldGoal.minValue,
       maxValue: targetVal,
       unit: oldGoal.unit,
-      isActive: true, 
-      createdAt: oldGoal.createdAt, 
+      isActive: true,
+      createdAt: oldGoal.createdAt,
       updatedAt: DateTime.now(),
     );
-    
+
     setState(() {
       _goal = updatedLocalGoal;
       _isEditingValue = false;
     });
-    
+
     // Save locally immediately
     await _saveLocalGoal(updatedLocalGoal);
 
     // If not a temp goal, also save to server
     if (!oldGoal.id.startsWith('temp_')) {
       try {
-        debugPrint('[GOAL] Updating values for ${oldGoal.id}: current=$currentVal, target=$targetVal');
-        final updated = await updateGoal(oldGoal.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
-        debugPrint('[GOAL] updateGoal result: ${updated?.id ?? 'null'}');
+        Logger.debug('[GOAL] Updating values for ${oldGoal.id}: current=$currentVal, target=$targetVal');
+        final updated =
+            await updateGoal(oldGoal.id, currentValue: currentVal, targetValue: targetVal, maxValue: targetVal);
+        Logger.debug('[GOAL] updateGoal result: ${updated?.id ?? 'null'}');
         if (updated != null && mounted) {
           setState(() => _goal = updated);
           await _saveLocalGoal(updated);
           _loadAdvice();
         }
       } catch (e) {
-        debugPrint('[GOAL] Error saving values: $e');
+        Logger.debug('[GOAL] Error saving values: $e');
         // Keep local state - user still sees their change
       }
     }
@@ -370,9 +377,15 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
     HapticFeedback.lightImpact();
     final newGoal = Goal(
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
-      title: 'My goal', goalType: 'numeric',
-      currentValue: 0, targetValue: 100, minValue: 0, maxValue: 100,
-      isActive: true, createdAt: DateTime.now(), updatedAt: DateTime.now(),
+      title: 'My goal',
+      goalType: 'numeric',
+      currentValue: 0,
+      targetValue: 100,
+      minValue: 0,
+      maxValue: 100,
+      isActive: true,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
     );
     setState(() {
       _goal = newGoal;
@@ -431,7 +444,9 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: const Center(
-        child: SizedBox(width: 20, height: 20,
+        child: SizedBox(
+          width: 20,
+          height: 20,
           child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white24)),
         ),
       ),
@@ -440,7 +455,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
 
   Widget _buildEmpty() {
     final hasSuggestion = _suggestion != null;
-    
+
     return GestureDetector(
       onTap: hasSuggestion ? _createGoalFromSuggestion : _createDefaultGoal,
       child: Container(
@@ -452,7 +467,9 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
             Text(
               'GOAL',
               style: TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 1.5,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1.5,
                 color: Colors.white.withOpacity(0.3),
               ),
             ),
@@ -502,77 +519,92 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                 Text(
                   'GOAL',
                   style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.w500, letterSpacing: 1.5,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 1.5,
                     color: Colors.white.withOpacity(0.3),
                   ),
                 ),
                 const SizedBox(height: 8),
                 // Title with edit hint
                 GestureDetector(
-                  onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingGoal = true); },
-                  child: _isEditingGoal ? _buildTitleEdit() : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _goal!.title,
-                          style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w400,
-                            color: Colors.white.withOpacity(0.7),
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                
-                // Gauge
-                _isEditingValue ? _buildValueEdit(color) : GestureDetector(
-                  onTap: () { HapticFeedback.lightImpact(); setState(() => _isEditingValue = true); },
-                  child: SizedBox(
-                    height: 160,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CustomPaint(
-                          size: const Size(260, 160),
-                          painter: _GaugePainter(progress: progress, color: color),
-                        ),
-                        // Main number with edit hint
-                        Positioned(
-                          bottom: 10,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _formatNum(_goal!.currentValue),
-                                style: const TextStyle(
-                                  fontSize: 48, fontWeight: FontWeight.w300,
-                                  color: Colors.white, height: 1,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    setState(() => _isEditingGoal = true);
+                  },
+                  child: _isEditingGoal
+                      ? _buildTitleEdit()
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _goal!.title,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: Colors.white.withOpacity(0.7),
                                 ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
                               ),
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4, top: 4),
-                                child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                          ],
+                        ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Gauge
+                _isEditingValue
+                    ? _buildValueEdit(color)
+                    : GestureDetector(
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setState(() => _isEditingValue = true);
+                        },
+                        child: SizedBox(
+                          height: 160,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CustomPaint(
+                                size: const Size(260, 160),
+                                painter: _GaugePainter(progress: progress, color: color),
+                              ),
+                              // Main number with edit hint
+                              Positioned(
+                                bottom: 10,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _formatNum(_goal!.currentValue),
+                                      style: const TextStyle(
+                                        fontSize: 48,
+                                        fontWeight: FontWeight.w300,
+                                        color: Colors.white,
+                                        height: 1,
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 4, top: 4),
+                                      child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
+                      ),
+              ],
+            ),
           ),
-        ),
 
           // Advice section - clickable, opens chat with FULL text
           if (_advice != null && _advice!.isNotEmpty) ...[
@@ -618,7 +650,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              filled: true, fillColor: Colors.white.withOpacity(0.1),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.1),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             ),
             onSubmitted: (_) => _saveTitle(),
@@ -652,7 +685,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
               _numField(_currentValueController, 'CURRENT', color),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text('/', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withOpacity(0.2))),
+                child: Text('/',
+                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withOpacity(0.2))),
               ),
               _numField(_targetValueController, 'TARGET', Colors.white60),
             ],
@@ -670,7 +704,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Save', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  child: const Text('Save',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -684,8 +719,11 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
                 behavior: HitTestBehavior.opaque,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                  child: Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.6))),
+                  decoration:
+                      BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                  child: Text('Cancel',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.6))),
                 ),
               ),
             ],
@@ -698,7 +736,9 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
   Widget _numField(TextEditingController c, String label, Color color) {
     return Column(
       children: [
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1, color: Colors.white.withOpacity(0.35))),
+        Text(label,
+            style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1, color: Colors.white.withOpacity(0.35))),
         const SizedBox(height: 6),
         SizedBox(
           width: 100,
@@ -710,7 +750,8 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget>
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              filled: true, fillColor: Colors.white.withOpacity(0.05),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             ),
           ),
@@ -730,21 +771,21 @@ class _GaugePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height - 5);
     final radius = size.width / 2 - 15;
-    
+
     const totalTicks = 40;
     const startAngle = math.pi;
     const sweepAngle = math.pi;
     const tickLength = 14.0;
-    
+
     final filledTicks = (progress * totalTicks).round();
 
     for (int i = 0; i <= totalTicks; i++) {
       final angle = startAngle + (sweepAngle * i / totalTicks);
       final isFilled = i <= filledTicks;
-      
+
       final innerRadius = radius - tickLength;
       final outerRadius = radius;
-      
+
       final p1 = Offset(center.dx + innerRadius * math.cos(angle), center.dy + innerRadius * math.sin(angle));
       final p2 = Offset(center.dx + outerRadius * math.cos(angle), center.dy + outerRadius * math.sin(angle));
 

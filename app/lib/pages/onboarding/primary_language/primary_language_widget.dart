@@ -1,10 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
+import 'package:omi/utils/logger.dart';
 
 class PrimaryLanguageWidget extends StatefulWidget {
   final Function goNext;
@@ -52,7 +55,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
   }
 
   void filterLanguages(String query) {
-    debugPrint(query);
+    Logger.debug(query);
     setState(() {
       searchQuery = query.toLowerCase();
       if (query.isEmpty) {
@@ -64,9 +67,9 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
       }
 
       // Debug print to verify filtering
-      debugPrint('Search query: $searchQuery, Found ${filteredLanguages.length} languages');
+      Logger.debug('Search query: $searchQuery, Found ${filteredLanguages.length} languages');
       for (var lang in filteredLanguages) {
-        debugPrint('Filtered language: ${lang.key} (${lang.value})');
+        Logger.debug('Filtered language: ${lang.key} (${lang.value})');
       }
     });
   }
@@ -236,7 +239,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
       final deviceLocale = Platform.localeName;
       final languageCode = deviceLocale.split('_').first.toLowerCase();
 
-      debugPrint('Device locale: $deviceLocale, language code: $languageCode');
+      Logger.debug('Device locale: $deviceLocale, language code: $languageCode');
 
       // Try to find a matching language in available languages
       for (final entry in availableLanguages.entries) {
@@ -247,13 +250,13 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
             selectedLanguage = entry.value;
             selectedLanguageName = entry.key;
           });
-          debugPrint('Auto-selected language: ${entry.key} (${entry.value})');
+          Logger.debug('Auto-selected language: ${entry.key} (${entry.value})');
           return;
         }
       }
-      debugPrint('No matching language found for device locale: $deviceLocale');
+      Logger.debug('No matching language found for device locale: $deviceLocale');
     } catch (e) {
-      debugPrint('Error auto-detecting device language: $e');
+      Logger.debug('Error auto-detecting device language: $e');
     }
   }
 

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:omi/utils/logger.dart';
+
 // Dart interface for Android's CompanionDeviceManager
 // Note: This only works on Android
 class CompanionDeviceManagerService {
@@ -59,7 +61,7 @@ class CompanionDeviceManagerService {
         }
       },
       onError: (error) {
-        debugPrint('CompanionDeviceManager event error: $error');
+        Logger.debug('CompanionDeviceManager event error: $error');
       },
     );
   }
@@ -73,7 +75,7 @@ class CompanionDeviceManagerService {
       final result = await _methodChannel.invokeMethod<bool>('isSupported');
       return result ?? false;
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager isSupported error: ${e.message}');
+      Logger.debug('CompanionDeviceManager isSupported error: ${e.message}');
       return false;
     }
   }
@@ -87,7 +89,7 @@ class CompanionDeviceManagerService {
       final result = await _methodChannel.invokeMethod<bool>('isPresenceObservingSupported');
       return result ?? false;
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager isPresenceObservingSupported error: ${e.message}');
+      Logger.debug('CompanionDeviceManager isPresenceObservingSupported error: ${e.message}');
       return false;
     }
   }
@@ -100,7 +102,7 @@ class CompanionDeviceManagerService {
       final result = await _methodChannel.invokeMethod<List<dynamic>>('getAssociatedDevices');
       return result?.cast<String>() ?? [];
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager getAssociatedDevices error: ${e.message}');
+      Logger.debug('CompanionDeviceManager getAssociatedDevices error: ${e.message}');
       return [];
     }
   }
@@ -146,7 +148,7 @@ class CompanionDeviceManagerService {
 
       return AssociationResult(success: false, error: 'Unknown result');
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager associate error: ${e.message}');
+      Logger.debug('CompanionDeviceManager associate error: ${e.message}');
       return AssociationResult(success: false, error: e.message);
     }
   }
@@ -161,7 +163,7 @@ class CompanionDeviceManagerService {
       });
       return result ?? false;
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager disassociate error: ${e.message}');
+      Logger.debug('CompanionDeviceManager disassociate error: ${e.message}');
       return false;
     }
   }
@@ -181,7 +183,7 @@ class CompanionDeviceManagerService {
       });
       return result ?? false;
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager startObservingDevicePresence error: ${e.message}');
+      Logger.debug('CompanionDeviceManager startObservingDevicePresence error: ${e.message}');
       return false;
     }
   }
@@ -196,7 +198,7 @@ class CompanionDeviceManagerService {
       });
       return result ?? false;
     } on PlatformException catch (e) {
-      debugPrint('CompanionDeviceManager stopObservingDevicePresence error: ${e.message}');
+      Logger.debug('CompanionDeviceManager stopObservingDevicePresence error: ${e.message}');
       return false;
     }
   }

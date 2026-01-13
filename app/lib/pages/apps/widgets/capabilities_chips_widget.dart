@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:omi/backend/schema/app.dart';
+
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/app.dart';
 import '../providers/add_app_provider.dart';
 
 class CapabilitiesChipsWidget extends StatelessWidget {

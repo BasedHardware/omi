@@ -1,14 +1,15 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/chat/clone_chat_page.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/utils/other/string_utils.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-
 import '../persona_profile.dart';
 
 class CloneSuccessScreen extends StatefulWidget {

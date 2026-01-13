@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:omi/utils/audio/audio_transcoder.dart';
-import 'package:omi/services/sockets/pure_socket.dart';
-import 'package:omi/services/custom_stt_log_service.dart';
+
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
+import 'package:omi/utils/audio/audio_transcoder.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/logger.dart';
 
 enum PurePollingStatus { notConnected, connecting, connected, disconnected }
 
@@ -141,7 +143,7 @@ class PurePollingSocket implements IPureSocket {
       try {
         audioData = config.transcoder!.transcodeFrames(frames);
       } catch (e, trace) {
-        debugPrint("[Polling] Transcoding error: $e");
+        Logger.debug("[Polling] Transcoding error: $e");
         _isProcessing = false;
         onError(e, trace);
         return;
@@ -255,7 +257,7 @@ class PurePollingSocket implements IPureSocket {
     } else if (message is List<int>) {
       _audioFrames.add(Uint8List.fromList(message));
     } else {
-      debugPrint("[Polling] Unsupported message type: ${message.runtimeType}");
+      Logger.debug("[Polling] Unsupported message type: ${message.runtimeType}");
     }
   }
 

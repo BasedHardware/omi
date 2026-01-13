@@ -1,25 +1,29 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/pages/settings/widgets/toggle_section_widget.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class DesktopDeveloperSettingsPage extends StatefulWidget {
   const DesktopDeveloperSettingsPage({super.key});
@@ -220,7 +224,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                       final result = await Share.shareXFiles([XFile(files.first.path)],
                                                           text: 'Omi debug log');
                                                       if (result.status == ShareResultStatus.success) {
-                                                        debugPrint('Log shared');
+                                                        Logger.debug('Log shared');
                                                       }
                                                       return;
                                                     }
@@ -267,7 +271,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                       final result = await Share.shareXFiles([XFile(selected.path)],
                                                           text: 'Omi debug log');
                                                       if (result.status == ShareResultStatus.success) {
-                                                        debugPrint('Log shared');
+                                                        Logger.debug('Log shared');
                                                       }
                                                     }
                                                   },
@@ -364,7 +368,7 @@ class _DesktopDeveloperSettingsPageState extends State<DesktopDeveloperSettingsP
                                                 final result = await Share.shareXFiles([XFile(file.path)],
                                                     text: 'Exported Conversations from Omi');
                                                 if (result.status == ShareResultStatus.success) {
-                                                  debugPrint('Thank you for sharing the picture!');
+                                                  Logger.debug('Thank you for sharing the picture!');
                                                 }
                                                 MixpanelManager().exportMemories();
                                                 setState(() => provider.loadingExportMemories = false);

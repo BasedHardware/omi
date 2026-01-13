@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
 import 'package:intl/intl.dart';
 
 String dateTimeFormat(String format, DateTime? dateTime, {String? locale}) {
@@ -13,7 +14,7 @@ Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
   if (!context.mounted) {
     return Future.value();
   }
-  
+
   var route = Platform.isIOS ? CupertinoPageRoute(builder: (c) => page) : MaterialPageRoute(builder: (c) => page);
   if (replace) {
     return Navigator.of(context).pushAndRemoveUntil(route, (route) => false);

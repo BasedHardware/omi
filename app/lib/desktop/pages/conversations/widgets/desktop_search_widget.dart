@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 class DesktopSearchWidget extends StatefulWidget {
   const DesktopSearchWidget({super.key});
@@ -76,9 +78,7 @@ class _DesktopSearchWidgetState extends State<DesktopSearchWidget> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
           width: _isExpanded ? 240 : null,
-          child: _isExpanded
-              ? _buildSearchInput(provider)
-              : _buildSearchButton(),
+          child: _isExpanded ? _buildSearchInput(provider) : _buildSearchButton(),
         );
       },
     );

@@ -1,14 +1,19 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
 import 'package:omi/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:omi/pages/apps/widgets/external_trigger_fields_widget.dart';
-import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
 import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
@@ -17,10 +22,6 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import 'widgets/capabilities_chips_widget.dart';
 import 'widgets/prompt_text_field.dart';
 

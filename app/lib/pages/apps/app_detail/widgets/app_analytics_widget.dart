@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import 'package:flutter_svg/svg.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class AppAnalyticsWidget extends StatelessWidget {
   final int installs;

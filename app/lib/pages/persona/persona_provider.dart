@@ -1,12 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import 'package:image_picker/image_picker.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 
 typedef ShowSuccessDialogCallback = void Function(String url);
 
@@ -46,7 +49,7 @@ class PersonaProvider extends ChangeNotifier {
   String? selectedImageUrl;
 
   Future updatePersonaName() async {
-    debugPrint("updatePersonaName");
+    Logger.debug("updatePersonaName");
     await updatePersona();
     notifyListeners();
   }
@@ -73,7 +76,7 @@ class PersonaProvider extends ChangeNotifier {
   Future getTwitterProfile(String handle) async {
     setIsLoading(true);
     var res = await getTwitterProfileData(handle);
-    debugPrint('Twitter Profile: $res');
+    Logger.debug('Twitter Profile: $res');
     if (res != null) {
       if (res['status'] == 'notfound') {
         AppSnackbar.showSnackbarError('Twitter handle not found');
@@ -167,7 +170,7 @@ class PersonaProvider extends ChangeNotifier {
     makePersonaPublic = value;
 
     // Update
-    debugPrint("setPersonaPublic");
+    Logger.debug("setPersonaPublic");
     if (_userPersona != null) {
       MixpanelManager().personaPublicToggled(personaId: _userPersona!.id, isPublic: makePersonaPublic);
     }
@@ -212,7 +215,7 @@ class PersonaProvider extends ChangeNotifier {
       validateForm();
 
       // Update
-      debugPrint("pickAndUpdateImage");
+      Logger.debug("pickAndUpdateImage");
       await updatePersona();
     }
     notifyListeners();
@@ -264,7 +267,7 @@ class PersonaProvider extends ChangeNotifier {
     _twitterProfile = {};
     hasTwitterConnection = false;
 
-    debugPrint("disconnectTwitter");
+    Logger.debug("disconnectTwitter");
     if (_isEditablePersona()) {
       updatePersona();
       if (_userPersona != null) {
@@ -276,7 +279,7 @@ class PersonaProvider extends ChangeNotifier {
 
   void disconnectOmi() {
     hasOmiConnection = false;
-    debugPrint("disconnectOmi");
+    Logger.debug("disconnectOmi");
     if (_isEditablePersona()) {
       updatePersona();
       if (_userPersona != null) {
@@ -355,7 +358,7 @@ class PersonaProvider extends ChangeNotifier {
             .personaUpdateFailed(personaId: _userPersona!.id, errorMessage: 'Failed to update persona API call');
       }
     } catch (e) {
-      debugPrint('Error updating persona: $e');
+      Logger.debug('Error updating persona: $e');
       AppSnackbar.showSnackbarError('Failed to update persona');
       MixpanelManager().personaUpdateFailed(personaId: _userPersona!.id, errorMessage: e.toString());
     } finally {
@@ -403,7 +406,7 @@ class PersonaProvider extends ChangeNotifier {
 
       if (res.isNotEmpty) {
         String personaUrl = 'personas.omi.me/u/${res['username']}';
-        debugPrint('Persona URL: $personaUrl');
+        Logger.debug('Persona URL: $personaUrl');
         MixpanelManager().personaCreated(
             personaId: res['id'],
             isPublic: !(personaData['private'] as bool? ?? true),
@@ -470,13 +473,13 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future onTwitterVerifiedCompleted() async {
-    debugPrint("routing $routing");
+    Logger.debug("routing $routing");
     if (routing == PersonaProfileRouting.no_device) {
       return;
     }
 
     // update
-    debugPrint("onTwitterVerifiedCompleted");
+    Logger.debug("onTwitterVerifiedCompleted");
     updatePersona();
   }
 }

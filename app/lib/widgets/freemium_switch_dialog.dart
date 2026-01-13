@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';

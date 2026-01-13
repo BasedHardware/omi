@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/http/api/integrations.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/utils/logger.dart';
 
 abstract class BaseIntegrationService {
   final String appKey;
@@ -21,7 +24,7 @@ abstract class BaseIntegrationService {
     try {
       final authUrl = await getIntegrationOAuthUrl(appKey);
       if (authUrl == null) {
-        debugPrint('Failed to get OAuth URL for $appKey');
+        Logger.debug('Failed to get OAuth URL for $appKey');
         return false;
       }
 
@@ -30,11 +33,11 @@ abstract class BaseIntegrationService {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return true;
       } else {
-        debugPrint('Cannot launch OAuth URL for $appKey');
+        Logger.debug('Cannot launch OAuth URL for $appKey');
         return false;
       }
     } catch (e) {
-      debugPrint('Error during $appKey authentication: $e');
+      Logger.debug('Error during $appKey authentication: $e');
       return false;
     }
   }
@@ -46,7 +49,7 @@ abstract class BaseIntegrationService {
       await SharedPreferencesUtil().saveBool(prefKey, isConnected);
       return isConnected;
     } catch (e) {
-      debugPrint('Error checking $appKey connection: $e');
+      Logger.debug('Error checking $appKey connection: $e');
       await SharedPreferencesUtil().saveBool(prefKey, false);
       return false;
     }
@@ -61,7 +64,7 @@ abstract class BaseIntegrationService {
       }
       return false;
     } catch (e) {
-      debugPrint('Error disconnecting $appKey: $e');
+      Logger.debug('Error disconnecting $appKey: $e');
       return false;
     }
   }

@@ -2,11 +2,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/schema/conversation.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
+
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/logger.dart';
 
 enum BottomSheetView { share, exportTranscript, exportSummary }
 
@@ -143,18 +146,18 @@ void showShareBottomSheet(
           void updateView(BottomSheetView view) {
             setModalState(() {
               currentView = view;
-              debugPrint("View Set to: ${view.name}");
+              Logger.debug("View Set to: ${view.name}");
             });
           }
 
           void setExportType(ExportType type) {
             setModalState(() {
               exportType = type;
-              debugPrint("Type Set to: ${type.name}");
+              Logger.debug("Type Set to: ${type.name}");
             });
           }
 
-          debugPrint("Current View: $currentView");
+          Logger.debug("Current View: $currentView");
 
           return Container(
             decoration: BoxDecoration(
