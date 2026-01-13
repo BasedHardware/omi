@@ -29,24 +29,6 @@ class CompanionDevicePresenceReceiver : BroadcastReceiver() {
             presenceListener = listener
         }
 
-        /**
-         * Called by CompanionDeviceBackgroundService to forward device appeared events
-         * to the Flutter event channel via the presence listener.
-         */
-        fun notifyDeviceAppeared(deviceAddress: String) {
-            Log.d(TAG, "notifyDeviceAppeared: $deviceAddress, listener=${presenceListener != null}")
-            presenceListener?.onDeviceAppeared(deviceAddress)
-        }
-
-        /**
-         * Called by CompanionDeviceBackgroundService to forward device disappeared events
-         * to the Flutter event channel via the presence listener.
-         */
-        fun notifyDeviceDisappeared(deviceAddress: String) {
-            Log.d(TAG, "notifyDeviceDisappeared: $deviceAddress, listener=${presenceListener != null}")
-            presenceListener?.onDeviceDisappeared(deviceAddress)
-        }
-
         interface PresenceListener {
             fun onDeviceAppeared(deviceAddress: String)
             fun onDeviceDisappeared(deviceAddress: String)

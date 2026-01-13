@@ -24,29 +24,6 @@ class MainActivity: FlutterFragmentActivity() {
         super.onResume()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             CompanionDeviceBackgroundService.isAppInForeground = true
-            // Reset notification cooldown whenever user opens the app
-            CompanionDeviceBackgroundService.onAppCameToForeground(this)
-        }
-        // Check if launched from companion device notification
-        handleCompanionDeviceIntent(intent)
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        // Handle case where app is already running and notification is tapped
-        handleCompanionDeviceIntent(intent)
-    }
-
-    /**
-     * When user taps the "device nearby" notification, reset the cooldown
-     * so future notifications will work normally.
-     */
-    private fun handleCompanionDeviceIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra("from_companion_device", false) == true) {
-            val deviceAddress = intent.getStringExtra("device_address")
-            if (deviceAddress != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                CompanionDeviceBackgroundService.onUserRespondedToNotification(this, deviceAddress)
-            }
         }
     }
 
@@ -61,11 +38,22 @@ class MainActivity: FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
 
         // Initialize CompanionDeviceService for battery-efficient device presence detection
-        // This also sets up the presence listener to forward events to Flutter
         companionDeviceService = CompanionDeviceService(this).apply {
             setAssociationLauncher(associationLauncher)
             register(flutterEngine)
         }
+
+        // Set up presence listener to forward events to Flutter
+        CompanionDevicePresenceReceiver.setPresenceListener(object : CompanionDevicePresenceReceiver.Companion.PresenceListener {
+            override fun onDeviceAppeared(deviceAddress: String) {
+                // This will be handled by the EventChannel in CompanionDeviceService
+                // The event is sent via the broadcast receiver
+            }
+
+            override fun onDeviceDisappeared(deviceAddress: String) {
+                // This will be handled by the EventChannel in CompanionDeviceService
+            }
+        })
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->

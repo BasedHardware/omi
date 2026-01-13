@@ -122,19 +122,6 @@ class CompanionDeviceService(private val activity: Activity) {
                 }
             })
         }
-
-        // Set up presence listener to forward events from CompanionDevicePresenceReceiver to Flutter
-        CompanionDevicePresenceReceiver.setPresenceListener(object : CompanionDevicePresenceReceiver.Companion.PresenceListener {
-            override fun onDeviceAppeared(deviceAddress: String) {
-                Log.d(TAG, "Forwarding deviceAppeared to Flutter: $deviceAddress")
-                sendEvent("deviceAppeared", mapOf("deviceAddress" to deviceAddress))
-            }
-
-            override fun onDeviceDisappeared(deviceAddress: String) {
-                Log.d(TAG, "Forwarding deviceDisappeared to Flutter: $deviceAddress")
-                sendEvent("deviceDisappeared", mapOf("deviceAddress" to deviceAddress))
-            }
-        })
     }
 
     /**

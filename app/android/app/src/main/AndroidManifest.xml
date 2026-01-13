@@ -116,11 +116,6 @@
             </intent-filter>
         </service>
 
-        <!-- Receiver for notification dismiss events -->
-        <receiver
-            android:name=".NotificationDismissedReceiver"
-            android:exported="false" />
-
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
