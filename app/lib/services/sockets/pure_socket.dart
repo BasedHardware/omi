@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/status.dart' as socket_channel_status;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -199,7 +197,6 @@ class PureSocket implements IPureSocket {
   void onError(Object err, StackTrace trace) {
     _status = PureSocketStatus.disconnected;
     Logger.debug("[Socket] Error: $err");
-    debugPrintStack(stackTrace: trace);
 
     DebugLogManager.logError(err, trace, 'pure_socket_error', {
       'url': url,

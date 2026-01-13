@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -249,7 +247,7 @@ class GeminiStreamingSttSocket implements IPureSocket {
       }
     } catch (e, trace) {
       CustomSttLogService.instance.error('GeminiStreaming', 'Parse error: $e');
-      debugPrintStack(stackTrace: trace);
+      Logger.handle(e, trace, message: 'GeminiStreaming parse error');
     }
   }
 
@@ -576,7 +574,7 @@ class PureStreamingSttSocket implements IPureSocket {
       }
     } catch (e, trace) {
       CustomSttLogService.instance.error(config.serviceId, 'Parse error: $e');
-      debugPrintStack(stackTrace: trace);
+      Logger.handle(e, trace, message: '${config.serviceId} parse error');
     }
   }
 

@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -236,7 +234,6 @@ class PurePollingSocket implements IPureSocket {
     DebugLogManager.logError(err, trace, 'polling_socket_error', {
       'service_id': config.serviceId ?? 'Polling',
     });
-    debugPrintStack(stackTrace: trace);
     _listener?.onError(err, trace);
   }
 
