@@ -196,6 +196,30 @@ def has_transcription_credits(uid: str) -> bool:
     return True
 
 
+def get_remaining_transcription_seconds(uid: str) -> int | None:
+    """
+    Get remaining transcription seconds for the user.
+    Returns None if unlimited, otherwise the remaining seconds (>= 0).
+    Used for freemium auto-switch to on-device transcription.
+    """
+    subscription = users_db.get_user_valid_subscription(uid)
+    if not subscription:
+        # No subscription = use basic limits
+        limits = get_basic_plan_limits()
+    elif subscription.plan == PlanType.unlimited:
+        return None  # Unlimited
+    else:
+        limits = get_plan_limits(subscription.plan)
+
+    if not limits.transcription_seconds or limits.transcription_seconds <= 0:
+        return None  # Unlimited (limit is 0 or not set)
+
+    usage = get_monthly_usage_for_subscription(uid)
+    used_seconds = usage.get('transcription_seconds', 0)
+
+    return max(0, limits.transcription_seconds - used_seconds)
+
+
 def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
     """
     If Firestore says `basic` but there is a Stripe subscription with a future period end

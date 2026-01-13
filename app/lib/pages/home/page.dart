@@ -24,6 +24,7 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
+import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -119,6 +120,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<MemoriesPage>> _memoriesPageKey = GlobalKey<State<MemoriesPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
+
+  // Freemium switch handler for auto-switch dialogs
+  final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
   void _initiateApps() {
     context.read<AppProvider>().getApps();
@@ -245,8 +249,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // ForegroundUtil.requestPermissions();
       if (!PlatformService.isDesktop) {
-        await ForegroundUtil.initializeForegroundService();
-        await ForegroundUtil.startForegroundTask();
+        if (SharedPreferencesUtil().locationEnabled) {
+          await ForegroundUtil.initializeForegroundService();
+          await ForegroundUtil.startForegroundTask();
+        } else {
+          debugPrint('Skipping foreground service: location is not enabled');
+        }
       }
       if (mounted) {
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
@@ -397,10 +405,34 @@ break;
     });
 
     _listenToMessagesFromNotification();
+    _listenToFreemiumThreshold();
     super.initState();
 
     // After init
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+  }
+
+  void _listenToFreemiumThreshold() {
+    // Listen to capture provider for freemium threshold events
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+      captureProvider.addListener(_onCaptureProviderChanged);
+      // Connect freemium session reset callback
+      captureProvider.onFreemiumSessionReset = () {
+        _freemiumHandler.resetDialogFlag();
+      };
+    });
+  }
+
+  void _onCaptureProviderChanged() {
+    if (!mounted) return;
+
+    final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+    _freemiumHandler.checkAndShowDialog(context, captureProvider).catchError((e) {
+      debugPrint('[Freemium] Error checking dialog: $e');
+    });
   }
 
   void _listenToMessagesFromNotification() {
@@ -1141,6 +1173,14 @@ break;
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
+    // Remove capture provider listener
+    try {
+      final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+      captureProvider.removeListener(_onCaptureProviderChanged);
+      captureProvider.onFreemiumSessionReset = null;
+    } catch (_) {}
+    // Clean up freemium handler
+    _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();

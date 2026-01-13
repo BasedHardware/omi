@@ -43,6 +43,10 @@ from routers import (
 )
 
 from utils.other.timeout import TimeoutMiddleware
+from utils.observability import log_langsmith_status
+
+# Log LangSmith tracing status at startup
+log_langsmith_status()
 
 # Initialize Sentry for error tracking and performance monitoring
 # SENTRY_ENABLED must be explicitly set to 'true' to enable Sentry (prevents local dev from sending errors)

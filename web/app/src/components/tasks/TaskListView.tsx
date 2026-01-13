@@ -21,6 +21,8 @@ interface TaskListViewProps {
   onUpdateDescription: (id: string, description: string) => void;
   onSetDueDate: (id: string, date: Date | null) => void;
   searchQuery?: string;
+  // Double-click to enter selection mode
+  onEnterSelectionMode?: (id: string) => void;
 }
 
 export function TaskListView({
@@ -38,6 +40,7 @@ export function TaskListView({
   onUpdateDescription,
   onSetDueDate,
   searchQuery = '',
+  onEnterSelectionMode,
 }: TaskListViewProps) {
   // Filter tasks based on search query
   const filteredPending = searchQuery
@@ -91,6 +94,7 @@ export function TaskListView({
               isSelected={selectedIds.has(task.id)}
               onSelect={isSelectMode ? onSelect : undefined}
               isFocused={focusedIndex === index}
+              onEnterSelectionMode={onEnterSelectionMode}
             />
           ))}
         </AnimatePresence>
@@ -146,6 +150,7 @@ export function TaskListView({
                       isSelected={selectedIds.has(task.id)}
                       onSelect={isSelectMode ? onSelect : undefined}
                       isFocused={focusedIndex === filteredPending.length + index}
+                      onEnterSelectionMode={onEnterSelectionMode}
                     />
                   ))}
                 </div>

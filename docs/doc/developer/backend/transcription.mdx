@@ -1,6 +1,6 @@
 ---
 title: "Real-time Transcription"
-description: "A comprehensive guide to Omi's real-time audio transcription system, covering WebSocket connections, STT providers, speaker diarization, and message formats."
+description: "A comprehensive guide to Omi's real-time audio transcription system, covering WebSocket connections, STT providers, speaker diarization, message formats, and building external custom STT services."
 ---
 
 ## Overview
@@ -44,6 +44,7 @@ flowchart LR
     - Multiple STT providers with automatic fallback
     - Speech profile for user identification
     - Dual-socket architecture for speaker training
+    - [External Custom STT](#external-custom-stt-service) for your own transcription service
   </Tab>
 </Tabs>
 
@@ -189,6 +190,76 @@ When using Deepgram, the following options are configured:
 | `filler_words` | `false` | Remove "um", "uh", etc. |
 | `encoding` | `linear16` | 16-bit PCM encoding |
 
+## External Custom STT Service
+
+Build your own transcription/diarization WebSocket service that integrates with Omi.
+
+```mermaid
+flowchart LR
+    subgraph App["📱 Omi App"]
+        Capture[Audio Capture]
+    end
+
+    subgraph Custom["🎧 Your STT Service"]
+        WS[WebSocket Server]
+    end
+
+    subgraph Backend["🖥️ Omi Backend"]
+        API["/v4/listen"]
+    end
+
+    Capture -->|Binary audio| WS
+    WS -->|JSON transcripts| Capture
+    Capture -->|suggested_transcript| API
+```
+
+### Your Service Receives
+
+| Message | Format | Description |
+|---------|--------|-------------|
+| Audio frames | Binary | Raw audio bytes (codec configured by app, typically `opus` 16kHz) |
+| `{"type": "CloseStream"}` | JSON | End of audio stream |
+
+### Your Service Sends
+
+**Format:** JSON object with `segments` array
+
+```json
+{
+  "segments": [
+    {
+      "text": "Hello, how are you?",
+      "speaker": "SPEAKER_00",
+      "start": 0.0,
+      "end": 1.5
+    },
+    {
+      "text": "I'm doing great, thanks!",
+      "speaker": "SPEAKER_01",
+      "start": 1.6,
+      "end": 3.2
+    }
+  ]
+}
+```
+
+### Segment Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text` | `string` | Yes | Transcribed text |
+| `speaker` | `string` | No | Speaker label (`SPEAKER_00`, `SPEAKER_01`, etc.) |
+| `start` | `float` | No | Start time in seconds |
+| `end` | `float` | No | End time in seconds |
+
+### Requirements
+
+<Warning>
+- Response **must be an object** with `segments` key. Raw arrays `[{...}]` will fail.
+- Do **not** include a `type` field, or set it to `"Results"`. Other values are ignored.
+- Connection closes after **90 seconds** of inactivity.
+</Warning>
+
 ## Speech Profile & Dual-Socket Architecture
 
 <Note>
@@ -301,14 +372,18 @@ sequenceDiagram
         {
           "text": "Hello there",
           "speaker": "SPEAKER_00",
+          "speaker_id": 0,
           "start": 0.0,
           "end": 1.5,
-          "is_user": true
+          "is_user": true,
+          "person_id": "known-person-uuid-or-null"
         }
       ],
       "stt_provider": "custom-provider-name"
     }
     ```
+
+    See [External Custom STT Service](#external-custom-stt-service) for building your own transcription service.
   </Tab>
 
   <Tab title="Image Chunk" icon="image">

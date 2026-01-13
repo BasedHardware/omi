@@ -104,6 +104,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                   ),
                   IconButton(
                     onPressed: () {
+                      provider.confirmPendingDeletion();
                       _removeDeleteNotification();
                     },
                     icon: const Icon(Icons.close, color: Colors.white70, size: 20),
@@ -121,7 +122,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
     Overlay.of(context).insert(_deleteNotificationOverlay!);
 
-    Future.delayed(const Duration(seconds: 10), () {
+    Future.delayed(const Duration(seconds: 4), () {
+      if (!mounted) return;
       _removeDeleteNotification();
     });
   }
@@ -363,13 +365,10 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                     provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
                                         ? context.l10n.noMemoriesYet
                                         : provider.selectedCategories.isNotEmpty
-                                            ? provider.selectedCategories.contains(MemoryCategory.interesting) &&
+                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
                                                     provider.selectedCategories.length == 1
-                                                ? context.l10n.noInterestingMemories
-                                                : provider.selectedCategories.contains(MemoryCategory.system) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noSystemMemories
-                                                    : context.l10n.noMemoriesInCategories
+                                                ? context.l10n.noManualMemories
+                                                : context.l10n.noMemoriesInCategories
                                             : context.l10n.noMemoriesFound,
                                     style: TextStyle(
                                       color: Colors.grey.shade400,

@@ -14,6 +14,10 @@ class DateListItem extends StatelessWidget {
     var isToday = date.month == now.month && date.day == now.day && date.year == now.year;
     var isYesterday = date.month == yesterday.month && date.day == yesterday.day && date.year == yesterday.year;
 
+    if (isToday) {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: EdgeInsets.fromLTRB(24, isFirst ? 0 : 20, 16, 4),
       child: Row(
@@ -21,11 +25,7 @@ class DateListItem extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            isToday
-                ? 'Today'
-                : isYesterday
-                    ? 'Yesterday'
-                    : dateTimeFormat('MMM dd', date),
+            isYesterday ? 'Yesterday' : dateTimeFormat('MMM dd', date),
             style: const TextStyle(color: Colors.white, fontSize: 18),
           ),
         ],

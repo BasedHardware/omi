@@ -76,7 +76,7 @@ class AdviceResponse(BaseModel):
 
 @router.get('/v1/goals', tags=['goals'])
 async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Optional[dict]:
-    """Get the current active goal for the user."""
+    """Get the current active goal for the user (backward compatibility)."""
     goal = goals_db.get_user_goal(uid)
     if goal:
         # Convert datetime objects to strings for JSON serialization
@@ -85,6 +85,21 @@ async def get_current_goal(uid: str = Depends(auth.get_current_user_uid)) -> Opt
         if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
             goal['updated_at'] = goal['updated_at'].isoformat()
     return goal
+
+
+@router.get('/v1/goals/all', tags=['goals'])
+async def get_all_goals(uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
+    """Get all active goals for the user (up to 3)."""
+    goals = goals_db.get_user_goals(uid, limit=3)
+    
+    # Convert datetime objects to strings for JSON serialization
+    for goal in goals:
+        if 'created_at' in goal and hasattr(goal['created_at'], 'isoformat'):
+            goal['created_at'] = goal['created_at'].isoformat()
+        if 'updated_at' in goal and hasattr(goal['updated_at'], 'isoformat'):
+            goal['updated_at'] = goal['updated_at'].isoformat()
+    
+    return goals
 
 
 @router.post('/v1/goals', tags=['goals'])

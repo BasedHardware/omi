@@ -74,6 +74,13 @@ export function TaskHub() {
     return () => setContext(null);
   }, [setContext]);
 
+  // Enter selection mode and select the specified task (for double-click)
+  // Defined early because it's used in taskGroupProps
+  const enterSelectionModeWithId = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
   // Common props for all TaskGroup components
   const taskGroupProps = {
     onToggleComplete: toggleComplete,
@@ -85,6 +92,10 @@ export function TaskHub() {
     ...(isSelectMode && {
       selectedIds,
       onSelect: handleSelect,
+    }),
+    // Pass onEnterSelectionMode when NOT in select mode (for double-click)
+    ...(!isSelectMode && {
+      onEnterSelectionMode: enterSelectionModeWithId,
     }),
   };
 
@@ -532,6 +543,7 @@ export function TaskHub() {
                   onUpdateDescription={updateDescription}
                   onSetDueDate={setDueDate}
                   searchQuery={searchQuery}
+                  onEnterSelectionMode={!isSelectMode ? enterSelectionModeWithId : undefined}
                 />
               ) : filteredView ? (
                 /* Filtered view (when date is selected in Hub view) */

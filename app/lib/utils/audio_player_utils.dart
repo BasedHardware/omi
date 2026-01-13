@@ -11,6 +11,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class AudioPlayerUtils extends ChangeNotifier {
+  // Singleton pattern
+  static final AudioPlayerUtils _instance = AudioPlayerUtils._internal();
+  static AudioPlayerUtils get instance => _instance;
+
+  factory AudioPlayerUtils() => _instance;
+
+  AudioPlayerUtils._internal();
+
   FlutterSoundPlayer? _audioPlayer;
   String? _currentPlayingId;
   bool _isProcessingAudio = false;
@@ -32,13 +40,9 @@ class AudioPlayerUtils extends ChangeNotifier {
     return progress.clamp(0.0, 1.0);
   }
 
-  AudioPlayerUtils() {
-    _initializeAudioPlayer();
-  }
-
-  Future<void> _initializeAudioPlayer() async {
+  /// Lazily initialize the audio player only when needed
+  Future<void> _ensurePlayerInitialized() async {
     if (_audioPlayer != null) return;
-
     if (Platform.isMacOS) return;
 
     _audioPlayer = FlutterSoundPlayer();
@@ -85,6 +89,9 @@ class AudioPlayerUtils extends ChangeNotifier {
     _currentPosition = Duration.zero;
     _totalDuration = Duration.zero;
     notifyListeners();
+
+    // Initialize player lazily on first use
+    await _ensurePlayerInitialized();
 
     final audioFilePath = await _getOrCreateAudioFile(wal);
     if (audioFilePath == null) {

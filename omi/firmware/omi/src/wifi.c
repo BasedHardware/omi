@@ -76,8 +76,12 @@ uint16_t tcp_server_port = 0;
 
 static struct net_mgmt_event_callback wifi_shell_mgmt_cb;
 static struct net_mgmt_event_callback net_shell_mgmt_cb;
+static struct net_mgmt_event_callback wifi_scan_mgmt_cb;
 
 static atomic_t wifi_ready_status;
+static atomic_t wifi_scan_done;
+
+K_SEM_DEFINE(wifi_scan_done_sem, 0, 1);
 
 K_SEM_DEFINE(dhcp_bound_sem, 0, 1);
 static atomic_t dhcp_bound;
@@ -95,6 +99,7 @@ K_MUTEX_DEFINE(tcp_socket_mutex);
 static struct sockaddr_in tcp_sock_addr;
 static bool tcp_server_addr_valid;
 static bool stop_tcp_traffic = true;
+static bool is_hardware_available = false;
 
 enum {
 	WIFI_FLAG_CONNECTED = 0,
@@ -150,6 +155,72 @@ static inline void wifi_set_need_recover(bool need)
 	} else {
 		atomic_clear_bit(&wifi_flags, WIFI_FLAG_NEED_RECOVER);
 	}
+}
+
+static void wifi_scan_event_handler(struct net_mgmt_event_callback *cb,
+				    uint32_t mgmt_event, struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(iface);
+
+	if (mgmt_event == NET_EVENT_WIFI_SCAN_DONE) {
+		atomic_set(&wifi_scan_done, 1);
+		k_sem_give(&wifi_scan_done_sem);
+	}
+}
+
+static bool wifi_probe_rpu(struct net_if *iface)
+{
+	struct wifi_scan_params params = { 0 };
+	int ret;
+
+	atomic_set(&wifi_scan_done, 0);
+	k_sem_reset(&wifi_scan_done_sem);
+
+	params.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+	params.bands = 0; /* 0 == no restriction */
+	params.dwell_time_active = 20;
+	params.dwell_time_passive = 60;
+	params.max_bss_cnt = 1;
+
+	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, iface, &params, sizeof(params));
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_WRN("Wi-Fi scan probe request failed: %d", ret);
+		return false;
+	}
+
+	ret = k_sem_take(&wifi_scan_done_sem, K_SECONDS(5));
+	if (ret != 0) {
+		LOG_ERR("Wi-Fi scan probe timed out (RPU not responding?)");
+		return false;
+	}
+
+	return true;
+}
+
+static bool wifi_check_hardware_ready()
+{
+	struct net_if *iface = net_if_get_wifi_sta();
+
+	if (!iface) {
+		LOG_ERR("No Wi-Fi interface found");
+		return false;
+	}
+
+	int ret = net_if_up(iface);
+	if (ret != 0 && ret != -EALREADY) {
+		LOG_ERR("net_if_up failed: %d", ret);
+		return false;
+	}
+
+	if (!wifi_probe_rpu(iface)) {
+		LOG_ERR("Wi-Fi RPU probe failed");
+		net_if_down(iface);
+		return false;
+	}
+	net_if_down(iface);
+
+	return true;
 }
 
 static void tcp_close_socket(void)
@@ -581,7 +652,7 @@ static void handle_wifi_on(void)
 	}
 
 	set_wifi_state(WIFI_STATE_CONNECTING);
-	int ret = wifi_connect();;
+	int ret = wifi_connect();
 	if (ret != 0) {
 		LOG_WRN("wifi_connect() failed (%d), recovering...", ret);
 		set_wifi_state(WIFI_STATE_ON);
@@ -687,6 +758,14 @@ void start_wifi_thread(void)
 {
 	LOG_INF("WiFi thread started, using DHCP for IP assignment");
 
+	// check if Wi-Fi hardware is broken/unavailable
+	if (!wifi_check_hardware_ready()) {
+		LOG_ERR("Wi-Fi hardware not ready");
+		return;
+	}
+	is_hardware_available = true;
+	LOG_INF("Wi-Fi hardware is ready");
+
 	while (1) {
 		/* Handle state-specific logic */
 		wifi_state_t current_state = get_wifi_state();
@@ -727,6 +806,7 @@ static void net_mgmt_callback_init(void)
 {
 	atomic_set(&wifi_flags, 0);
 	atomic_set(&wifi_ready_status, 0);
+	atomic_set(&wifi_scan_done, 0);
 	atomic_set(&dhcp_bound, 0);
 	k_sem_reset(&dhcp_bound_sem);
 	tcp_server_addr_valid = false;
@@ -745,6 +825,11 @@ static void net_mgmt_callback_init(void)
 				     NET_EVENT_IF_UP);
 
 	net_mgmt_add_event_callback(&net_shell_mgmt_cb);
+
+	net_mgmt_init_event_callback(&wifi_scan_mgmt_cb,
+				     wifi_scan_event_handler,
+				     NET_EVENT_WIFI_SCAN_DONE);
+	net_mgmt_add_event_callback(&wifi_scan_mgmt_cb);
 
 	/* No blocking sleeps here: keep init fast and deterministic */
 }
@@ -993,14 +1078,6 @@ int wifi_init(void)
 	if (ret) {
 		return ret;
 	}
-
-	/* Best-effort: start in a true OFF state (power + interface) */
-	{
-		struct net_if *iface = net_if_get_first_wifi();
-		if (iface) {
-			net_if_down(iface);
-		}
-	}
 	
 	k_thread_start(start_wifi_thread_id);
 	return ret;
@@ -1016,4 +1093,9 @@ bool is_wifi_on(void)
 {
 	wifi_state_t state = get_wifi_state();
 	return state >= WIFI_STATE_ON ? true : false;
+}
+
+bool wifi_is_hw_available(void)
+{
+	return is_hardware_available;
 }

@@ -18,12 +18,12 @@ class AgentSafetyGuard:
     """
     Safety guard for ReAct agents to prevent:
     - Tool call loops (repeated calls with same parameters)
-    - Excessive tool calls (max 10 per query)
+    - Excessive tool calls (max 25 per query)
     - Context overflow (max 500K tokens)
     - Suspicious parameter patterns
     """
 
-    def __init__(self, max_tool_calls: int = 10, max_context_tokens: int = 500000):
+    def __init__(self, max_tool_calls: int = 25, max_context_tokens: int = 500000):
         self.max_tool_calls = max_tool_calls
         self.max_context_tokens = max_context_tokens
 

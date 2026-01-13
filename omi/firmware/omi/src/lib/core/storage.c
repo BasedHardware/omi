@@ -264,6 +264,13 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
         return len;
     }
 
+    if (wifi_is_hw_available() == false) {
+        LOG_ERR("Wi-Fi hardware not available");
+        result_buffer[0] = 0xFE; // error: hardware not available
+        bt_gatt_notify(conn, &storage_service.attrs[8], &result_buffer, 1);
+        return len;
+    }
+
     const uint8_t cmd = ((const uint8_t *)buf)[0];
 
     switch (cmd) {

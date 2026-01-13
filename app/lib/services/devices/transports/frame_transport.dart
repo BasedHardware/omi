@@ -39,7 +39,7 @@ class FrameTransport extends DeviceTransport {
   }
 
   @override
-  Future<void> connect() async {
+  Future<void> connect({bool autoConnect = false}) async {
     if (_state == DeviceTransportState.connected) {
       return;
     }

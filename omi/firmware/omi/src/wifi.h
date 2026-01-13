@@ -22,6 +22,7 @@ typedef enum {
 int wifi_init(void);
 void wifi_turn_off(void);
 int wifi_turn_on(void);
+bool wifi_is_hw_available(void);
 int setup_wifi_credentials(const char *ssid, const char *password);
 int setup_tcp_server(const char *server_addr, uint16_t server_port);
 int wifi_send_data(const uint8_t *data, size_t len);

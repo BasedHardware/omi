@@ -5,7 +5,7 @@ import 'dart:async';
 abstract class DeviceTransport {
   String get deviceId;
 
-  Future<void> connect();
+  Future<void> connect({bool autoConnect = false});
   Future<void> disconnect();
   Future<bool> isConnected();
   Future<bool> ping();

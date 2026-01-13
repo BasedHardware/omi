@@ -61,6 +61,10 @@ class Message(BaseModel):
     files: List[FileChat] = []
     chat_session_id: Optional[str] = None
     data_protection_level: Optional[str] = None
+    langsmith_run_id: Optional[str] = None  # LangSmith run ID for feedback tracking
+    prompt_name: Optional[str] = None  # LangSmith prompt name for versioning
+    prompt_commit: Optional[str] = None  # LangSmith prompt commit/version for traceability
+    rating: Optional[int] = None  # User feedback: 1 = thumbs up, -1 = thumbs down, None = no rating
 
     @model_validator(mode='before')
     @classmethod

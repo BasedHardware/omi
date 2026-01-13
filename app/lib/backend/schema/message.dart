@@ -128,6 +128,9 @@ class ServerMessage {
 
   List<MessageConversation> memories;
   bool askForNps;
+  
+  /// User rating for this message: 1 = thumbs up, -1 = thumbs down, null = no rating
+  int? rating;
 
   List<String> thinkings = [];
 
@@ -143,6 +146,7 @@ class ServerMessage {
     this.filesId,
     this.memories, {
     this.askForNps = true,
+    this.rating,
   });
 
   static ServerMessage fromJson(Map<String, dynamic> json) {
@@ -158,6 +162,7 @@ class ServerMessage {
       (json['files_id'] ?? []).map((m) => m.toString()).toList(),
       ((json['memories'] ?? []) as List<dynamic>).map((m) => MessageConversation.fromJson(m)).toList(),
       askForNps: json['ask_for_nps'] ?? true,
+      rating: json['rating'],
     );
   }
 
@@ -173,6 +178,7 @@ class ServerMessage {
       'memories': memories.map((m) => m.toJson()).toList(),
       'files': files.map((m) => m.toJson()).toList(),
       'ask_for_nps': askForNps,
+      'rating': rating,
     };
   }
 

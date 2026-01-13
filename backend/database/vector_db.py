@@ -140,3 +140,110 @@ def delete_vector(uid: str, conversation_id: str):
     vector_id = f'{uid}-{conversation_id}'
     result = index.delete(ids=[vector_id], namespace="ns1")
     print('delete_vector', vector_id, result)
+
+
+# ==========================================
+# Memory Vector Functions
+# For memory embeddings and semantic search
+# ==========================================
+
+MEMORIES_NAMESPACE = "ns2"
+
+
+def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
+    """
+    Upsert a memory embedding to Pinecone.
+    """
+    if index is None:
+        print('Pinecone index not initialized, skipping memory vector upsert')
+        return None
+
+    vector = embeddings.embed_query(content)
+    data = {
+        "id": f'{uid}-{memory_id}',
+        "values": vector,
+        "metadata": {
+            "uid": uid,
+            "memory_id": memory_id,
+            "category": category,
+            "created_at": int(datetime.now(timezone.utc).timestamp()),
+        },
+    }
+    res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
+    print('upsert_memory_vector', memory_id, res)
+    return vector
+
+
+def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit: int = 5) -> List[dict]:
+    """
+    Find memories similar to the given content.
+    Returns list of matches with similarity scores.
+    Used for duplicate detection and semantic search.
+    """
+    if index is None:
+        print('Pinecone index not initialized, skipping similarity search')
+        return []
+
+    vector = embeddings.embed_query(content)
+    filter_data = {'uid': uid}
+
+    xc = index.query(
+        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
+    )
+
+    results = []
+    for match in xc.get('matches', []):
+        if match['score'] >= threshold:
+            results.append(
+                {
+                    'memory_id': match['metadata'].get('memory_id'),
+                    'category': match['metadata'].get('category'),
+                    'score': match['score'],
+                }
+            )
+
+    return results
+
+
+def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> dict | None:
+    """
+    Check if a similar memory already exists.
+    Returns the duplicate info if found, None otherwise.
+    """
+    similar = find_similar_memories(uid, content, threshold=threshold, limit=1)
+    if similar:
+        print(f'Found duplicate memory: {similar[0]}')
+        return similar[0]
+    return None
+
+
+def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str]:
+    """
+    Semantic search for memories.
+    Returns list of memory_ids ordered by relevance.
+    """
+    if index is None:
+        print('Pinecone index not initialized, skipping memory search')
+        return []
+
+    vector = embeddings.embed_query(query)
+    filter_data = {'uid': uid}
+
+    xc = index.query(
+        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
+    )
+
+    return [match['metadata'].get('memory_id') for match in xc.get('matches', [])]
+
+
+def delete_memory_vector(uid: str, memory_id: str):
+    """
+    Delete a memory vector from Pinecone.
+    """
+    if index is None:
+        print('Pinecone index not initialized, skipping memory vector delete')
+        return
+
+    vector_id = f'{uid}-{memory_id}'
+    result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
+    print('delete_memory_vector', vector_id, result)

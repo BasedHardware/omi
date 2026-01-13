@@ -126,7 +126,7 @@ class GoalSuggestion {
   }
 }
 
-/// Get current active goal
+/// Get current active goal (backward compatibility - returns first goal)
 Future<Goal?> getCurrentGoal() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/goals',
@@ -142,6 +142,25 @@ Future<Goal?> getCurrentGoal() async {
     }
   }
   return null;
+}
+
+/// Get all active goals (up to 3)
+Future<List<Goal>> getAllGoals() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/goals/all',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  debugPrint('getAllGoals response: ${response.body}');
+  if (response.statusCode == 200) {
+    var decoded = json.decode(response.body);
+    if (decoded != null && decoded is List) {
+      return decoded.map((e) => Goal.fromJson(e)).toList();
+    }
+  }
+  return [];
 }
 
 /// Create a new goal

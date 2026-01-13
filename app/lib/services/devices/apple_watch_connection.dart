@@ -26,8 +26,9 @@ class AppleWatchDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
+    bool autoConnect = false,
   }) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged, autoConnect: autoConnect);
 
     // Check for any recording that should be restarted
     await checkAndStartRecordingOnRelaunch();

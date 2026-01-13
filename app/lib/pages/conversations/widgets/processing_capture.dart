@@ -310,247 +310,125 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     // When recording is active, show simplified UI
     if (isDeviceRecording || isPhoneRecording) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Status with green/orange dot
-          Padding(
-            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Left: Status tag + Star indicator
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
-                            style: const TextStyle(
-                              color: Color(0xFFC9CBCF),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Star indicator when conversation is marked for starring
-                    if (provider.isConversationMarkedForStarring) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FaIcon(
-                              FontAwesomeIcons.solidStar,
-                              size: 12,
-                              color: Colors.amber,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Starred',
-                              style: TextStyle(
-                                color: Colors.amber,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                // Right: Control buttons for both device and phone recording
-                Row(
-                  children: [
-                    // Pause/Resume button
-                    GestureDetector(
-                      onTap: () async {
-                        if (!isPaused) {
-                          // Muting: double impact for a satisfying "click-click" feel
-                          HapticFeedback.heavyImpact();
-                          await Future.delayed(const Duration(milliseconds: 80));
-                          HapticFeedback.lightImpact();
-                          // User is pausing/muting
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: true,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        } else {
-                          // Unmuting: standard haptic feedback
-                          HapticFeedback.mediumImpact();
-                          // User is resuming
-                          MixpanelManager().recordingMuteToggled(
-                            isMuted: false,
-                            recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                          );
-                        }
-                        _toggleRecording(context, provider);
-                      },
-                      child: Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: isPaused
-                              ? isDeviceRecording
-                                  ? const Color(0xFFFE5D50)
-                                  : const Color(0xFF7C3AED)
-                              : isDeviceRecording
-                                  ? const Color(0xFF35343B)
-                                  : const Color(0xFFFF9500),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: FaIcon(
-                            isPaused
-                                ? isDeviceRecording
-                                    ? FontAwesomeIcons.microphoneSlash
-                                    : FontAwesomeIcons.play
-                                : isDeviceRecording
-                                    ? FontAwesomeIcons.microphone
-                                    : FontAwesomeIcons.pause,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Pulsing status dot
-                    _PulsingDot(
-                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFF34d399),
-                    ),
-                  ],
-                ),
-                // Mute/unmute button
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    _toggleRecording(context, provider);
-                  },
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2a2a2a),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Icon(
-                        isPaused ? Icons.mic_off : Icons.mic,
-                        color: isPaused ? Colors.red : Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Divider
-          Container(
-            height: 1,
-            color: const Color(0xFF35343B),
-            margin: const EdgeInsets.only(bottom: 8),
-          ),
-          // Live Transcription header
-          Padding(
-            padding: const EdgeInsets.only(left: 4, right: 4, bottom: 6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.text_fields, color: Colors.grey.shade400, size: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Live Transcription',
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF34d399),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
-                ),
-                Icon(Icons.arrow_forward_ios, color: Colors.grey.shade600, size: 14),
-              ],
-            ),
-          ),
-          // Transcript preview
-          if (provider.segments.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      return Padding(
+        padding: const EdgeInsets.only(left: 8, right: 6),
+        child: Row(
+          children: [
+            // Left: Status tag
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF35343B),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    provider.segments.isNotEmpty
-                        ? 'Speaker 1: ${provider.segments.last.text}'
-                        : 'Waiting for speech...',
+                    isPaused ? (isDeviceRecording ? 'Muted' : 'Paused') : 'Listening',
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
+                      color: Color(0xFFC9CBCF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Tap to view full transcript (${provider.segments.length} segments)',
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 11,
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                      shape: BoxShape.circle,
                     ),
                   ),
                 ],
               ),
             ),
-          ] else ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 4),
-              child: Text(
-                'Waiting for speech...',
-                style: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 13,
+            // Star indicator when conversation is marked for starring
+            if (provider.isConversationMarkedForStarring) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FaIcon(
+                      FontAwesomeIcons.solidStar,
+                      size: 12,
+                      color: Colors.amber,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Starred',
+                      style: TextStyle(
+                        color: Colors.amber,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            // Middle: Transcript text (takes remaining space)
+            if (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+              const Expanded(child: LiteCaptureWidget())
+            else
+              const Spacer(),
+            // Right: Pause/Resume button
+            GestureDetector(
+              onTap: () async {
+                if (!isPaused) {
+                  HapticFeedback.heavyImpact();
+                  await Future.delayed(const Duration(milliseconds: 80));
+                  HapticFeedback.lightImpact();
+                  MixpanelManager().recordingMuteToggled(
+                    isMuted: true,
+                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                  );
+                } else {
+                  HapticFeedback.mediumImpact();
+                  MixpanelManager().recordingMuteToggled(
+                    isMuted: false,
+                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
+                  );
+                }
+                _toggleRecording(context, provider);
+              },
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: isPaused
+                      ? isDeviceRecording
+                          ? const Color(0xFFFE5D50)
+                          : const Color(0xFF7C3AED)
+                      : isDeviceRecording
+                          ? const Color(0xFF35343B)
+                          : const Color(0xFFFF9500),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: FaIcon(
+                    isPaused
+                        ? isDeviceRecording
+                            ? FontAwesomeIcons.microphoneSlash
+                            : FontAwesomeIcons.play
+                        : isDeviceRecording
+                            ? FontAwesomeIcons.microphone
+                            : FontAwesomeIcons.pause,
+                    color: Colors.white,
+                    size: 12,
+                  ),
                 ),
               ),
             ),
           ],
-        ],
+        ),
       );
     } else {
       // For non-recording states, show the original header-based UI

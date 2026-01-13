@@ -53,6 +53,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
+  static final RegExp _contextRegex = RegExp(r'^Context: "([\s\S]+?)"\n\n');
+
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _pulseAnimation;
@@ -734,6 +736,19 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
 
   Widget _buildModernMessageBubble(ServerMessage message, MessageProvider provider, int chatIndex) {
     // Make messages take only 70% of available width and align based on sender
+    String text = message.text.decodeString;
+    String? contextText;
+    String messageText = text;
+
+    if (message.sender == MessageSender.human) {
+      final match = _contextRegex.firstMatch(text);
+
+      if (match != null) {
+        contextText = match.group(1);
+        messageText = text.substring(match.end);
+      }
+    }
+
     return Align(
       alignment: message.sender == MessageSender.ai ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
@@ -772,10 +787,44 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (contextText != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6.0, right: 4.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: ResponsiveHelper.backgroundQuaternary.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.subdirectory_arrow_right,
+                                size: 14, color: ResponsiveHelper.textSecondary),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                contextText,
+                                style: const TextStyle(
+                                  color: ResponsiveHelper.textSecondary,
+                                  fontSize: 12,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   OmiChatBubble(
                     type: OmiChatBubbleType.outgoing,
                     child: Text(
-                      message.text.decodeString,
+                      messageText.trimRight(),
                       style: const TextStyle(
                         color: ResponsiveHelper.textPrimary,
                         fontSize: 15,
@@ -801,8 +850,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
           context.read<ConversationProvider>().updateConversation(conversation);
         },
         message: message,
-        setMessageNps: (int value) {
-          provider.setMessageNps(message, value);
+        setMessageNps: (int value, {String? reason}) {
+          provider.setMessageNps(message, value, reason: reason);
         },
         date: message.createdAt,
       );
@@ -881,14 +930,14 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
                 ))
             : const SizedBox.shrink(),
         message.text.isEmpty ? const SizedBox.shrink() : getMarkdownWidget(context, message.text.decodeString),
-        _getNpsWidget(context, message, (int value) {
-          provider.setMessageNps(message, value);
+        _getNpsWidget(context, message, (int value, {String? reason}) {
+          provider.setMessageNps(message, value, reason: reason);
         }),
       ],
     );
   }
 
-  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int) setMessageNps) {
+  Widget _getNpsWidget(BuildContext context, ServerMessage message, Function(int, {String? reason}) setMessageNps) {
     if (!message.askForNps) return const SizedBox();
 
     return Padding(
@@ -906,7 +955,8 @@ class DesktopChatPageState extends State<DesktopChatPage> with AutomaticKeepAliv
             iconSize: 14,
             borderRadius: 6,
             onPressed: () {
-              setMessageNps(0);
+              // For desktop, submit thumbs down without reason picker (can be enhanced later)
+              setMessageNps(-1);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Text('Thank you for your feedback!'),

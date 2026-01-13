@@ -13,7 +13,6 @@ from typing import Dict, List, Optional, Set, Tuple, Callable
 import av
 import numpy as np
 import opuslib  # type: ignore
-import webrtcvad  # type: ignore
 
 import lc3  # lc3py
 
@@ -21,9 +20,6 @@ from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
-
-# Suppress FFmpeg duration estimation warnings
-av.logging.set_level(av.logging.ERROR)
 
 import database.conversations as conversations_db
 import database.calendar_meetings as calendar_db
@@ -45,6 +41,8 @@ from models.conversation import (
 )
 from models.message_event import (
     ConversationEvent,
+    FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+    FreemiumThresholdReachedEvent,
     LastConversationEvent,
     MessageEvent,
     MessageServiceStatusEvent,
@@ -77,12 +75,14 @@ from utils.stt.streaming import (
     process_audio_speechmatics,
     send_initial_file_path,
 )
-from utils.subscription import has_transcription_credits
+from utils.subscription import has_transcription_credits, get_remaining_transcription_seconds
 from utils.translation import TranslationService
 from utils.translation_cache import TranscriptSegmentLanguageCache
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.onboarding import OnboardingHandler
 
+from utils.aac import AACDecoder
+from utils.audio import AudioRingBuffer
 from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
     compare_embeddings,
@@ -95,125 +95,13 @@ router = APIRouter()
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 
-
-class AudioRingBuffer:
-    """Circular buffer storing last N seconds of PCM16 mono audio with timestamp tracking."""
-
-    def __init__(self, duration_seconds: float, sample_rate: int):
-        self.sample_rate = sample_rate
-        self.bytes_per_second = sample_rate * 2  # PCM16 mono
-        self.capacity = int(duration_seconds * self.bytes_per_second)
-        self.buffer = bytearray(self.capacity)
-        self.write_pos = 0
-        self.total_bytes_written = 0
-        self.last_write_timestamp: Optional[float] = None
-
-    def write(self, data: bytes, timestamp: float):
-        """Append audio data with timestamp."""
-        for byte in data:
-            self.buffer[self.write_pos] = byte
-            self.write_pos = (self.write_pos + 1) % self.capacity
-        self.total_bytes_written += len(data)
-        self.last_write_timestamp = timestamp
-
-    def get_time_range(self) -> Optional[Tuple[float, float]]:
-        """Return (start_ts, end_ts) of audio currently in buffer."""
-        if self.last_write_timestamp is None:
-            return None
-        bytes_in_buffer = min(self.total_bytes_written, self.capacity)
-        buffer_duration = bytes_in_buffer / self.bytes_per_second
-        return (self.last_write_timestamp - buffer_duration, self.last_write_timestamp)
-
-    def extract(self, start_ts: float, end_ts: float) -> Optional[bytes]:
-        """Extract audio for absolute timestamp range."""
-        time_range = self.get_time_range()
-        if time_range is None:
-            return None
-
-        buffer_start_ts, buffer_end_ts = time_range
-        actual_start = max(start_ts, buffer_start_ts)
-        actual_end = min(end_ts, buffer_end_ts)
-
-        if actual_start >= actual_end:
-            return None
-
-        bytes_in_buffer = min(self.total_bytes_written, self.capacity)
-        buffer_logical_start = (self.write_pos - bytes_in_buffer) % self.capacity
-
-        start_offset = int((actual_start - buffer_start_ts) * self.bytes_per_second)
-        end_offset = int((actual_end - buffer_start_ts) * self.bytes_per_second)
-
-        # Ensure even number of bytes (PCM16)
-        length = ((end_offset - start_offset) // 2) * 2
-        if length <= 0:
-            return None
-
-        result = bytearray(length)
-        for i in range(length):
-            pos = (buffer_logical_start + start_offset + i) % self.capacity
-            result[i] = self.buffer[pos]
-
-        return bytes(result)
+# Freemium: Send notification when credits threshold is reached
+FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
 
 
 class CustomSttMode(str, Enum):
     disabled = "disabled"
     enabled = "enabled"
-
-
-class AACDecoder:
-
-    def __init__(self, uid: str = '', session_id: str = '', sample_rate: int = 16000, channels: int = 1):
-        self.uid = uid
-        self.session_id = session_id
-
-        # Initialize codec context immediately
-        self.codec_context = av.CodecContext.create('aac', 'r')
-
-        # Initialize resampler immediately
-        from av.audio.resampler import AudioResampler
-
-        target_layout = 'mono' if channels == 1 else 'stereo'
-        self.resampler = AudioResampler(format='s16', layout=target_layout, rate=sample_rate)
-
-    def decode(self, aac_data: bytes) -> bytes:
-        """Decode AAC frame using persistent codec context.
-
-        Args:
-            aac_data: Complete AAC frame with ADTS header
-
-        Returns:
-            PCM data as bytes
-        """
-        if not aac_data:
-            return b''
-
-        try:
-            # Create packet and decode
-            packet = av.Packet(aac_data)
-            frames = self.codec_context.decode(packet)
-
-            if not frames:
-                return b''
-
-            # Resample and collect PCM data
-            pcm_chunks = []
-            for frame in frames:
-                resampled_frames = self.resampler.resample(frame)
-                for resampled_frame in resampled_frames:
-                    frame_array = resampled_frame.to_ndarray()
-                    if frame_array.ndim > 1:
-                        frame_array = frame_array.T.flatten()
-                    pcm_chunks.append(frame_array.tobytes())
-
-            return b''.join(pcm_chunks)
-
-        except (EOFError, av.AVError):
-            # Expected for incomplete frames, return empty
-            return b''
-        except Exception as e:
-            print(f"[AAC] Decode error: {e}", self.uid, self.session_id)
-            return b''
 
 
 async def _listen(
@@ -363,9 +251,12 @@ async def _listen(
     last_transcript_time: Optional[float] = None
     current_conversation_id = None
 
+    freemium_threshold_sent = False  # Track if we've sent the freemium threshold notification
+
     async def _record_usage_periodically():
         nonlocal websocket_active, last_usage_record_timestamp, words_transcribed_since_last_record
         nonlocal last_audio_received_time, last_transcript_time, user_has_credits
+        nonlocal freemium_threshold_sent
 
         while websocket_active:
             await asyncio.sleep(60)
@@ -386,22 +277,40 @@ async def _listen(
                     record_usage(uid, transcription_seconds=transcription_seconds, words_transcribed=words_to_record)
                 last_usage_record_timestamp = current_time
 
-            if not use_custom_stt and not has_transcription_credits(uid):
-                user_has_credits = False
+            # Freemium: Check remaining credits and notify when threshold reached
+            remaining_seconds = get_remaining_transcription_seconds(uid)
+
+            # Notify user when approaching limit (3 minutes remaining)
+            if (
+                remaining_seconds is not None
+                and remaining_seconds <= FREEMIUM_THRESHOLD_SECONDS
+                and not freemium_threshold_sent
+            ):
+                # Determine required action
+                # Currently: user must setup on-device STT
+                # Future: backend may auto-fallback to lower-tier cloud STT (action = ACTION_NONE)
+                await _asend_message_event(
+                    FreemiumThresholdReachedEvent(
+                        remaining_seconds=remaining_seconds,
+                        action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                    )
+                )
+                freemium_threshold_sent = True
+
+                # Also send push notification
                 try:
                     await send_credit_limit_notification(uid)
                 except Exception as e:
                     print(f"Error sending credit limit notification: {e}", uid, session_id)
 
-                if current_conversation_id and current_conversation_id not in locked_conversation_ids:
-                    conversation = conversations_db.get_conversation(uid, current_conversation_id)
-                    if conversation and conversation['status'] == ConversationStatus.in_progress:
-                        conversation_id = conversation['id']
-                        print(f"Locking conversation {conversation_id} due to transcription limit.", uid, session_id)
-                        conversations_db.update_conversation(uid, conversation_id, {'is_locked': True})
-                        locked_conversation_ids.add(conversation_id)
-            elif not use_custom_stt:
+            # Update credits state
+            if remaining_seconds is not None and remaining_seconds <= 0:
+                user_has_credits = False
+            elif remaining_seconds is None or remaining_seconds > 0:
                 user_has_credits = True
+                # Reset threshold flag if credits were restored (new month, upgrade, etc.)
+                if remaining_seconds is None or remaining_seconds > FREEMIUM_THRESHOLD_SECONDS:
+                    freemium_threshold_sent = False
 
             # Silence notification logic for basic plan users
             user_subscription = user_db.get_user_valid_subscription(uid)
@@ -1447,7 +1356,11 @@ async def _listen(
             best_distance = float('inf')
 
             # Print all candidates with scores for tuning
-            print(f"Speaker ID: comparing speaker {speaker_id} against {len(person_embeddings_cache)} people:", uid, session_id)
+            print(
+                f"Speaker ID: comparing speaker {speaker_id} against {len(person_embeddings_cache)} people:",
+                uid,
+                session_id,
+            )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
                 print(f"  - {data['name']}: {distance:.4f}", uid, session_id)

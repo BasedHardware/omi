@@ -86,6 +86,9 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
+  /// Alias for fetchSubscription - refreshes subscription data from backend
+  Future<void> refreshSubscription() => fetchSubscription();
+
   Future<void> fetchUsageStats({required String period}) async {
     if (_isUsageLoading) return;
 

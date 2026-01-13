@@ -34,8 +34,9 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   @override
   Future<void> connect({
     Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
+    bool autoConnect = false,
   }) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged, autoConnect: autoConnect);
     await Future.delayed(const Duration(seconds: 1));
 
     _controlSub = transport.getCharacteristicStream(serviceUuid, controlCharacteristicUuid).listen((data) {

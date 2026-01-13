@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { X, Merge, Loader2, FolderInput } from 'lucide-react';
+import { X, Merge, Loader2, FolderInput, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MergeActionBarProps {
@@ -9,7 +9,10 @@ interface MergeActionBarProps {
   onCancel: () => void;
   onMerge: () => void;
   onMoveToFolder?: () => void;
+  onDelete?: () => void;
   isLoading?: boolean;
+  /** Render inline instead of fixed at bottom */
+  inline?: boolean;
 }
 
 export function MergeActionBar({
@@ -17,24 +20,30 @@ export function MergeActionBar({
   onCancel,
   onMerge,
   onMoveToFolder,
+  onDelete,
   isLoading = false,
+  inline = false,
 }: MergeActionBarProps) {
   const canMerge = selectedCount >= 2;
   const canMove = selectedCount >= 1;
+  const canDelete = selectedCount >= 1;
 
   return (
     <motion.div
-      initial={{ y: 100, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 100, opacity: 0 }}
-      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+      initial={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
+      animate={inline ? { opacity: 1 } : { y: 0, opacity: 1 }}
+      exit={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
+      transition={inline ? { duration: 0.15 } : { type: 'spring', damping: 25, stiffness: 300 }}
       className={cn(
-        'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
         'flex items-center gap-3',
-        'px-4 py-3 rounded-2xl',
-        'bg-bg-secondary/95 backdrop-blur-lg',
+        'px-4 py-2.5 rounded-xl',
+        'bg-bg-tertiary/80',
         'border border-bg-tertiary',
-        'shadow-[0_8px_32px_rgba(0,0,0,0.4)]'
+        !inline && [
+          'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
+          'rounded-2xl backdrop-blur-lg',
+          'shadow-[0_8px_32px_rgba(0,0,0,0.4)]'
+        ]
       )}
     >
       {/* Cancel button */}
@@ -78,6 +87,25 @@ export function MergeActionBar({
         >
           <FolderInput className="w-4 h-4" />
           <span>Move</span>
+        </button>
+      )}
+
+      {/* Delete button */}
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          disabled={!canDelete || isLoading}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-xl',
+            'text-sm font-medium',
+            'transition-all duration-150',
+            canDelete && !isLoading
+              ? 'bg-error/10 text-error hover:bg-error/20'
+              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed'
+          )}
+        >
+          <Trash2 className="w-4 h-4" />
+          <span>Delete</span>
         </button>
       )}
 

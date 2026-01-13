@@ -16,10 +16,13 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'desktop_conversation_detail_page.dart';
 import 'widgets/desktop_conversation_card.dart';
+import 'widgets/desktop_daily_score_widget.dart';
 import 'widgets/desktop_empty_conversations.dart';
+import 'widgets/desktop_goals_widget.dart';
 import 'widgets/desktop_search_widget.dart';
 import 'widgets/desktop_search_result_header.dart';
 import 'widgets/desktop_recording_widget.dart';
+import 'widgets/desktop_today_tasks_widget.dart';
 
 class DesktopConversationsPage extends StatefulWidget {
   const DesktopConversationsPage({
@@ -310,6 +313,37 @@ class _DesktopConversationsPageState extends State<DesktopConversationsPage>
                                         child: DesktopRecordingWidget(
                                           hasConversations: true,
                                           onStartRecording: _showExpandedRecordingView,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                // Daily Score + Today Tasks + Goals section (only when not searching)
+                                if (hasAnyConversationsInSystem && !isSearchActive)
+                                  SliverToBoxAdapter(
+                                    child: FadeTransition(
+                                      opacity: _fadeAnimation,
+                                      child: Container(
+                                        padding: const EdgeInsets.fromLTRB(32, 0, 32, 24),
+                                        height: 260, // Height to fit 3 tasks/goals
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            // Daily Score Widget
+                                            const Expanded(
+                                              child: DesktopDailyScoreWidget(),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            // Today Tasks Widget
+                                            const Expanded(
+                                              child: DesktopTodayTasksWidget(),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            // Goals Widget
+                                            const Expanded(
+                                              child: DesktopGoalsWidget(),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),

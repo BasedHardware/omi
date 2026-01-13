@@ -83,6 +83,7 @@ class CalendarProvider extends ChangeNotifier {
     // Apply saved settings to calendar monitor
     await _service.updateSettings(
       showEventsWithNoParticipants: SharedPreferencesUtil().showEventsWithNoParticipants,
+      showMeetingsInMenuBar: SharedPreferencesUtil().showMeetingsInMenuBar,
     );
   }
 
@@ -94,6 +95,7 @@ class CalendarProvider extends ChangeNotifier {
 
   Future<void> updateShowMeetingsInMenuBar(bool value) async {
     SharedPreferencesUtil().showMeetingsInMenuBar = value;
+    await _service.updateSettings(showMeetingsInMenuBar: value);
   }
 
   Future<void> checkPermissionStatus() async {

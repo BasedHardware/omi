@@ -244,6 +244,31 @@ def report_message(uid: str, msg_doc_id: str):
         return {"message": f"Update failed: {e}"}
 
 
+def update_message_rating(uid: str, message_id: str, rating: int | None):
+    """
+    Update the rating on a message document.
+    
+    Args:
+        uid: User ID
+        message_id: Message ID (not doc ID)
+        rating: Rating value (1 = thumbs up, -1 = thumbs down, None = no rating)
+    """
+    user_ref = db.collection('users').document(uid)
+    message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
+    message_doc = next(message_ref, None)
+    if not message_doc:
+        print(f"⚠️ Message {message_id} not found for user {uid}")
+        return False
+    
+    try:
+        user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
+        print(f"✅ Updated message {message_id} rating to {rating}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to update message rating: {e}")
+        return False
+
+
 def batch_delete_messages(
     parent_doc_ref, batch_size=450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ):

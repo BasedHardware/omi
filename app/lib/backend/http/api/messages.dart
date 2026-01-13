@@ -29,6 +29,14 @@ Future<List<ServerMessage>> getMessagesServer({
     }
     var messages = decodedBody.map((conversation) => ServerMessage.fromJson(conversation)).toList();
     debugPrint('getMessages length: ${messages.length}');
+    // Debug: Check if any messages have ratings
+    var ratedMessages = messages.where((m) => m.rating != null).toList();
+    if (ratedMessages.isNotEmpty) {
+      debugPrint('📊 Messages with ratings: ${ratedMessages.length}');
+      for (var m in ratedMessages) {
+        debugPrint('  - Message ${m.id}: rating=${m.rating}');
+      }
+    }
     return messages;
   }
   return [];

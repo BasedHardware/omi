@@ -286,9 +286,17 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
   return response.statusCode == 200;
 }
 
-Future<bool> setMessageResponseRating(String messageId, int value) async {
+Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
+  // Build URL with required params
+  String url = '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value';
+  
+  // Add reason param if provided (for thumbs down feedback)
+  if (reason != null && reason.isNotEmpty) {
+    url += '&reason=$reason';
+  }
+  
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value',
+    url: url,
     headers: {},
     method: 'POST',
     body: '',
