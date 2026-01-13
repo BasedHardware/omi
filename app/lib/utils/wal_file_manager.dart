@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,6 +19,7 @@ class WalFileManager {
 
   static File? _walFile;
   static File? _walBackupFile;
+  static Future<void> _lastSaveFuture = Future.value();
 
   static Future<void> init() async {
     final directory =
@@ -74,6 +76,7 @@ class WalFileManager {
           await _walFile!.parent.create(recursive: true);
         } catch (e) {
           Logger.debug('Failed to create WAL directory: $e');
+          return false;
         }
       }
 

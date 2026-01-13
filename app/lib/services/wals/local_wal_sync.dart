@@ -243,6 +243,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       await _saveWalsToFile();
     } catch (e) {
       Logger.debug("LocalWalSync: Error during flush: $e");
+      rethrow;
     } finally {
       _isFlushing = false;
     }
