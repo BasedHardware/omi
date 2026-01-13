@@ -21,6 +21,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   Timer? _chunkingTimer;
   Timer? _flushingTimer;
 
+  bool _isFlushing = false;
+
   IWalSyncListener listener;
 
   int _framesPerSecond = 100;
@@ -199,39 +201,51 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   Future _flush() async {
-    Logger.debug("_flushing");
-    for (var i = 0; i < _wals.length; i++) {
-      final wal = _wals[i];
-
-      if (wal.storage == WalStorage.mem) {
-        String? filePath = await Wal.getFilePath(wal.getFileName());
-        if (filePath == null) {
-          throw Exception('Flushing to storage failed. Cannot get file path.');
-        }
-
-        List<int> data = [];
-        for (int i = 0; i < wal.data.length; i++) {
-          var frame = wal.data[i].sublist(3);
-
-          final byteFrame = ByteData(frame.length);
-          for (int i = 0; i < frame.length; i++) {
-            byteFrame.setUint8(i, frame[i]);
-          }
-          data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-          data.addAll(byteFrame.buffer.asUint8List());
-        }
-        final file = File(filePath);
-        await file.writeAsBytes(data);
-        wal.filePath = wal.getFileName();
-        wal.storage = WalStorage.disk;
-
-        Logger.debug("_flush file ${wal.filePath}");
-
-        _wals[i] = wal;
-      }
+    if (_isFlushing) {
+      Logger.debug("LocalWalSync: Flush already in progress, skipping");
+      return;
     }
+    _isFlushing = true;
 
-    await _saveWalsToFile();
+    try {
+      Logger.debug("_flushing");
+      for (var i = 0; i < _wals.length; i++) {
+        final wal = _wals[i];
+
+        if (wal.storage == WalStorage.mem) {
+          String? filePath = await Wal.getFilePath(wal.getFileName());
+          if (filePath == null) {
+            throw Exception('Flushing to storage failed. Cannot get file path.');
+          }
+
+          List<int> data = [];
+          for (int i = 0; i < wal.data.length; i++) {
+            var frame = wal.data[i].sublist(3);
+
+            final byteFrame = ByteData(frame.length);
+            for (int i = 0; i < frame.length; i++) {
+              byteFrame.setUint8(i, frame[i]);
+            }
+            data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
+            data.addAll(byteFrame.buffer.asUint8List());
+          }
+          final file = File(filePath);
+          await file.writeAsBytes(data);
+          wal.filePath = wal.getFileName();
+          wal.storage = WalStorage.disk;
+
+          Logger.debug("_flush file ${wal.filePath}");
+
+          _wals[i] = wal;
+        }
+      }
+
+      await _saveWalsToFile();
+    } catch (e) {
+      Logger.debug("LocalWalSync: Error during flush: $e");
+    } finally {
+      _isFlushing = false;
+    }
   }
 
   Future<void> _saveWalsToFile() async {
