@@ -204,6 +204,10 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   void close() {
+    if (_state == VoiceRecorderState.idle) {
+      return;
+    }
+
     if (_state == VoiceRecorderState.recording) {
       stopRecording();
     }
