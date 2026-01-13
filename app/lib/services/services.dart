@@ -3,14 +3,17 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
-import 'package:flutter/services.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class ServiceManager {
@@ -197,7 +200,7 @@ class BackgroundService {
   }
 
   void stop() {
-    debugPrint("invoke stop");
+    Logger.debug("invoke stop");
     _service.invoke("stop");
   }
 
@@ -441,14 +444,14 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         }
         break;
       case 'audioFormat':
-        debugPrint("audioFormat: ${call.arguments}");
+        Logger.debug("audioFormat: ${call.arguments}");
         if (_onFormatReceived != null && call.arguments is Map) {
           final Map<String, dynamic> format = Map<String, dynamic>.from(call.arguments as Map);
           _onFormatReceived!(format);
         }
         break;
       case 'audioStreamEnded':
-        debugPrint("audioStreamEnded");
+        Logger.debug("audioStreamEnded");
         _isRecording = false;
         if (_onStop != null) {
           _onStop!();
@@ -457,7 +460,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         break;
       case 'captureError':
       case 'converterError':
-        debugPrint("captureError: ${call.arguments}");
+        Logger.debug("captureError: ${call.arguments}");
         _isRecording = false;
         if (_onError != null && call.arguments is String) {
           _onError!(call.arguments as String);
@@ -499,11 +502,12 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         if (_onRecordingStartedFromNub != null) {
           _onRecordingStartedFromNub!();
         } else {
-          debugPrint('DesktopSystemAudioRecorderService: WARNING - No callback registered for recordingStartedFromNub');
+          Logger.debug(
+              'DesktopSystemAudioRecorderService: WARNING - No callback registered for recordingStartedFromNub');
         }
         break;
       case 'recordingStoppedAutomatically':
-        debugPrint('recordingStoppedAutomatically received - will trigger conversation processing after stop');
+        Logger.debug('recordingStoppedAutomatically received - will trigger conversation processing after stop');
         if (_onStoppedAutomatically != null) {
           _onStoppedAutomatically!();
         }
@@ -517,7 +521,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         if (call.arguments is Map) {
           final args = Map<String, dynamic>.from(call.arguments as Map);
           final isSpeakerActive = args['isSpeakerActive'] as bool? ?? false;
-          debugPrint('Speaker status changed: $isSpeakerActive');
+          Logger.debug('Speaker status changed: $isSpeakerActive');
         }
         break;
       case 'isRecordingPaused':
@@ -527,7 +531,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         }
         return false;
       default:
-        debugPrint('DesktopSystemAudioRecorderService: Unhandled method call: ${call.method}');
+        Logger.debug('DesktopSystemAudioRecorderService: Unhandled method call: ${call.method}');
     }
   }
 
@@ -637,7 +641,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
         _isRecording = false;
       }
     } catch (e) {
-      debugPrint("[SystemAudio] State check error: $e");
+      Logger.debug("[SystemAudio] State check error: $e");
     }
 
     if (_isRecording) {
@@ -702,7 +706,7 @@ class DesktopSystemAudioRecorderService implements ISystemAudioRecorderService {
     try {
       _channel.invokeMethod('stop');
     } catch (e) {
-      debugPrint('DesktopSystemAudioRecorderService: Error stopping: $e');
+      Logger.debug('DesktopSystemAudioRecorderService: Error stopping: $e');
     }
   }
 }

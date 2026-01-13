@@ -1,35 +1,37 @@
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/pages/apps/app_home_web_page.dart';
-import 'package:collection/collection.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/add_review_widget.dart';
+import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:skeletonizer/skeletonizer.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'dart:async';
-
 import '../../../../backend/schema/app.dart';
 import '../../../../pages/apps/widgets/show_app_options_sheet.dart';
-
-import 'package:timeago/timeago.dart' as timeago;
 
 class DesktopAppDetail extends StatefulWidget {
   final App app;
@@ -150,7 +152,7 @@ class _DesktopAppDetailState extends State<DesktopAppDetail> with SingleTickerPr
           timer.cancel();
           _paymentCheckTimer?.cancel();
         } else {
-          debugPrint('Payment not made yet');
+          Logger.debug('Payment not made yet');
         }
       }
     });

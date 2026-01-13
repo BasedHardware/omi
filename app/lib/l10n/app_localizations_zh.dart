@@ -2018,10 +2018,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noMemoriesYet => '暂无记忆';
 
   @override
-  String get noInterestingMemories => '暂无有趣记忆';
+  String get noAutoMemories => '暂无自动记忆';
 
   @override
-  String get noSystemMemories => '暂无系统记忆';
+  String get noManualMemories => '暂无手动记忆';
 
   @override
   String get noMemoriesInCategories => '此类目无记忆';
@@ -2146,13 +2146,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get filterAll => '全部';
 
   @override
-  String get filterInteresting => '有趣';
+  String get filterSystem => 'About You';
+
+  @override
+  String get filterInteresting => 'Insights';
 
   @override
   String get filterManual => '手动';
-
-  @override
-  String get filterSystem => '系统';
 
   @override
   String get completed => '已完成';

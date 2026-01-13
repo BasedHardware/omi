@@ -1,25 +1,23 @@
-
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/backend/schema/memory.dart';
-import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:omi/widgets/extensions/functions.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'widgets/desktop_memory_item.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/atoms/omi_icon_button.dart';
+import 'package:omi/ui/atoms/omi_search_input.dart';
+import 'package:omi/ui/molecules/omi_empty_state.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/extensions/functions.dart';
 import 'widgets/desktop_memory_dialog.dart';
+import 'widgets/desktop_memory_item.dart';
 import 'widgets/desktop_memory_management_dialog.dart';
 
-import 'package:omi/ui/atoms/omi_search_input.dart';
-import 'package:omi/ui/atoms/omi_icon_button.dart';
-import 'package:omi/ui/molecules/omi_empty_state.dart';
-
-enum FilterOption { interesting, system, manual, all }
+enum FilterOption { system, interesting, manual, all }
 
 class DesktopMemoriesPage extends StatefulWidget {
   const DesktopMemoriesPage({super.key});
@@ -140,11 +138,11 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     setState(() {
       _currentFilter = option;
       switch (option) {
-        case FilterOption.interesting:
-          _selectedCategory = MemoryCategory.interesting;
-          break;
         case FilterOption.system:
           _selectedCategory = MemoryCategory.system;
+          break;
+        case FilterOption.interesting:
+          _selectedCategory = MemoryCategory.interesting;
           break;
         case FilterOption.manual:
           _selectedCategory = MemoryCategory.manual;
@@ -161,13 +159,13 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
     if (!mounted) return;
 
     switch (option) {
-      case FilterOption.interesting:
-        provider.toggleCategoryFilter(MemoryCategory.interesting);
-        MixpanelManager().memoriesFiltered('interesting');
-        break;
       case FilterOption.system:
         provider.toggleCategoryFilter(MemoryCategory.system);
         MixpanelManager().memoriesFiltered('system');
+        break;
+      case FilterOption.interesting:
+        provider.toggleCategoryFilter(MemoryCategory.interesting);
+        MixpanelManager().memoriesFiltered('interesting');
         break;
       case FilterOption.manual:
         provider.toggleCategoryFilter(MemoryCategory.manual);
@@ -258,7 +256,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                                 child: Column(
                                   children: [
                                     _buildModernHeader(provider),
-
                                     Expanded(
                                       child: _animationsInitialized
                                           ? FadeTransition(
@@ -277,8 +274,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
                           ),
                         ),
                       ),
-
-
 
                       // Loading overlay for CMD+R reload
                       if (_isReloading)
@@ -403,8 +398,8 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
         offset: const Offset(0, 48),
         itemBuilder: (context) => [
           _buildFilterItem(FilterOption.all, 'All Memories'),
-          _buildFilterItem(FilterOption.interesting, 'Interesting'),
-          _buildFilterItem(FilterOption.system, 'System'),
+          _buildFilterItem(FilterOption.system, 'About You'),
+          _buildFilterItem(FilterOption.interesting, 'Insights'),
           _buildFilterItem(FilterOption.manual, 'Manual'),
         ],
         onSelected: _applyFilter,
@@ -466,10 +461,10 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
 
   String _getFilterText() {
     switch (_currentFilter) {
-      case FilterOption.interesting:
-        return 'Interesting';
       case FilterOption.system:
-        return 'System';
+        return 'About You';
+      case FilterOption.interesting:
+        return 'Insights';
       case FilterOption.manual:
         return 'Manual';
       case FilterOption.all:
@@ -693,10 +688,6 @@ class DesktopMemoriesPageState extends State<DesktopMemoriesPage>
       ),
     );
   }
-
-
-
-
 
   void _showManagementSheet(BuildContext context, MemoriesProvider provider) {
     showDialog(

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:provider/provider.dart';
-import 'widgets/action_item_form_sheet.dart';
 
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'widgets/action_item_form_sheet.dart';
 
 enum TaskCategory { today, tomorrow, noDeadline, later }
 
@@ -33,6 +34,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   @override
   bool get wantKeepAlive => true;
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -88,7 +99,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   // Categorize items by deadline
-  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(List<ActionItemWithMetadata> items, bool showCompleted) {
+  Map<TaskCategory, List<ActionItemWithMetadata>> _categorizeItems(
+      List<ActionItemWithMetadata> items, bool showCompleted) {
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
@@ -855,9 +867,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
         color: isCompleted ? Colors.amber : Colors.transparent,
       ),
-      child: isCompleted
-          ? const Icon(Icons.check, size: 14, color: Colors.black)
-          : null,
+      child: isCompleted ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
     );
   }
 

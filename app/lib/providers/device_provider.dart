@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/http/api/device.dart';
 import 'package:omi/main.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connection_foreground_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
@@ -15,6 +17,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
@@ -147,6 +150,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = true;
         }
+
+        if (PlatformService.isAndroid && connectedDevice != null) {
+          ConnectionForegroundService.instance.updateNotification(
+            deviceName: connectedDevice!.name,
+            batteryLevel: value,
+          );
+        }
+
         notifyListeners();
       },
     );
@@ -316,6 +327,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
+    if (PlatformService.isAndroid) {
+      await ConnectionForegroundService.instance.stop();
+    }
+
     captureProvider?.updateRecordingDevice(null);
 
     // Wals
@@ -362,6 +377,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _disconnectNotificationTimer?.cancel();
     NotificationService.instance.clearNotification(1);
     setConnectedDevice(device);
+
+    if (PlatformService.isAndroid) {
+      await ConnectionForegroundService.instance.start(deviceName: device.name);
+    }
 
     if (captureProvider != null) {
       captureProvider?.updateRecordingDevice(device);

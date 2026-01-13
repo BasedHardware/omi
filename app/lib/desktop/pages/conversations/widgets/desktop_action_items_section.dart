@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/ui/atoms/omi_checkbox.dart';
 import 'package:omi/ui/molecules/omi_section_header.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopActionItemsSection extends StatelessWidget {
   final ServerConversation conversation;

@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/logger.dart';
 
 Future<String> webhookOnConversationCreatedCall(ServerConversation? conversation, {bool returnRawBody = false}) async {
   if (conversation == null) return '';
-  debugPrint('devModeWebhookCall: $conversation');
+  Logger.debug('devModeWebhookCall: $conversation');
   String url = SharedPreferencesUtil().webhookOnConversationCreated;
   if (url.isEmpty) return '';
   if (url.contains('?')) {
@@ -15,7 +17,7 @@ Future<String> webhookOnConversationCreatedCall(ServerConversation? conversation
   } else {
     url += '?uid=${SharedPreferencesUtil().uid}';
   }
-  debugPrint('triggerConversationRequestAtEndpoint: $url');
+  Logger.debug('triggerConversationRequestAtEndpoint: $url');
   var data = conversation.toJson();
   try {
     var response = await makeApiCall(
@@ -24,15 +26,15 @@ Future<String> webhookOnConversationCreatedCall(ServerConversation? conversation
       body: jsonEncode(data),
       method: 'POST',
     );
-    debugPrint('response: ${response?.statusCode}');
+    Logger.debug('response: ${response?.statusCode}');
     if (returnRawBody) return jsonEncode({'statusCode': response?.statusCode, 'body': response?.body});
     var body = jsonDecode(response?.body ?? '{}');
     return body['message'] ?? '';
   } on FormatException catch (e) {
-    debugPrint('Response not a valid json: $e');
+    Logger.debug('Response not a valid json: $e');
     return '';
   } catch (e) {
-    debugPrint('Error triggering conversation request at endpoint: $e');
+    Logger.debug('Error triggering conversation request at endpoint: $e');
     return '';
   }
 }

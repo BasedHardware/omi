@@ -1,43 +1,34 @@
 import 'package:flutter/material.dart';
+
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
-import 'package:omi/widgets/freemium_paywall_page.dart';
 
 /// Handler for freemium transcription switching
-/// Manages when to show the paywall and navigation
+/// Manages when to show the plans sheet and navigation
 class FreemiumSwitchHandler {
   final FreemiumTranscriptionService _freemiumService = FreemiumTranscriptionService();
 
   FreemiumTranscriptionService get service => _freemiumService;
 
-  /// Check and show paywall if freemium threshold reached
-  /// Returns true if paywall was shown
+  /// Check and show plans sheet if freemium threshold reached
+  /// Returns true if plans sheet was shown
   Future<bool> checkAndShowPaywall(BuildContext context, CaptureProvider captureProvider) async {
     if (_freemiumService.dialogShownThisSession) return false;
 
     if (captureProvider.freemiumThresholdReached && captureProvider.freemiumRequiresUserAction) {
       _freemiumService.markDialogShown();
 
-      // Check on-device readiness
-      final readiness = await _freemiumService.checkReadiness();
-      final isOnDeviceReady = readiness == FreemiumReadiness.ready;
-
       if (!context.mounted) return false;
 
-      // Navigate to full-screen paywall
-      await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (context) => FreemiumPaywallPage(
-            remainingSeconds: captureProvider.freemiumRemainingSeconds,
-            isOnDeviceReady: isOnDeviceReady,
-          ),
-          fullscreenDialog: true,
-        ),
+      // Show plans sheet directly
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) => _PlansSheetWrapper(),
       );
 
-      // result == true means user upgraded
-      // result == false means user chose on-device
-      // result == null means user dismissed
       return true;
     }
     return false;
@@ -62,5 +53,52 @@ class FreemiumSwitchHandler {
   /// Reset just the dialog shown flag
   void resetDialogFlag() {
     _freemiumService.resetDialogShownFlag();
+  }
+}
+
+/// Wrapper widget to create animation controllers for PlansSheet
+class _PlansSheetWrapper extends StatefulWidget {
+  @override
+  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
+}
+
+class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
+  late AnimationController _waveController;
+  late AnimationController _arrowController;
+  late Animation<double> _arrowAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(
+      duration: const Duration(milliseconds: 18000),
+      vsync: this,
+    )..repeat();
+
+    _arrowController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _arrowAnimation = Tween<double>(begin: 0, end: 3).animate(
+      CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    _arrowController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PlansSheet(
+      waveController: _waveController,
+      notesController: _waveController,
+      arrowController: _arrowController,
+      arrowAnimation: _arrowAnimation,
+    );
   }
 }

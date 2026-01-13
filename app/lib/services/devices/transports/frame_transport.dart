@@ -4,10 +4,12 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
 import 'package:frame_sdk/bluetooth.dart';
 import 'package:frame_sdk/frame_sdk.dart';
-import 'package:omi/gen/assets.gen.dart';
 
+import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 class FrameTransport extends DeviceTransport {
@@ -66,7 +68,7 @@ class FrameTransport extends DeviceTransport {
 
   Future<void> _afterConnect() async {
     if (_frame == null || !_frame!.isConnected) {
-      debugPrint("Frame is not connected in afterConnect!");
+      Logger.debug("Frame is not connected in afterConnect!");
       return;
     }
 
@@ -74,7 +76,7 @@ class FrameTransport extends DeviceTransport {
       _debugSubscription!.cancel();
     }
     _debugSubscription = _frame!.bluetooth.stringResponse.listen((data) {
-      debugPrint("Frame printed: $data");
+      Logger.debug("Frame printed: $data");
     });
 
     await _setTimeOnFrame();
@@ -91,7 +93,7 @@ class FrameTransport extends DeviceTransport {
         _batteryLevel = int.parse(await _frame!.evaluate("frame.battery_level()"));
         _isLooping = false;
       } catch (e) {
-        debugPrint('Frame Transport: Error getting device info: $e');
+        Logger.debug('Frame Transport: Error getting device info: $e');
       }
     }
   }
@@ -138,19 +140,19 @@ class FrameTransport extends DeviceTransport {
       await _sendUntilEchoed("CAMERA START");
     } else if (!isLoaded) {
       await _frame!.bluetooth.sendBreakSignal();
-      debugPrint("About to send main.lua to frame, length = ${mainLuaContent.length}");
+      Logger.debug("About to send main.lua to frame, length = ${mainLuaContent.length}");
       try {
         await _frame!.files.writeFile("main.lua", utf8.encode("$mainLuaContent\nframeLibHash = $frameLibHash\nstart()"),
             checked: true);
-        debugPrint("Sent main.lua to frame");
+        Logger.debug("Sent main.lua to frame");
         await _frame!.bluetooth.sendResetSignal();
       } catch (e) {
-        debugPrint("Error sending main.lua to frame: $e");
+        Logger.debug("Error sending main.lua to frame: $e");
       }
       await _setTimeOnFrame();
     } else if (isLoaded && !isRunning) {
       await _frame!.bluetooth.sendBreakSignal();
-      debugPrint("Frame already loaded, running start()");
+      Logger.debug("Frame already loaded, running start()");
       await _setTimeOnFrame();
       await _frame!.runLua("start()");
     }
@@ -249,7 +251,7 @@ class FrameTransport extends DeviceTransport {
         });
       }
     } catch (e) {
-      debugPrint('Frame Transport: Failed to setup listener: $e');
+      Logger.debug('Frame Transport: Failed to setup listener: $e');
     }
   }
 
@@ -283,7 +285,7 @@ class FrameTransport extends DeviceTransport {
 
       return [];
     } catch (e) {
-      debugPrint('Frame Transport: Failed to read characteristic: $e');
+      Logger.debug('Frame Transport: Failed to read characteristic: $e');
       return [];
     }
   }
@@ -321,7 +323,7 @@ class FrameTransport extends DeviceTransport {
         await _sendUntilEchoed(command);
       }
     } catch (e) {
-      debugPrint('Frame Transport: Failed to write characteristic: $e');
+      Logger.debug('Frame Transport: Failed to write characteristic: $e');
       rethrow;
     }
   }
@@ -335,7 +337,7 @@ class FrameTransport extends DeviceTransport {
       await _frame!.bluetooth.sendData(Uint8List.fromList(command.codeUnits));
       return true;
     } catch (e) {
-      debugPrint('Frame Transport: Error sending command: $e');
+      Logger.debug('Frame Transport: Error sending command: $e');
       return false;
     }
   }
@@ -349,7 +351,7 @@ class FrameTransport extends DeviceTransport {
       final batteryLevel = await _frame!.getBatteryLevel();
       return batteryLevel.toString();
     } catch (e) {
-      debugPrint('Frame Transport: Error getting battery level: $e');
+      Logger.debug('Frame Transport: Error getting battery level: $e');
       return null;
     }
   }
@@ -371,17 +373,17 @@ class FrameTransport extends DeviceTransport {
 
     try {
       Uint8List result = await futureResult;
-      debugPrint("Received $key from frame: ${utf8.decode(result)}");
+      Logger.debug("Received $key from frame: ${utf8.decode(result)}");
       _isLooping = true;
       return utf8.decode(result);
     } on TimeoutException {
-      debugPrint("Timeout occurred while getting $key from loop");
+      Logger.debug("Timeout occurred while getting $key from loop");
       return null;
     }
   }
 
   Future<void> _sendHeartbeat() async {
-    debugPrint("Sending heartbeat to frame");
+    Logger.debug("Sending heartbeat to frame");
     final heartbeatBytes = Uint8List.fromList(utf8.encode("HEARTBEAT"));
     await _frame?.bluetooth.sendData(heartbeatBytes);
   }
@@ -401,9 +403,9 @@ class FrameTransport extends DeviceTransport {
         return true;
       } catch (e) {
         if (e is TimeoutException) {
-          debugPrint("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
+          Logger.debug("Timeout occurred while waiting for echo of $data. Attempt $attempt of $maxAttempts");
           if (attempt == maxAttempts) {
-            debugPrint("Failed to receive echo for $data after $maxAttempts attempts");
+            Logger.debug("Failed to receive echo for $data after $maxAttempts attempts");
             return false;
           }
         } else {
@@ -412,7 +414,7 @@ class FrameTransport extends DeviceTransport {
               // Could trigger reconnection logic here
             }
           } else {
-            debugPrint("Error sending $data to frame: $e");
+            Logger.debug("Error sending $data to frame: $e");
             return false;
           }
         }

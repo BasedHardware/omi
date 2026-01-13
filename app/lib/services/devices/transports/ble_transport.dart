@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 
+import 'package:collection/collection.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
+import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
+import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 class BleTransport extends DeviceTransport {
@@ -124,7 +126,7 @@ class BleTransport extends DeviceTransport {
       await _bleDevice.readRssi(timeout: 10);
       return true;
     } catch (e) {
-      debugPrint('BLE Transport ping failed: $e');
+      Logger.debug('BLE Transport ping failed: $e');
       return false;
     }
   }
@@ -145,7 +147,7 @@ class BleTransport extends DeviceTransport {
     try {
       final characteristic = await _getCharacteristic(serviceUuid, characteristicUuid);
       if (characteristic == null) {
-        debugPrint('BLE Transport: Characteristic not found: $serviceUuid:$characteristicUuid');
+        Logger.debug('BLE Transport: Characteristic not found: $serviceUuid:$characteristicUuid');
         return;
       }
 
@@ -158,14 +160,14 @@ class BleTransport extends DeviceTransport {
           }
         },
         onError: (error) {
-          debugPrint('BLE Transport characteristic stream error: $error');
+          Logger.debug('BLE Transport characteristic stream error: $error');
         },
       );
 
       _characteristicSubscriptions[key] = subscription;
       _bleDevice.cancelWhenDisconnected(subscription);
     } catch (e) {
-      debugPrint('BLE Transport: Failed to setup characteristic listener: $e');
+      Logger.debug('BLE Transport: Failed to setup characteristic listener: $e');
     }
   }
 
@@ -179,7 +181,7 @@ class BleTransport extends DeviceTransport {
     try {
       return await characteristic.read();
     } catch (e) {
-      debugPrint('BLE Transport: Failed to read characteristic: $e');
+      Logger.debug('BLE Transport: Failed to read characteristic: $e');
       return [];
     }
   }
@@ -194,7 +196,7 @@ class BleTransport extends DeviceTransport {
     try {
       await characteristic.write(data);
     } catch (e) {
-      debugPrint('BLE Transport: Failed to write characteristic: $e');
+      Logger.debug('BLE Transport: Failed to write characteristic: $e');
       rethrow;
     }
   }

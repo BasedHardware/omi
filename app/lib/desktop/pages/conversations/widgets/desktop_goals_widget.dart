@@ -1,8 +1,12 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:omi/backend/http/api/goals.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 /// Desktop multi-goal widget supporting up to 3 goals with minimalistic UI
 class DesktopGoalsWidget extends StatefulWidget {
@@ -15,17 +19,35 @@ class DesktopGoalsWidget extends StatefulWidget {
 class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBindingObserver {
   List<Goal> _goals = [];
   bool _isLoading = true;
-  
+
   static const String _goalsStorageKey = 'goals_tracker_local_goals';
   static const String _goalsEmojiKey = 'goals_tracker_emojis';
   static const int _maxGoals = 3;
-  
+
   // Available emojis for goals
   static const List<String> _availableEmojis = [
-    '🎯', '💪', '📚', '💰', '🏃', '🧘', '💡', '🔥', '⭐', '🚀',
-    '💎', '🏆', '📈', '❤️', '🎨', '🎵', '✈️', '🏠', '🌱', '⏰',
+    '🎯',
+    '💪',
+    '📚',
+    '💰',
+    '🏃',
+    '🧘',
+    '💡',
+    '🔥',
+    '⭐',
+    '🚀',
+    '💎',
+    '🏆',
+    '📈',
+    '❤️',
+    '🎨',
+    '🎵',
+    '✈️',
+    '🏠',
+    '🌱',
+    '⏰',
   ];
-  
+
   Map<String, String> _goalEmojis = {};
   String _selectedEmoji = '🎯';
 
@@ -61,15 +83,15 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
       // Load emojis from local storage
       final prefs = await SharedPreferences.getInstance();
       final emojisJson = prefs.getString(_goalsEmojiKey);
-      
+
       if (emojisJson != null) {
         final Map<String, dynamic> decoded = json.decode(emojisJson);
         _goalEmojis = decoded.map((k, v) => MapEntry(k, v.toString()));
       }
-      
+
       // Fetch goals from backend (source of truth for cross-device sync)
       final backendGoals = await getAllGoals();
-      
+
       if (backendGoals.isNotEmpty && mounted) {
         setState(() {
           _goals = backendGoals;
@@ -92,7 +114,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
               return;
             }
           } catch (e) {
-            debugPrint('[GOALS] Error parsing local goals: $e');
+            Logger.debug('[GOALS] Error parsing local goals: $e');
           }
         }
         if (mounted) {
@@ -100,7 +122,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
         }
       }
     } catch (e) {
-      debugPrint('[GOALS] Error loading goals: $e');
+      Logger.debug('[GOALS] Error loading goals: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -113,16 +135,29 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
       final emojisJson = json.encode(_goalEmojis);
       await prefs.setString(_goalsEmojiKey, emojisJson);
     } catch (e) {
-      debugPrint('[GOALS] Error saving goals: $e');
+      Logger.debug('[GOALS] Error saving goals: $e');
     }
   }
-  
+
   String _getSmartEmoji(String title) {
     final lowerTitle = title.toLowerCase();
-    
+
     final Map<List<String>, String> keywordMap = {
       ['revenue', 'money', 'income', 'profit', 'sales', '\$', 'dollar', 'earn']: '💰',
-      ['users', 'customers', 'clients', 'subscribers', 'followers', 'growth', 'million', '1m', '10k', '100k', 'mrr', 'arr']: '🚀',
+      [
+        'users',
+        'customers',
+        'clients',
+        'subscribers',
+        'followers',
+        'growth',
+        'million',
+        '1m',
+        '10k',
+        '100k',
+        'mrr',
+        'arr'
+      ]: '🚀',
       ['startup', 'launch', 'business', 'company']: '🏆',
       ['invest', 'stock', 'crypto', 'trading']: '📈',
       ['workout', 'gym', 'exercise', 'lift', 'muscle', 'strength', 'pushup', 'pullup']: '💪',
@@ -156,7 +191,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
       ['grow', 'improve', 'better', 'progress']: '🌱',
       ['star', 'success', 'excellent']: '⭐',
     };
-    
+
     for (final entry in keywordMap.entries) {
       for (final keyword in entry.key) {
         if (lowerTitle.contains(keyword)) {
@@ -164,10 +199,10 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
         }
       }
     }
-    
+
     return '🎯';
   }
-  
+
   String _getGoalEmoji(String goalId) {
     return _goalEmojis[goalId] ?? '🎯';
   }
@@ -202,7 +237,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
 
   void _showGoalDialog(Goal? existingGoal) {
     final isNew = existingGoal == null;
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -252,13 +287,11 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
                               height: 40,
                               margin: const EdgeInsets.only(right: 6),
                               decoration: BoxDecoration(
-                                color: isSelected 
+                                color: isSelected
                                     ? ResponsiveHelper.purplePrimary.withOpacity(0.2)
                                     : ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
                                 borderRadius: BorderRadius.circular(10),
-                                border: isSelected 
-                                    ? Border.all(color: ResponsiveHelper.purplePrimary, width: 2)
-                                    : null,
+                                border: isSelected ? Border.all(color: ResponsiveHelper.purplePrimary, width: 2) : null,
                               ),
                               child: Center(
                                 child: Text(emoji, style: const TextStyle(fontSize: 20)),
@@ -462,7 +495,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
           targetValue: target,
           currentValue: current,
         );
-        
+
         if (created != null && mounted) {
           final index = _goals.indexWhere((g) => g.id == newGoal.id);
           if (index >= 0) {
@@ -477,7 +510,7 @@ class _DesktopGoalsWidgetState extends State<DesktopGoalsWidget> with WidgetsBin
 
       await _saveGoalsLocally();
     } catch (e) {
-      debugPrint('[GOALS] Error saving goal: $e');
+      Logger.debug('[GOALS] Error saving goal: $e');
     }
   }
 

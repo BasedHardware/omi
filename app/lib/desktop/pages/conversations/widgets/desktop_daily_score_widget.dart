@@ -1,8 +1,11 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+
+import 'package:provider/provider.dart';
+
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
-import 'package:provider/provider.dart';
 
 /// Desktop Daily Score Widget - Shows task completion rate as a 0-5 score
 class DesktopDailyScoreWidget extends StatelessWidget {
@@ -20,8 +23,7 @@ class DesktopDailyScoreWidget extends StatelessWidget {
         // Get tasks due today only
         final todayTasks = provider.actionItems.where((item) {
           if (item.dueAt == null) return false;
-          return item.dueAt!.isAfter(todayStart.subtract(const Duration(days: 1))) && 
-                 item.dueAt!.isBefore(todayEnd);
+          return item.dueAt!.isAfter(todayStart.subtract(const Duration(days: 1))) && item.dueAt!.isBefore(todayEnd);
         }).toList();
 
         final totalTasks = todayTasks.length;
@@ -94,19 +96,19 @@ class DesktopDailyScoreWidget extends StatelessWidget {
                             ),
                           ),
                         ),
-                      // Score text
-                      Positioned(
-                        top: 28,
-                        child: Text(
-                          _formatScore(score),
-                          style: TextStyle(
-                            fontSize: 40,
-                            fontWeight: FontWeight.w500,
-                            color: statusColor,
-                            height: 1,
+                        // Score text
+                        Positioned(
+                          top: 28,
+                          child: Text(
+                            _formatScore(score),
+                            style: TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.w500,
+                              color: statusColor,
+                              height: 1,
+                            ),
                           ),
                         ),
-                      ),
                       ],
                     ),
                   ),
@@ -180,6 +182,5 @@ class _SemicircleGaugePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SemicircleGaugePainter old) =>
-      old.score != score || old.color != color;
+  bool shouldRepaint(_SemicircleGaugePainter old) => old.score != score || old.color != color;
 }

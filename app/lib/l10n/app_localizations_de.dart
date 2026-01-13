@@ -2079,10 +2079,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get noMemoriesYet => 'Noch keine Erinnerungen';
 
   @override
-  String get noInterestingMemories => 'Noch keine interessanten Erinnerungen';
+  String get noAutoMemories => 'Noch keine automatischen Erinnerungen';
 
   @override
-  String get noSystemMemories => 'Noch keine Systemerinnerungen';
+  String get noManualMemories => 'Noch keine manuellen Erinnerungen';
 
   @override
   String get noMemoriesInCategories => 'Keine Erinnerungen in diesen Kategorien';
@@ -2208,13 +2208,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get filterAll => 'Alle';
 
   @override
-  String get filterInteresting => 'Interessant';
+  String get filterSystem => 'About You';
+
+  @override
+  String get filterInteresting => 'Insights';
 
   @override
   String get filterManual => 'Manuell';
-
-  @override
-  String get filterSystem => 'System';
 
   @override
   String get completed => 'Erledigt';

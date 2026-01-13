@@ -2043,10 +2043,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get noMemoriesYet => 'No hay recuerdos aún';
 
   @override
-  String get noInterestingMemories => 'No hay recuerdos interesantes';
+  String get noAutoMemories => 'No hay recuerdos automáticos';
 
   @override
-  String get noSystemMemories => 'No hay recuerdos del sistema';
+  String get noManualMemories => 'No hay recuerdos manuales';
 
   @override
   String get noMemoriesInCategories => 'No hay recuerdos en estas categorías';
@@ -2171,13 +2171,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get filterAll => 'Todos';
 
   @override
-  String get filterInteresting => 'Interesante';
+  String get filterSystem => 'About You';
+
+  @override
+  String get filterInteresting => 'Insights';
 
   @override
   String get filterManual => 'Manual';
-
-  @override
-  String get filterSystem => 'Sistema';
 
   @override
   String get completed => 'Completado';

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+
+import 'package:webview_flutter/webview_flutter.dart';
+
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:omi/utils/logger.dart';
 
 class PaymentWebViewPage extends StatefulWidget {
   final String checkoutUrl;
@@ -42,12 +45,12 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
           },
           onNavigationRequest: (NavigationRequest request) {
             if (request.url.startsWith(successUrl)) {
-              debugPrint('Payment successful, closing webview');
+              Logger.debug('Payment successful, closing webview');
               Navigator.of(context).pop(true); // Pop with success result
               return NavigationDecision.prevent;
             }
             if (request.url.startsWith(cancelUrl)) {
-              debugPrint('Payment cancelled, closing webview');
+              Logger.debug('Payment cancelled, closing webview');
               Navigator.of(context).pop(false); // Pop with cancel result
               return NavigationDecision.prevent;
             }

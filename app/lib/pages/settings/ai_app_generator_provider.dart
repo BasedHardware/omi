@@ -3,11 +3,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
+import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:omi/utils/logger.dart';
 
 /// State enum for the AI app generation process
 enum GenerationState {
@@ -121,7 +124,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         ];
       }
     } catch (e) {
-      debugPrint('Error fetching sample prompts: $e');
+      Logger.debug('Error fetching sample prompts: $e');
       _samplePrompts = [
         'A playful gratitude spinner for daily positivity',
         'Mind map organizer for my conversations',
@@ -206,7 +209,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('Error generating app: $e');
+      Logger.debug('Error generating app: $e');
       _state = GenerationState.error;
       _errorMessage = 'An error occurred: ${e.toString()}';
       notifyListeners();
@@ -239,7 +242,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
       notifyListeners();
       return iconBase64 != null;
     } catch (e) {
-      debugPrint('Error regenerating icon: $e');
+      Logger.debug('Error regenerating icon: $e');
       _state = GenerationState.error;
       _errorMessage = 'Failed to regenerate icon';
       notifyListeners();
@@ -314,7 +317,7 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         return null;
       }
     } catch (e) {
-      debugPrint('Error submitting app: $e');
+      Logger.debug('Error submitting app: $e');
       _state = GenerationState.error;
       _errorMessage = 'An error occurred while creating the app';
       notifyListeners();

@@ -19,6 +19,8 @@ import database.trends as trends_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
+from database.vector_db import find_similar_memories, upsert_memory_vector, delete_memory_vector
+from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
@@ -336,7 +338,11 @@ def _update_goal_progress(uid: str, conversation: Conversation):
 
 
 def _extract_memories(uid: str, conversation: Conversation):
-    # TODO: maybe instead (once they can edit them) we should not tie it this hard
+    # Delete old memories for this conversation (if reprocessing)
+    # Also get the IDs to delete from Pinecone
+    existing_memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation.id)
+    for memory_id in existing_memory_ids:
+        delete_memory_vector(uid, memory_id)
     memories_db.delete_memories_for_conversation(uid, conversation.id)
 
     new_memories: List[Memory] = []
@@ -353,11 +359,49 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     is_locked = conversation.is_locked
     parsed_memories = []
+    memories_to_delete = []
+
     for memory in new_memories:
+        # Find similar existing memories
+        similar_matches = find_similar_memories(uid, memory.content, threshold=0.7, limit=3)
+
+        # Fetch content for each similar memory
+        similar_memories = []
+        for match in similar_matches:
+            memory_data = memories_db.get_memory(uid, match['memory_id'])
+            if memory_data:
+                similar_memories.append(
+                    {
+                        'memory_id': match['memory_id'],
+                        'category': match['category'],
+                        'score': match['score'],
+                        'content': memory_data.get('content', ''),
+                    }
+                )
+
+        if similar_memories:
+
+            resolution = resolve_memory_conflict(memory.content, similar_memories)
+
+            if resolution.action == 'keep_existing':
+                continue
+
+            elif resolution.action == 'merge':
+                # Replace existing memory with merged version
+                if resolution.merged_content:
+                    memories_to_delete.append(similar_memories[0]['memory_id'])
+                    memory.content = resolution.merged_content
+
+            elif resolution.action == 'keep_both':
+                pass
+
         memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
-        # print('_extract_memories:', memory.category.value.upper(), '|', memory.content)
+
+    for memory_id in memories_to_delete:
+        delete_memory_vector(uid, memory_id)
+        memories_db.delete_memory(uid, memory_id)
 
     if len(parsed_memories) == 0:
         print(f"No memories extracted for conversation {conversation.id}")
@@ -365,6 +409,9 @@ def _extract_memories(uid: str, conversation: Conversation):
 
     print(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
+
+    for memory_db_obj in parsed_memories:
+        upsert_memory_vector(uid, memory_db_obj.id, memory_db_obj.content, memory_db_obj.category.value)
 
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
