@@ -16,8 +16,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/companion_device_manager.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -462,20 +460,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
       connectingToDeviceId = device.id;
       notifyListeners();
-
-      if (PlatformService.isAndroid) {
-        await _associateCompanionDevice(device);
-      }
-
       await ServiceManager.instance().device.ensureConnection(device.id, force: true);
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
       await SharedPreferencesUtil().btDeviceSet(device);
-
-      if (PlatformService.isAndroid) {
-        await _startCompanionDevicePresenceObservation(device.id);
-      }
-
       deviceName = device.name;
       deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
@@ -530,54 +518,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     }
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     return connection?.device;
-  }
-
-  Future<void> _associateCompanionDevice(BtDevice device) async {
-    try {
-      final companionService = CompanionDeviceManagerService.instance;
-
-      // Check if already associated
-      final isAssociated = await companionService.isDeviceAssociated(device.id);
-      if (isAssociated) {
-        Logger.debug('CompanionDevice: Device ${device.id} already associated');
-        return;
-      }
-
-      // Check if CompanionDeviceManager is supported
-      if (!await companionService.isSupported()) {
-        Logger.debug('CompanionDevice: Not supported on this device');
-        return;
-      }
-
-      Logger.debug('CompanionDevice: Associating device ${device.id} (${device.name})');
-
-      final result = await companionService.associate(
-        deviceAddress: device.id,
-        deviceName: device.name,
-        serviceUuid: omiServiceUuid,
-      );
-
-      if (result.success) {
-        Logger.debug('CompanionDevice: Association successful');
-      } else {
-        Logger.debug('CompanionDevice: Association failed/cancelled: ${result.error}');
-      }
-    } catch (e) {
-      Logger.debug('CompanionDevice: Error during association: $e');
-    }
-  }
-
-  Future<void> _startCompanionDevicePresenceObservation(String deviceId) async {
-    try {
-      final companionService = CompanionDeviceManagerService.instance;
-      if (await companionService.isPresenceObservingSupported()) {
-        if (await companionService.isDeviceAssociated(deviceId)) {
-          await companionService.startObservingDevicePresence(deviceId);
-        }
-      }
-    } catch (e) {
-      Logger.debug('CompanionDevice: Error starting presence observation: $e');
-    }
   }
 
   Future<void> scanDevices({

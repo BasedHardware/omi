@@ -140,7 +140,6 @@ dependencies:
 dependency_overrides:
   js: ^0.7.1
   uuid: ^4.4.0
-  flutter_blue_plus: 2.1.0
   opus_flutter_ios:
     git:
       url: https://github.com/mdmohsin7/opus_flutter.git

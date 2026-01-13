@@ -42,11 +42,8 @@ class FrameDeviceConnection extends DeviceConnection {
   // Frame SDK initialization is now handled by FrameTransport
 
   @override
-  Future<void> connect({
-    Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged,
-    bool autoConnect = false,
-  }) async {
-    await super.connect(onConnectionStateChanged: onConnectionStateChanged, autoConnect: autoConnect);
+  Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
+    await super.connect(onConnectionStateChanged: onConnectionStateChanged);
     try {
       _firmwareRevision = 'Frame';
       _batteryLevel = await performRetrieveBatteryLevel();

@@ -53,7 +53,7 @@ class BleTransport extends DeviceTransport {
   }
 
   @override
-  Future<void> connect({bool autoConnect = false}) async {
+  Future<void> connect() async {
     if (_state == DeviceTransportState.connected) {
       return;
     }
@@ -65,15 +65,11 @@ class BleTransport extends DeviceTransport {
       await BluetoothAdapter.adapterState.where((val) => val == BluetoothAdapterStateHelper.on).first;
 
       // Connect to device
-      // Note: autoConnect is incompatible with mtu parameter in flutter_blue_plus
-      await _bleDevice.connect(autoConnect: autoConnect, mtu: autoConnect ? null : 512, license: License.free);
-
+      await _bleDevice.connect(license: License.free);
       await _bleDevice.connectionState.where((val) => val == BluetoothConnectionState.connected).first;
 
       // Request larger MTU for better performance on Android
-      // When autoConnect is true, we need to request MTU separately after connection
       if (Platform.isAndroid && _bleDevice.mtuNow < 512) {
-        await Future.delayed(const Duration(milliseconds: 300));
         await _bleDevice.requestMtu(512);
       }
 
