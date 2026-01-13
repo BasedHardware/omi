@@ -281,19 +281,30 @@ static ssize_t storage_wifi_handler(struct bt_conn *conn,
                 break;
             }
             // Parse SSID
-            // Format: [cmd][ssid_len][ssid]
-            uint8_t ssid_len = ((const uint8_t *)buf)[1];
+            // Format: [cmd][ssid_len][ssid][password_len][password]
+            uint8_t idx = 1;
+            uint8_t ssid_len = ((const uint8_t *)buf)[idx++];
             LOG_INF("WIFI_SETUP: ssid_len=%d, len=%d", ssid_len, len);
 
-            if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || 2 + ssid_len > len) {
+            if (ssid_len == 0 || ssid_len > WIFI_MAX_SSID_LEN || idx + ssid_len > len) {
                 LOG_WRN("SSID length invalid: ssid_len=%d, len=%d", ssid_len, len);
                 result_buffer[0] = 3; break;
             }
             char ssid[WIFI_MAX_SSID_LEN + 1] = {0};
-            memcpy(ssid, &((const uint8_t *)buf)[2], ssid_len);
+            memcpy(ssid, &((const uint8_t *)buf)[idx], ssid_len);
+            idx += ssid_len;
             LOG_INF("WIFI_SETUP: ssid='%s'", ssid);
 
-            setup_wifi_ssid(ssid);
+            uint8_t pwd_len = ((const uint8_t *)buf)[idx++];
+            LOG_INF("WIFI_SETUP: pwd_len=%d, len=%d", pwd_len, len);
+            if (pwd_len < WIFI_MIN_PASSWORD_LEN || pwd_len > WIFI_MAX_PASSWORD_LEN || idx + pwd_len > len) {
+                LOG_WRN("PWD length invalid: pwd_len=%d, len=%d", pwd_len, len);
+                result_buffer[0] = 4; break;
+            }
+            char pwd[WIFI_MAX_PASSWORD_LEN + 1] = {0};
+            if (pwd_len > 0) memcpy(pwd, &((const uint8_t *)buf)[idx], pwd_len);
+
+            setup_wifi_credentials(ssid, pwd);
             result_buffer[0] = 0; // success
             break;
 

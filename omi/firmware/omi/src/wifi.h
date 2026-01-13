@@ -6,6 +6,8 @@
 #include <stdint.h>
 
 #define WIFI_MAX_SSID_LEN        32
+#define WIFI_MAX_PASSWORD_LEN    64
+#define WIFI_MIN_PASSWORD_LEN    8
 
 /* WiFi state machine states */
 typedef enum {
@@ -20,7 +22,7 @@ typedef enum {
 int wifi_init(void);
 void wifi_turn_off(void);
 int wifi_turn_on(void);
-int setup_wifi_ssid(const char *ssid);
+int setup_wifi_credentials(const char *ssid, const char *password);
 int wifi_send_data(const uint8_t *data, size_t len);
 bool is_wifi_transport_ready(void);
 bool is_wifi_on(void);

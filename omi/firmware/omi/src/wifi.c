@@ -57,6 +57,7 @@ static struct wifi_ap_sta_node sta_list[AP_MAX_STATIONS];
 /* WiFi state management */
 static wifi_state_t current_wifi_state = WIFI_STATE_OFF;
 static char ap_ssid[WIFI_SSID_MAX_LEN + 1] = "Omi CV1";
+static char ap_password[WIFI_MAX_PASSWORD_LEN + 1] = "12345678";
 
 #define TCP_REMOTE_IP "192.168.1.2"
 #define TCP_REMOTE_PORT 12345
@@ -297,9 +298,9 @@ int wifi_turn_on(void)
 	return 0;
 }
 
-int setup_wifi_ssid(const char *ssid)
+int setup_wifi_credentials(const char *ssid, const char *password)
 {
-	if (!ssid) {
+	if (!ssid || !password) {
 		return -EINVAL;
 	}
 
@@ -308,8 +309,15 @@ int setup_wifi_ssid(const char *ssid)
 		return -EINVAL;
 	}
 
+	len = strlen(password);
+	if (len < 8 || len > WIFI_MAX_PASSWORD_LEN) {
+		return -EINVAL;
+	}
+
 	strncpy(ap_ssid, ssid, sizeof(ap_ssid) - 1);
 	ap_ssid[sizeof(ap_ssid) - 1] = '\0';
+	strncpy(ap_password, password, sizeof(ap_password) - 1);
+	ap_password[sizeof(ap_password) - 1] = '\0';
 	return 0;
 }
 
@@ -538,7 +546,9 @@ static int __wifi_args_to_params(struct wifi_connect_req_params *params)
 		return -1;
 	}
 
-	params->security = WIFI_SECURITY_TYPE_NONE;
+	params->security = WIFI_SECURITY_TYPE_PSK;
+	params->psk = ap_password;
+	params->psk_length = strlen(params->psk);
 
 	return 0;
 }
