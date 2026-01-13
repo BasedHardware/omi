@@ -44,7 +44,7 @@ class CompanionDeviceTransport extends DeviceTransport {
   void _setupPresenceListener() {
     _presenceSubscription = _companionService.events.listen((event) {
       // Only handle events for our device
-      if (event.deviceAddress.toUpperCase() != _deviceAddress.toUpperCase()) return;
+      if (event.deviceAddress != _deviceAddress) return;
 
       switch (event.type) {
         case CompanionDeviceEventType.appeared:
