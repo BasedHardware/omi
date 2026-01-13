@@ -35,6 +35,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   @override
   bool get wantKeepAlive => true;
 
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
