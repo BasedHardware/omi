@@ -237,7 +237,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get searchConversations => 'Unterhaltungen durchsuchen';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count ausgewählt';
   }
 
@@ -2208,10 +2208,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get filterAll => 'Alle';
 
   @override
-  String get filterSystem => 'About You';
+  String get filterSystem => 'Über Sie';
 
   @override
-  String get filterInteresting => 'Insights';
+  String get filterInteresting => 'Einblicke';
 
   @override
   String get filterManual => 'Manuell';
@@ -2236,4 +2236,14 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get appLanguage => 'App-Sprache';
+
+  @override
+  String get appInterfaceSectionTitle => 'APP-OBERFLÄCHE';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'SPRACHE UND TRANSKRIPTION';
+
+  @override
+  String get languageSettingsHelperText =>
+      'Die App-Sprache ändert Menüs und Schaltflächen. Die Sprachsprache beeinflusst, wie Ihre Aufnahmen transkribiert werden.';
 }

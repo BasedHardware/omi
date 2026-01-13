@@ -234,7 +234,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get searchConversations => 'Buscar conversas';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count selecionados';
   }
 
@@ -2162,7 +2162,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get filterAll => 'Todos';
 
   @override
-  String get filterSystem => 'About You';
+  String get filterSystem => 'Sobre você';
 
   @override
   String get filterInteresting => 'Insights';
@@ -2190,4 +2190,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get appLanguage => 'Idioma do App';
+
+  @override
+  String get appInterfaceSectionTitle => 'INTERFACE DO APLICATIVO';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'FALA E TRANSCRIÇÃO';
+
+  @override
+  String get languageSettingsHelperText =>
+      'O idioma do aplicativo altera menus e botões. O idioma de fala afeta como suas gravações são transcritas.';
 }
