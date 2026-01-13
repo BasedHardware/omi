@@ -1,12 +1,14 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+
+import 'package:collection/collection.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
-
+import 'package:omi/utils/logger.dart';
 import 'device_discoverer.dart';
 
 class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
@@ -19,7 +21,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
   @override
   Future<DeviceDiscoveryResult> discover({int timeout = 5}) async {
     if (!(await BluetoothAdapter.isSupported)) {
-      debugPrint('Bluetooth not supported, skipping discovery');
+      Logger.debug('Bluetooth not supported, skipping discovery');
       return const DeviceDiscoveryResult(devices: []);
     }
 
@@ -32,7 +34,7 @@ class BluetoothDeviceDiscoverer extends DeviceDiscoverer {
         ..clear()
         ..addAll(list);
     }, onError: (e) {
-      debugPrint('BLE discovery error: $e');
+      Logger.debug('BLE discovery error: $e');
     });
 
     try {

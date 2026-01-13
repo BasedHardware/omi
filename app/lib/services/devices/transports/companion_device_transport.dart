@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+
 import 'package:omi/services/devices/companion_device_manager.dart';
 import 'package:omi/services/devices/transports/ble_transport.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/utils/logger.dart';
 
 /// A transport wrapper that adds Android CompanionDeviceManager support to BleTransport.
 ///
@@ -45,7 +48,7 @@ class CompanionDeviceTransport extends DeviceTransport {
 
       switch (event.type) {
         case CompanionDeviceEventType.appeared:
-          debugPrint('CompanionDeviceTransport: Device appeared - $_deviceAddress');
+          Logger.debug('CompanionDeviceTransport: Device appeared - $_deviceAddress');
           onDeviceAppeared?.call();
 
           // Auto-reconnect if enabled
@@ -55,12 +58,12 @@ class CompanionDeviceTransport extends DeviceTransport {
           break;
 
         case CompanionDeviceEventType.disappeared:
-          debugPrint('CompanionDeviceTransport: Device disappeared - $_deviceAddress');
+          Logger.debug('CompanionDeviceTransport: Device disappeared - $_deviceAddress');
           onDeviceDisappeared?.call();
           break;
 
         case CompanionDeviceEventType.associated:
-          debugPrint('CompanionDeviceTransport: Device associated - $_deviceAddress');
+          Logger.debug('CompanionDeviceTransport: Device associated - $_deviceAddress');
           break;
       }
     });
@@ -71,7 +74,7 @@ class CompanionDeviceTransport extends DeviceTransport {
     try {
       await connect(autoConnect: false); // Direct connect since device is available
     } catch (e) {
-      debugPrint('CompanionDeviceTransport: Auto-reconnect failed: $e');
+      Logger.debug('CompanionDeviceTransport: Auto-reconnect failed: $e');
     }
   }
 
@@ -99,11 +102,11 @@ class CompanionDeviceTransport extends DeviceTransport {
             await _bleTransport.connect(autoConnect: false);
             return;
           } catch (e) {
-            debugPrint('CompanionDeviceTransport: Initial connect failed, waiting for presence: $e');
+            Logger.debug('CompanionDeviceTransport: Initial connect failed, waiting for presence: $e');
             return;
           }
         } else {
-          debugPrint('CompanionDeviceTransport: Device not associated, using BLE autoConnect');
+          Logger.debug('CompanionDeviceTransport: Device not associated, using BLE autoConnect');
         }
       }
     }
@@ -117,9 +120,9 @@ class CompanionDeviceTransport extends DeviceTransport {
     final success = await _companionService.startObservingDevicePresence(_deviceAddress);
     if (success) {
       _isObservingPresence = true;
-      debugPrint('CompanionDeviceTransport: Started presence observation for $_deviceAddress');
+      Logger.debug('CompanionDeviceTransport: Started presence observation for $_deviceAddress');
     } else {
-      debugPrint('CompanionDeviceTransport: Failed to start presence observation');
+      Logger.debug('CompanionDeviceTransport: Failed to start presence observation');
     }
   }
 
@@ -128,7 +131,7 @@ class CompanionDeviceTransport extends DeviceTransport {
 
     await _companionService.stopObservingDevicePresence(_deviceAddress);
     _isObservingPresence = false;
-    debugPrint('CompanionDeviceTransport: Stopped presence observation for $_deviceAddress');
+    Logger.debug('CompanionDeviceTransport: Stopped presence observation for $_deviceAddress');
   }
 
   @override

@@ -1,27 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/widgets/daily_score_widget.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
+import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
-import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
-import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
-import 'package:omi/pages/conversations/widgets/daily_score_widget.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
-import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:visibility_detector/visibility_detector.dart';
-
-import 'widgets/empty_conversations.dart';
 import 'widgets/conversations_group_widget.dart';
+import 'widgets/empty_conversations.dart';
 
 class ConversationsPage extends StatefulWidget {
   const ConversationsPage({super.key});
@@ -35,7 +37,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
-  
+
   void _refreshGoals() {
     _goalsWidgetKey.currentState?.refresh();
   }
@@ -158,7 +160,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('building conversations page');
+    Logger.debug('building conversations page');
     super.build(context);
     return Consumer<ConversationProvider>(builder: (context, convoProvider, child) {
       return RefreshIndicator(
@@ -182,7 +184,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
             const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
             const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-            
+
             // Search bar
             Consumer2<HomeProvider, ConversationProvider>(
               builder: (context, homeProvider, convoProvider, _) {
@@ -203,7 +205,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ),
             const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
             getProcessingConversationsWidget(convoProvider.processingConversations),
-            
+
             // Daily Score Widget
             const SliverToBoxAdapter(
               child: Padding(
@@ -211,7 +213,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 child: DailyScoreWidget(),
               ),
             ),
-            
+
             // Today's Tasks (top 3)
             const SliverToBoxAdapter(
               child: Padding(
@@ -219,10 +221,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 child: TodayTasksWidget(),
               ),
             ),
-            
+
             // Goals Widget (up to 3 goals)
             SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
-            
+
             // Conversations section header
             const SliverToBoxAdapter(
               child: Padding(
@@ -237,7 +239,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
               ),
             ),
-            
+
             // Folder tabs
             Consumer2<FolderProvider, ConversationProvider>(
               builder: (context, folderProvider, convoProvider, _) {
@@ -282,7 +284,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   childCount: convoProvider.groupedConversations.length + 1,
                   (context, index) {
                     if (index == convoProvider.groupedConversations.length) {
-                      debugPrint('loading more conversations');
+                      Logger.debug('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
                       }

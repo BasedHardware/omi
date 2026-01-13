@@ -1,10 +1,14 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
 
 class AppReviewService {
   static final AppReviewService _instance = AppReviewService._internal();
@@ -166,7 +170,7 @@ class AppReviewService {
                           MixpanelManager().track('App Review Opened');
                           await Future.delayed(const Duration(milliseconds: 500));
                         } else {
-                          debugPrint('Could not launch review URL');
+                          Logger.debug('Could not launch review URL');
                         }
                       },
                       style: ElevatedButton.styleFrom(

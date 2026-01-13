@@ -2,10 +2,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+
 import 'package:path_provider/path_provider.dart';
+
 import 'package:omi/models/stt_result.dart';
-import 'package:omi/services/sockets/pure_polling.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/pure_polling.dart';
 
 class OnDeviceAppleProvider implements ISttProvider {
   final String language;
@@ -23,7 +25,7 @@ class OnDeviceAppleProvider implements ISttProvider {
   }) async {
     try {
       final sw = Stopwatch()..start();
-      
+
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/temp_apple_audio_${DateTime.now().millisecondsSinceEpoch}.wav');
       await tempFile.writeAsBytes(audioData);
@@ -45,7 +47,8 @@ class OnDeviceAppleProvider implements ISttProvider {
 
         // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
-        CustomSttLogService.instance.info('OnDeviceApple', 'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms. Text: $result');
+        CustomSttLogService.instance.info('OnDeviceApple',
+            'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms. Text: $result');
 
         return SttTranscriptionResult(
           segments: [
@@ -58,7 +61,6 @@ class OnDeviceAppleProvider implements ISttProvider {
           ],
           rawText: result,
         );
-
       } finally {
         if (await tempFile.exists()) {
           await tempFile.delete();

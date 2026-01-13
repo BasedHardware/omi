@@ -1,13 +1,16 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/pages/persona/persona_provider.dart';
 import 'package:omi/pages/persona/twitter/verify_identity_screen.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:provider/provider.dart';
 
 class SocialHandleScreen extends StatefulWidget {
   final PersonaProfileRouting routing;
@@ -176,7 +179,7 @@ class _SocialHandleScreenState extends State<SocialHandleScreen> {
                             if (_formKey.currentState!.validate()) {
                               provider.setIsLoading(true);
                               if (FirebaseAuth.instance.currentUser == null) {
-                                debugPrint('User is not signed in, signing in anonymously');
+                                Logger.debug('User is not signed in, signing in anonymously');
                                 await AuthService.instance.signInAnonymously();
                               }
                               var handle = _controller.text.trim();

@@ -1,7 +1,10 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 
 Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) async {
   var response = await makeApiCall(
@@ -12,7 +15,7 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) a
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
-    debugPrint('createCheckoutSession response: ${response.body}');
+    Logger.debug('createCheckoutSession response: ${response.body}');
 
     // Check if this is a reactivation response
     if (jsonResponse.containsKey('status') && jsonResponse['status'] == 'reactivated') {
@@ -54,7 +57,7 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId}) asy
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
-    debugPrint('upgradeSubscription response: ${response.body}');
+    Logger.debug('upgradeSubscription response: ${response.body}');
     return jsonResponse;
   }
   return null;
@@ -69,7 +72,7 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
-    debugPrint('getAppSubscription response: ${response.body}');
+    Logger.debug('getAppSubscription response: ${response.body}');
     return jsonResponse;
   }
   return null;
@@ -84,7 +87,7 @@ Future<Map<String, dynamic>?> getAvailablePlans() async {
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
-    debugPrint('getAvailablePlans response: ${response.body}');
+    Logger.debug('getAvailablePlans response: ${response.body}');
     return jsonResponse;
   }
   return null;
@@ -99,7 +102,7 @@ Future<Map<String, String>?> createCustomerPortalSession() async {
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
-    debugPrint('createCustomerPortalSession response: ${response.body}');
+    Logger.debug('createCustomerPortalSession response: ${response.body}');
     return {
       'url': jsonResponse['url'] as String,
     };
@@ -116,7 +119,7 @@ Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
-    debugPrint('cancelAppSubscription response: ${response.body}');
+    Logger.debug('cancelAppSubscription response: ${response.body}');
     return jsonResponse;
   }
   return null;

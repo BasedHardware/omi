@@ -360,14 +360,14 @@ class App {
   }
 
   bool hasTasksAccess() {
-  if (worksExternally()) {
-    final actions = externalIntegration?.actions;
-    if (actions != null) {
-      return actions.any((a) => a.action == 'read_tasks');
+    if (worksExternally()) {
+      final actions = externalIntegration?.actions;
+      if (actions != null) {
+        return actions.any((a) => a.action == 'read_tasks');
+      }
     }
+    return false;
   }
-  return false;
-}
 
   factory App.fromJson(Map<String, dynamic> json) {
     return App(

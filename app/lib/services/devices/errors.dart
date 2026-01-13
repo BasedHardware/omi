@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 void logErrorMessage(String message, String deviceId) {
-  debugPrint('($deviceId) $message');
+  Logger.debug('($deviceId) $message');
   PlatformManager.instance.crashReporter.reportCrash(Exception(message), StackTrace.current);
 }
 
 void logCommonErrorMessage(String message) {
-  debugPrint(message);
+  Logger.debug(message);
   PlatformManager.instance.crashReporter.reportCrash(Exception(message), StackTrace.current);
 }
 

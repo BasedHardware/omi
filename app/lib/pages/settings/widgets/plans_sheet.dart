@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
-
 import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-
 import '../payment_webview_page.dart';
 
 class PlansSheet extends StatefulWidget {
@@ -283,7 +284,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return currentPlan;
     } catch (e) {
-      debugPrint('Error getting current plan details: $e');
+      Logger.debug('Error getting current plan details: $e');
       return null;
     }
   }
@@ -305,7 +306,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return false;
     } catch (e) {
-      debugPrint('Error checking scheduled upgrade: $e');
+      Logger.debug('Error checking scheduled upgrade: $e');
       return false;
     }
   }
@@ -325,7 +326,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
       return annualPlan;
     } catch (e) {
-      debugPrint('Error getting scheduled plan details: $e');
+      Logger.debug('Error getting scheduled plan details: $e');
       return null;
     }
   }
@@ -364,7 +365,7 @@ class _PlansSheetState extends State<PlansSheet> {
         );
       }
     } catch (e) {
-      debugPrint('Error switching to free plan: $e');
+      Logger.debug('Error switching to free plan: $e');
       AppSnackbar.showSnackbarError('Could not switch to free plan. Please try again.');
     } finally {
       if (mounted) setState(() => _isSwitchingToFree = false);

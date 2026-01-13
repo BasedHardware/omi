@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:omi/utils/logger.dart';
+
 /// Flutter wrapper for the native Android ConnectionForegroundService.
 ///
 /// This service runs in the foreground with `connectedDevice` service type,
@@ -30,10 +32,10 @@ class ConnectionForegroundService {
         'deviceName': deviceName,
       });
       _isRunning = result == true;
-      debugPrint('ConnectionForegroundService: started=$_isRunning');
+      Logger.debug('ConnectionForegroundService: started=$_isRunning');
       return _isRunning;
     } catch (e) {
-      debugPrint('ConnectionForegroundService: start failed: $e');
+      Logger.debug('ConnectionForegroundService: start failed: $e');
       return false;
     }
   }
@@ -45,10 +47,10 @@ class ConnectionForegroundService {
     try {
       final result = await _channel.invokeMethod('stop');
       _isRunning = false;
-      debugPrint('ConnectionForegroundService: stopped');
+      Logger.debug('ConnectionForegroundService: stopped');
       return result == true;
     } catch (e) {
-      debugPrint('ConnectionForegroundService: stop failed: $e');
+      Logger.debug('ConnectionForegroundService: stop failed: $e');
       return false;
     }
   }
@@ -62,7 +64,7 @@ class ConnectionForegroundService {
       _isRunning = result == true;
       return _isRunning;
     } catch (e) {
-      debugPrint('ConnectionForegroundService: checkIsRunning failed: $e');
+      Logger.debug('ConnectionForegroundService: checkIsRunning failed: $e');
       return false;
     }
   }
@@ -80,7 +82,7 @@ class ConnectionForegroundService {
         'batteryLevel': batteryLevel,
       });
     } catch (e) {
-      debugPrint('ConnectionForegroundService: updateNotification failed: $e');
+      Logger.debug('ConnectionForegroundService: updateNotification failed: $e');
     }
   }
 }

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -13,10 +17,9 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
@@ -95,7 +98,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       } else if (provider.isPaused) {
         await provider.resumeSystemAudioRecording();
       } else if (recordingState == RecordingState.initialising) {
-        debugPrint('initialising, have to wait');
+        Logger.debug('initialising, have to wait');
       } else {
         await provider.streamSystemAudioRecording();
       }
@@ -125,7 +128,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         await provider.streamRecording();
         MixpanelManager().phoneMicRecordingStarted();
       } else if (recordingState == RecordingState.initialising) {
-        debugPrint('initialising, have to wait');
+        Logger.debug('initialising, have to wait');
       } else {
         setState(() {
           _isPhoneMicPaused = false;

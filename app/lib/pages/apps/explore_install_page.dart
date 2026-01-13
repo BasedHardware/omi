@@ -1,25 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
+
 import 'package:omi/backend/schema/app.dart';
-import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/pages/apps/widgets/filter_sheet.dart';
-import 'package:omi/pages/apps/list_item.dart';
-import 'package:omi/pages/apps/widgets/category_apps_page.dart';
-import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
-import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/list_item.dart';
+import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
+import 'package:omi/pages/apps/widgets/category_apps_page.dart';
+import 'package:omi/pages/apps/widgets/category_section.dart';
+import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:provider/provider.dart';
-import 'package:shimmer/shimmer.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-
 import 'add_app.dart';
 
 String filterValueToString(dynamic value) {

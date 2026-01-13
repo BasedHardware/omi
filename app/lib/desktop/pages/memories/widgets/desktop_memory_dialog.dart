@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/atoms/omi_choice_chip.dart';
 import 'package:omi/ui/atoms/omi_icon_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopMemoryDialog extends StatefulWidget {
   final Memory? memory;
@@ -306,7 +308,7 @@ class _DesktopMemoryDialogState extends State<DesktopMemoryDialog> {
       }
     } catch (e) {
       success = false;
-      debugPrint('Error saving memory: $e');
+      Logger.debug('Error saving memory: $e');
     }
 
     if (!mounted) return;

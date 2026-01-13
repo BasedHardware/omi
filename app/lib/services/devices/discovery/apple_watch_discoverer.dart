@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/flutter_communicator.g.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
+import 'package:omi/utils/logger.dart';
 
 class AppleWatchDiscoverer extends DeviceDiscoverer {
   @override
@@ -30,7 +32,7 @@ class AppleWatchDiscoverer extends DeviceDiscoverer {
         return DeviceDiscoveryResult(devices: [device]);
       }
     } catch (e) {
-      debugPrint('Apple Watch discovery error: $e');
+      Logger.debug('Apple Watch discovery error: $e');
     }
     return const DeviceDiscoveryResult(devices: []);
   }

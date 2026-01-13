@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:omi/backend/http/api/task_integrations.dart';
+
 import 'package:url_launcher/url_launcher.dart';
+
+import 'package:omi/backend/http/api/task_integrations.dart';
+import 'package:omi/utils/logger.dart';
 
 class ClickUpService {
   static final ClickUpService _instance = ClickUpService._internal();
@@ -25,16 +28,16 @@ class ClickUpService {
     try {
       final authUrl = await getOAuthUrl('clickup');
       if (authUrl == null) {
-        debugPrint('Failed to get ClickUp OAuth URL from backend');
+        Logger.debug('Failed to get ClickUp OAuth URL from backend');
         return false;
       }
 
       final authUri = Uri.parse(authUrl);
-      debugPrint('Opening ClickUp auth URL');
+      Logger.debug('Opening ClickUp auth URL');
 
       final canLaunch = await canLaunchUrl(authUri);
       if (!canLaunch) {
-        debugPrint('Cannot launch auth URL');
+        Logger.debug('Cannot launch auth URL');
         return false;
       }
 
@@ -45,7 +48,7 @@ class ClickUpService {
 
       return true;
     } catch (e) {
-      debugPrint('Error starting ClickUp authentication: $e');
+      Logger.debug('Error starting ClickUp authentication: $e');
       return false;
     }
   }
@@ -54,7 +57,7 @@ class ClickUpService {
   Future<bool> handleCallback({String? userId}) async {
     _isAuthenticated = true;
     _userId = userId;
-    debugPrint('ClickUp authentication successful');
+    Logger.debug('ClickUp authentication successful');
     return true;
   }
 
@@ -64,7 +67,7 @@ class ClickUpService {
       final teams = await getClickUpTeams();
       return teams ?? [];
     } catch (e) {
-      debugPrint('Error fetching ClickUp workspaces: $e');
+      Logger.debug('Error fetching ClickUp workspaces: $e');
       return [];
     }
   }
@@ -75,7 +78,7 @@ class ClickUpService {
       final spaces = await getClickUpSpaces(teamId);
       return spaces ?? [];
     } catch (e) {
-      debugPrint('Error fetching ClickUp spaces: $e');
+      Logger.debug('Error fetching ClickUp spaces: $e');
       return [];
     }
   }
@@ -86,7 +89,7 @@ class ClickUpService {
       final lists = await getClickUpLists(spaceId);
       return lists ?? [];
     } catch (e) {
-      debugPrint('Error fetching ClickUp lists: $e');
+      Logger.debug('Error fetching ClickUp lists: $e');
       return [];
     }
   }
@@ -106,14 +109,14 @@ class ClickUpService {
       );
 
       if (result != null && result['success'] == true) {
-        debugPrint('Task created successfully in ClickUp');
+        Logger.debug('Task created successfully in ClickUp');
         return true;
       }
 
-      debugPrint('Failed to create task in ClickUp: ${result?['error']}');
+      Logger.debug('Failed to create task in ClickUp: ${result?['error']}');
       return false;
     } catch (e) {
-      debugPrint('Error creating task in ClickUp: $e');
+      Logger.debug('Error creating task in ClickUp: $e');
       return false;
     }
   }
@@ -124,9 +127,9 @@ class ClickUpService {
       await deleteTaskIntegration('clickup');
       _isAuthenticated = false;
       _userId = null;
-      debugPrint('Disconnected from ClickUp');
+      Logger.debug('Disconnected from ClickUp');
     } catch (e) {
-      debugPrint('Error disconnecting from ClickUp: $e');
+      Logger.debug('Error disconnecting from ClickUp: $e');
     }
   }
 }

@@ -3,10 +3,12 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -44,7 +46,7 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
     }
     return parsed;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -74,7 +76,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     final cat = (data['category'] as Map<String, dynamic>?);
     return (apps: apps, pagination: pagination, category: cat);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
   }
@@ -105,7 +107,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     final cap = (data['capability'] as Map<String, dynamic>?);
     return (apps: apps, pagination: pagination, capability: cap);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, capability: null);
   }
@@ -146,7 +148,7 @@ Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, in
     final totalApps = meta['totalApps'] as int? ?? 0;
     return (groups: parsed, capability: cap, totalApps: totalApps);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
   }
@@ -198,7 +200,7 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     final filters = (data['filters'] as Map<String, dynamic>?);
     return (apps: apps, pagination: pagination, filters: filters);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (
       apps: <App>[],
@@ -223,7 +225,7 @@ Future<List<App>> retrievePopularApps() async {
       SharedPreferencesUtil().appsList = apps;
       return apps;
     } catch (e, stackTrace) {
-      debugPrint(e.toString());
+      Logger.debug(e.toString());
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
       return SharedPreferencesUtil().appsList;
     }
@@ -239,7 +241,7 @@ Future<bool> enableAppServer(String appId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('enableAppServer: $appId ${response.body}');
+  Logger.debug('enableAppServer: $appId ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -251,7 +253,7 @@ Future<bool> disableAppServer(String appId) async {
     body: '',
   );
   if (response == null) return false;
-  debugPrint('disableAppServer: ${response.body}');
+  Logger.debug('disableAppServer: ${response.body}');
   return response.statusCode == 200;
 }
 
@@ -263,10 +265,10 @@ Future<bool> reviewApp(String appId, AppReview review) async {
       method: 'POST',
       body: jsonEncode(review.toJson()),
     );
-    debugPrint('reviewApp: ${response?.body}');
+    Logger.debug('reviewApp: ${response?.body}');
     return response?.statusCode == 200;
   } catch (e) {
-    debugPrint('Error reviewing app: $e');
+    Logger.debug('Error reviewing app: $e');
     return false;
   }
 }
@@ -286,11 +288,11 @@ Future<Map<String, String>> uploadAppThumbnail(File file) async {
         'thumbnail_id': data['thumbnail_id'],
       };
     } else {
-      debugPrint('Failed to upload thumbnail. Status code: ${response.statusCode}');
+      Logger.debug('Failed to upload thumbnail. Status code: ${response.statusCode}');
       return {};
     }
   } catch (e) {
-    debugPrint('An error occurred uploading thumbnail: $e');
+    Logger.debug('An error occurred uploading thumbnail: $e');
     return {};
   }
 }
@@ -303,10 +305,10 @@ Future<bool> updateAppReview(String appId, AppReview review) async {
       method: 'PATCH',
       body: jsonEncode(review.toJson()),
     );
-    debugPrint('updateAppReview: ${response?.body}');
+    Logger.debug('updateAppReview: ${response?.body}');
     return response?.statusCode == 200;
   } catch (e) {
-    debugPrint('Error updating app review: $e');
+    Logger.debug('Error updating app review: $e');
     return false;
   }
 }
@@ -319,10 +321,10 @@ Future<bool> replyToAppReview(String appId, String reply, String reviewerUid) as
       method: 'PATCH',
       body: jsonEncode({'response': reply, 'reviewer_uid': reviewerUid}),
     );
-    debugPrint('replyToAppReview: ${response?.body}');
+    Logger.debug('replyToAppReview: ${response?.body}');
     return response?.statusCode == 200;
   } catch (e) {
-    debugPrint('Error replying to app review: $e');
+    Logger.debug('Error replying to app review: $e');
     return false;
   }
 }
@@ -339,7 +341,7 @@ Future<List<AppReview>> getAppReviews(String appId) async {
     log('getAppReviews: ${response.body}');
     return AppReview.fromJsonList(jsonDecode(response.body));
   } catch (e) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     return [];
   }
 }
@@ -369,16 +371,16 @@ Future<bool> isAppSetupCompleted(String? url) async {
     Logger.debug(data);
     return data['is_setup_completed'] ?? false;
   } on FormatException catch (e) {
-    debugPrint('Response not a valid json: $e');
+    Logger.debug('Response not a valid json: $e');
     return false;
   } catch (e) {
-    debugPrint('Error triggering request at endpoint: $e');
+    Logger.debug('Error triggering request at endpoint: $e');
     return false;
   }
 }
 
 Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
-  debugPrint(jsonEncode(appData));
+  Logger.debug(jsonEncode(appData));
   try {
     var response = await makeMultipartApiCall(
       url: '${Env.apiBaseUrl}v1/apps',
@@ -390,10 +392,10 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
     if (response.statusCode == 200) {
       var respData = jsonDecode(response.body);
       String? appId = respData['app_id'];
-      debugPrint('submitAppServer Response body: $respData');
+      Logger.debug('submitAppServer Response body: $respData');
       return (true, '', appId);
     } else {
-      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      Logger.debug('Failed to submit app. Status code: ${response.statusCode}');
       if (response.body.isNotEmpty) {
         return (
           false,
@@ -405,13 +407,13 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
       }
     }
   } catch (e) {
-    debugPrint('An error occurred submitAppServer: $e');
+    Logger.debug('An error occurred submitAppServer: $e');
     return (false, 'Failed to submit app. Please try again later', null);
   }
 }
 
 Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
-  debugPrint(jsonEncode(appData));
+  Logger.debug(jsonEncode(appData));
   try {
     List<File> files = file != null ? [file] : [];
     var response = await makeMultipartApiCall(
@@ -423,14 +425,14 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
     );
 
     if (response.statusCode == 200) {
-      debugPrint('updateAppServer Response body: ${jsonDecode(response.body)}');
+      Logger.debug('updateAppServer Response body: ${jsonDecode(response.body)}');
       return true;
     } else {
-      debugPrint('Failed to update app. Status code: ${response.statusCode}');
+      Logger.debug('Failed to update app. Status code: ${response.statusCode}');
       return false;
     }
   } catch (e) {
-    debugPrint('An error occurred updateAppServer: $e');
+    Logger.debug('An error occurred updateAppServer: $e');
     return false;
   }
 }
@@ -448,7 +450,7 @@ Future<List<Category>> getAppCategories() async {
     var res = jsonDecode(response.body);
     return Category.fromJsonList(res);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -467,7 +469,7 @@ Future<List<AppCapability>> getAppCapabilitiesServer() async {
     var res = jsonDecode(response.body);
     return AppCapability.fromJsonList(res);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -486,7 +488,7 @@ Future<List<NotificationScope>> getNotificationScopesServer() async {
     var res = jsonDecode(response.body);
     return NotificationScope.fromJsonList(res);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -504,7 +506,7 @@ Future changeAppVisibilityServer(String appId, bool makePublic) async {
     log('changeAppVisibilityServer: ${response.body}');
     return true;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return false;
   }
@@ -522,7 +524,7 @@ Future deleteAppServer(String appId) async {
     log('deleteAppServer: ${response.body}');
     return true;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return false;
   }
@@ -540,7 +542,7 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
     log('getAppDetailsServer: ${response.body}');
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
@@ -558,7 +560,7 @@ Future<List<PaymentPlan>> getPaymentPlansServer() async {
     log('getPaymentPlansServer: ${response.body}');
     return PaymentPlan.fromJsonList(jsonDecode(response.body));
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -576,7 +578,7 @@ Future<String> getGenratedDescription(String name, String description) async {
     log('getGenratedDescription: ${response.body}');
     return jsonDecode(response.body)['description'];
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return '';
   }
@@ -602,7 +604,7 @@ Future<({String description, String emoji})> getGeneratedDescriptionAndEmoji(Str
       emoji: (data['emoji'] as String?) ?? '✨',
     );
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (description: 'A custom app that $prompt', emoji: '✨');
   }
@@ -626,7 +628,7 @@ Future<List<String>> getGeneratedAppPrompts() async {
     var data = jsonDecode(response.body);
     return (data['prompts'] as List<dynamic>).cast<String>();
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -642,14 +644,14 @@ Future<Map<String, dynamic>?> generateAppFromPrompt(String prompt) async {
   );
   try {
     if (response == null || response.statusCode != 200) {
-      debugPrint('generateAppFromPrompt failed: ${response?.body}');
+      Logger.debug('generateAppFromPrompt failed: ${response?.body}');
       return null;
     }
     log('generateAppFromPrompt: ${response.body}');
     var data = jsonDecode(response.body);
     return data['app'] as Map<String, dynamic>;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
@@ -670,14 +672,14 @@ Future<String?> generateAppIcon(String name, String description, String category
   );
   try {
     if (response == null || response.statusCode != 200) {
-      debugPrint('generateAppIcon failed: ${response?.body}');
+      Logger.debug('generateAppIcon failed: ${response?.body}');
       return null;
     }
     log('generateAppIcon: success');
     var data = jsonDecode(response.body);
     return data['icon_base64'] as String;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
@@ -696,7 +698,7 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
     log('listApiKeysServer: ${response.body}');
     return AppApiKey.fromJsonList(jsonDecode(response.body));
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return [];
   }
@@ -716,7 +718,7 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
     log('createApiKeyServer: ${response.body}');
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     throw Exception('Failed to create API key: ${e.toString()}');
   }
@@ -736,7 +738,7 @@ Future<bool> deleteApiKeyServer(String appId, String keyId) async {
     log('deleteApiKeyServer: ${response.body}');
     return true;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     throw Exception('Failed to delete API key: ${e.toString()}');
   }
@@ -753,20 +755,20 @@ Future<Map> createPersonaApp(File file, Map<String, dynamic> personaData) async 
     );
 
     if (response.statusCode == 200) {
-      debugPrint('createPersonaApp Response body: ${jsonDecode(response.body)}');
+      Logger.debug('createPersonaApp Response body: ${jsonDecode(response.body)}');
       return jsonDecode(response.body);
     } else {
-      debugPrint('Failed to submit app. Status code: ${response.statusCode}');
+      Logger.debug('Failed to submit app. Status code: ${response.statusCode}');
       return {};
     }
   } catch (e) {
-    debugPrint('An error occurred createPersonaApp: $e');
+    Logger.debug('An error occurred createPersonaApp: $e');
     return {};
   }
 }
 
 Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) async {
-  debugPrint(jsonEncode(personaData));
+  Logger.debug(jsonEncode(personaData));
   try {
     List<File> files = file != null ? [file] : [];
     var response = await makeMultipartApiCall(
@@ -778,14 +780,14 @@ Future<bool> updatePersonaApp(File? file, Map<String, dynamic> personaData) asyn
     );
 
     if (response.statusCode == 200) {
-      debugPrint('updatePersonaApp Response body: ${jsonDecode(response.body)}');
+      Logger.debug('updatePersonaApp Response body: ${jsonDecode(response.body)}');
       return true;
     } else {
-      debugPrint('Failed to update app. Status code: ${response.statusCode}');
+      Logger.debug('Failed to update app. Status code: ${response.statusCode}');
       return false;
     }
   } catch (e) {
-    debugPrint('An error occurred updatePersonaApp: $e');
+    Logger.debug('An error occurred updatePersonaApp: $e');
     return false;
   }
 }
@@ -802,7 +804,7 @@ Future<bool> checkPersonaUsername(String username) async {
     log('checkPersonaUsernames: ${response.body}');
     return jsonDecode(response.body)['is_taken'];
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return true;
   }
@@ -820,7 +822,7 @@ Future<Map?> getTwitterProfileData(String handle) async {
     log('getTwitterProfileData: ${response.body}');
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
@@ -846,7 +848,7 @@ Future<(bool, String?)> verifyTwitterOwnership(String username, String handle, S
       data['persona_id'] as String?,
     );
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (false, null);
   }
@@ -864,7 +866,7 @@ Future<String> getPersonaInitialMessage(String username) async {
     log('getPersonaInitialMessage: ${response.body}');
     return jsonDecode(response.body)['message'];
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return '';
   }
@@ -883,7 +885,7 @@ Future<App?> getUserPersonaServer() async {
     var res = jsonDecode(response.body);
     return App.fromJson(res);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
@@ -902,7 +904,7 @@ Future<String?> generateUsername(String handle) async {
     var res = jsonDecode(response.body);
     return res['username'];
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
@@ -920,7 +922,7 @@ Future<bool> migrateAppOwnerId(String oldId) async {
     log('migrateAppOwnerId: ${response.body}');
     return true;
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return false;
   }
@@ -938,7 +940,7 @@ Future<Map<String, dynamic>?> getUpsertUserPersonaServer() async {
     log('getUpsertUserPersonaServer: ${response.body}');
     return jsonDecode(response.body);
   } catch (e, stackTrace) {
-    debugPrint(e.toString());
+    Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return null;
   }
