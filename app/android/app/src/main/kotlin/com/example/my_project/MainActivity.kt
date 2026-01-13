@@ -67,8 +67,6 @@ class MainActivity: FlutterFragmentActivity() {
             register(flutterEngine)
         }
 
-        ConnectionForegroundService.register(flutterEngine, this)
-
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
             if(call.method == "setNotificationOnKillService"){
