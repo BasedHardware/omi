@@ -1,12 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
 
