@@ -233,7 +233,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchConversations => 'बातचीत खोजें';
 
   @override
-  String selectedCount(int count) {
+  String selectedCount(int count, Object s) {
     return '$count चयनित';
   }
 
@@ -2163,10 +2163,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get filterAll => 'सभी';
 
   @override
-  String get filterSystem => 'About You';
+  String get filterSystem => 'आपके बारे में';
 
   @override
-  String get filterInteresting => 'Insights';
+  String get filterInteresting => 'अंतर्दृष्टि';
 
   @override
   String get filterManual => 'मैनुअल';
@@ -2191,4 +2191,14 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get appLanguage => 'ऐप भाषा';
+
+  @override
+  String get appInterfaceSectionTitle => 'ऐप इंटरफ़ेस';
+
+  @override
+  String get speechTranscriptionSectionTitle => 'वाणी और ट्रांसक्रिप्शन';
+
+  @override
+  String get languageSettingsHelperText =>
+      'ऐप भाषा मेनू और बटन बदलती है। वाणी भाषा आपकी रिकॉर्डिंग के ट्रांसक्रिप्शन को प्रभावित करती है।';
 }

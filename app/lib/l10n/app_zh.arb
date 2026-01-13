@@ -90,7 +90,9 @@
   "selectedCount": "已选择 {count} 项",
   "@selectedCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "merge": "合并",
@@ -98,7 +100,9 @@
   "mergeConversationsMessage": "这将把 {count} 个对话合并为一个。所有内容将被合并并重新生成。",
   "@mergeConversationsMessage": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "mergingInBackground": "后台合并中。这可能需要一点时间。",
@@ -408,7 +412,6 @@
   "defaultProjectOptional": "默认项目（可选）",
   "leaveUnselectedTasks": "如果不选择，任务将没有项目",
   "noProjectsInWorkspace": "在此工作区未找到项目",
-  "conversationTimeout": "对话超时",
   "conversationTimeoutDesc": "选择静音多久后自动结束对话：",
   "timeout2Minutes": "2 分钟",
   "timeout2MinutesDesc": "静音 2 分钟后结束",
@@ -696,6 +699,8 @@
   "pressDoneToCreate": "按完成创建",
   "filterAll": "全部",
   "filterAuto": "自动",
+  "filterInteresting": "见解",
+  "filterSystem": "关于你",
   "filterManual": "手动",
   "completed": "已完成",
   "markComplete": "标记为完成",
@@ -729,5 +734,8 @@
       }
     }
   },
-  "continueButton": "继续"
+  "continueButton": "继续",
+  "appInterfaceSectionTitle": "应用界面",
+  "speechTranscriptionSectionTitle": "语音与转录",
+  "languageSettingsHelperText": "应用语言更改菜单和按钮。语音语言影响录音的转录方式。"
 }

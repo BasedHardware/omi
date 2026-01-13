@@ -1,0 +1,2317 @@
+{
+  "@@locale": "ms",
+  "@@last_modified": "2026-01-13",
+  "appTitle": "Omi",
+  "@appTitle": {
+    "description": "The app title displayed in various places"
+  },
+  "conversationTab": "Perbualan",
+  "@conversationTab": {
+    "description": "Tab label for conversation summary"
+  },
+  "transcriptTab": "Transkrip",
+  "@transcriptTab": {
+    "description": "Tab label for transcript view"
+  },
+  "actionItemsTab": "Item Tindakan",
+  "@actionItemsTab": {
+    "description": "Tab label for action items"
+  },
+  "deleteConversationTitle": "Padam Perbualan?",
+  "@deleteConversationTitle": {
+    "description": "Title for delete confirmation dialog"
+  },
+  "deleteConversationMessage": "Adakah anda pasti mahu memadam perbualan ini? Tindakan ini tidak boleh dibatalkan.",
+  "@deleteConversationMessage": {
+    "description": "Message for delete confirmation dialog"
+  },
+  "confirm": "Sahkan",
+  "@confirm": {
+    "description": "Confirm button label"
+  },
+  "cancel": "Batal",
+  "@cancel": {
+    "description": "Button label"
+  },
+  "ok": "Ok",
+  "@ok": {
+    "description": "Generic OK button text"
+  },
+  "delete": "Padam",
+  "@delete": {
+    "description": "Button label"
+  },
+  "add": "Tambah",
+  "@add": {
+    "description": "Add button label"
+  },
+  "update": "Kemas Kini",
+  "@update": {
+    "description": "Update button label"
+  },
+  "save": "Simpan",
+  "@save": {
+    "description": "Save button label"
+  },
+  "edit": "Edit",
+  "@edit": {
+    "description": "Edit button/action label"
+  },
+  "close": "Tutup",
+  "@close": {
+    "description": "Close button label"
+  },
+  "clear": "Kosongkan",
+  "@clear": {
+    "description": "Clear button label"
+  },
+  "copyTranscript": "Salin Transkrip",
+  "@copyTranscript": {
+    "description": "Menu item to copy transcript"
+  },
+  "copySummary": "Salin Ringkasan",
+  "@copySummary": {
+    "description": "Menu item to copy summary"
+  },
+  "testPrompt": "Uji Gesaan",
+  "@testPrompt": {
+    "description": "Menu item for testing prompts"
+  },
+  "reprocessConversation": "Proses Semula Perbualan",
+  "@reprocessConversation": {
+    "description": "Menu item to reprocess a conversation"
+  },
+  "deleteConversation": "Padam Perbualan",
+  "@deleteConversation": {
+    "description": "Menu item to delete a conversation"
+  },
+  "contentCopied": "Kandungan disalin ke papan keratan",
+  "@contentCopied": {
+    "description": "Snackbar message when content is copied"
+  },
+  "failedToUpdateStarred": "Gagal mengemas kini status bintang.",
+  "@failedToUpdateStarred": {
+    "description": "Error message when starring fails"
+  },
+  "conversationUrlNotShared": "URL perbualan tidak dapat dikongsi.",
+  "@conversationUrlNotShared": {
+    "description": "Error message when sharing fails"
+  },
+  "errorProcessingConversation": "Ralat semasa memproses perbualan. Sila cuba lagi kemudian.",
+  "@errorProcessingConversation": {
+    "description": "Error message for conversation processing failure"
+  },
+  "noInternetConnection": "Sila semak sambungan internet anda dan cuba lagi.",
+  "@noInternetConnection": {
+    "description": "Message shown when there's no internet"
+  },
+  "unableToDeleteConversation": "Tidak Dapat Memadam Perbualan",
+  "@unableToDeleteConversation": {
+    "description": "Title for delete error dialog"
+  },
+  "somethingWentWrong": "Ada yang tidak kena! Sila cuba lagi kemudian.",
+  "@somethingWentWrong": {
+    "description": "Generic error message"
+  },
+  "copyErrorMessage": "Salin mesej ralat",
+  "@copyErrorMessage": {
+    "description": "Button to copy error details"
+  },
+  "errorCopied": "Mesej ralat disalin ke papan keratan",
+  "@errorCopied": {
+    "description": "Snackbar message after copying error"
+  },
+  "remaining": "Berbaki",
+  "@remaining": {
+    "description": "Label for remaining time/items"
+  },
+  "loading": "Memuatkan...",
+  "@loading": {
+    "description": "Loading indicator text"
+  },
+  "loadingDuration": "Memuatkan tempoh...",
+  "@loadingDuration": {
+    "description": "Loading duration indicator"
+  },
+  "secondsCount": "{count} saat",
+  "@secondsCount": {
+    "description": "Duration in seconds",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "people": "Orang",
+  "@people": {
+    "description": "People section title"
+  },
+  "addNewPerson": "Tambah Orang Baharu",
+  "@addNewPerson": {
+    "description": "Title for add person dialog"
+  },
+  "editPerson": "Edit Orang",
+  "@editPerson": {
+    "description": "Title for edit person dialog"
+  },
+  "createPersonHint": "Cipta orang baharu dan latih Omi untuk mengenali pertuturan mereka juga!",
+  "@createPersonHint": {
+    "description": "Hint text for creating a person"
+  },
+  "speechProfile": "Profil Pertuturan",
+  "@speechProfile": {
+    "description": "Speech profile label"
+  },
+  "sampleNumber": "Sampel {number}",
+  "@sampleNumber": {
+    "description": "Label for speech sample",
+    "placeholders": {
+      "number": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "settings": "Tetapan",
+  "@settings": {
+    "description": "Settings page title"
+  },
+  "language": "Bahasa",
+  "@language": {
+    "description": "Language setting label"
+  },
+  "selectLanguage": "Pilih Bahasa",
+  "@selectLanguage": {
+    "description": "Title for language selection"
+  },
+  "deleting": "Memadam...",
+  "@deleting": {
+    "description": "Deleting in progress indicator"
+  },
+  "pleaseCompleteAuthentication": "Sila lengkapkan pengesahan dalam pelayar anda. Selepas selesai, kembali ke aplikasi.",
+  "@pleaseCompleteAuthentication": {
+    "description": "Message shown during OAuth flow"
+  },
+  "failedToStartAuthentication": "Gagal memulakan pengesahan",
+  "@failedToStartAuthentication": {
+    "description": "Error when OAuth fails to start"
+  },
+  "importStarted": "Import bermula! Anda akan dimaklumkan apabila selesai.",
+  "@importStarted": {
+    "description": "Success message when import begins"
+  },
+  "failedToStartImport": "Gagal memulakan import. Sila cuba lagi.",
+  "@failedToStartImport": {
+    "description": "Error when import fails to start"
+  },
+  "couldNotAccessFile": "Tidak dapat mengakses fail yang dipilih",
+  "@couldNotAccessFile": {
+    "description": "Error when file access fails"
+  },
+  "askOmi": "Tanya Omi",
+  "@askOmi": {
+    "description": "Chat button label"
+  },
+  "done": "Selesai",
+  "@done": {
+    "description": "Button label"
+  },
+  "disconnected": "Terputus Sambungan",
+  "@disconnected": {
+    "description": "Device disconnected status"
+  },
+  "searching": "Mencari",
+  "@searching": {
+    "description": "Searching for device status"
+  },
+  "connectDevice": "Sambung Peranti",
+  "@connectDevice": {
+    "description": "Button to connect a device"
+  },
+  "monthlyLimitReached": "Anda telah mencapai had bulanan anda.",
+  "@monthlyLimitReached": {
+    "description": "Message when usage limit is reached"
+  },
+  "checkUsage": "Semak Penggunaan",
+  "@checkUsage": {
+    "description": "Button to check usage details"
+  },
+  "syncingRecordings": "Menyegerakkan rakaman",
+  "@syncingRecordings": {
+    "description": "Title when sync is in progress"
+  },
+  "recordingsToSync": "Rakaman untuk disegerakkan",
+  "@recordingsToSync": {
+    "description": "Title when there are recordings to sync"
+  },
+  "allCaughtUp": "Semua telah dikemas kini",
+  "@allCaughtUp": {
+    "description": "Title when everything is synced"
+  },
+  "sync": "Segerak",
+  "@sync": {
+    "description": "Sync button label"
+  },
+  "pendantUpToDate": "Pendant adalah terkini",
+  "@pendantUpToDate": {
+    "description": "Status when pendant is synced"
+  },
+  "allRecordingsSynced": "Semua rakaman telah disegerakkan",
+  "@allRecordingsSynced": {
+    "description": "Status text when sync is complete"
+  },
+  "syncingInProgress": "Penyegerakan sedang berlangsung",
+  "@syncingInProgress": {
+    "description": "Status when sync is happening"
+  },
+  "readyToSync": "Sedia untuk disegerakkan",
+  "@readyToSync": {
+    "description": "Status when ready to sync"
+  },
+  "tapSyncToStart": "Ketik Segerak untuk mula",
+  "@tapSyncToStart": {
+    "description": "Hint to start sync"
+  },
+  "pendantNotConnected": "Pendant tidak disambungkan. Sambung untuk menyegerakkan.",
+  "@pendantNotConnected": {
+    "description": "Warning when pendant is not connected"
+  },
+  "everythingSynced": "Semua telah disegerakkan.",
+  "@everythingSynced": {
+    "description": "Message when all is synced"
+  },
+  "recordingsNotSynced": "Anda mempunyai rakaman yang belum disegerakkan lagi.",
+  "@recordingsNotSynced": {
+    "description": "Message when there are unsynced recordings"
+  },
+  "syncingBackground": "Kami akan terus menyegerakkan rakaman anda di latar belakang.",
+  "@syncingBackground": {
+    "description": "Message during background sync"
+  },
+  "noConversationsYet": "Tiada perbualan lagi.",
+  "@noConversationsYet": {
+    "description": "Empty state when no conversations exist"
+  },
+  "noStarredConversations": "Tiada perbualan berbintang lagi.",
+  "@noStarredConversations": {
+    "description": "Empty state for starred filter"
+  },
+  "starConversationHint": "Untuk membintangkan perbualan, buka dan ketik ikon bintang di pengepala.",
+  "@starConversationHint": {
+    "description": "Hint explaining how to star conversations"
+  },
+  "searchConversations": "Cari Perbualan",
+  "@searchConversations": {
+    "description": "Search field placeholder"
+  },
+  "selectedCount": "{count} dipilih",
+  "@selectedCount": {
+    "description": "Selection count label",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "merge": "Gabung",
+  "@merge": {
+    "description": "Merge button label"
+  },
+  "mergeConversations": "Gabungkan Perbualan",
+  "@mergeConversations": {
+    "description": "Merge dialog title"
+  },
+  "mergeConversationsMessage": "Ini akan menggabungkan {count} perbualan menjadi satu. Semua kandungan akan digabungkan dan dijana semula.",
+  "@mergeConversationsMessage": {
+    "description": "Merge confirmation message",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mergingInBackground": "Menggabungkan di latar belakang. Ini mungkin mengambil sedikit masa.",
+  "@mergingInBackground": {
+    "description": "Snackbar message during merge"
+  },
+  "failedToStartMerge": "Gagal memulakan penggabungan",
+  "@failedToStartMerge": {
+    "description": "Error message when merge fails"
+  },
+  "askAnything": "Tanya apa sahaja",
+  "@askAnything": {
+    "description": "Chat input placeholder"
+  },
+  "noMessagesYet": "Tiada mesej lagi!\nMengapa tidak mulakan perbualan?",
+  "@noMessagesYet": {
+    "description": "Empty chat state message"
+  },
+  "deletingMessages": "Memadam mesej anda daripada ingatan Omi...",
+  "@deletingMessages": {
+    "description": "Loading text while clearing chat"
+  },
+  "messageCopied": "Mesej disalin ke papan keratan.",
+  "@messageCopied": {
+    "description": "Snackbar after copying message"
+  },
+  "cannotReportOwnMessage": "Anda tidak boleh melaporkan mesej anda sendiri.",
+  "@cannotReportOwnMessage": {
+    "description": "Error when trying to report own message"
+  },
+  "reportMessage": "Laporkan Mesej",
+  "@reportMessage": {
+    "description": "Report message dialog title"
+  },
+  "reportMessageConfirm": "Adakah anda pasti mahu melaporkan mesej ini?",
+  "@reportMessageConfirm": {
+    "description": "Report message confirmation"
+  },
+  "messageReported": "Mesej berjaya dilaporkan.",
+  "@messageReported": {
+    "description": "Confirmation after reporting message"
+  },
+  "thankYouFeedback": "Terima kasih atas maklum balas anda!",
+  "@thankYouFeedback": {
+    "description": "After thumbs up/down feedback"
+  },
+  "clearChat": "Kosongkan Sembang?",
+  "@clearChat": {
+    "description": "Clear chat dialog title"
+  },
+  "clearChatConfirm": "Adakah anda pasti mahu mengosongkan sembang? Tindakan ini tidak boleh dibatalkan.",
+  "@clearChatConfirm": {
+    "description": "Clear chat confirmation message"
+  },
+  "maxFilesLimit": "Anda hanya boleh memuat naik 4 fail pada satu masa",
+  "@maxFilesLimit": {
+    "description": "Max files upload warning"
+  },
+  "chatWithOmi": "Sembang dengan Omi",
+  "@chatWithOmi": {
+    "description": "Chat share subject"
+  },
+  "apps": "Aplikasi",
+  "@apps": {
+    "description": "Apps page title"
+  },
+  "noAppsFound": "Tiada aplikasi dijumpai",
+  "@noAppsFound": {
+    "description": "Empty state when no apps match"
+  },
+  "tryAdjustingSearch": "Cuba laraskan carian atau penapis anda",
+  "@tryAdjustingSearch": {
+    "description": "Hint when no apps found"
+  },
+  "createYourOwnApp": "Cipta Aplikasi Anda Sendiri",
+  "@createYourOwnApp": {
+    "description": "Create app button title"
+  },
+  "buildAndShareApp": "Bina dan kongsi aplikasi tersuai anda",
+  "@buildAndShareApp": {
+    "description": "Create app button subtitle"
+  },
+  "searchApps": "Cari 1500+ Aplikasi",
+  "@searchApps": {
+    "description": "Apps search placeholder"
+  },
+  "myApps": "Aplikasi Saya",
+  "@myApps": {
+    "description": "My Apps filter button"
+  },
+  "installedApps": "Aplikasi Dipasang",
+  "@installedApps": {
+    "description": "Installed Apps filter button"
+  },
+  "unableToFetchApps": "Tidak dapat mendapatkan aplikasi :(\n\nSila semak sambungan internet anda dan cuba lagi.",
+  "@unableToFetchApps": {
+    "description": "Error when apps fail to load"
+  },
+  "aboutOmi": "Tentang Omi",
+  "@aboutOmi": {
+    "description": "About page title"
+  },
+  "privacyPolicy": "Dasar Privasi",
+  "@privacyPolicy": {
+    "description": "Link text for Privacy Policy"
+  },
+  "visitWebsite": "Lawati Laman Web",
+  "@visitWebsite": {
+    "description": "Visit website link"
+  },
+  "helpOrInquiries": "Bantuan atau Pertanyaan?",
+  "@helpOrInquiries": {
+    "description": "Help link title"
+  },
+  "joinCommunity": "Sertai komuniti!",
+  "@joinCommunity": {
+    "description": "Discord community link"
+  },
+  "membersAndCounting": "8000+ ahli dan semakin bertambah.",
+  "@membersAndCounting": {
+    "description": "Discord member count"
+  },
+  "deleteAccountTitle": "Padam Akaun",
+  "@deleteAccountTitle": {
+    "description": "Delete account page title"
+  },
+  "deleteAccountConfirm": "Adakah anda pasti mahu memadam akaun anda?",
+  "@deleteAccountConfirm": {
+    "description": "Delete account confirmation"
+  },
+  "cannotBeUndone": "Ini tidak boleh dibatalkan.",
+  "@cannotBeUndone": {
+    "description": "Warning that action is permanent"
+  },
+  "allDataErased": "Semua ingatan dan perbualan anda akan dipadam secara kekal.",
+  "@allDataErased": {
+    "description": "Delete account warning 1"
+  },
+  "appsDisconnected": "Aplikasi dan Integrasi anda akan diputuskan sambungan dengan serta-merta.",
+  "@appsDisconnected": {
+    "description": "Delete account warning 2"
+  },
+  "exportBeforeDelete": "Anda boleh mengeksport data anda sebelum memadam akaun anda, tetapi setelah dipadam, ia tidak boleh dipulihkan.",
+  "@exportBeforeDelete": {
+    "description": "Delete account warning 3"
+  },
+  "deleteAccountCheckbox": "Saya faham bahawa memadam akaun saya adalah kekal dan semua data, termasuk ingatan dan perbualan, akan hilang dan tidak boleh dipulihkan.",
+  "@deleteAccountCheckbox": {
+    "description": "Delete account checkbox confirmation"
+  },
+  "areYouSure": "Adakah anda pasti?",
+  "@areYouSure": {
+    "description": "Final confirmation title"
+  },
+  "deleteAccountFinal": "Tindakan ini tidak boleh diterbalikkan dan akan memadam akaun anda dan semua data berkaitan secara kekal. Adakah anda pasti mahu meneruskan?",
+  "@deleteAccountFinal": {
+    "description": "Final delete confirmation message"
+  },
+  "deleteNow": "Padam Sekarang",
+  "@deleteNow": {
+    "description": "Delete now button"
+  },
+  "goBack": "Kembali",
+  "@goBack": {
+    "description": "Go back button"
+  },
+  "checkBoxToConfirm": "Tandakan kotak untuk mengesahkan anda faham bahawa memadam akaun anda adalah kekal dan tidak boleh diterbalikkan.",
+  "@checkBoxToConfirm": {
+    "description": "Checkbox validation error"
+  },
+  "profile": "Profil",
+  "@profile": {
+    "description": "Profile page title"
+  },
+  "name": "Nama",
+  "@name": {
+    "description": "Name field label"
+  },
+  "email": "E-mel",
+  "@email": {
+    "description": "Email field label"
+  },
+  "customVocabulary": "Perbendaharaan Kata Tersuai",
+  "@customVocabulary": {
+    "description": "Custom vocabulary setting"
+  },
+  "identifyingOthers": "Mengenal Pasti Orang Lain",
+  "@identifyingOthers": {
+    "description": "People identification setting"
+  },
+  "paymentMethods": "Kaedah Pembayaran",
+  "@paymentMethods": {
+    "description": "Payment methods setting"
+  },
+  "conversationDisplay": "Paparan Perbualan",
+  "@conversationDisplay": {
+    "description": "Conversation display setting"
+  },
+  "dataPrivacy": "Data & Privasi",
+  "@dataPrivacy": {
+    "description": "Data and privacy setting"
+  },
+  "userId": "ID Pengguna",
+  "@userId": {
+    "description": "User ID label"
+  },
+  "notSet": "Tidak ditetapkan",
+  "@notSet": {
+    "description": "Default value when not set"
+  },
+  "userIdCopied": "ID Pengguna disalin ke papan keratan",
+  "@userIdCopied": {
+    "description": "Confirmation when user ID is copied"
+  },
+  "systemDefault": "Lalai Sistem",
+  "@systemDefault": {
+    "description": "System language option"
+  },
+  "planAndUsage": "Pelan & Penggunaan",
+  "@planAndUsage": {
+    "description": "Plan and usage menu item"
+  },
+  "offlineSync": "Segerak Luar Talian",
+  "@offlineSync": {
+    "description": "Offline sync menu item"
+  },
+  "deviceSettings": "Tetapan Peranti",
+  "@deviceSettings": {
+    "description": "Device settings menu item"
+  },
+  "chatTools": "Alat Sembang",
+  "@chatTools": {
+    "description": "Chat tools menu item"
+  },
+  "feedbackBug": "Maklum Balas / Pepijat",
+  "@feedbackBug": {
+    "description": "Feedback menu item"
+  },
+  "helpCenter": "Pusat Bantuan",
+  "@helpCenter": {
+    "description": "Help center menu item"
+  },
+  "developerSettings": "Tetapan Pembangun",
+  "@developerSettings": {
+    "description": "Developer settings menu item"
+  },
+  "getOmiForMac": "Dapatkan Omi untuk Mac",
+  "@getOmiForMac": {
+    "description": "Mac app download link"
+  },
+  "referralProgram": "Program Rujukan",
+  "@referralProgram": {
+    "description": "Referral program menu item"
+  },
+  "signOut": "Log Keluar",
+  "@signOut": {
+    "description": "Sign out button"
+  },
+  "appAndDeviceCopied": "Butiran aplikasi dan peranti disalin",
+  "@appAndDeviceCopied": {
+    "description": "Confirmation when version info is copied"
+  },
+  "wrapped2025": "Wrapped 2025",
+  "@wrapped2025": {
+    "description": "Wrapped 2025 menu item"
+  },
+  "yourPrivacyYourControl": "Privasi Anda, Kawalan Anda",
+  "@yourPrivacyYourControl": {
+    "description": "Data privacy page heading"
+  },
+  "privacyIntro": "Di Omi, kami komited untuk melindungi privasi anda. Halaman ini membolehkan anda mengawal cara data anda disimpan dan digunakan.",
+  "@privacyIntro": {
+    "description": "Data privacy page introduction"
+  },
+  "learnMore": "Ketahui lebih lanjut...",
+  "@learnMore": {
+    "description": "Learn more link"
+  },
+  "dataProtectionLevel": "Tahap Perlindungan Data",
+  "@dataProtectionLevel": {
+    "description": "Data protection section title"
+  },
+  "dataProtectionDesc": "Data anda dijamin secara lalai dengan penyulitan yang kukuh. Semak tetapan dan pilihan privasi masa depan anda di bawah.",
+  "@dataProtectionDesc": {
+    "description": "Data protection section description"
+  },
+  "appAccess": "Akses Aplikasi",
+  "@appAccess": {
+    "description": "App access section title"
+  },
+  "appAccessDesc": "Aplikasi berikut boleh mengakses data anda. Ketik pada aplikasi untuk mengurus keizinannya.",
+  "@appAccessDesc": {
+    "description": "App access section description"
+  },
+  "noAppsExternalAccess": "Tiada aplikasi yang dipasang mempunyai akses luaran ke data anda.",
+  "@noAppsExternalAccess": {
+    "description": "Empty state for app access"
+  },
+  "deviceName": "Nama Peranti",
+  "@deviceName": {
+    "description": "Device name label"
+  },
+  "deviceId": "ID Peranti",
+  "@deviceId": {
+    "description": "Device ID label"
+  },
+  "firmware": "Perisian Tegar",
+  "@firmware": {
+    "description": "Firmware label"
+  },
+  "sdCardSync": "Segerak Kad SD",
+  "@sdCardSync": {
+    "description": "SD Card sync label"
+  },
+  "hardwareRevision": "Semakan Perkakasan",
+  "@hardwareRevision": {
+    "description": "Hardware revision label"
+  },
+  "modelNumber": "Nombor Model",
+  "@modelNumber": {
+    "description": "Model number label"
+  },
+  "manufacturer": "Pengeluar",
+  "@manufacturer": {
+    "description": "Manufacturer label"
+  },
+  "doubleTap": "Ketik Dua Kali",
+  "@doubleTap": {
+    "description": "Double tap action label"
+  },
+  "ledBrightness": "Kecerahan LED",
+  "@ledBrightness": {
+    "description": "LED brightness setting"
+  },
+  "micGain": "Gandaan Mikrofon",
+  "@micGain": {
+    "description": "Microphone gain setting"
+  },
+  "disconnect": "Putuskan Sambungan",
+  "@disconnect": {
+    "description": "Disconnect device button"
+  },
+  "forgetDevice": "Lupakan Peranti",
+  "@forgetDevice": {
+    "description": "Forget device button"
+  },
+  "chargingIssues": "Masalah Pengecasan",
+  "@chargingIssues": {
+    "description": "Charging issues help item"
+  },
+  "disconnectDevice": "Putuskan Sambungan Peranti",
+  "@disconnectDevice": {
+    "description": "Disconnect device button"
+  },
+  "unpairDevice": "Nyahpasang Peranti",
+  "@unpairDevice": {
+    "description": "Unpair device button"
+  },
+  "unpairAndForget": "Nyahpasang dan Lupakan Peranti",
+  "@unpairAndForget": {
+    "description": "Unpair and forget device button"
+  },
+  "deviceDisconnectedMessage": "Omi anda telah diputuskan sambungan 😔",
+  "@deviceDisconnectedMessage": {
+    "description": "Message shown when device is disconnected"
+  },
+  "deviceUnpairedMessage": "Peranti dinyahpasangkan. Pergi ke Tetapan > Bluetooth dan lupakan peranti untuk melengkapkan nyahpasangan.",
+  "@deviceUnpairedMessage": {
+    "description": "Message shown when device is unpaired"
+  },
+  "unpairDialogTitle": "Nyahpasang Peranti",
+  "@unpairDialogTitle": {
+    "description": "Unpair dialog title"
+  },
+  "unpairDialogMessage": "Ini akan menyahpasangkan peranti supaya ia boleh disambungkan ke telefon lain. Anda perlu pergi ke Tetapan > Bluetooth dan lupakan peranti untuk melengkapkan proses.",
+  "@unpairDialogMessage": {
+    "description": "Unpair dialog message"
+  },
+  "deviceNotConnected": "Peranti Tidak Disambungkan",
+  "@deviceNotConnected": {
+    "description": "Device not connected header"
+  },
+  "connectDeviceMessage": "Sambungkan peranti Omi anda untuk mengakses\ntetapan peranti dan penyesuaian",
+  "@connectDeviceMessage": {
+    "description": "Message encouraging user to connect device"
+  },
+  "deviceInfoSection": "Maklumat Peranti",
+  "@deviceInfoSection": {
+    "description": "Device information section header"
+  },
+  "customizationSection": "Penyesuaian",
+  "@customizationSection": {
+    "description": "Customization section header"
+  },
+  "hardwareSection": "Perkakasan",
+  "@hardwareSection": {
+    "description": "Hardware section header"
+  },
+  "v2Undetected": "V2 tidak dikesan",
+  "@v2Undetected": {
+    "description": "V2 device undeteced dialog title"
+  },
+  "v2UndetectedMessage": "Kami lihat anda sama ada mempunyai peranti V1 atau peranti anda tidak disambungkan. Fungsi Kad SD hanya tersedia untuk peranti V2.",
+  "@v2UndetectedMessage": {
+    "description": "V2 device undeteced dialog message"
+  },
+  "endConversation": "Tamatkan Perbualan",
+  "@endConversation": {
+    "description": "End conversation action"
+  },
+  "pauseResume": "Jeda/Sambung Semula",
+  "@pauseResume": {
+    "description": "Pause/Resume action"
+  },
+  "starConversation": "Bintangkan Perbualan",
+  "@starConversation": {
+    "description": "Star conversation action"
+  },
+  "doubleTapAction": "Tindakan Ketik Dua Kali",
+  "@doubleTapAction": {
+    "description": "Double tap action setting"
+  },
+  "endAndProcess": "Tamatkan & Proses Perbualan",
+  "@endAndProcess": {
+    "description": "End and process action"
+  },
+  "pauseResumeRecording": "Jeda/Sambung Semula Rakaman",
+  "@pauseResumeRecording": {
+    "description": "Pause/Resume recording action"
+  },
+  "starOngoing": "Bintangkan Perbualan Berterusan",
+  "@starOngoing": {
+    "description": "Star ongoing conversation action"
+  },
+  "off": "Mati",
+  "@off": {
+    "description": "Off state"
+  },
+  "max": "Maksimum",
+  "@max": {
+    "description": "Max state"
+  },
+  "mute": "Bisukan",
+  "@mute": {
+    "description": "Mute state"
+  },
+  "quiet": "Senyap",
+  "@quiet": {
+    "description": "Quiet preset"
+  },
+  "normal": "Biasa",
+  "@normal": {
+    "description": "Normal preset"
+  },
+  "high": "Tinggi",
+  "@high": {
+    "description": "High preset"
+  },
+  "micGainDescMuted": "Mikrofon dibisukan",
+  "@micGainDescMuted": {
+    "description": "Mic gain description: Muted"
+  },
+  "micGainDescLow": "Sangat senyap - untuk persekitaran bising",
+  "@micGainDescLow": {
+    "description": "Mic gain description: Low"
+  },
+  "micGainDescModerate": "Senyap - untuk bunyi sederhana",
+  "@micGainDescModerate": {
+    "description": "Mic gain description: Moderate"
+  },
+  "micGainDescNeutral": "Neutral - rakaman seimbang",
+  "@micGainDescNeutral": {
+    "description": "Mic gain description: Neutral"
+  },
+  "micGainDescSlightlyBoosted": "Dipertingkat sedikit - penggunaan biasa",
+  "@micGainDescSlightlyBoosted": {
+    "description": "Mic gain description: Slightly Boosted"
+  },
+  "micGainDescBoosted": "Dipertingkat - untuk persekitaran senyap",
+  "@micGainDescBoosted": {
+    "description": "Mic gain description: Boosted"
+  },
+  "micGainDescHigh": "Tinggi - untuk suara jauh atau lembut",
+  "@micGainDescHigh": {
+    "description": "Mic gain description: High"
+  },
+  "micGainDescVeryHigh": "Sangat tinggi - untuk sumber sangat senyap",
+  "@micGainDescVeryHigh": {
+    "description": "Mic gain description: Very High"
+  },
+  "micGainDescMax": "Maksimum - gunakan dengan berhati-hati",
+  "@micGainDescMax": {
+    "description": "Mic gain description: Max"
+  },
+  "developerSettingsTitle": "Tetapan Pembangun",
+  "@developerSettingsTitle": {
+    "description": "Developer settings page title"
+  },
+  "saving": "Menyimpan...",
+  "@saving": {
+    "description": "Saving state text"
+  },
+  "personaConfig": "Konfigurasikan persona AI anda",
+  "@personaConfig": {
+    "description": "Persona configuration subtitle"
+  },
+  "beta": "BETA",
+  "@beta": {
+    "description": "Beta tag"
+  },
+  "transcription": "Transkripsi",
+  "@transcription": {
+    "description": "Transcription settings title"
+  },
+  "transcriptionConfig": "Konfigurasikan penyedia STT",
+  "@transcriptionConfig": {
+    "description": "Transcription configuration subtitle"
+  },
+  "conversationTimeout": "Tamat Masa Perbualan",
+  "@conversationTimeout": {
+    "description": "Conversation timeout settings title"
+  },
+  "conversationTimeoutConfig": "Tetapkan bila perbualan tamat secara automatik",
+  "@conversationTimeoutConfig": {
+    "description": "Conversation timeout configuration subtitle"
+  },
+  "importData": "Import Data",
+  "@importData": {
+    "description": "Import data details title"
+  },
+  "importDataConfig": "Import data dari sumber lain",
+  "@importDataConfig": {
+    "description": "Import data details subtitle"
+  },
+  "debugDiagnostics": "Nyahpepijat & Diagnostik",
+  "@debugDiagnostics": {
+    "description": "Debug & Diagnostics section header"
+  },
+  "endpointUrl": "URL Titik Akhir",
+  "@endpointUrl": {
+    "description": "Endpoint URL label"
+  },
+  "noApiKeys": "Tiada kunci API lagi",
+  "@noApiKeys": {
+    "description": "No API keys message"
+  },
+  "createKeyToStart": "Cipta kunci untuk bermula",
+  "@createKeyToStart": {
+    "description": "Create key instruction"
+  },
+  "createKey": "Cipta Kunci",
+  "@createKey": {
+    "description": "Create Key button"
+  },
+  "docs": "Dokumen",
+  "@docs": {
+    "description": "Documentation link"
+  },
+  "yourOmiInsights": "Wawasan Omi Anda",
+  "@yourOmiInsights": {
+    "description": "Usage page title"
+  },
+  "today": "Hari Ini",
+  "@today": {
+    "description": "Time period: Today"
+  },
+  "thisMonth": "Bulan Ini",
+  "@thisMonth": {
+    "description": "Time period: This Month"
+  },
+  "thisYear": "Tahun Ini",
+  "@thisYear": {
+    "description": "Time period: This Year"
+  },
+  "allTime": "Sepanjang Masa",
+  "@allTime": {
+    "description": "Time period: All Time"
+  },
+  "noActivityYet": "Tiada Aktiviti Lagi",
+  "@noActivityYet": {
+    "description": "Empty state title"
+  },
+  "startConversationToSeeInsights": "Mulakan perbualan dengan Omi\nuntuk melihat wawasan penggunaan anda di sini.",
+  "@startConversationToSeeInsights": {
+    "description": "Empty state description"
+  },
+  "listening": "Mendengar",
+  "@listening": {
+    "description": "Listening stat title"
+  },
+  "listeningSubtitle": "Jumlah masa Omi telah mendengar secara aktif.",
+  "@listeningSubtitle": {
+    "description": "Listening stat subtitle"
+  },
+  "understanding": "Memahami",
+  "@understanding": {
+    "description": "Understanding stat title"
+  },
+  "understandingSubtitle": "Perkataan yang difahami daripada perbualan anda.",
+  "@understandingSubtitle": {
+    "description": "Understanding stat subtitle"
+  },
+  "providing": "Menyediakan",
+  "@providing": {
+    "description": "Providing stat title"
+  },
+  "providingSubtitle": "Item tindakan dan nota ditangkap secara automatik.",
+  "@providingSubtitle": {
+    "description": "Providing stat subtitle"
+  },
+  "remembering": "Mengingati",
+  "@remembering": {
+    "description": "Remembering stat title"
+  },
+  "rememberingSubtitle": "Fakta dan butiran diingati untuk anda.",
+  "@rememberingSubtitle": {
+    "description": "Remembering stat subtitle"
+  },
+  "unlimitedPlan": "Pelan Tanpa Had",
+  "@unlimitedPlan": {
+    "description": "Unlimited plan name"
+  },
+  "managePlan": "Urus Pelan",
+  "@managePlan": {
+    "description": "Manage plan button"
+  },
+  "cancelAtPeriodEnd": "Pelan anda akan dibatalkan pada {date}.",
+  "@cancelAtPeriodEnd": {
+    "description": "Cancellation message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "renewsOn": "Pelan anda diperbaharui pada {date}.",
+  "@renewsOn": {
+    "description": "Renewal message",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "Jan 1, 2026"
+      }
+    }
+  },
+  "basicPlan": "Pelan Percuma",
+  "@basicPlan": {
+    "description": "Basic plan name"
+  },
+  "usageLimitMessage": "{used} daripada {limit} minit digunakan",
+  "@usageLimitMessage": {
+    "description": "Usage limit message",
+    "placeholders": {
+      "used": {
+        "type": "String",
+        "example": "100"
+      },
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "upgrade": "Naik Taraf",
+  "@upgrade": {
+    "description": "Upgrade button"
+  },
+  "upgradeToUnlimited": "Naik Taraf ke Tanpa Had",
+  "@upgradeToUnlimited": {
+    "description": "Upgrade to unlimited button"
+  },
+  "basicPlanDesc": "Pelan anda termasuk {limit} minit percuma sebulan. Naik taraf untuk tanpa had.",
+  "@basicPlanDesc": {
+    "description": "Basic plan description",
+    "placeholders": {
+      "limit": {
+        "type": "int",
+        "example": "60"
+      }
+    }
+  },
+  "shareStatsMessage": "Berkongsi statistik Omi saya! (omi.me - pembantu AI anda yang sentiasa aktif)",
+  "@shareStatsMessage": {
+    "description": "Share stats base message"
+  },
+  "sharePeriodToday": "Hari ini, omi telah:",
+  "@sharePeriodToday": {
+    "description": "Share stats period: Today"
+  },
+  "sharePeriodMonth": "Bulan ini, omi telah:",
+  "@sharePeriodMonth": {
+    "description": "Share stats period: Month"
+  },
+  "sharePeriodYear": "Tahun ini, omi telah:",
+  "@sharePeriodYear": {
+    "description": "Share stats period: Year"
+  },
+  "sharePeriodAllTime": "Setakat ini, omi telah:",
+  "@sharePeriodAllTime": {
+    "description": "Share stats period: All Time"
+  },
+  "shareStatsListened": "🎧 Mendengar selama {minutes} minit",
+  "@shareStatsListened": {
+    "description": "Share stats: listened",
+    "placeholders": {
+      "minutes": {
+        "type": "String",
+        "example": "120"
+      }
+    }
+  },
+  "shareStatsWords": "🧠 Memahami {words} perkataan",
+  "@shareStatsWords": {
+    "description": "Share stats: words",
+    "placeholders": {
+      "words": {
+        "type": "String",
+        "example": "5000"
+      }
+    }
+  },
+  "shareStatsInsights": "✨ Menyediakan {count} wawasan",
+  "@shareStatsInsights": {
+    "description": "Share stats: insights",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "10"
+      }
+    }
+  },
+  "shareStatsMemories": "📚 Mengingati {count} ingatan",
+  "@shareStatsMemories": {
+    "description": "Share stats: memories",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "5"
+      }
+    }
+  },
+  "debugLogs": "Log Nyahpepijat",
+  "debugLogsAutoDelete": "Auto-padam selepas 3 hari.",
+  "debugLogsDesc": "Membantu mendiagnosis masalah",
+  "noLogFilesFound": "Tiada fail log dijumpai.",
+  "omiDebugLog": "Log nyahpepijat Omi",
+  "logShared": "Log dikongsi",
+  "selectLogFile": "Pilih Fail Log",
+  "shareLogs": "Kongsi Log",
+  "debugLogCleared": "Log nyahpepijat dikosongkan",
+  "exportStarted": "Eksport bermula. Ini mungkin mengambil beberapa saat...",
+  "exportAllData": "Eksport Semua Data",
+  "exportDataDesc": "Eksport perbualan ke fail JSON",
+  "exportedConversations": "Perbualan Dieksport daripada Omi",
+  "exportShared": "Eksport dikongsi",
+  "deleteKnowledgeGraphTitle": "Padam Graf Pengetahuan?",
+  "deleteKnowledgeGraphMessage": "Ini akan memadam semua data graf pengetahuan terbitan (nod dan sambungan). Ingatan asal anda akan kekal selamat. Graf akan dibina semula dari semasa ke semasa atau atas permintaan seterusnya.",
+  "knowledgeGraphDeleted": "Graf Pengetahuan berjaya dipadam",
+  "deleteGraphFailed": "Gagal memadam graf: {error}",
+  "@deleteGraphFailed": {
+    "description": "Error message when deleting graph fails",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteKnowledgeGraph": "Padam Graf Pengetahuan",
+  "deleteKnowledgeGraphDesc": "Kosongkan semua nod dan sambungan",
+  "mcp": "MCP",
+  "mcpServer": "Pelayan MCP",
+  "mcpServerDesc": "Sambungkan pembantu AI ke data anda",
+  "serverUrl": "URL Pelayan",
+  "urlCopied": "URL disalin",
+  "apiKeyAuth": "Pengesahan Kunci API",
+  "header": "Pengepala",
+  "authorizationBearer": "Authorization: Bearer <key>",
+  "oauth": "OAuth",
+  "clientId": "ID Klien",
+  "clientSecret": "Rahsia Klien",
+  "useMcpApiKey": "Gunakan kunci API MCP anda",
+  "webhooks": "Webhooks",
+  "conversationEvents": "Acara Perbualan",
+  "newConversationCreated": "Perbualan baharu dicipta",
+  "realtimeTranscript": "Transkrip Masa Nyata",
+  "transcriptReceived": "Transkrip diterima",
+  "audioBytes": "Bait Audio",
+  "audioDataReceived": "Data audio diterima",
+  "intervalSeconds": "Selang (saat)",
+  "daySummary": "Ringkasan Hari",
+  "summaryGenerated": "Ringkasan dijana",
+  "claudeDesktop": "Claude Desktop",
+  "addToClaudeConfig": "Tambah ke claude_desktop_config.json",
+  "copyConfig": "Salin Konfigurasi",
+  "configCopied": "Konfigurasi disalin ke papan keratan",
+  "listeningMins": "Mendengar (minit)",
+  "understandingWords": "Memahami (perkataan)",
+  "insights": "Wawasan",
+  "memories": "Ingatan",
+  "minsUsedThisMonth": "{used} daripada {limit} minit digunakan bulan ini",
+  "@minsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "wordsUsedThisMonth": "{used} daripada {limit} perkataan digunakan bulan ini",
+  "@wordsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "insightsUsedThisMonth": "{used} daripada {limit} wawasan diperoleh bulan ini",
+  "@insightsUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "memoriesUsedThisMonth": "{used} daripada {limit} ingatan dicipta bulan ini",
+  "@memoriesUsedThisMonth": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "visibility": "Keterlihatan",
+  "visibilitySubtitle": "Kawal perbualan mana yang muncul dalam senarai anda",
+  "showShortConversations": "Tunjukkan Perbualan Pendek",
+  "showShortConversationsDesc": "Paparkan perbualan yang lebih pendek daripada ambang",
+  "showDiscardedConversations": "Tunjukkan Perbualan Dibuang",
+  "showDiscardedConversationsDesc": "Sertakan perbualan yang ditandakan sebagai dibuang",
+  "shortConversationThreshold": "Ambang Perbualan Pendek",
+  "shortConversationThresholdSubtitle": "Perbualan yang lebih pendek daripada ini akan disembunyikan melainkan didayakan di atas",
+  "durationThreshold": "Ambang Tempoh",
+  "durationThresholdDesc": "Sembunyikan perbualan yang lebih pendek daripada ini",
+  "minLabel": "{count} min",
+  "@minLabel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customVocabularyTitle": "Perbendaharaan Kata Tersuai",
+  "addWords": "Tambah Perkataan",
+  "addWordsDesc": "Nama, istilah, atau perkataan luar biasa",
+  "vocabularyHint": "Omi, Callie, OpenAI",
+  "connect": "Sambung",
+  "comingSoon": "Akan Datang",
+  "chatToolsFooter": "Sambungkan aplikasi anda untuk melihat data dan metrik dalam sembang.",
+  "completeAuthInBrowser": "Sila lengkapkan pengesahan dalam pelayar anda. Selepas selesai, kembali ke aplikasi.",
+  "failedToStartAuth": "Gagal memulakan pengesahan {appName}",
+  "@failedToStartAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppTitle": "Putuskan sambungan {appName}?",
+  "@disconnectAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectAppMessage": "Adakah anda pasti mahu memutuskan sambungan dari {appName}? Anda boleh menyambung semula bila-bila masa.",
+  "@disconnectAppMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectedFrom": "Terputus sambungan dari {appName}",
+  "@disconnectedFrom": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDisconnect": "Gagal memutuskan sambungan",
+  "connectTo": "Sambung ke {appName}",
+  "@connectTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authAccessMessage": "Anda perlu memberi kebenaran kepada Omi untuk mengakses data {appName} anda. Ini akan membuka pelayar anda untuk pengesahan.",
+  "@authAccessMessage": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueAction": "Teruskan",
+  "languageTitle": "Bahasa",
+  "primaryLanguage": "Bahasa Utama",
+  "automaticTranslation": "Terjemahan Automatik",
+  "detectLanguages": "Kesan 10+ bahasa",
+  "authorizeSavingRecordings": "Benarkan Menyimpan Rakaman",
+  "thanksForAuthorizing": "Terima kasih kerana memberi kebenaran!",
+  "needYourPermission": "Kami memerlukan kebenaran anda",
+  "alreadyGavePermission": "Anda telah memberi kami kebenaran untuk menyimpan rakaman anda. Berikut adalah peringatan mengapa kami memerlukannya:",
+  "wouldLikePermission": "Kami ingin kebenaran anda untuk menyimpan rakaman suara anda. Sebabnya:",
+  "improveSpeechProfile": "Tingkatkan Profil Pertuturan Anda",
+  "improveSpeechProfileDesc": "Kami menggunakan rakaman untuk melatih dan meningkatkan profil pertuturan peribadi anda.",
+  "trainFamilyProfiles": "Latih Profil untuk Rakan dan Keluarga",
+  "trainFamilyProfilesDesc": "Rakaman anda membantu kami mengenali dan mencipta profil untuk rakan dan keluarga anda.",
+  "enhanceTranscriptAccuracy": "Tingkatkan Ketepatan Transkrip",
+  "enhanceTranscriptAccuracyDesc": "Apabila model kami bertambah baik, kami boleh memberikan hasil transkripsi yang lebih baik untuk rakaman anda.",
+  "legalNotice": "Notis Undang-undang: Kesahihan merakam dan menyimpan data suara mungkin berbeza bergantung pada lokasi anda dan cara anda menggunakan ciri ini. Adalah tanggungjawab anda untuk memastikan pematuhan undang-undang dan peraturan tempatan.",
+  "alreadyAuthorized": "Sudah Dibenarkan",
+  "authorize": "Benarkan",
+  "revokeAuthorization": "Batalkan Kebenaran",
+  "authorizationSuccessful": "Kebenaran berjaya!",
+  "failedToAuthorize": "Gagal memberi kebenaran. Sila cuba lagi.",
+  "authorizationRevoked": "Kebenaran dibatalkan.",
+  "recordingsDeleted": "Rakaman dipadam.",
+  "failedToRevoke": "Gagal membatalkan kebenaran. Sila cuba lagi.",
+  "permissionRevokedTitle": "Kebenaran Dibatalkan",
+  "permissionRevokedMessage": "Adakah anda mahu kami membuang semua rakaman sedia ada anda juga?",
+  "yes": "Ya",
+  "editName": "Edit Nama",
+  "howShouldOmiCallYou": "Apa yang Omi patut panggil anda?",
+  "enterYourName": "Masukkan nama anda",
+  "nameCannotBeEmpty": "Nama tidak boleh kosong",
+  "nameUpdatedSuccessfully": "Nama berjaya dikemas kini!",
+  "calendarSettings": "Tetapan kalendar",
+  "calendarProviders": "Penyedia Kalendar",
+  "macOsCalendar": "Kalendar macOS",
+  "connectMacOsCalendar": "Sambungkan kalendar macOS tempatan anda",
+  "googleCalendar": "Google Calendar",
+  "syncGoogleAccount": "Segerakkan dengan akaun Google anda",
+  "showMeetingsMenuBar": "Tunjukkan mesyuarat akan datang di bar menu",
+  "showMeetingsMenuBarDesc": "Paparkan mesyuarat seterusnya anda dan masa sehingga ia bermula di bar menu macOS",
+  "showEventsNoParticipants": "Tunjukkan acara tanpa peserta",
+  "showEventsNoParticipantsDesc": "Apabila didayakan, Coming Up menunjukkan acara tanpa peserta atau pautan video.",
+  "yourMeetings": "Mesyuarat Anda",
+  "refresh": "Muat Semula",
+  "noUpcomingMeetings": "Tiada mesyuarat akan datang dijumpai",
+  "checkingNextDays": "Menyemak 30 hari akan datang",
+  "tomorrow": "Esok",
+  "googleCalendarComingSoon": "Integrasi Google Calendar akan datang!",
+  "connectedAsUser": "Disambungkan sebagai pengguna: {userId}",
+  "@connectedAsUser": {
+    "placeholders": {
+      "userId": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultWorkspace": "Ruang Kerja Lalai",
+  "tasksCreatedInWorkspace": "Tugasan akan dicipta dalam ruang kerja ini",
+  "defaultProjectOptional": "Projek Lalai (Pilihan)",
+  "leaveUnselectedTasks": "Biarkan tidak dipilih untuk mencipta tugasan tanpa projek",
+  "noProjectsInWorkspace": "Tiada projek dijumpai dalam ruang kerja ini",
+  "conversationTimeoutDesc": "Pilih berapa lama untuk menunggu dalam senyap sebelum menamatkan perbualan secara automatik:",
+  "timeout2Minutes": "2 minit",
+  "timeout2MinutesDesc": "Tamatkan perbualan selepas 2 minit senyap",
+  "timeout5Minutes": "5 minit",
+  "timeout5MinutesDesc": "Tamatkan perbualan selepas 5 minit senyap",
+  "timeout10Minutes": "10 minit",
+  "timeout10MinutesDesc": "Tamatkan perbualan selepas 10 minit senyap",
+  "timeout30Minutes": "30 minit",
+  "timeout30MinutesDesc": "Tamatkan perbualan selepas 30 minit senyap",
+  "timeout4Hours": "4 jam",
+  "timeout4HoursDesc": "Tamatkan perbualan selepas 4 jam senyap",
+  "conversationEndAfterHours": "Perbualan akan tamat selepas 4 jam senyap",
+  "conversationEndAfterMinutes": "Perbualan akan tamat selepas {minutes} minit senyap",
+  "@conversationEndAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tellUsPrimaryLanguage": "Beritahu kami bahasa utama anda",
+  "languageForTranscription": "Tetapkan bahasa anda untuk transkripsi yang lebih tajam dan pengalaman yang diperibadikan.",
+  "singleLanguageModeInfo": "Mod Bahasa Tunggal didayakan. Terjemahan dilumpuhkan untuk ketepatan yang lebih tinggi.",
+  "searchLanguageHint": "Cari bahasa mengikut nama atau kod",
+  "noLanguagesFound": "Tiada bahasa dijumpai",
+  "skip": "Langkau",
+  "languageSetTo": "Bahasa ditetapkan kepada {language}",
+  "@languageSetTo": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToSetLanguage": "Gagal menetapkan bahasa",
+  "appSettings": "Tetapan {appName}",
+  "@appSettings": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromApp": "Putuskan sambungan dari {appName}?",
+  "@disconnectFromApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "disconnectFromAppDesc": "Ini akan membuang pengesahan {appName} anda. Anda perlu menyambung semula untuk menggunakannya lagi.",
+  "@disconnectFromAppDesc": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectedToApp": "Disambungkan ke {appName}",
+  "@connectedToApp": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "account": "Akaun",
+  "actionItemsSyncedTo": "Item tindakan anda akan disegerakkan ke akaun {appName} anda",
+  "@actionItemsSyncedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultSpace": "Ruang Lalai",
+  "selectSpaceInWorkspace": "Pilih ruang dalam ruang kerja anda",
+  "noSpacesInWorkspace": "Tiada ruang dijumpai dalam ruang kerja ini",
+  "defaultList": "Senarai Lalai",
+  "tasksAddedToList": "Tugasan akan ditambah ke senarai ini",
+  "noListsInSpace": "Tiada senarai dijumpai dalam ruang ini",
+  "failedToLoadRepos": "Gagal memuatkan repositori: {error}",
+  "@failedToLoadRepos": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRepoSaved": "Repositori lalai disimpan",
+  "failedToSaveDefaultRepo": "Gagal menyimpan repositori lalai",
+  "defaultRepository": "Repositori Lalai",
+  "selectDefaultRepoDesc": "Pilih repositori lalai untuk mencipta isu. Anda masih boleh menyatakan repositori yang berbeza semasa mencipta isu.",
+  "noReposFound": "Tiada repositori dijumpai",
+  "private": "Peribadi",
+  "updatedDate": "Dikemas kini {date}",
+  "@updatedDate": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "yesterday": "semalam",
+  "daysAgo": "{count} hari yang lalu",
+  "@daysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneWeekAgo": "1 minggu yang lalu",
+  "weeksAgo": "{count} minggu yang lalu",
+  "@weeksAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "oneMonthAgo": "1 bulan yang lalu",
+  "monthsAgo": "{count} bulan yang lalu",
+  "@monthsAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "issuesCreatedInRepo": "Isu akan dicipta dalam repositori lalai anda",
+  "taskIntegrations": "Integrasi Tugasan",
+  "configureSettings": "Konfigurasikan Tetapan",
+  "completeAuthBrowser": "Sila lengkapkan pengesahan dalam pelayar anda. Selepas selesai, kembali ke aplikasi.",
+  "failedToStartAppAuth": "Gagal memulakan pengesahan {appName}",
+  "@failedToStartAppAuth": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "connectToAppTitle": "Sambung ke {appName}",
+  "@connectToAppTitle": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "authorizeOmiForTasks": "Anda perlu memberi kebenaran kepada Omi untuk mencipta tugasan dalam akaun {appName} anda. Ini akan membuka pelayar anda untuk pengesahan.",
+  "@authorizeOmiForTasks": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "continueButton": "Teruskan",
+  "appIntegration": "Integrasi {appName}",
+  "@appIntegration": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "integrationComingSoon": "Integrasi dengan {appName} akan datang! Kami bekerja keras untuk membawa anda lebih banyak pilihan pengurusan tugasan.",
+  "@integrationComingSoon": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "gotIt": "Faham",
+  "tasksExportedOneApp": "Tugasan boleh dieksport ke satu aplikasi pada satu masa.",
+  "completeYourUpgrade": "Lengkapkan Naik Taraf Anda",
+  "importConfiguration": "Import Konfigurasi",
+  "exportConfiguration": "Eksport konfigurasi",
+  "bringYourOwn": "Bawa milik anda sendiri",
+  "payYourSttProvider": "Gunakan omi secara bebas. Anda hanya membayar penyedia STT anda secara langsung.",
+  "freeMinutesMonth": "1,200 minit percuma/bulan disertakan. Tanpa had dengan ",
+  "omiUnlimited": "Omi Tanpa Had",
+  "hostRequired": "Hos diperlukan",
+  "validPortRequired": "Port yang sah diperlukan",
+  "validWebsocketUrlRequired": "URL WebSocket yang sah diperlukan (wss://)",
+  "apiUrlRequired": "URL API diperlukan",
+  "apiKeyRequired": "Kunci API diperlukan",
+  "invalidJsonConfig": "Konfigurasi JSON tidak sah",
+  "errorSaving": "Ralat menyimpan: {error}",
+  "@errorSaving": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "configCopiedToClipboard": "Konfigurasi disalin ke papan keratan",
+  "pasteJsonConfig": "Tampal konfigurasi JSON anda di bawah:",
+  "addApiKeyAfterImport": "Anda perlu menambah kunci API anda sendiri selepas mengimport",
+  "paste": "Tampal",
+  "import": "Import",
+  "invalidProviderInConfig": "Penyedia tidak sah dalam konfigurasi",
+  "importedConfig": "Konfigurasi {providerName} diimport",
+  "@importedConfig": {
+    "placeholders": {
+      "providerName": {
+        "type": "String"
+      }
+    }
+  },
+  "invalidJson": "JSON tidak sah: {error}",
+  "@invalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "provider": "Penyedia",
+  "live": "Langsung",
+  "onDevice": "Pada Peranti",
+  "apiUrl": "URL API",
+  "enterSttHttpEndpoint": "Masukkan titik akhir HTTP STT anda",
+  "websocketUrl": "URL WebSocket",
+  "enterLiveSttWebsocket": "Masukkan titik akhir WebSocket STT langsung anda",
+  "apiKey": "Kunci API",
+  "enterApiKey": "Masukkan kunci API anda",
+  "storedLocallyNeverShared": "Disimpan secara tempatan, tidak pernah dikongsi",
+  "host": "Hos",
+  "port": "Port",
+  "advanced": "Lanjutan",
+  "configuration": "Konfigurasi",
+  "requestConfiguration": "Konfigurasi Permintaan",
+  "responseSchema": "Skema Respons",
+  "modified": "Diubah Suai",
+  "resetRequestConfig": "Tetapkan semula konfigurasi permintaan ke lalai",
+  "logs": "Log",
+  "logsCopied": "Log disalin",
+  "noLogsYet": "Tiada log lagi. Mulakan rakaman untuk melihat aktiviti STT tersuai.",
+  "deviceUsesCodec": "{deviceName} menggunakan {codecReason}. Omi akan digunakan.",
+  "@deviceUsesCodec": {
+    "placeholders": {
+      "deviceName": {
+        "type": "String"
+      },
+      "codecReason": {
+        "type": "String"
+      }
+    }
+  },
+  "omiTranscription": "Transkripsi Omi",
+  "bestInClassTranscription": "Transkripsi terbaik dalam kelasnya tanpa persediaan",
+  "instantSpeakerLabels": "Label penutur segera",
+  "languageTranslation": "Terjemahan 100+ bahasa",
+  "optimizedForConversation": "Dioptimumkan untuk perbualan",
+  "autoLanguageDetection": "Pengesanan bahasa automatik",
+  "highAccuracy": "Ketepatan tinggi",
+  "privacyFirst": "Privasi utama",
+  "saveChanges": "Simpan Perubahan",
+  "resetToDefault": "Tetapkan Semula ke Lalai",
+  "viewTemplate": "Lihat Templat",
+  "trySomethingLike": "Cuba sesuatu seperti...",
+  "tryIt": "Cuba",
+  "creatingPlan": "Mencipta pelan",
+  "developingLogic": "Membangunkan logik",
+  "designingApp": "Mereka aplikasi",
+  "generatingIconStep": "Menjana ikon",
+  "finalTouches": "Sentuhan akhir",
+  "processing": "Memproses...",
+  "features": "Ciri-ciri",
+  "creatingYourApp": "Mencipta aplikasi anda...",
+  "generatingIcon": "Menjana ikon...",
+  "whatShouldWeMake": "Apa yang patut kita buat?",
+  "appName": "Nama Aplikasi",
+  "description": "Penerangan",
+  "publicLabel": "Awam",
+  "privateLabel": "Peribadi",
+  "free": "Percuma",
+  "perMonth": "/ Bulan",
+  "tailoredConversationSummaries": "Ringkasan Perbualan Tersuai",
+  "customChatbotPersonality": "Personaliti Chatbot Tersuai",
+  "makePublic": "Jadikan awam",
+  "anyoneCanDiscover": "Sesiapa sahaja boleh menemui aplikasi anda",
+  "onlyYouCanUse": "Hanya anda boleh menggunakan aplikasi ini",
+  "paidApp": "Aplikasi berbayar",
+  "usersPayToUse": "Pengguna membayar untuk menggunakan aplikasi anda",
+  "freeForEveryone": "Percuma untuk semua",
+  "perMonthLabel": "/ bulan",
+  "creating": "Mencipta...",
+  "@creating": {
+    "description": "Loading state text when app generation is in progress"
+  },
+  "createApp": "Cipta Aplikasi",
+  "@createApp": {
+    "description": "Button text to initiate app creation"
+  },
+  "@connect": {
+    "description": "Title for device connection page"
+  },
+  "searchingForDevices": "Mencari peranti...",
+  "@searchingForDevices": {
+    "description": "Status text while scanning for Bluetooth devices"
+  },
+  "devicesFoundNearby": "{count} {count, plural, =1{PERANTI} other{PERANTI}} DIJUMPAI BERDEKATAN",
+  "@devicesFoundNearby": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pairingSuccessful": "PERPASANGAN BERJAYA",
+  "errorConnectingAppleWatch": "Ralat menyambung ke Apple Watch: {error}",
+  "@errorConnectingAppleWatch": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dontShowAgain": "Jangan tunjukkan lagi",
+  "@dontShowAgain": {
+    "description": "Checkbox text to suppress future connection confirmations"
+  },
+  "iUnderstand": "Saya Faham",
+  "@iUnderstand": {
+    "description": "Button text to acknowledge connection warnings"
+  },
+  "enableBluetooth": "Dayakan Bluetooth",
+  "@enableBluetooth": {
+    "description": "Title for dialog prompting user to enable Bluetooth"
+  },
+  "bluetoothNeeded": "Omi memerlukan Bluetooth untuk menyambung ke peranti boleh pakai anda. Sila dayakan Bluetooth dan cuba lagi.",
+  "@bluetoothNeeded": {
+    "description": "Explanation text for why Bluetooth is required"
+  },
+  "contactSupport": "Hubungi Sokongan?",
+  "@contactSupport": {
+    "description": "Link text to contact support"
+  },
+  "connectLater": "Sambung Kemudian",
+  "@connectLater": {
+    "description": "Button text to skip immediate device connection"
+  },
+  "grantPermissions": "Berikan kebenaran",
+  "@grantPermissions": {
+    "description": "Title for the permissions request page"
+  },
+  "backgroundActivity": "Aktiviti latar belakang",
+  "@backgroundActivity": {
+    "description": "Title for background activity permission"
+  },
+  "backgroundActivityDesc": "Biarkan Omi berjalan di latar belakang untuk kestabilan yang lebih baik",
+  "@backgroundActivityDesc": {
+    "description": "Description for background activity permission"
+  },
+  "locationAccess": "Akses lokasi",
+  "@locationAccess": {
+    "description": "Title for location access permission"
+  },
+  "locationAccessDesc": "Dayakan lokasi latar belakang untuk pengalaman penuh",
+  "@locationAccessDesc": {
+    "description": "Description for location access permission"
+  },
+  "notifications": "Pemberitahuan",
+  "@notifications": {
+    "description": "Title for notifications permission"
+  },
+  "notificationsDesc": "Dayakan pemberitahuan untuk terus dimaklumkan",
+  "@notificationsDesc": {
+    "description": "Description for notifications permission"
+  },
+  "@continueButton": {
+    "description": "Generic continue button text"
+  },
+  "locationServiceDisabled": "Perkhidmatan Lokasi Dilumpuhkan",
+  "@locationServiceDisabled": {
+    "description": "Title for dialog when location services are off"
+  },
+  "locationServiceDisabledDesc": "Perkhidmatan Lokasi dilumpuhkan. Sila pergi ke Tetapan > Privasi & Keselamatan > Perkhidmatan Lokasi dan dayakannya",
+  "@locationServiceDisabledDesc": {
+    "description": "Instructions to enable location services"
+  },
+  "backgroundLocationDenied": "Akses Lokasi Latar Belakang Ditolak",
+  "@backgroundLocationDenied": {
+    "description": "Title for dialog when background location is denied"
+  },
+  "backgroundLocationDeniedDesc": "Sila pergi ke tetapan peranti dan tetapkan kebenaran lokasi kepada \"Sentiasa Benarkan\"",
+  "@backgroundLocationDeniedDesc": {
+    "description": "Instructions to grant background location permission"
+  },
+  "lovingOmi": "Suka Omi?",
+  "@lovingOmi": {
+    "description": "Title for the app review prompt"
+  },
+  "leaveReviewIos": "Bantu kami menjangkau lebih ramai orang dengan meninggalkan ulasan di App Store. Maklum balas anda sangat bermakna bagi kami!",
+  "@leaveReviewIos": {
+    "description": "App review prompt text for iOS users"
+  },
+  "leaveReviewAndroid": "Bantu kami menjangkau lebih ramai orang dengan meninggalkan ulasan di Google Play Store. Maklum balas anda sangat bermakna bagi kami!",
+  "@leaveReviewAndroid": {
+    "description": "App review prompt text for Android users"
+  },
+  "rateOnAppStore": "Nilai di App Store",
+  "@rateOnAppStore": {
+    "description": "Button text to rate on Apple App Store"
+  },
+  "rateOnGooglePlay": "Nilai di Google Play",
+  "@rateOnGooglePlay": {
+    "description": "Button text to rate on Google Play Store"
+  },
+  "maybeLater": "Mungkin kemudian",
+  "@maybeLater": {
+    "description": "Button text to dismiss the review prompt"
+  },
+  "speechProfileIntro": "Omi perlu mempelajari matlamat dan suara anda. Anda boleh mengubahnya kemudian.",
+  "@speechProfileIntro": {
+    "description": "Introduction text for speech profile creation"
+  },
+  "getStarted": "Mulakan",
+  "@getStarted": {
+    "description": "Button text to begin a process"
+  },
+  "allDone": "Semua selesai!",
+  "@allDone": {
+    "description": "Success message after completing a task"
+  },
+  "keepGoing": "Teruskan, anda buat dengan baik",
+  "@keepGoing": {
+    "description": "Encouragement text during a multi-step process"
+  },
+  "skipThisQuestion": "Langkau soalan ini",
+  "@skipThisQuestion": {
+    "description": "Button text to skip the current question"
+  },
+  "skipForNow": "Langkau buat masa ini",
+  "@skipForNow": {
+    "description": "Button text to skip the entire process temporarily"
+  },
+  "connectionError": "Ralat Sambungan",
+  "@connectionError": {
+    "description": "Title for connection error dialog"
+  },
+  "connectionErrorDesc": "Gagal menyambung ke pelayan. Sila semak sambungan internet anda dan cuba lagi.",
+  "@connectionErrorDesc": {
+    "description": "Description of connection error"
+  },
+  "invalidRecordingMultipleSpeakers": "Rakaman tidak sah dikesan",
+  "@invalidRecordingMultipleSpeakers": {
+    "description": "Error title when multiple speakers are detected"
+  },
+  "multipleSpeakersDesc": "Nampaknya terdapat beberapa penutur dalam rakaman. Sila pastikan anda berada di lokasi yang senyap dan cuba lagi.",
+  "@multipleSpeakersDesc": {
+    "description": "Error description for multiple speakers"
+  },
+  "tooShortDesc": "Tidak cukup pertuturan dikesan. Sila bercakap lebih banyak dan cuba lagi.",
+  "@tooShortDesc": {
+    "description": "Error description for recording being too short"
+  },
+  "invalidRecordingDesc": "Sila pastikan anda bercakap sekurang-kurangnya 5 saat dan tidak lebih daripada 90.",
+  "@invalidRecordingDesc": {
+    "description": "Error description for invalid recording duration"
+  },
+  "areYouThere": "Adakah anda di sana?",
+  "@areYouThere": {
+    "description": "Timeout warning title"
+  },
+  "noSpeechDesc": "Kami tidak dapat mengesan sebarang pertuturan. Sila pastikan untuk bercakap sekurang-kurangnya 10 saat dan tidak lebih daripada 3 minit.",
+  "@noSpeechDesc": {
+    "description": "Error description when no speech is detected"
+  },
+  "connectionLost": "Sambungan Terputus",
+  "@connectionLost": {
+    "description": "Title for lost connection dialog"
+  },
+  "connectionLostDesc": "Sambungan terganggu. Sila semak sambungan internet anda dan cuba lagi.",
+  "@connectionLostDesc": {
+    "description": "Description for lost connection"
+  },
+  "tryAgain": "Cuba Lagi",
+  "@tryAgain": {
+    "description": "Button text to retry an action"
+  },
+  "connectOmiOmiGlass": "Sambung Omi / OmiGlass",
+  "@connectOmiOmiGlass": {
+    "description": "Button text to connect specific device models"
+  },
+  "continueWithoutDevice": "Teruskan Tanpa Peranti",
+  "@continueWithoutDevice": {
+    "description": "Button text to proceed without connecting a hardware device"
+  },
+  "permissionsRequired": "Kebenaran Diperlukan",
+  "@permissionsRequired": {
+    "description": "Title for permissions required dialog"
+  },
+  "permissionsRequiredDesc": "Aplikasi ini memerlukan kebenaran Bluetooth dan Lokasi untuk berfungsi dengan betul. Sila dayakannya dalam tetapan.",
+  "@permissionsRequiredDesc": {
+    "description": "Explanation of why permissions are needed"
+  },
+  "openSettings": "Buka Tetapan",
+  "@openSettings": {
+    "description": "Button text to open app settings"
+  },
+  "wantDifferentName": "Mahu dipanggil dengan nama lain?",
+  "@wantDifferentName": {
+    "description": "Question asking if user wants to change their display name"
+  },
+  "whatsYourName": "Siapa nama anda?",
+  "@whatsYourName": {
+    "description": "Question asking for user's name"
+  },
+  "@enterYourName": {
+    "description": "Hint text for name input field"
+  },
+  "speakTranscribeSummarize": "Bercakap. Transkrip. Ringkaskan.",
+  "@speakTranscribeSummarize": {
+    "description": "Tagline or slogan on the welcome/auth screen"
+  },
+  "signInWithApple": "Log masuk dengan Apple",
+  "@signInWithApple": {
+    "description": "Button text for Apple Sign In"
+  },
+  "signInWithGoogle": "Log masuk dengan Google",
+  "@signInWithGoogle": {
+    "description": "Button text for Google Sign In"
+  },
+  "byContinuingAgree": "Dengan meneruskan, anda bersetuju dengan ",
+  "@byContinuingAgree": {
+    "description": "Legal disclaimer prefix text"
+  },
+  "termsOfUse": "Terma Penggunaan",
+  "@termsOfUse": {
+    "description": "Link text for Terms of Use"
+  },
+  "omiYourAiCompanion": "Omi – Sahabat AI Anda",
+  "@omiYourAiCompanion": {
+    "description": "App title or branding on onboarding screen"
+  },
+  "captureEveryMoment": "Tangkap setiap detik. Dapatkan ringkasan dikuasakan AI.\nJangan ambil nota lagi.",
+  "@captureEveryMoment": {
+    "description": "App value proposition or description"
+  },
+  "appleWatchSetup": "Persediaan Apple Watch",
+  "@appleWatchSetup": {
+    "description": "Title for Apple Watch setup page"
+  },
+  "permissionRequestedExclaim": "Kebenaran Diminta!",
+  "@permissionRequestedExclaim": {
+    "description": "Title when permission has been requested"
+  },
+  "microphonePermission": "Kebenaran Mikrofon",
+  "@microphonePermission": {
+    "description": "Title for microphone permission section"
+  },
+  "permissionGrantedNow": "Kebenaran diberikan! Sekarang:\n\nBuka aplikasi Omi pada jam tangan anda dan ketik \"Teruskan\" di bawah",
+  "@permissionGrantedNow": {
+    "description": "Instructions after permission is granted"
+  },
+  "needMicrophonePermission": "Kami memerlukan kebenaran mikrofon.\n\n1. Ketik \"Berikan Kebenaran\"\n2. Benarkan pada iPhone anda\n3. Aplikasi jam tangan akan ditutup\n4. Buka semula dan ketik \"Teruskan\"",
+  "@needMicrophonePermission": {
+    "description": "Instructions for granting microphone permission"
+  },
+  "grantPermissionButton": "Berikan Kebenaran",
+  "@grantPermissionButton": {
+    "description": "Button to request permission"
+  },
+  "needHelp": "Perlukan Bantuan?",
+  "@needHelp": {
+    "description": "Link to help dialog"
+  },
+  "troubleshootingSteps": "Penyelesaian Masalah:\n\n1. Pastikan Omi dipasang pada jam tangan anda\n2. Buka aplikasi Omi pada jam tangan anda\n3. Cari popup kebenaran\n4. Ketik \"Benarkan\" apabila diminta\n5. Aplikasi pada jam tangan anda akan ditutup - buka semula\n6. Kembali dan ketik \"Teruskan\" pada iPhone anda",
+  "@troubleshootingSteps": {
+    "description": "Troubleshooting instructions for watch setup"
+  },
+  "@gotIt": {
+    "description": "Button to dismiss dialog"
+  },
+  "recordingStartedSuccessfully": "Rakaman bermula dengan jayanya!",
+  "@recordingStartedSuccessfully": {
+    "description": "Success message"
+  },
+  "permissionNotGrantedYet": "Kebenaran belum diberikan. Sila pastikan anda membenarkan akses mikrofon dan membuka semula aplikasi pada jam tangan anda.",
+  "@permissionNotGrantedYet": {
+    "description": "Error message when permission is missing"
+  },
+  "errorRequestingPermission": "Ralat meminta kebenaran: {error}",
+  "@errorRequestingPermission": {
+    "description": "Error message for permission request failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "errorStartingRecording": "Ralat memulakan rakaman: {error}",
+  "@errorStartingRecording": {
+    "description": "Error message for recording start failure",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "selectPrimaryLanguage": "Pilih bahasa utama anda",
+  "@selectPrimaryLanguage": {
+    "description": "Title for language selection dialog"
+  },
+  "languageBenefits": "Tetapkan bahasa anda untuk transkripsi yang lebih tajam dan pengalaman yang diperibadikan",
+  "@languageBenefits": {
+    "description": "Explanation of why language selection matters"
+  },
+  "@searchLanguageHint": {
+    "description": "Hint text for language search"
+  },
+  "@noLanguagesFound": {
+    "description": "Text when search returns no results"
+  },
+  "whatsYourPrimaryLanguage": "Apakah bahasa utama anda?",
+  "@whatsYourPrimaryLanguage": {
+    "description": "Question asking for primary language"
+  },
+  "selectYourLanguage": "Pilih bahasa anda",
+  "@selectYourLanguage": {
+    "description": "Placeholder for selected language name"
+  },
+  "personalGrowthJourney": "Perjalanan pertumbuhan peribadi anda dengan AI yang mendengar setiap perkataan anda.",
+  "@personalGrowthJourney": {
+    "description": "Tagline on onboarding wrapper"
+  },
+  "actionItemsTitle": "Tugasan",
+  "@actionItemsTitle": {
+    "description": "Title for the Action Items page"
+  },
+  "actionItemsDescription": "Ketik untuk edit • Tekan lama untuk pilih • Leret untuk tindakan",
+  "@actionItemsDescription": {
+    "description": "Instruction text for Action Items interactions"
+  },
+  "tabToDo": "Tugasan",
+  "@tabToDo": {
+    "description": "Label for To Do tab"
+  },
+  "tabDone": "Selesai",
+  "@tabDone": {
+    "description": "Label for Done tab"
+  },
+  "tabOld": "Lama",
+  "@tabOld": {
+    "description": "Label for Old tab"
+  },
+  "emptyTodoMessage": "🎉 Semua telah selesai!\nTiada item tindakan tertunda",
+  "@emptyTodoMessage": {
+    "description": "Message when To Do list is empty"
+  },
+  "emptyDoneMessage": "Tiada item selesai lagi",
+  "@emptyDoneMessage": {
+    "description": "Message when Done list is empty"
+  },
+  "emptyOldMessage": "✅ Tiada tugasan lama",
+  "@emptyOldMessage": {
+    "description": "Message when Old list is empty"
+  },
+  "noItems": "Tiada item",
+  "@noItems": {
+    "description": "Generic no items message"
+  },
+  "actionItemMarkedIncomplete": "Item tindakan ditandakan sebagai tidak lengkap",
+  "@actionItemMarkedIncomplete": {
+    "description": "Snackbar message when item marked incomplete"
+  },
+  "actionItemCompleted": "Item tindakan selesai",
+  "@actionItemCompleted": {
+    "description": "Snackbar message when item completed"
+  },
+  "deleteActionItemTitle": "Padam Item Tindakan",
+  "@deleteActionItemTitle": {
+    "description": "Title for delete item dialog"
+  },
+  "deleteActionItemMessage": "Adakah anda pasti mahu memadam item tindakan ini?",
+  "@deleteActionItemMessage": {
+    "description": "Confirmation message for deleting single item"
+  },
+  "deleteSelectedItemsTitle": "Padam Item Terpilih",
+  "@deleteSelectedItemsTitle": {
+    "description": "Title for bulk delete dialog"
+  },
+  "deleteSelectedItemsMessage": "Adakah anda pasti mahu memadam {count} item tindakan terpilih{s}?",
+  "@deleteSelectedItemsMessage": {
+    "description": "Confirmation message for bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String",
+        "description": "Plural suffix (s) if needed, handled by logic or just append 's' for simplicity if count > 1"
+      }
+    }
+  },
+  "actionItemDeletedResult": "Item tindakan \"{description}\" dipadam",
+  "@actionItemDeletedResult": {
+    "description": "Snackbar message after deleting single item",
+    "placeholders": {
+      "description": {
+        "type": "String"
+      }
+    }
+  },
+  "itemsDeletedResult": "{count} item tindakan{s} dipadam",
+  "@itemsDeletedResult": {
+    "description": "Snackbar message after bulk delete",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "s": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToDeleteItem": "Gagal memadam item tindakan",
+  "@failedToDeleteItem": {
+    "description": "Error message when deletion fails"
+  },
+  "failedToDeleteItems": "Gagal memadam item",
+  "@failedToDeleteItems": {
+    "description": "Error message when bulk deletion fails"
+  },
+  "failedToDeleteSomeItems": "Gagal memadam beberapa item",
+  "@failedToDeleteSomeItems": {
+    "description": "Error message when partial deletion failure"
+  },
+  "welcomeActionItemsTitle": "Sedia untuk Item Tindakan",
+  "@welcomeActionItemsTitle": {
+    "description": "Heading for empty state welcome"
+  },
+  "welcomeActionItemsDescription": "AI anda akan secara automatik mengekstrak tugasan dan perkara-yang-perlu-dilakukan daripada perbualan anda. Ia akan muncul di sini apabila dicipta.",
+  "@welcomeActionItemsDescription": {
+    "description": "Description for empty state welcome"
+  },
+  "autoExtractionFeature": "Diekstrak secara automatik daripada perbualan",
+  "@autoExtractionFeature": {
+    "description": "Feature point description"
+  },
+  "editSwipeFeature": "Ketik untuk edit, leret untuk lengkapkan atau padam",
+  "@editSwipeFeature": {
+    "description": "Feature point description"
+  },
+  "itemsSelected": "{count} dipilih",
+  "@itemsSelected": {
+    "description": "Selection count in app bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAll": "Pilih semua",
+  "@selectAll": {
+    "description": "Tooltip for select all"
+  },
+  "deleteSelected": "Padam terpilih",
+  "@deleteSelected": {
+    "description": "Tooltip for delete selected"
+  },
+  "searchMemories": "Cari {count} Ingatan",
+  "@searchMemories": {
+    "description": "Hint text for memories search bar",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "memoryDeleted": "Ingatan Dipadam.",
+  "@memoryDeleted": {
+    "description": "Notification when memory deleted"
+  },
+  "undo": "Buat Asal",
+  "@undo": {
+    "description": "Undo button text"
+  },
+  "noMemoriesYet": "Tiada ingatan lagi",
+  "@noMemoriesYet": {
+    "description": "Empty state text"
+  },
+  "noAutoMemories": "Tiada ingatan auto-ekstrak lagi",
+  "@noAutoMemories": {
+    "description": "Empty state text for auto category"
+  },
+  "noManualMemories": "Tiada ingatan manual lagi",
+  "@noManualMemories": {
+    "description": "Empty state text for manual category"
+  },
+  "noMemoriesInCategories": "Tiada ingatan dalam kategori ini",
+  "@noMemoriesInCategories": {
+    "description": "Empty state text for filtered categories"
+  },
+  "noMemoriesFound": "Tiada ingatan dijumpai",
+  "@noMemoriesFound": {
+    "description": "Empty state text for search results"
+  },
+  "addFirstMemory": "Tambah ingatan pertama anda",
+  "@addFirstMemory": {
+    "description": "Button to add first memory"
+  },
+  "clearMemoryTitle": "Kosongkan Ingatan Omi",
+  "@clearMemoryTitle": {
+    "description": "Dialog title for clearing memory"
+  },
+  "clearMemoryMessage": "Adakah anda pasti mahu mengosongkan ingatan Omi? Tindakan ini tidak boleh dibatalkan.",
+  "@clearMemoryMessage": {
+    "description": "Dialog content for clearing memory"
+  },
+  "clearMemoryButton": "Kosongkan Ingatan",
+  "@clearMemoryButton": {
+    "description": "Button text to confirm clear"
+  },
+  "memoryClearedSuccess": "Ingatan Omi tentang anda telah dikosongkan",
+  "@memoryClearedSuccess": {
+    "description": "Snackbar success message"
+  },
+  "noMemoriesToDelete": "Tiada ingatan untuk dipadam",
+  "@noMemoriesToDelete": {
+    "description": "Snackbar message"
+  },
+  "createMemoryTooltip": "Cipta ingatan baharu",
+  "@createMemoryTooltip": {
+    "description": "Tooltip for create memory FAB"
+  },
+  "createActionItemTooltip": "Cipta item tindakan baharu",
+  "@createActionItemTooltip": {
+    "description": "Tooltip for create action item FAB"
+  },
+  "memoryManagement": "Pengurusan Ingatan",
+  "@memoryManagement": {
+    "description": "Title for memory management sheet"
+  },
+  "filterMemories": "Tapis Ingatan",
+  "@filterMemories": {
+    "description": "Section header"
+  },
+  "totalMemoriesCount": "Anda mempunyai {count} jumlah ingatan",
+  "@totalMemoriesCount": {
+    "description": "Count display",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "publicMemories": "Ingatan awam",
+  "@publicMemories": {
+    "description": "Label"
+  },
+  "privateMemories": "Ingatan peribadi",
+  "@privateMemories": {
+    "description": "Label"
+  },
+  "makeAllPrivate": "Jadikan Semua Ingatan Peribadi",
+  "@makeAllPrivate": {
+    "description": "Button label"
+  },
+  "makeAllPublic": "Jadikan Semua Ingatan Awam",
+  "@makeAllPublic": {
+    "description": "Button label"
+  },
+  "deleteAllMemories": "Padam Semua Ingatan",
+  "@deleteAllMemories": {
+    "description": "Button label"
+  },
+  "allMemoriesPrivateResult": "Semua ingatan kini peribadi",
+  "@allMemoriesPrivateResult": {
+    "description": "Snackbar"
+  },
+  "allMemoriesPublicResult": "Semua ingatan kini awam",
+  "@allMemoriesPublicResult": {
+    "description": "Snackbar"
+  },
+  "newMemory": "Ingatan Baharu",
+  "@newMemory": {
+    "description": "Dialog title"
+  },
+  "editMemory": "Edit Ingatan",
+  "@editMemory": {
+    "description": "Dialog title"
+  },
+  "memoryContentHint": "Saya suka makan ais krim...",
+  "@memoryContentHint": {
+    "description": "Input hint"
+  },
+  "failedToSaveMemory": "Gagal menyimpan. Sila semak sambungan anda.",
+  "@failedToSaveMemory": {
+    "description": "Error message"
+  },
+  "saveMemory": "Simpan Ingatan",
+  "@saveMemory": {
+    "description": "Button label"
+  },
+  "retry": "Cuba Semula",
+  "@retry": {
+    "description": "Button label"
+  },
+  "createActionItem": "Cipta Item Tindakan",
+  "@createActionItem": {
+    "description": "Sheet title"
+  },
+  "editActionItem": "Edit Item Tindakan",
+  "@editActionItem": {
+    "description": "Sheet title"
+  },
+  "actionItemDescriptionHint": "Apa yang perlu dilakukan?",
+  "@actionItemDescriptionHint": {
+    "description": "Input hint"
+  },
+  "actionItemDescriptionEmpty": "Penerangan item tindakan tidak boleh kosong.",
+  "@actionItemDescriptionEmpty": {
+    "description": "Error message"
+  },
+  "actionItemUpdated": "Item tindakan dikemas kini",
+  "@actionItemUpdated": {
+    "description": "Snackbar"
+  },
+  "failedToUpdateActionItem": "Gagal mengemas kini item tindakan",
+  "@failedToUpdateActionItem": {
+    "description": "Snackbar"
+  },
+  "actionItemCreated": "Item tindakan dicipta",
+  "@actionItemCreated": {
+    "description": "Snackbar"
+  },
+  "failedToCreateActionItem": "Gagal mencipta item tindakan",
+  "@failedToCreateActionItem": {
+    "description": "Snackbar"
+  },
+  "dueDate": "Tarikh Akhir",
+  "@dueDate": {
+    "description": "Label"
+  },
+  "time": "Masa",
+  "@time": {
+    "description": "Label"
+  },
+  "addDueDate": "Tambah tarikh akhir",
+  "@addDueDate": {
+    "description": "Placeholder"
+  },
+  "pressDoneToSave": "Tekan selesai untuk simpan",
+  "@pressDoneToSave": {
+    "description": "Instruction"
+  },
+  "pressDoneToCreate": "Tekan selesai untuk cipta",
+  "@pressDoneToCreate": {
+    "description": "Instruction"
+  },
+  "filterAll": "Semua",
+  "@filterAll": {
+    "description": "Filter option"
+  },
+  "filterSystem": "Tentang Anda",
+  "@filterSystem": {
+    "description": "Filter option for facts about the user"
+  },
+  "filterInteresting": "Wawasan",
+  "@filterInteresting": {
+    "description": "Filter option for external wisdom/advice"
+  },
+  "filterManual": "Manual",
+  "@filterManual": {
+    "description": "Filter option"
+  },
+  "completed": "Selesai",
+  "@completed": {
+    "description": "Status label"
+  },
+  "markComplete": "Tandakan selesai",
+  "@markComplete": {
+    "description": "Action label"
+  },
+  "actionItemDeleted": "Item tindakan dipadam",
+  "@actionItemDeleted": {
+    "description": "Snackbar"
+  },
+  "failedToDeleteActionItem": "Gagal memadam item tindakan",
+  "@failedToDeleteActionItem": {
+    "description": "Snackbar"
+  },
+  "deleteActionItemConfirmTitle": "Padam Item Tindakan",
+  "@deleteActionItemConfirmTitle": {
+    "description": "Dialog title"
+  },
+  "deleteActionItemConfirmMessage": "Adakah anda pasti mahu memadam item tindakan ini?",
+  "@deleteActionItemConfirmMessage": {
+    "description": "Dialog message"
+  },
+  "appLanguage": "Bahasa Aplikasi",
+  "@appLanguage": {
+    "description": "Label for app language selector"
+  },
+  "appInterfaceSectionTitle": "ANTARA MUKA APLIKASI",
+  "speechTranscriptionSectionTitle": "PERTUTURAN & TRANSKRIPSI",
+  "languageSettingsHelperText": "Bahasa Aplikasi menukar menu dan butang. Bahasa Pertuturan mempengaruhi cara rakaman anda ditranskripsi."
+}
