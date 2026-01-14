@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Grant permissions",
+  "grantPermissions": "Acordați permisiuni",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Activați funcțiile pentru cea mai bună experiență Omi pe dispozitivul dvs.",
+  "microphoneAccess": "Acces la microfon",
+  "recordAudioConversations": "Înregistrați conversații audio",
+  "microphoneAccessDescription": "Omi are nevoie de acces la microfon pentru a înregistra conversațiile dvs. și a furniza transcripții.",
+  "screenRecording": "Înregistrare ecran",
+  "captureSystemAudioFromMeetings": "Capturați audio-ul sistemului din întâlniri",
+  "screenRecordingDescription": "Omi are nevoie de permisiune de înregistrare a ecranului pentru a captura audio-ul sistemului din întâlnirile dvs. bazate pe browser.",
+  "accessibility": "Accesibilitate",
+  "detectBrowserBasedMeetings": "Detectați întâlnirile bazate pe browser",
+  "accessibilityDescription": "Omi are nevoie de permisiune de accesibilitate pentru a detecta când vă alăturați întâlnirilor Zoom, Meet sau Teams în browser-ul dvs.",
+  "pleaseWait": "Vă rugăm așteptați..."
 }

@@ -560,7 +560,7 @@
   "bluetoothNeeded": "Omi necesita Bluetooth para conectar tu wearable.",
   "contactSupport": "¿Contactar soporte?",
   "connectLater": "Conectar más tarde",
-  "grantPermissions": "Otorgar permisos",
+  "grantPermissions": "Conceder permisos",
   "backgroundActivity": "Actividad en segundo plano",
   "backgroundActivityDesc": "Deja que Omi corra en segundo plano para mejor estabilidad",
   "locationAccess": "Acceso a ubicación",
@@ -1217,5 +1217,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Active funciones para la mejor experiencia Omi en su dispositivo.",
+  "microphoneAccess": "Acceso al micrófono",
+  "recordAudioConversations": "Grabar conversaciones de audio",
+  "microphoneAccessDescription": "Omi necesita acceso al micrófono para grabar sus conversaciones y proporcionar transcripciones.",
+  "screenRecording": "Grabación de pantalla",
+  "captureSystemAudioFromMeetings": "Capturar audio del sistema de reuniones",
+  "screenRecordingDescription": "Omi necesita permiso de grabación de pantalla para capturar el audio del sistema de sus reuniones basadas en navegador.",
+  "accessibility": "Accesibilidad",
+  "detectBrowserBasedMeetings": "Detectar reuniones basadas en navegador",
+  "accessibilityDescription": "Omi necesita permiso de accesibilidad para detectar cuándo se une a reuniones de Zoom, Meet o Teams en su navegador.",
+  "pleaseWait": "Por favor, espere..."
 }

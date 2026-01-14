@@ -2752,5 +2752,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Įjunkite funkcijas geriausiai Omi patirčiai jūsų įrenginyje.",
+  "microphoneAccess": "Mikrofono prieiga",
+  "recordAudioConversations": "Įrašyti garso pokalbius",
+  "microphoneAccessDescription": "Omi reikia mikrofono prieigos, kad įrašytų jūsų pokalbius ir pateiktų transkripciją.",
+  "screenRecording": "Ekrano įrašymas",
+  "captureSystemAudioFromMeetings": "Užfiksuoti sistemos garsą iš susitikimų",
+  "screenRecordingDescription": "Omi reikia ekrano įrašymo leidimo, kad užfiksuotų sistemos garsą iš jūsų naršyklėje vykstančių susitikimų.",
+  "accessibility": "Prieinamumas",
+  "detectBrowserBasedMeetings": "Aptikti naršyklėje vykstančius susitikimus",
+  "accessibilityDescription": "Omi reikia prieinamumo leidimo, kad aptiktų, kada prisijungiate prie Zoom, Meet ar Teams susitikimų naršyklėje.",
+  "pleaseWait": "Prašome palaukti..."
 }

@@ -2752,5 +2752,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Cihazınızda en iyi Omi deneyimi için özellikleri etkinleştirin.",
+  "microphoneAccess": "Mikrofon Erişimi",
+  "recordAudioConversations": "Sesli konuşmaları kaydet",
+  "microphoneAccessDescription": "Omi, konuşmalarınızı kaydetmek ve transkript sağlamak için mikrofon erişimine ihtiyaç duyar.",
+  "screenRecording": "Ekran Kaydı",
+  "captureSystemAudioFromMeetings": "Toplantılardan sistem sesini yakala",
+  "screenRecordingDescription": "Omi, tarayıcı tabanlı toplantılarınızdan sistem sesini yakalamak için ekran kaydı izni gerektirir.",
+  "accessibility": "Erişilebilirlik",
+  "detectBrowserBasedMeetings": "Tarayıcı tabanlı toplantıları algıla",
+  "accessibilityDescription": "Omi, tarayıcınızda Zoom, Meet veya Teams toplantılarına katıldığınızı algılamak için erişilebilirlik izni gerektirir.",
+  "pleaseWait": "Lütfen bekleyin..."
 }

@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Lubage funktsioonid parima Omi kogemuse jaoks oma seadmes.",
+  "microphoneAccess": "Mikrofoni juurdepääs",
+  "recordAudioConversations": "Helisalvestiste salvestamine",
+  "microphoneAccessDescription": "Omi vajab mikrofoni juurdepääsu, et salvestada teie vestlusi ja pakkuda transkriptsioone.",
+  "screenRecording": "Ekraanisalvestus",
+  "captureSystemAudioFromMeetings": "Süsteemiheli jäädvustamine koosolekutest",
+  "screenRecordingDescription": "Omi vajab ekraanisalvestuse luba, et jäädvustada süsteemiheli teie brauseripõhistest koosolekutest.",
+  "accessibility": "Juurdepääsetavus",
+  "detectBrowserBasedMeetings": "Tuvastage brauseripõhised koosolekud",
+  "accessibilityDescription": "Omi vajab juurdepääsetavuse luba, et tuvastada, millal te liitute Zoom, Meet või Teams koosolekutega oma brauseris.",
+  "pleaseWait": "Palun oodake..."
 }

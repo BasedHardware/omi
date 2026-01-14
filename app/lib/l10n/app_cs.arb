@@ -2788,5 +2788,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Povolte funkce pro nejlepší Omi zážitek na vašem zařízení.",
+  "microphoneAccess": "Přístup k mikrofonu",
+  "recordAudioConversations": "Nahrávat audio konverzace",
+  "microphoneAccessDescription": "Omi potřebuje přístup k mikrofonu pro nahrávání vašich konverzací a poskytování přepisů.",
+  "screenRecording": "Záznam obrazovky",
+  "captureSystemAudioFromMeetings": "Zachytit systémový zvuk ze schůzek",
+  "screenRecordingDescription": "Omi potřebuje oprávnění k záznamu obrazovky pro zachycení systémového zvuku z vašich schůzek v prohlížeči.",
+  "accessibility": "Přístupnost",
+  "detectBrowserBasedMeetings": "Detekovat schůzky v prohlížeči",
+  "accessibilityDescription": "Omi potřebuje oprávnění k přístupnosti pro detekci, kdy se připojujete ke schůzkám Zoom, Meet nebo Teams ve vašem prohlížeči.",
+  "pleaseWait": "Prosím čekejte..."
 }

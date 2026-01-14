@@ -4022,5 +4022,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Enable features for the best Omi experience on your device.",
+  "microphoneAccess": "Microphone Access",
+  "recordAudioConversations": "Record audio conversations",
+  "microphoneAccessDescription": "Omi needs microphone access to record your conversations and provide transcriptions.",
+  "screenRecording": "Screen Recording",
+  "captureSystemAudioFromMeetings": "Capture system audio from meetings",
+  "screenRecordingDescription": "Omi needs screen recording permission to capture system audio from your browser-based meetings.",
+  "accessibility": "Accessibility",
+  "detectBrowserBasedMeetings": "Detect browser-based meetings",
+  "accessibilityDescription": "Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.",
+  "pleaseWait": "Please wait..."
 }

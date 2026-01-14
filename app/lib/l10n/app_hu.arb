@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Engedélyezze a funkciókat a legjobb Omi élményért az eszközén.",
+  "microphoneAccess": "Mikrofon hozzáférés",
+  "recordAudioConversations": "Hangbeszélgetések rögzítése",
+  "microphoneAccessDescription": "Az Omi-nak mikrofon hozzáférésre van szüksége a beszélgetések rögzítéséhez és átirat készítéséhez.",
+  "screenRecording": "Képernyőrögzítés",
+  "captureSystemAudioFromMeetings": "Rendszerhang rögzítése találkozókból",
+  "screenRecordingDescription": "Az Omi-nak képernyőrögzítési engedélyre van szüksége a rendszerhang rögzítéséhez a böngésző alapú találkozókból.",
+  "accessibility": "Akadálymentesség",
+  "detectBrowserBasedMeetings": "Böngésző alapú találkozók észlelése",
+  "accessibilityDescription": "Az Omi-nak akadálymentesítési engedélyre van szüksége annak észleléséhez, amikor csatlakozik Zoom, Meet vagy Teams találkozókhoz a böngészőjében.",
+  "pleaseWait": "Kérem várjon..."
 }

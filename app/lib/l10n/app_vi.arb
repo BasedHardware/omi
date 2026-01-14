@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Bật các tính năng để có trải nghiệm Omi tốt nhất trên thiết bị của bạn.",
+  "microphoneAccess": "Quyền truy cập micrô",
+  "recordAudioConversations": "Ghi âm cuộc trò chuyện",
+  "microphoneAccessDescription": "Omi cần quyền truy cập micrô để ghi lại các cuộc trò chuyện của bạn và cung cấp bản ghi âm.",
+  "screenRecording": "Ghi màn hình",
+  "captureSystemAudioFromMeetings": "Ghi âm hệ thống từ các cuộc họp",
+  "screenRecordingDescription": "Omi cần quyền ghi màn hình để ghi âm hệ thống từ các cuộc họp dựa trên trình duyệt của bạn.",
+  "accessibility": "Khả năng truy cập",
+  "detectBrowserBasedMeetings": "Phát hiện các cuộc họp dựa trên trình duyệt",
+  "accessibilityDescription": "Omi cần quyền truy cập để phát hiện khi bạn tham gia các cuộc họp Zoom, Meet hoặc Teams trong trình duyệt của bạn.",
+  "pleaseWait": "Vui lòng đợi..."
 }

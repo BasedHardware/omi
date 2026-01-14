@@ -10,11 +10,11 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 33
+Files Completed: 34
 Files Skipped (Internal): 2
 Files Skipped (Large): 3
-Total Keys Added: 328
-Total Translations: 11,152 (328 keys × 34 languages)
+Total Keys Added: 334
+Total Translations: 11,356 (334 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -462,6 +462,21 @@ Notes: Localized language selection screen including error message, screen title
        Note: "continue" key accessed as continue_ in Dart due to reserved keyword.
 Commit: d947e16b1
 
+FILE 62: desktop_name_screen.dart
+----------------------------------
+Location: app/lib/desktop/pages/onboarding/screens/
+Keys Added: 6
+Keys: pleaseEnterYourName, nameMustBeAtLeast2Characters, whatsYourName,
+      tellUsHowYouWouldLikeToBeAddressed, enterYourName,
+      charactersCount (parameterized with count)
+Script: /tmp/translate_name_screen_keys.py
+Status: ✅ COMPLETED
+Notes: Localized name input screen including error messages, screen title and
+       subtitle, input hint, and character count with parameterized translation.
+       Reused existing keys (continue, back). Removed const from widgets to support
+       dynamic l10n values.
+Commit: 3af19eaaf
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -663,6 +678,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-14
-Last Completed: FILE 61 - desktop_language_screen.dart (8 keys, 272 translations)
-Previous Completed: FILE 60 - desktop_auth_screen.dart (16 keys, 544 translations)
+Last Completed: FILE 62 - desktop_name_screen.dart (6 keys, 204 translations)
+Previous Completed: FILE 61 - desktop_language_screen.dart (8 keys, 272 translations)
 Current Session: [active]

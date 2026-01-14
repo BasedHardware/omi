@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Dayakan ciri untuk pengalaman Omi terbaik pada peranti anda.",
+  "microphoneAccess": "Akses Mikrofon",
+  "recordAudioConversations": "Rakam perbualan audio",
+  "microphoneAccessDescription": "Omi memerlukan akses mikrofon untuk merakam perbualan anda dan menyediakan transkripsi.",
+  "screenRecording": "Rakaman Skrin",
+  "captureSystemAudioFromMeetings": "Tangkap audio sistem dari mesyuarat",
+  "screenRecordingDescription": "Omi memerlukan kebenaran rakaman skrin untuk menangkap audio sistem dari mesyuarat berasaskan pelayar anda.",
+  "accessibility": "Kebolehcapaian",
+  "detectBrowserBasedMeetings": "Kesan mesyuarat berasaskan pelayar",
+  "accessibilityDescription": "Omi memerlukan kebenaran kebolehcapaian untuk mengesan apabila anda menyertai mesyuarat Zoom, Meet, atau Teams dalam pelayar anda.",
+  "pleaseWait": "Sila tunggu..."
 }

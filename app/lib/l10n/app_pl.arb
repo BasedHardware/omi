@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Włącz funkcje dla najlepszego doświadczenia Omi na swoim urządzeniu.",
+  "microphoneAccess": "Dostęp do mikrofonu",
+  "recordAudioConversations": "Nagrywaj rozmowy audio",
+  "microphoneAccessDescription": "Omi potrzebuje dostępu do mikrofonu, aby nagrywać rozmowy i dostarczać transkrypcje.",
+  "screenRecording": "Nagrywanie ekranu",
+  "captureSystemAudioFromMeetings": "Przechwytuj dźwięk systemowy ze spotkań",
+  "screenRecordingDescription": "Omi potrzebuje uprawnień do nagrywania ekranu, aby przechwytywać dźwięk systemowy z twoich spotkań opartych na przeglądarce.",
+  "accessibility": "Dostępność",
+  "detectBrowserBasedMeetings": "Wykrywaj spotkania oparte na przeglądarce",
+  "accessibilityDescription": "Omi potrzebuje uprawnień dostępności, aby wykrywać, kiedy dołączasz do spotkań Zoom, Meet lub Teams w przeglądarce.",
+  "pleaseWait": "Proszę czekać..."
 }

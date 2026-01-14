@@ -1335,7 +1335,7 @@
   "singleLanguageModeInfo": "El mode d'idioma únic està activat. La traducció està desactivada per a una major precisió.",
   "searchLanguageHint": "Cercar idioma per nom o codi",
   "noLanguagesFound": "No s'han trobat idiomes",
-  "skip": "Ometre",
+  "skip": "Saltar",
   "languageSetTo": "Idioma establert a {language}",
   "@languageSetTo": {
     "placeholders": {
@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Atorgar permisos",
+  "grantPermissions": "Concedir permisos",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2788,5 +2788,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Activeu les funcions per a la millor experiència Omi al vostre dispositiu.",
+  "microphoneAccess": "Accés al micròfon",
+  "recordAudioConversations": "Enregistrar converses d'àudio",
+  "microphoneAccessDescription": "Omi necessita accés al micròfon per enregistrar les vostres converses i proporcionar transcripcions.",
+  "screenRecording": "Gravació de pantalla",
+  "captureSystemAudioFromMeetings": "Capturar àudio del sistema de reunions",
+  "screenRecordingDescription": "Omi necessita permís de gravació de pantalla per capturar l'àudio del sistema de les vostres reunions basades en el navegador.",
+  "accessibility": "Accessibilitat",
+  "detectBrowserBasedMeetings": "Detectar reunions basades en el navegador",
+  "accessibilityDescription": "Omi necessita permís d'accessibilitat per detectar quan us uniu a reunions de Zoom, Meet o Teams al vostre navegador.",
+  "pleaseWait": "Si us plau, espereu..."
 }

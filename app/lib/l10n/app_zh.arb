@@ -1217,5 +1217,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "启用功能以在您的设备上获得最佳 Omi 体验。",
+  "microphoneAccess": "麦克风访问",
+  "recordAudioConversations": "录制音频对话",
+  "microphoneAccessDescription": "Omi 需要麦克风访问权限来录制您的对话并提供转录。",
+  "screenRecording": "屏幕录制",
+  "captureSystemAudioFromMeetings": "从会议中捕获系统音频",
+  "screenRecordingDescription": "Omi 需要屏幕录制权限来从基于浏览器的会议中捕获系统音频。",
+  "accessibility": "辅助功能",
+  "detectBrowserBasedMeetings": "检测基于浏览器的会议",
+  "accessibilityDescription": "Omi 需要辅助功能权限来检测您何时在浏览器中加入 Zoom、Meet 或 Teams 会议。",
+  "pleaseWait": "请稍候..."
 }

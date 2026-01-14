@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Включите функции для наилучшего опыта Omi на вашем устройстве.",
+  "microphoneAccess": "Доступ к микрофону",
+  "recordAudioConversations": "Записывать аудиоразговоры",
+  "microphoneAccessDescription": "Omi нужен доступ к микрофону для записи ваших разговоров и предоставления транскрипций.",
+  "screenRecording": "Запись экрана",
+  "captureSystemAudioFromMeetings": "Захват системного звука со встреч",
+  "screenRecordingDescription": "Omi нужно разрешение на запись экрана для захвата системного звука с ваших встреч на базе браузера.",
+  "accessibility": "Доступность",
+  "detectBrowserBasedMeetings": "Обнаружение встреч на базе браузера",
+  "accessibilityDescription": "Omi нужно разрешение доступности для обнаружения, когда вы присоединяетесь к встречам Zoom, Meet или Teams в вашем браузере.",
+  "pleaseWait": "Пожалуйста, подождите..."
 }

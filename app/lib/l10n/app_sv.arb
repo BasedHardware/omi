@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Aktivera funktioner för den bästa Omi-upplevelsen på din enhet.",
+  "microphoneAccess": "Mikrofonåtkomst",
+  "recordAudioConversations": "Spela in ljudsamtal",
+  "microphoneAccessDescription": "Omi behöver mikrofonåtkomst för att spela in dina samtal och tillhandahålla transkriptioner.",
+  "screenRecording": "Skärminspelning",
+  "captureSystemAudioFromMeetings": "Fånga systemljud från möten",
+  "screenRecordingDescription": "Omi behöver tillstånd för skärminspelning för att fånga systemljud från dina webbläsarbaserade möten.",
+  "accessibility": "Tillgänglighet",
+  "detectBrowserBasedMeetings": "Upptäck webbläsarbaserade möten",
+  "accessibilityDescription": "Omi behöver tillgänglighetstillstånd för att upptäcka när du ansluter till Zoom-, Meet- eller Teams-möten i din webbläsare.",
+  "pleaseWait": "Vänta..."
 }

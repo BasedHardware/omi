@@ -1217,5 +1217,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "अपने डिवाइस पर सर्वोत्तम Omi अनुभव के लिए सुविधाएं सक्षम करें।",
+  "microphoneAccess": "माइक्रोफ़ोन एक्सेस",
+  "recordAudioConversations": "ऑडियो वार्तालाप रिकॉर्ड करें",
+  "microphoneAccessDescription": "Omi को आपकी बातचीत रिकॉर्ड करने और ट्रांसक्रिप्शन प्रदान करने के लिए माइक्रोफ़ोन एक्सेस की आवश्यकता है।",
+  "screenRecording": "स्क्रीन रिकॉर्डिंग",
+  "captureSystemAudioFromMeetings": "मीटिंग से सिस्टम ऑडियो कैप्चर करें",
+  "screenRecordingDescription": "Omi को आपके ब्राउज़र-आधारित मीटिंग से सिस्टम ऑडियो कैप्चर करने के लिए स्क्रीन रिकॉर्डिंग अनुमति की आवश्यकता है।",
+  "accessibility": "पहुंच-योग्यता",
+  "detectBrowserBasedMeetings": "ब्राउज़र-आधारित मीटिंग का पता लगाएं",
+  "accessibilityDescription": "Omi को यह पता लगाने के लिए पहुंच-योग्यता अनुमति की आवश्यकता है कि आप अपने ब्राउज़र में Zoom, Meet, या Teams मीटिंग में कब शामिल होते हैं।",
+  "pleaseWait": "कृपया प्रतीक्षा करें..."
 }

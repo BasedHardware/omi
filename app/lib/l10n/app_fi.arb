@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Myönnä käyttöoikeudet",
+  "grantPermissions": "Myönnä luvat",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Ota käyttöön ominaisuudet parhaan Omi-kokemuksen saamiseksi laitteellasi.",
+  "microphoneAccess": "Mikrofonin käyttöoikeus",
+  "recordAudioConversations": "Tallenna äänikeskusteluja",
+  "microphoneAccessDescription": "Omi tarvitsee mikrofonin käyttöoikeuden tallentaakseen keskustelusi ja tarjotakseen transkriptioita.",
+  "screenRecording": "Näytön tallennus",
+  "captureSystemAudioFromMeetings": "Tallenna järjestelmän ääntä kokouksista",
+  "screenRecordingDescription": "Omi tarvitsee näytön tallennusluvan tallentaakseen järjestelmän ääntä selainpohjaisista kokouksistasi.",
+  "accessibility": "Esteettömyys",
+  "detectBrowserBasedMeetings": "Tunnista selainpohjaiset kokoukset",
+  "accessibilityDescription": "Omi tarvitsee esteettömyysluvan tunnistaakseen, milloin liityt Zoom-, Meet- tai Teams-kokouksiin selaimessasi.",
+  "pleaseWait": "Odota..."
 }

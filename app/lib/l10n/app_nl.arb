@@ -1588,5 +1588,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Schakel functies in voor de beste Omi-ervaring op uw apparaat.",
+  "microphoneAccess": "Microfoontoegang",
+  "recordAudioConversations": "Audiogesprekken opnemen",
+  "microphoneAccessDescription": "Omi heeft microfoontoegang nodig om uw gesprekken op te nemen en transcripties te leveren.",
+  "screenRecording": "Schermopname",
+  "captureSystemAudioFromMeetings": "Systeemaudio van vergaderingen vastleggen",
+  "screenRecordingDescription": "Omi heeft toestemming voor schermopname nodig om systeemaudio van uw browsergebaseerde vergaderingen vast te leggen.",
+  "accessibility": "Toegankelijkheid",
+  "detectBrowserBasedMeetings": "Browsergebaseerde vergaderingen detecteren",
+  "accessibilityDescription": "Omi heeft toegankelijkheidstoestemming nodig om te detecteren wanneer u deelneemt aan Zoom-, Meet- of Teams-vergaderingen in uw browser.",
+  "pleaseWait": "Even geduld..."
 }

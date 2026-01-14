@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Дайте разрешения",
+  "grantPermissions": "Предоставяне на разрешения",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2788,5 +2788,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Активирайте функции за най-доброто Omi изживяване на вашето устройство.",
+  "microphoneAccess": "Достъп до микрофон",
+  "recordAudioConversations": "Записване на аудио разговори",
+  "microphoneAccessDescription": "Omi се нуждае от достъп до микрофона, за да записва вашите разговори и да предоставя транскрипции.",
+  "screenRecording": "Запис на екрана",
+  "captureSystemAudioFromMeetings": "Заснемане на системен звук от срещи",
+  "screenRecordingDescription": "Omi се нуждае от разрешение за запис на екрана, за да заснема системен звук от вашите срещи в браузъра.",
+  "accessibility": "Достъпност",
+  "detectBrowserBasedMeetings": "Откриване на срещи в браузъра",
+  "accessibilityDescription": "Omi се нуждае от разрешение за достъпност, за да открива кога се присъединявате към срещи в Zoom, Meet или Teams във вашия браузър.",
+  "pleaseWait": "Моля, изчакайте..."
 }

@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Iespējojiet funkcijas labākajai Omi pieredzei jūsu ierīcē.",
+  "microphoneAccess": "Mikrofona piekļuve",
+  "recordAudioConversations": "Ierakstīt audio sarunas",
+  "microphoneAccessDescription": "Omi nepieciešama mikrofona piekļuve, lai ierakstītu jūsu sarunas un nodrošinātu transkripcijas.",
+  "screenRecording": "Ekrāna ierakstīšana",
+  "captureSystemAudioFromMeetings": "Uzņemt sistēmas audio no sapulcēm",
+  "screenRecordingDescription": "Omi nepieciešama ekrāna ierakstīšanas atļauja, lai uzņemtu sistēmas audio no jūsu pārlūkprogrammā balstītajām sapulcēm.",
+  "accessibility": "Pieejamība",
+  "detectBrowserBasedMeetings": "Noteikt pārlūkprogrammā balstītas sapulces",
+  "accessibilityDescription": "Omi nepieciešama pieejamības atļauja, lai noteiktu, kad pievienojaties Zoom, Meet vai Teams sapulcēm savā pārlūkprogrammā.",
+  "pleaseWait": "Lūdzu, uzgaidiet..."
 }

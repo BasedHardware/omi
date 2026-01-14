@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "Grant permissions",
+  "grantPermissions": "Giv tilladelser",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Aktiver funktioner for den bedste Omi-oplevelse på din enhed.",
+  "microphoneAccess": "Mikrofonadgang",
+  "recordAudioConversations": "Optag lydsamtaler",
+  "microphoneAccessDescription": "Omi har brug for mikrofonadgang for at optage dine samtaler og give transkriptioner.",
+  "screenRecording": "Skærmoptagelse",
+  "captureSystemAudioFromMeetings": "Optag systemlyd fra møder",
+  "screenRecordingDescription": "Omi har brug for skærmoptagelsestilladelse for at optage systemlyd fra dine browserbaserede møder.",
+  "accessibility": "Tilgængelighed",
+  "detectBrowserBasedMeetings": "Opdage browserbaserede møder",
+  "accessibilityDescription": "Omi har brug for tilgængelighedstilladelse for at opdage, når du deltager i Zoom-, Meet- eller Teams-møder i din browser.",
+  "pleaseWait": "Vent venligst..."
 }

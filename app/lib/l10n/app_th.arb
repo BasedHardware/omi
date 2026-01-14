@@ -1657,7 +1657,7 @@
   "@connectLater": {
     "description": "Button text to skip immediate device connection"
   },
-  "grantPermissions": "อนุญาตสิทธิ์",
+  "grantPermissions": "ให้สิทธิ์",
   "@grantPermissions": {
     "description": "Title for the permissions request page"
   },
@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "เปิดใช้งานฟีเจอร์เพื่อประสบการณ์ Omi ที่ดีที่สุดบนอุปกรณ์ของคุณ",
+  "microphoneAccess": "การเข้าถึงไมโครโฟน",
+  "recordAudioConversations": "บันทึกการสนทนาเสียง",
+  "microphoneAccessDescription": "Omi ต้องการการเข้าถึงไมโครโฟนเพื่อบันทึกการสนทนาของคุณและให้การถอดความ",
+  "screenRecording": "การบันทึกหน้าจอ",
+  "captureSystemAudioFromMeetings": "จับภาพเสียงระบบจากการประชุม",
+  "screenRecordingDescription": "Omi ต้องการสิทธิ์ในการบันทึกหน้าจอเพื่อจับภาพเสียงระบบจากการประชุมที่ใช้เบราว์เซอร์ของคุณ",
+  "accessibility": "การเข้าถึง",
+  "detectBrowserBasedMeetings": "ตรวจจับการประชุมที่ใช้เบราว์เซอร์",
+  "accessibilityDescription": "Omi ต้องการสิทธิ์การเข้าถึงเพื่อตรวจจับเมื่อคุณเข้าร่วมการประชุม Zoom, Meet หรือ Teams ในเบราว์เซอร์ของคุณ",
+  "pleaseWait": "กรุณารอสักครู่..."
 }

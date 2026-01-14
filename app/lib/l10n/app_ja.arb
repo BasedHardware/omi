@@ -1196,5 +1196,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "デバイスで最高のOmi体験を得るために機能を有効にしてください。",
+  "microphoneAccess": "マイクアクセス",
+  "recordAudioConversations": "音声会話を録音",
+  "microphoneAccessDescription": "Omiは会話を録音し、文字起こしを提供するためにマイクアクセスが必要です。",
+  "screenRecording": "画面録画",
+  "captureSystemAudioFromMeetings": "会議からシステムオーディオをキャプチャ",
+  "screenRecordingDescription": "Omiは、ブラウザベースの会議からシステムオーディオをキャプチャするために画面録画権限が必要です。",
+  "accessibility": "アクセシビリティ",
+  "detectBrowserBasedMeetings": "ブラウザベースの会議を検出",
+  "accessibilityDescription": "Omiは、ブラウザでZoom、Meet、またはTeamsの会議に参加したことを検出するためにアクセシビリティ権限が必要です。",
+  "pleaseWait": "お待ちください..."
 }

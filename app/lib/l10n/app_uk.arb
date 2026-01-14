@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Увімкніть функції для найкращого досвіду Omi на вашому пристрої.",
+  "microphoneAccess": "Доступ до мікрофона",
+  "recordAudioConversations": "Записувати аудіо розмови",
+  "microphoneAccessDescription": "Omi потребує доступу до мікрофона для запису ваших розмов і надання транскрипцій.",
+  "screenRecording": "Запис екрана",
+  "captureSystemAudioFromMeetings": "Захоплення системного звуку зі зустрічей",
+  "screenRecordingDescription": "Omi потребує дозволу на запис екрана для захоплення системного звуку з ваших зустрічей на основі браузера.",
+  "accessibility": "Доступність",
+  "detectBrowserBasedMeetings": "Виявлення зустрічей на основі браузера",
+  "accessibilityDescription": "Omi потребує дозволу доступності для виявлення, коли ви приєднуєтесь до зустрічей Zoom, Meet або Teams у вашому браузері.",
+  "pleaseWait": "Будь ласка, зачекайте..."
 }

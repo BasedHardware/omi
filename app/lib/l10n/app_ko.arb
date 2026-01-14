@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "기기에서 최고의 Omi 경험을 위해 기능을 활성화하세요.",
+  "microphoneAccess": "마이크 액세스",
+  "recordAudioConversations": "오디오 대화 녹음",
+  "microphoneAccessDescription": "Omi는 대화를 녹음하고 전사를 제공하기 위해 마이크 액세스가 필요합니다.",
+  "screenRecording": "화면 녹화",
+  "captureSystemAudioFromMeetings": "회의에서 시스템 오디오 캡처",
+  "screenRecordingDescription": "Omi는 브라우저 기반 회의에서 시스템 오디오를 캡처하기 위해 화면 녹화 권한이 필요합니다.",
+  "accessibility": "접근성",
+  "detectBrowserBasedMeetings": "브라우저 기반 회의 감지",
+  "accessibilityDescription": "Omi는 브라우저에서 Zoom, Meet 또는 Teams 회의에 참여할 때를 감지하기 위해 접근성 권한이 필요합니다.",
+  "pleaseWait": "잠시만 기다려 주세요..."
 }

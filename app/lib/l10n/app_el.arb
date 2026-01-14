@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Ενεργοποιήστε λειτουργίες για την καλύτερη εμπειρία Omi στη συσκευή σας.",
+  "microphoneAccess": "Πρόσβαση στο μικρόφωνο",
+  "recordAudioConversations": "Εγγραφή ηχητικών συνομιλιών",
+  "microphoneAccessDescription": "Το Omi χρειάζεται πρόσβαση στο μικρόφωνο για να εγγράφει τις συνομιλίες σας και να παρέχει μεταγραφές.",
+  "screenRecording": "Εγγραφή οθόνης",
+  "captureSystemAudioFromMeetings": "Καταγραφή ήχου συστήματος από συναντήσεις",
+  "screenRecordingDescription": "Το Omi χρειάζεται άδεια εγγραφής οθόνης για να καταγράφει τον ήχο συστήματος από τις συναντήσεις σας που βασίζονται στον περιηγητή.",
+  "accessibility": "Προσβασιμότητα",
+  "detectBrowserBasedMeetings": "Ανίχνευση συναντήσεων που βασίζονται στον περιηγητή",
+  "accessibilityDescription": "Το Omi χρειάζεται άδεια προσβασιμότητας για να ανιχνεύει πότε συμμετέχετε σε συναντήσεις Zoom, Meet ή Teams στον περιηγητή σας.",
+  "pleaseWait": "Παρακαλώ περιμένετε..."
 }

@@ -2770,5 +2770,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Aktiver funksjoner for den beste Omi-opplevelsen på enheten din.",
+  "microphoneAccess": "Mikrofontilgang",
+  "recordAudioConversations": "Ta opp lydsamtaler",
+  "microphoneAccessDescription": "Omi trenger mikrofontilgang for å ta opp samtalene dine og gi transkripsjoner.",
+  "screenRecording": "Skjermopptak",
+  "captureSystemAudioFromMeetings": "Fang opp systemlyd fra møter",
+  "screenRecordingDescription": "Omi trenger tillatelse til skjermopptak for å fange opp systemlyd fra nettleserbaserte møter.",
+  "accessibility": "Tilgjengelighet",
+  "detectBrowserBasedMeetings": "Oppdag nettleserbaserte møter",
+  "accessibilityDescription": "Omi trenger tilgjengelighetstillatelse for å oppdage når du deltar i Zoom-, Meet- eller Teams-møter i nettleseren din.",
+  "pleaseWait": "Vennligst vent..."
 }

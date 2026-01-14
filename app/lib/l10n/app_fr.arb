@@ -611,7 +611,7 @@
   "singleLanguageModeInfo": "Le mode langue unique est activé. La traduction est désactivée pour une meilleure précision.",
   "searchLanguageHint": "Rechercher une langue par nom ou code",
   "noLanguagesFound": "Aucune langue trouvée",
-  "skip": "Passer",
+  "skip": "Ignorer",
   "languageSetTo": "Langue définie sur {language}",
   "@languageSetTo": {
     "placeholders": {
@@ -1588,5 +1588,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Activez les fonctionnalités pour la meilleure expérience Omi sur votre appareil.",
+  "microphoneAccess": "Accès au microphone",
+  "recordAudioConversations": "Enregistrer les conversations audio",
+  "microphoneAccessDescription": "Omi a besoin d'un accès au microphone pour enregistrer vos conversations et fournir des transcriptions.",
+  "screenRecording": "Enregistrement d'écran",
+  "captureSystemAudioFromMeetings": "Capturer l'audio système des réunions",
+  "screenRecordingDescription": "Omi a besoin de l'autorisation d'enregistrement d'écran pour capturer l'audio système de vos réunions basées sur le navigateur.",
+  "accessibility": "Accessibilité",
+  "detectBrowserBasedMeetings": "Détecter les réunions basées sur le navigateur",
+  "accessibilityDescription": "Omi a besoin de l'autorisation d'accessibilité pour détecter quand vous rejoignez des réunions Zoom, Meet ou Teams dans votre navigateur.",
+  "pleaseWait": "Veuillez patienter..."
 }

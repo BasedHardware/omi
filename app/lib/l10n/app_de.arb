@@ -1217,5 +1217,16 @@
         "type": "int"
       }
     }
-  }
+  },
+  "enableFeaturesForBestExperience": "Aktivieren Sie Funktionen für das beste Omi-Erlebnis auf Ihrem Gerät.",
+  "microphoneAccess": "Mikrofonzugriff",
+  "recordAudioConversations": "Audio-Gespräche aufzeichnen",
+  "microphoneAccessDescription": "Omi benötigt Mikrofonzugriff, um Ihre Gespräche aufzuzeichnen und Transkriptionen bereitzustellen.",
+  "screenRecording": "Bildschirmaufzeichnung",
+  "captureSystemAudioFromMeetings": "System-Audio von Besprechungen erfassen",
+  "screenRecordingDescription": "Omi benötigt die Berechtigung zur Bildschirmaufzeichnung, um System-Audio von Ihren browserbasierten Besprechungen zu erfassen.",
+  "accessibility": "Barrierefreiheit",
+  "detectBrowserBasedMeetings": "Browserbasierte Besprechungen erkennen",
+  "accessibilityDescription": "Omi benötigt die Berechtigung für Barrierefreiheit, um zu erkennen, wann Sie Zoom-, Meet- oder Teams-Besprechungen in Ihrem Browser beitreten.",
+  "pleaseWait": "Bitte warten..."
 }
