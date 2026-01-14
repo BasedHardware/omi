@@ -146,10 +146,18 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(get_
     }
 
     action_item_id = action_items_db.create_action_item(uid, action_item_data)
-    action_item = action_items_db.get_action_item(uid, action_item_id)
-
-    if not action_item:
+    if not action_item_id:
         raise HTTPException(status_code=500, detail="Failed to create action item")
+
+    now = datetime.now(timezone.utc)
+    action_item = {
+        **action_item_data,
+        'id': action_item_id,
+        'created_at': now,
+        'updated_at': now,
+    }
+    if action_item.get('completed') and not action_item.get('completed_at'):
+        action_item['completed_at'] = now
 
     if request.due_at:
         send_action_item_data_message(
@@ -200,7 +208,7 @@ def update_action_item(
     request: UpdateActionItemRequest,
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
-    _get_valid_action_item(uid, action_item_id)
+    original_item = _get_valid_action_item(uid, action_item_id)
 
     update_data = {}
     if request.description is not None:
@@ -213,10 +221,14 @@ def update_action_item(
     elif request.due_at is not None:
         update_data['due_at'] = request.due_at
 
+    if not update_data:
+        return ActionItemResponse(**original_item)
+
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
-    updated_item = action_items_db.get_action_item(uid, action_item_id)
+    updated_item = {**original_item, **update_data}
+    updated_item['updated_at'] = datetime.now(timezone.utc)
 
     if 'due_at' in update_data and update_data['due_at']:
         send_action_item_update_message(

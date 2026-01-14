@@ -406,9 +406,18 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             action_item_data["due_at"] = due_at
 
         action_item_id = action_items_db.create_action_item(user_id, action_item_data)
-        action_item = action_items_db.get_action_item(user_id, action_item_id)
-        if not action_item:
+        if not action_item_id:
             raise ToolExecutionError("Failed to create action item")
+
+        now = datetime.now(timezone.utc)
+        action_item = {
+            **action_item_data,
+            "id": action_item_id,
+            "created_at": now,
+            "updated_at": now,
+        }
+        if action_item.get("completed") and not action_item.get("completed_at"):
+            action_item["completed_at"] = now
 
         if due_at:
             send_action_item_data_message(
@@ -425,7 +434,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not action_item_id:
             raise ToolExecutionError("action_item_id is required")
 
-        _get_valid_action_item(user_id, action_item_id)
+        original_item = _get_valid_action_item(user_id, action_item_id)
 
         update_data = {}
         if "description" in arguments and arguments.get("description") is not None:
@@ -437,12 +446,14 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if "due_at" in arguments:
             update_data["due_at"] = _parse_iso_datetime(arguments.get("due_at"), "due_at")
 
+        if not update_data:
+            return {"success": True, "action_item": original_item}
+
         if not action_items_db.update_action_item(user_id, action_item_id, update_data):
             raise ToolExecutionError("Failed to update action item")
 
-        updated_item = action_items_db.get_action_item(user_id, action_item_id)
-        if not updated_item:
-            raise ToolExecutionError("Action item not found", code=-32001)
+        updated_item = {**original_item, **update_data}
+        updated_item["updated_at"] = datetime.now(timezone.utc)
 
         if "due_at" in update_data and update_data["due_at"]:
             send_action_item_update_message(

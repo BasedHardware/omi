@@ -50,14 +50,10 @@ def test_create_action_item_sends_notification(client, mcp_router, monkeypatch):
         calls["create"] = action_item_data
         return "item-1"
 
-    def fake_get_action_item(uid, action_item_id):
-        return {"id": action_item_id, "description": "Do it", "completed": False}
-
     def fake_send_action_item_data_message(**kwargs):
         calls["notify"] = kwargs
 
     monkeypatch.setattr(mcp_router.action_items_db, "create_action_item", fake_create_action_item)
-    monkeypatch.setattr(mcp_router.action_items_db, "get_action_item", fake_get_action_item)
     monkeypatch.setattr(mcp_router, "send_action_item_data_message", fake_send_action_item_data_message)
 
     response = client.post(
@@ -65,6 +61,7 @@ def test_create_action_item_sends_notification(client, mcp_router, monkeypatch):
         json={"description": "Do it", "due_at": "2025-01-01T00:00:00Z"},
     )
     assert response.status_code == 200
+    assert response.json()["id"] == "item-1"
     assert isinstance(calls["create"]["due_at"], datetime)
     assert calls["notify"]["action_item_id"] == "item-1"
     assert calls["notify"]["due_at"].endswith("+00:00")
@@ -74,7 +71,13 @@ def test_update_action_item_clears_due_date_without_notification(client, mcp_rou
     calls = {}
 
     def fake_get_action_item(uid, action_item_id):
-        return {"id": action_item_id, "description": "Task", "completed": False, "is_locked": False}
+        return {
+            "id": action_item_id,
+            "description": "Task",
+            "completed": False,
+            "is_locked": False,
+            "due_at": datetime(2025, 1, 1),
+        }
 
     def fake_update_action_item(uid, action_item_id, update_data):
         calls["update"] = update_data
@@ -89,6 +92,7 @@ def test_update_action_item_clears_due_date_without_notification(client, mcp_rou
     assert "due_at" in calls["update"]
     assert calls["update"]["due_at"] is None
     assert "notify" not in calls
+    assert response.json()["due_at"] is None
 
 
 def test_update_action_item_sets_completed_timestamp(client, mcp_router, monkeypatch):

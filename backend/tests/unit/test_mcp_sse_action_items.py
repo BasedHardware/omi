@@ -53,14 +53,10 @@ def test_create_action_item_sends_notification(mcp_sse, monkeypatch):
         calls["create"] = action_item_data
         return "item-1"
 
-    def fake_get_action_item(uid, action_item_id):
-        return {"id": action_item_id, "description": "Do it", "completed": False}
-
     def fake_send_action_item_data_message(**kwargs):
         calls["notify"] = kwargs
 
     monkeypatch.setattr(mcp_sse.action_items_db, "create_action_item", fake_create_action_item)
-    monkeypatch.setattr(mcp_sse.action_items_db, "get_action_item", fake_get_action_item)
     monkeypatch.setattr(mcp_sse, "send_action_item_data_message", fake_send_action_item_data_message)
 
     result = mcp_sse.execute_tool(
@@ -70,6 +66,7 @@ def test_create_action_item_sends_notification(mcp_sse, monkeypatch):
     )
 
     assert result["success"] is True
+    assert result["action_item"]["id"] == "item-1"
     assert isinstance(calls["create"]["due_at"], datetime)
     assert calls["notify"]["action_item_id"] == "item-1"
 
@@ -78,7 +75,13 @@ def test_update_action_item_clears_due_date_without_notification(mcp_sse, monkey
     calls = {}
 
     def fake_get_action_item(uid, action_item_id):
-        return {"id": action_item_id, "description": "Task", "completed": False, "is_locked": False}
+        return {
+            "id": action_item_id,
+            "description": "Task",
+            "completed": False,
+            "is_locked": False,
+            "due_at": datetime(2025, 1, 1),
+        }
 
     def fake_update_action_item(uid, action_item_id, update_data):
         calls["update"] = update_data
@@ -92,6 +95,7 @@ def test_update_action_item_clears_due_date_without_notification(mcp_sse, monkey
     assert result["success"] is True
     assert calls["update"]["due_at"] is None
     assert "notify" not in calls
+    assert result["action_item"]["due_at"] is None
 
 
 def test_update_action_item_rejects_locked_item(mcp_sse, monkeypatch):
