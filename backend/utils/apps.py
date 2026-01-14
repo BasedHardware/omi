@@ -285,7 +285,7 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     else:
         # 3. Database query (slow, ~50-100ms)
         all_apps = get_public_approved_apps_db()
-        set_generic_cache('get_public_approved_apps_data', all_apps, 30)  # 30 seconds cached
+        set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
 
     # Process apps (add installs, reviews, etc.)
     app_ids = [app['id'] for app in all_apps]
