@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "جاري حذف رسائلك من ذاكرة Omi...",
+  "deletingMessages": "حذف رسائلك من ذاكرة Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "تم نسخ الرسالة إلى الحافظة.",
+  "messageCopied": "✨ تم نسخ الرسالة إلى الحافظة",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "الإبلاغ عن رسالة",
+  "reportMessage": "الإبلاغ عن الرسالة",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2580,5 +2580,29 @@
   "filterCapabilities": "الإمكانيات",
   "noNotificationScopesAvailable": "لا توجد نطاقات إشعارات متاحة",
   "popularApps": "التطبيقات الشائعة",
-  "pleaseProvidePrompt": "يرجى تقديم موجه"
+  "pleaseProvidePrompt": "يرجى تقديم موجه",
+  "chatWithAppName": "الدردشة مع {appName}",
+  "defaultAiAssistant": "مساعد الذكاء الاصطناعي الافتراضي",
+  "readyToChat": "✨ جاهز للدردشة!",
+  "connectionNeeded": "🌐 يتطلب الاتصال",
+  "startConversation": "ابدأ محادثة ودع السحر يبدأ",
+  "checkInternetConnection": "يرجى التحقق من اتصالك بالإنترنت",
+  "wasThisHelpful": "هل كان هذا مفيدًا؟",
+  "thankYouForFeedback": "شكرًا لك على ملاحظاتك!",
+  "maxFilesUploadError": "يمكنك تحميل 4 ملفات فقط في المرة الواحدة",
+  "attachedFiles": "📎 الملفات المرفقة",
+  "takePhoto": "التقط صورة",
+  "captureWithCamera": "التقط بالكاميرا",
+  "selectImages": "اختر الصور",
+  "chooseFromGallery": "اختر من المعرض",
+  "selectFile": "اختر ملف",
+  "chooseAnyFileType": "اختر أي نوع ملف",
+  "cannotReportOwnMessages": "لا يمكنك الإبلاغ عن رسائلك الخاصة",
+  "messageReportedSuccessfully": "✅ تم الإبلاغ عن الرسالة بنجاح",
+  "confirmReportMessage": "هل أنت متأكد من أنك تريد الإبلاغ عن هذه الرسالة؟",
+  "selectChatAssistant": "اختر مساعد الدردشة",
+  "enableMoreApps": "تفعيل المزيد من التطبيقات",
+  "chatCleared": "تم مسح الدردشة",
+  "clearChatTitle": "مسح الدردشة؟",
+  "confirmClearChat": "هل أنت متأكد من أنك تريد مسح الدردشة؟ هذا الإجراء لا يمكن التراجع عنه."
 }

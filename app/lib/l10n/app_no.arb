@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Melding kopiert til utklippstavlen.",
+  "messageCopied": "✨ Melding kopiert til utklippstavle",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Funksjoner",
   "noNotificationScopesAvailable": "Ingen varslingsområder tilgjengelig",
   "popularApps": "Populære apper",
-  "pleaseProvidePrompt": "Vennligst oppgi en ledetekst"
+  "pleaseProvidePrompt": "Vennligst oppgi en ledetekst",
+  "chatWithAppName": "Chat med {appName}",
+  "defaultAiAssistant": "Standard AI-assistent",
+  "readyToChat": "✨ Klar til å chatte!",
+  "connectionNeeded": "🌐 Tilkobling kreves",
+  "startConversation": "Start en samtale og la magien begynne",
+  "checkInternetConnection": "Vennligst sjekk internettforbindelsen din",
+  "wasThisHelpful": "Var dette nyttig?",
+  "thankYouForFeedback": "Takk for tilbakemeldingen!",
+  "maxFilesUploadError": "Du kan bare laste opp 4 filer om gangen",
+  "attachedFiles": "📎 Vedlagte filer",
+  "takePhoto": "Ta et bilde",
+  "captureWithCamera": "Ta opp med kamera",
+  "selectImages": "Velg bilder",
+  "chooseFromGallery": "Velg fra galleri",
+  "selectFile": "Velg en fil",
+  "chooseAnyFileType": "Velg hvilken som helst filtype",
+  "cannotReportOwnMessages": "Du kan ikke rapportere dine egne meldinger",
+  "messageReportedSuccessfully": "✅ Melding rapportert",
+  "confirmReportMessage": "Er du sikker på at du vil rapportere denne meldingen?",
+  "selectChatAssistant": "Velg chat-assistent",
+  "enableMoreApps": "Aktiver flere apper",
+  "chatCleared": "Chat tømt",
+  "clearChatTitle": "Tøm chat?",
+  "confirmClearChat": "Er du sikker på at du vil tømme chatten? Denne handlingen kan ikke angres."
 }

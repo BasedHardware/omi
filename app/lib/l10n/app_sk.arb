@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Odstraňujú sa vaše správy z pamäte Omi...",
+  "deletingMessages": "Odstraňovanie vašich správ z pamäte Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Správa bola skopírovaná do schránky.",
+  "messageCopied": "✨ Správa skopírovaná do schránky",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Funkcie",
   "noNotificationScopesAvailable": "Nie sú k dispozícii žiadne rozsahy oznámení",
   "popularApps": "Obľúbené aplikácie",
-  "pleaseProvidePrompt": "Zadajte prosím výzvu"
+  "pleaseProvidePrompt": "Zadajte prosím výzvu",
+  "chatWithAppName": "Chat s {appName}",
+  "defaultAiAssistant": "Predvolený AI asistent",
+  "readyToChat": "✨ Pripravený na chat!",
+  "connectionNeeded": "🌐 Vyžaduje sa pripojenie",
+  "startConversation": "Začnite konverzáciu a nechajte kúzlo začať",
+  "checkInternetConnection": "Skontrolujte prosím internetové pripojenie",
+  "wasThisHelpful": "Bolo to užitočné?",
+  "thankYouForFeedback": "Ďakujeme za spätnú väzbu!",
+  "maxFilesUploadError": "Naraz môžete nahrať iba 4 súbory",
+  "attachedFiles": "📎 Priložené súbory",
+  "takePhoto": "Odfotiť",
+  "captureWithCamera": "Zachytiť kamerou",
+  "selectImages": "Vybrať obrázky",
+  "chooseFromGallery": "Vybrať z galérie",
+  "selectFile": "Vybrať súbor",
+  "chooseAnyFileType": "Vybrať akýkoľvek typ súboru",
+  "cannotReportOwnMessages": "Nemôžete nahlásiť vlastné správy",
+  "messageReportedSuccessfully": "✅ Správa úspešne nahlásená",
+  "confirmReportMessage": "Naozaj chcete nahlásiť túto správu?",
+  "selectChatAssistant": "Vybrať chatovacieho asistenta",
+  "enableMoreApps": "Povoliť viac aplikácií",
+  "chatCleared": "Chat vymazaný",
+  "clearChatTitle": "Vymazať chat?",
+  "confirmClearChat": "Naozaj chcete vymazať chat? Túto akciu nemožno vrátiť späť."
 }

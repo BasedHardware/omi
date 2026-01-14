@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Memadam mesej anda daripada ingatan Omi...",
+  "deletingMessages": "Memadam mesej anda dari ingatan Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Mesej disalin ke papan keratan.",
+  "messageCopied": "✨ Mesej disalin ke papan keratan",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Keupayaan",
   "noNotificationScopesAvailable": "Tiada skop pemberitahuan tersedia",
   "popularApps": "Aplikasi Popular",
-  "pleaseProvidePrompt": "Sila berikan prompt"
+  "pleaseProvidePrompt": "Sila berikan prompt",
+  "chatWithAppName": "Sembang dengan {appName}",
+  "defaultAiAssistant": "Pembantu AI Lalai",
+  "readyToChat": "✨ Bersedia untuk sembang!",
+  "connectionNeeded": "🌐 Sambungan diperlukan",
+  "startConversation": "Mulakan perbualan dan biarkan keajaiban bermula",
+  "checkInternetConnection": "Sila periksa sambungan internet anda",
+  "wasThisHelpful": "Adakah ini membantu?",
+  "thankYouForFeedback": "Terima kasih atas maklum balas anda!",
+  "maxFilesUploadError": "Anda hanya boleh memuat naik 4 fail pada satu masa",
+  "attachedFiles": "📎 Fail Dilampirkan",
+  "takePhoto": "Ambil Foto",
+  "captureWithCamera": "Tangkap dengan kamera",
+  "selectImages": "Pilih Imej",
+  "chooseFromGallery": "Pilih dari galeri",
+  "selectFile": "Pilih Fail",
+  "chooseAnyFileType": "Pilih sebarang jenis fail",
+  "cannotReportOwnMessages": "Anda tidak boleh melaporkan mesej anda sendiri",
+  "messageReportedSuccessfully": "✅ Mesej berjaya dilaporkan",
+  "confirmReportMessage": "Adakah anda pasti mahu melaporkan mesej ini?",
+  "selectChatAssistant": "Pilih Pembantu Sembang",
+  "enableMoreApps": "Dayakan Lebih Banyak Apl",
+  "chatCleared": "Sembang dibersihkan",
+  "clearChatTitle": "Kosongkan Sembang?",
+  "confirmClearChat": "Adakah anda pasti mahu mengosongkan sembang? Tindakan ini tidak boleh dibatalkan."
 }

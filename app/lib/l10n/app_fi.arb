@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Viesti kopioitu leikepöydälle.",
+  "messageCopied": "✨ Viesti kopioitu leikepöydälle",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Ilmoita viestistä",
+  "reportMessage": "Raportoi viesti",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Ominaisuudet",
   "noNotificationScopesAvailable": "Ilmoitusalueita ei ole saatavilla",
   "popularApps": "Suositut sovellukset",
-  "pleaseProvidePrompt": "Anna kehote"
+  "pleaseProvidePrompt": "Anna kehote",
+  "chatWithAppName": "Chat sovelluksen {appName} kanssa",
+  "defaultAiAssistant": "Oletus AI-assistentti",
+  "readyToChat": "✨ Valmis chattailemaan!",
+  "connectionNeeded": "🌐 Yhteys vaaditaan",
+  "startConversation": "Aloita keskustelu ja anna taikuuden alkaa",
+  "checkInternetConnection": "Tarkista internetyhteytesi",
+  "wasThisHelpful": "Oliko tästä apua?",
+  "thankYouForFeedback": "Kiitos palautteestasi!",
+  "maxFilesUploadError": "Voit ladata vain 4 tiedostoa kerralla",
+  "attachedFiles": "📎 Liitetyt tiedostot",
+  "takePhoto": "Ota valokuva",
+  "captureWithCamera": "Ota kameralla",
+  "selectImages": "Valitse kuvia",
+  "chooseFromGallery": "Valitse galleriasta",
+  "selectFile": "Valitse tiedosto",
+  "chooseAnyFileType": "Valitse mikä tahansa tiedostotyyppi",
+  "cannotReportOwnMessages": "Et voi raportoida omia viestejäsi",
+  "messageReportedSuccessfully": "✅ Viesti raportoitu onnistuneesti",
+  "confirmReportMessage": "Haluatko varmasti raportoida tämän viestin?",
+  "selectChatAssistant": "Valitse chat-assistentti",
+  "enableMoreApps": "Ota käyttöön lisää sovelluksia",
+  "chatCleared": "Chat tyhjennetty",
+  "clearChatTitle": "Tyhjennä chat?",
+  "confirmClearChat": "Haluatko varmasti tyhjentää chatin? Tätä toimintoa ei voi peruuttaa."
 }

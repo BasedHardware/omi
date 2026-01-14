@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "กำลังลบข้อความของคุณจากความทรงจำของ Omi...",
+  "deletingMessages": "กำลังลบข้อความของคุณจากหน่วยความจำของ Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "คัดลอกข้อความไปยังคลิปบอร์ดแล้ว",
+  "messageCopied": "✨ คัดลอกข้อความไปยังคลิปบอร์ดแล้ว",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "ความสามารถ",
   "noNotificationScopesAvailable": "ไม่มีขอบเขตการแจ้งเตือนที่พร้อมใช้งาน",
   "popularApps": "แอปยอดนิยม",
-  "pleaseProvidePrompt": "กรุณาระบุพรอมต์"
+  "pleaseProvidePrompt": "กรุณาระบุพรอมต์",
+  "chatWithAppName": "แชทกับ {appName}",
+  "defaultAiAssistant": "ผู้ช่วย AI เริ่มต้น",
+  "readyToChat": "✨ พร้อมแชท!",
+  "connectionNeeded": "🌐 ต้องการการเชื่อมต่อ",
+  "startConversation": "เริ่มการสนทนาและปล่อยให้มนต์ขลังเริ่มต้น",
+  "checkInternetConnection": "โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ",
+  "wasThisHelpful": "มีประโยชน์หรือไม่?",
+  "thankYouForFeedback": "ขอบคุณสำหรับคำติชมของคุณ!",
+  "maxFilesUploadError": "คุณสามารถอัปโหลดได้เพียง 4 ไฟล์ต่อครั้ง",
+  "attachedFiles": "📎 ไฟล์ที่แนบมา",
+  "takePhoto": "ถ่ายภาพ",
+  "captureWithCamera": "จับภาพด้วยกล้อง",
+  "selectImages": "เลือกรูปภาพ",
+  "chooseFromGallery": "เลือกจากแกลเลอรี",
+  "selectFile": "เลือกไฟล์",
+  "chooseAnyFileType": "เลือกประเภทไฟล์ใดก็ได้",
+  "cannotReportOwnMessages": "คุณไม่สามารถรายงานข้อความของคุณเองได้",
+  "messageReportedSuccessfully": "✅ รายงานข้อความสำเร็จ",
+  "confirmReportMessage": "คุณแน่ใจหรือไม่ว่าต้องการรายงานข้อความนี้?",
+  "selectChatAssistant": "เลือกผู้ช่วยแชท",
+  "enableMoreApps": "เปิดใช้งานแอปเพิ่มเติม",
+  "chatCleared": "ล้างแชทแล้ว",
+  "clearChatTitle": "ล้างแชท?",
+  "confirmClearChat": "คุณแน่ใจหรือไม่ว่าต้องการล้างแชท? การกระทำนี้ไม่สามารถยกเลิกได้"
 }

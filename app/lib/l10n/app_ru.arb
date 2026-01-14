@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Сообщение скопировано в буфер обмена.",
+  "messageCopied": "✨ Сообщение скопировано в буфер обмена",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Пожаловаться на сообщение",
+  "reportMessage": "Сообщить о сообщении",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Возможности",
   "noNotificationScopesAvailable": "Нет доступных областей уведомлений",
   "popularApps": "Популярные приложения",
-  "pleaseProvidePrompt": "Пожалуйста, укажите запрос"
+  "pleaseProvidePrompt": "Пожалуйста, укажите запрос",
+  "chatWithAppName": "Чат с {appName}",
+  "defaultAiAssistant": "AI-ассистент по умолчанию",
+  "readyToChat": "✨ Готов к чату!",
+  "connectionNeeded": "🌐 Требуется подключение",
+  "startConversation": "Начните разговор и позвольте магии начаться",
+  "checkInternetConnection": "Пожалуйста, проверьте подключение к Интернету",
+  "wasThisHelpful": "Было ли это полезно?",
+  "thankYouForFeedback": "Спасибо за ваш отзыв!",
+  "maxFilesUploadError": "Вы можете загрузить только 4 файла за раз",
+  "attachedFiles": "📎 Прикрепленные файлы",
+  "takePhoto": "Сделать фото",
+  "captureWithCamera": "Снять камерой",
+  "selectImages": "Выбрать изображения",
+  "chooseFromGallery": "Выбрать из галереи",
+  "selectFile": "Выбрать файл",
+  "chooseAnyFileType": "Выбрать любой тип файла",
+  "cannotReportOwnMessages": "Вы не можете сообщить о своих собственных сообщениях",
+  "messageReportedSuccessfully": "✅ Сообщение успешно отправлено",
+  "confirmReportMessage": "Вы уверены, что хотите сообщить об этом сообщении?",
+  "selectChatAssistant": "Выбрать чат-ассистента",
+  "enableMoreApps": "Включить больше приложений",
+  "chatCleared": "Чат очищен",
+  "clearChatTitle": "Очистить чат?",
+  "confirmClearChat": "Вы уверены, что хотите очистить чат? Это действие нельзя отменить."
 }

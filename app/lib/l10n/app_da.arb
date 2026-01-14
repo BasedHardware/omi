@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Besked kopieret til udklipsholder.",
+  "messageCopied": "✨ Besked kopieret til udklipsholder",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Funktioner",
   "noNotificationScopesAvailable": "Ingen notifikationsområder tilgængelige",
   "popularApps": "Populære apps",
-  "pleaseProvidePrompt": "Angiv venligst en prompt"
+  "pleaseProvidePrompt": "Angiv venligst en prompt",
+  "chatWithAppName": "Chat med {appName}",
+  "defaultAiAssistant": "Standard AI-assistent",
+  "readyToChat": "✨ Klar til at chatte!",
+  "connectionNeeded": "🌐 Forbindelse påkrævet",
+  "startConversation": "Start en samtale og lad magien begynde",
+  "checkInternetConnection": "Tjek venligst din internetforbindelse",
+  "wasThisHelpful": "Var dette nyttigt?",
+  "thankYouForFeedback": "Tak for din feedback!",
+  "maxFilesUploadError": "Du kan kun uploade 4 filer ad gangen",
+  "attachedFiles": "📎 Vedhæftede filer",
+  "takePhoto": "Tag et foto",
+  "captureWithCamera": "Optag med kamera",
+  "selectImages": "Vælg billeder",
+  "chooseFromGallery": "Vælg fra galleri",
+  "selectFile": "Vælg en fil",
+  "chooseAnyFileType": "Vælg enhver filtype",
+  "cannotReportOwnMessages": "Du kan ikke rapportere dine egne beskeder",
+  "messageReportedSuccessfully": "✅ Besked rapporteret",
+  "confirmReportMessage": "Er du sikker på, at du vil rapportere denne besked?",
+  "selectChatAssistant": "Vælg chatassistent",
+  "enableMoreApps": "Aktiver flere apps",
+  "chatCleared": "Chat ryddet",
+  "clearChatTitle": "Ryd chat?",
+  "confirmClearChat": "Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes."
 }

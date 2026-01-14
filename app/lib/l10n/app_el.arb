@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Το μήνυμα αντιγράφηκε στο πρόχειρο.",
+  "messageCopied": "✨ Μήνυμα αντιγράφηκε στο πρόχειρο",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Αναφορά Μηνύματος",
+  "reportMessage": "Αναφορά μηνύματος",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Δυνατότητες",
   "noNotificationScopesAvailable": "Δεν υπάρχουν διαθέσιμα πεδία ειδοποιήσεων",
   "popularApps": "Δημοφιλείς εφαρμογές",
-  "pleaseProvidePrompt": "Παρακαλώ δώστε μια προτροπή"
+  "pleaseProvidePrompt": "Παρακαλώ δώστε μια προτροπή",
+  "chatWithAppName": "Συνομιλία με {appName}",
+  "defaultAiAssistant": "Προεπιλεγμένος βοηθός AI",
+  "readyToChat": "✨ Έτοιμος για συνομιλία!",
+  "connectionNeeded": "🌐 Απαιτείται σύνδεση",
+  "startConversation": "Ξεκινήστε μια συνομιλία και αφήστε τη μαγεία να ξεκινήσει",
+  "checkInternetConnection": "Παρακαλώ ελέγξτε τη σύνδεσή σας στο Internet",
+  "wasThisHelpful": "Ήταν αυτό χρήσιμο;",
+  "thankYouForFeedback": "Ευχαριστούμε για τα σχόλιά σας!",
+  "maxFilesUploadError": "Μπορείτε να ανεβάσετε μόνο 4 αρχεία τη φορά",
+  "attachedFiles": "📎 Συνημμένα αρχεία",
+  "takePhoto": "Τραβήξτε φωτογραφία",
+  "captureWithCamera": "Λήψη με κάμερα",
+  "selectImages": "Επιλέξτε εικόνες",
+  "chooseFromGallery": "Επιλογή από τη συλλογή",
+  "selectFile": "Επιλέξτε αρχείο",
+  "chooseAnyFileType": "Επιλέξτε οποιονδήποτε τύπο αρχείου",
+  "cannotReportOwnMessages": "Δεν μπορείτε να αναφέρετε τα δικά σας μηνύματα",
+  "messageReportedSuccessfully": "✅ Το μήνυμα αναφέρθηκε επιτυχώς",
+  "confirmReportMessage": "Είστε βέβαιοι ότι θέλετε να αναφέρετε αυτό το μήνυμα;",
+  "selectChatAssistant": "Επιλογή βοηθού συνομιλίας",
+  "enableMoreApps": "Ενεργοποίηση περισσότερων εφαρμογών",
+  "chatCleared": "Η συνομιλία διαγράφηκε",
+  "clearChatTitle": "Διαγραφή συνομιλίας;",
+  "confirmClearChat": "Είστε βέβαιοι ότι θέλετε να διαγράψετε τη συνομιλία; Αυτή η ενέργεια δεν μπορεί να αναιρεθεί."
 }

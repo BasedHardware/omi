@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Se șterg mesajele din memoria Omi...",
+  "deletingMessages": "Ștergerea mesajelor din memoria Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Mesaj copiat în clipboard.",
+  "messageCopied": "✨ Mesaj copiat în clipboard",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Raportează mesajul",
+  "reportMessage": "Raportați mesajul",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Capacități",
   "noNotificationScopesAvailable": "Nu există domenii de notificare disponibile",
   "popularApps": "Aplicații populare",
-  "pleaseProvidePrompt": "Vă rugăm să furnizați o solicitare"
+  "pleaseProvidePrompt": "Vă rugăm să furnizați o solicitare",
+  "chatWithAppName": "Chat cu {appName}",
+  "defaultAiAssistant": "Asistent AI implicit",
+  "readyToChat": "✨ Pregătit pentru chat!",
+  "connectionNeeded": "🌐 Conexiune necesară",
+  "startConversation": "Începeți o conversație și lăsați magia să înceapă",
+  "checkInternetConnection": "Vă rugăm să verificați conexiunea la internet",
+  "wasThisHelpful": "A fost util?",
+  "thankYouForFeedback": "Mulțumim pentru feedback!",
+  "maxFilesUploadError": "Puteți încărca doar 4 fișiere o dată",
+  "attachedFiles": "📎 Fișiere atașate",
+  "takePhoto": "Faceți o fotografie",
+  "captureWithCamera": "Capturați cu camera",
+  "selectImages": "Selectați imagini",
+  "chooseFromGallery": "Alegeți din galerie",
+  "selectFile": "Selectați un fișier",
+  "chooseAnyFileType": "Alegeți orice tip de fișier",
+  "cannotReportOwnMessages": "Nu puteți raporta propriile mesaje",
+  "messageReportedSuccessfully": "✅ Mesaj raportat cu succes",
+  "confirmReportMessage": "Sigur doriți să raportați acest mesaj?",
+  "selectChatAssistant": "Selectați asistent de chat",
+  "enableMoreApps": "Activați mai multe aplicații",
+  "chatCleared": "Chat șters",
+  "clearChatTitle": "Ștergeți chatul?",
+  "confirmClearChat": "Sigur doriți să ștergeți chatul? Această acțiune nu poate fi anulată."
 }

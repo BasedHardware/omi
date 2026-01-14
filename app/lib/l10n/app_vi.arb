@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Đã sao chép tin nhắn vào clipboard.",
+  "messageCopied": "✨ Tin nhắn đã được sao chép vào clipboard",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Khả năng",
   "noNotificationScopesAvailable": "Không có phạm vi thông báo nào",
   "popularApps": "Ứng dụng phổ biến",
-  "pleaseProvidePrompt": "Vui lòng cung cấp lời nhắc"
+  "pleaseProvidePrompt": "Vui lòng cung cấp lời nhắc",
+  "chatWithAppName": "Trò chuyện với {appName}",
+  "defaultAiAssistant": "Trợ lý AI mặc định",
+  "readyToChat": "✨ Sẵn sàng trò chuyện!",
+  "connectionNeeded": "🌐 Cần kết nối",
+  "startConversation": "Bắt đầu cuộc trò chuyện và để phép màu bắt đầu",
+  "checkInternetConnection": "Vui lòng kiểm tra kết nối internet của bạn",
+  "wasThisHelpful": "Điều này có hữu ích không?",
+  "thankYouForFeedback": "Cảm ơn phản hồi của bạn!",
+  "maxFilesUploadError": "Bạn chỉ có thể tải lên 4 tệp cùng một lúc",
+  "attachedFiles": "📎 Tệp đính kèm",
+  "takePhoto": "Chụp ảnh",
+  "captureWithCamera": "Chụp bằng máy ảnh",
+  "selectImages": "Chọn hình ảnh",
+  "chooseFromGallery": "Chọn từ thư viện",
+  "selectFile": "Chọn tệp",
+  "chooseAnyFileType": "Chọn bất kỳ loại tệp nào",
+  "cannotReportOwnMessages": "Bạn không thể báo cáo tin nhắn của chính mình",
+  "messageReportedSuccessfully": "✅ Tin nhắn đã được báo cáo thành công",
+  "confirmReportMessage": "Bạn có chắc chắn muốn báo cáo tin nhắn này không?",
+  "selectChatAssistant": "Chọn trợ lý trò chuyện",
+  "enableMoreApps": "Bật thêm ứng dụng",
+  "chatCleared": "Đã xóa cuộc trò chuyện",
+  "clearChatTitle": "Xóa cuộc trò chuyện?",
+  "confirmClearChat": "Bạn có chắc chắn muốn xóa cuộc trò chuyện không? Hành động này không thể hoàn tác."
 }

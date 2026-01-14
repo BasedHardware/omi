@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Ištrinamos jūsų žinutės iš Omi atminties...",
+  "deletingMessages": "Ištrinami jūsų pranešimai iš Omi atminties...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Žinutė nukopijuota į iškarpinę.",
+  "messageCopied": "✨ Pranešimas nukopijuotas į iškarpinę",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Pranešti apie žinutę",
+  "reportMessage": "Pranešti apie pranešimą",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2530,5 +2530,29 @@
   "filterCapabilities": "Galimybės",
   "noNotificationScopesAvailable": "Pranešimų sritys nepasiekiamos",
   "popularApps": "Populiarios programos",
-  "pleaseProvidePrompt": "Pateikite raginimą"
+  "pleaseProvidePrompt": "Pateikite raginimą",
+  "chatWithAppName": "Pokalbis su {appName}",
+  "defaultAiAssistant": "Numatytasis AI asistentas",
+  "readyToChat": "✨ Pasiruošęs pokalbiui!",
+  "connectionNeeded": "🌐 Reikalingas ryšys",
+  "startConversation": "Pradėkite pokalbį ir leiskite magijai prasidėti",
+  "checkInternetConnection": "Patikrinkite interneto ryšį",
+  "wasThisHelpful": "Ar tai buvo naudinga?",
+  "thankYouForFeedback": "Dėkojame už atsiliepimą!",
+  "maxFilesUploadError": "Vienu metu galite įkelti tik 4 failus",
+  "attachedFiles": "📎 Pridėti failai",
+  "takePhoto": "Fotografuoti",
+  "captureWithCamera": "Užfiksuoti kamera",
+  "selectImages": "Pasirinkti paveikslėlius",
+  "chooseFromGallery": "Pasirinkti iš galerijos",
+  "selectFile": "Pasirinkti failą",
+  "chooseAnyFileType": "Pasirinkti bet kokį failo tipą",
+  "cannotReportOwnMessages": "Negalite pranešti apie savo žinutes",
+  "messageReportedSuccessfully": "✅ Pranešimas sėkmingai praneštas",
+  "confirmReportMessage": "Ar tikrai norite pranešti apie šį pranešimą?",
+  "selectChatAssistant": "Pasirinkti pokalbio asistentą",
+  "enableMoreApps": "Įgalinti daugiau programų",
+  "chatCleared": "Pokalbis išvalytas",
+  "clearChatTitle": "Išvalyti pokalbį?",
+  "confirmClearChat": "Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti."
 }

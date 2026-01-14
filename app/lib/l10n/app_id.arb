@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Pesan disalin ke clipboard.",
+  "messageCopied": "✨ Pesan disalin ke clipboard",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Kemampuan",
   "noNotificationScopesAvailable": "Tidak ada cakupan notifikasi yang tersedia",
   "popularApps": "Aplikasi Populer",
-  "pleaseProvidePrompt": "Harap berikan prompt"
+  "pleaseProvidePrompt": "Harap berikan prompt",
+  "chatWithAppName": "Obrolan dengan {appName}",
+  "defaultAiAssistant": "Asisten AI Default",
+  "readyToChat": "✨ Siap mengobrol!",
+  "connectionNeeded": "🌐 Koneksi diperlukan",
+  "startConversation": "Mulai percakapan dan biarkan keajaiban dimulai",
+  "checkInternetConnection": "Silakan periksa koneksi internet Anda",
+  "wasThisHelpful": "Apakah ini membantu?",
+  "thankYouForFeedback": "Terima kasih atas tanggapan Anda!",
+  "maxFilesUploadError": "Anda hanya dapat mengunggah 4 file sekaligus",
+  "attachedFiles": "📎 File Terlampir",
+  "takePhoto": "Ambil Foto",
+  "captureWithCamera": "Tangkap dengan kamera",
+  "selectImages": "Pilih Gambar",
+  "chooseFromGallery": "Pilih dari galeri",
+  "selectFile": "Pilih File",
+  "chooseAnyFileType": "Pilih jenis file apa saja",
+  "cannotReportOwnMessages": "Anda tidak dapat melaporkan pesan Anda sendiri",
+  "messageReportedSuccessfully": "✅ Pesan berhasil dilaporkan",
+  "confirmReportMessage": "Apakah Anda yakin ingin melaporkan pesan ini?",
+  "selectChatAssistant": "Pilih Asisten Obrolan",
+  "enableMoreApps": "Aktifkan Lebih Banyak Aplikasi",
+  "chatCleared": "Obrolan dibersihkan",
+  "clearChatTitle": "Hapus Obrolan?",
+  "confirmClearChat": "Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan."
 }

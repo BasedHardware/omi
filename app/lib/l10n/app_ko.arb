@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "메시지가 클립보드에 복사되었습니다.",
+  "messageCopied": "✨ 메시지가 클립보드에 복사되었습니다",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "기능",
   "noNotificationScopesAvailable": "사용 가능한 알림 범위 없음",
   "popularApps": "인기 앱",
-  "pleaseProvidePrompt": "프롬프트를 입력하세요"
+  "pleaseProvidePrompt": "프롬프트를 입력하세요",
+  "chatWithAppName": "{appName}와 채팅",
+  "defaultAiAssistant": "기본 AI 어시스턴트",
+  "readyToChat": "✨ 채팅 준비 완료!",
+  "connectionNeeded": "🌐 연결 필요",
+  "startConversation": "대화를 시작하고 마법을 시작하세요",
+  "checkInternetConnection": "인터넷 연결을 확인하세요",
+  "wasThisHelpful": "도움이 되었나요?",
+  "thankYouForFeedback": "피드백 감사합니다!",
+  "maxFilesUploadError": "한 번에 4개의 파일만 업로드할 수 있습니다",
+  "attachedFiles": "📎 첨부 파일",
+  "takePhoto": "사진 찍기",
+  "captureWithCamera": "카메라로 촬영",
+  "selectImages": "이미지 선택",
+  "chooseFromGallery": "갤러리에서 선택",
+  "selectFile": "파일 선택",
+  "chooseAnyFileType": "모든 파일 유형 선택",
+  "cannotReportOwnMessages": "자신의 메시지는 신고할 수 없습니다",
+  "messageReportedSuccessfully": "✅ 메시지가 성공적으로 신고되었습니다",
+  "confirmReportMessage": "이 메시지를 신고하시겠습니까?",
+  "selectChatAssistant": "채팅 어시스턴트 선택",
+  "enableMoreApps": "더 많은 앱 활성화",
+  "chatCleared": "채팅이 삭제되었습니다",
+  "clearChatTitle": "채팅 삭제?",
+  "confirmClearChat": "채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
 }

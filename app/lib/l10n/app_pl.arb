@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Usuwanie Twoich wiadomości z pamięci Omi...",
+  "deletingMessages": "Usuwanie wiadomości z pamięci Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Wiadomość skopiowana do schowka.",
+  "messageCopied": "✨ Wiadomość skopiowana do schowka",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Funkcje",
   "noNotificationScopesAvailable": "Brak dostępnych zakresów powiadomień",
   "popularApps": "Popularne aplikacje",
-  "pleaseProvidePrompt": "Proszę podać monit"
+  "pleaseProvidePrompt": "Proszę podać monit",
+  "chatWithAppName": "Czat z {appName}",
+  "defaultAiAssistant": "Domyślny asystent AI",
+  "readyToChat": "✨ Gotowy do czatu!",
+  "connectionNeeded": "🌐 Wymagane połączenie",
+  "startConversation": "Rozpocznij rozmowę i pozwól magii się zacząć",
+  "checkInternetConnection": "Sprawdź połączenie internetowe",
+  "wasThisHelpful": "Czy to było pomocne?",
+  "thankYouForFeedback": "Dziękujemy za opinię!",
+  "maxFilesUploadError": "Możesz przesłać tylko 4 pliki na raz",
+  "attachedFiles": "📎 Załączone pliki",
+  "takePhoto": "Zrób zdjęcie",
+  "captureWithCamera": "Przechwyć aparatem",
+  "selectImages": "Wybierz obrazy",
+  "chooseFromGallery": "Wybierz z galerii",
+  "selectFile": "Wybierz plik",
+  "chooseAnyFileType": "Wybierz dowolny typ pliku",
+  "cannotReportOwnMessages": "Nie możesz zgłaszać własnych wiadomości",
+  "messageReportedSuccessfully": "✅ Wiadomość zgłoszona pomyślnie",
+  "confirmReportMessage": "Czy na pewno chcesz zgłosić tę wiadomość?",
+  "selectChatAssistant": "Wybierz asystenta czatu",
+  "enableMoreApps": "Włącz więcej aplikacji",
+  "chatCleared": "Czat wyczyszczony",
+  "clearChatTitle": "Wyczyścić czat?",
+  "confirmClearChat": "Czy na pewno chcesz wyczyścić czat? Tej akcji nie można cofnąć."
 }

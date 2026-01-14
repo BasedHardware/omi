@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Tar bort dina meddelanden från Omis minne...",
+  "deletingMessages": "Raderar dina meddelanden från Omis minne...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Meddelande kopierat till urklipp.",
+  "messageCopied": "✨ Meddelande kopierat till urklipp",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Funktioner",
   "noNotificationScopesAvailable": "Inga aviseringsområden tillgängliga",
   "popularApps": "Populära appar",
-  "pleaseProvidePrompt": "Ange en prompt"
+  "pleaseProvidePrompt": "Ange en prompt",
+  "chatWithAppName": "Chatta med {appName}",
+  "defaultAiAssistant": "Standard AI-assistent",
+  "readyToChat": "✨ Redo att chatta!",
+  "connectionNeeded": "🌐 Anslutning krävs",
+  "startConversation": "Starta en konversation och låt magin börja",
+  "checkInternetConnection": "Kontrollera din internetanslutning",
+  "wasThisHelpful": "Var detta hjälpsamt?",
+  "thankYouForFeedback": "Tack för din feedback!",
+  "maxFilesUploadError": "Du kan bara ladda upp 4 filer åt gången",
+  "attachedFiles": "📎 Bifogade filer",
+  "takePhoto": "Ta ett foto",
+  "captureWithCamera": "Fånga med kamera",
+  "selectImages": "Välj bilder",
+  "chooseFromGallery": "Välj från galleri",
+  "selectFile": "Välj en fil",
+  "chooseAnyFileType": "Välj vilken filtyp som helst",
+  "cannotReportOwnMessages": "Du kan inte rapportera dina egna meddelanden",
+  "messageReportedSuccessfully": "✅ Meddelande rapporterat",
+  "confirmReportMessage": "Är du säker på att du vill rapportera detta meddelande?",
+  "selectChatAssistant": "Välj chattassistent",
+  "enableMoreApps": "Aktivera fler appar",
+  "chatCleared": "Chatt rensad",
+  "clearChatTitle": "Rensa chatt?",
+  "confirmClearChat": "Är du säker på att du vill rensa chatten? Denna åtgärd kan inte ångras."
 }

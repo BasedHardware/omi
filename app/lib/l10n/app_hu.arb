@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Üzenet vágólapra másolva.",
+  "messageCopied": "✨ Üzenet vágólapra másolva",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Üzenet bejelentése",
+  "reportMessage": "Üzenet jelentése",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Képességek",
   "noNotificationScopesAvailable": "Nincsenek elérhető értesítési hatókörök",
   "popularApps": "Népszerű alkalmazások",
-  "pleaseProvidePrompt": "Kérjük, adjon meg egy promptot"
+  "pleaseProvidePrompt": "Kérjük, adjon meg egy promptot",
+  "chatWithAppName": "Chat {appName} alkalmazással",
+  "defaultAiAssistant": "Alapértelmezett AI asszisztens",
+  "readyToChat": "✨ Készen áll a csevegésre!",
+  "connectionNeeded": "🌐 Kapcsolat szükséges",
+  "startConversation": "Kezdjen el beszélgetni, és hagyja, hogy a varázslat kezdetét vegye",
+  "checkInternetConnection": "Kérjük, ellenőrizze az internetkapcsolatot",
+  "wasThisHelpful": "Hasznos volt ez?",
+  "thankYouForFeedback": "Köszönjük a visszajelzést!",
+  "maxFilesUploadError": "Egyszerre csak 4 fájlt tölthet fel",
+  "attachedFiles": "📎 Csatolt fájlok",
+  "takePhoto": "Fénykép készítése",
+  "captureWithCamera": "Felvétel kamerával",
+  "selectImages": "Képek kiválasztása",
+  "chooseFromGallery": "Válasszon a galériából",
+  "selectFile": "Fájl kiválasztása",
+  "chooseAnyFileType": "Bármilyen fájltípus választása",
+  "cannotReportOwnMessages": "Nem jelentheti saját üzeneteit",
+  "messageReportedSuccessfully": "✅ Üzenet sikeresen jelentve",
+  "confirmReportMessage": "Biztosan jelenteni szeretné ezt az üzenetet?",
+  "selectChatAssistant": "Chat asszisztens kiválasztása",
+  "enableMoreApps": "További alkalmazások engedélyezése",
+  "chatCleared": "Chat törölve",
+  "clearChatTitle": "Chat törlése?",
+  "confirmClearChat": "Biztosan törölni szeretné a chatet? Ez a művelet nem vonható vissza."
 }

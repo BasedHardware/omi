@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Messaggio copiato negli appunti.",
+  "messageCopied": "✨ Messaggio copiato negli appunti",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Segnala Messaggio",
+  "reportMessage": "Segnala messaggio",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2530,5 +2530,29 @@
   "filterCapabilities": "Funzionalità",
   "noNotificationScopesAvailable": "Nessun ambito di notifica disponibile",
   "popularApps": "App popolari",
-  "pleaseProvidePrompt": "Si prega di fornire un prompt"
+  "pleaseProvidePrompt": "Si prega di fornire un prompt",
+  "chatWithAppName": "Chat con {appName}",
+  "defaultAiAssistant": "Assistente AI predefinito",
+  "readyToChat": "✨ Pronto per chattare!",
+  "connectionNeeded": "🌐 Connessione necessaria",
+  "startConversation": "Inizia una conversazione e lascia che la magia inizi",
+  "checkInternetConnection": "Controlla la tua connessione Internet",
+  "wasThisHelpful": "È stato utile?",
+  "thankYouForFeedback": "Grazie per il tuo feedback!",
+  "maxFilesUploadError": "Puoi caricare solo 4 file alla volta",
+  "attachedFiles": "📎 File allegati",
+  "takePhoto": "Scatta una foto",
+  "captureWithCamera": "Cattura con la fotocamera",
+  "selectImages": "Seleziona immagini",
+  "chooseFromGallery": "Scegli dalla galleria",
+  "selectFile": "Seleziona un file",
+  "chooseAnyFileType": "Scegli qualsiasi tipo di file",
+  "cannotReportOwnMessages": "Non puoi segnalare i tuoi messaggi",
+  "messageReportedSuccessfully": "✅ Messaggio segnalato con successo",
+  "confirmReportMessage": "Sei sicuro di voler segnalare questo messaggio?",
+  "selectChatAssistant": "Seleziona assistente chat",
+  "enableMoreApps": "Abilita più app",
+  "chatCleared": "Chat cancellata",
+  "clearChatTitle": "Cancellare la chat?",
+  "confirmClearChat": "Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata."
 }

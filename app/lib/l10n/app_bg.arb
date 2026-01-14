@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Изтриване на съобщенията ви от паметта на Omi...",
+  "deletingMessages": "Изтриване на вашите съобщения от паметта на Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Съобщението е копирано в клипборда.",
+  "messageCopied": "✨ Съобщението е копирано в клипборда",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Докладвай съобщение",
+  "reportMessage": "Докладване на съобщение",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2566,5 +2566,29 @@
   "filterCapabilities": "Възможности",
   "noNotificationScopesAvailable": "Няма налични области за уведомления",
   "popularApps": "Популярни приложения",
-  "pleaseProvidePrompt": "Моля, предоставете подсказка"
+  "pleaseProvidePrompt": "Моля, предоставете подсказка",
+  "chatWithAppName": "Чат с {appName}",
+  "defaultAiAssistant": "AI асистент по подразбиране",
+  "readyToChat": "✨ Готов за чат!",
+  "connectionNeeded": "🌐 Необходима връзка",
+  "startConversation": "Започнете разговор и нека магията започне",
+  "checkInternetConnection": "Моля, проверете интернет връзката си",
+  "wasThisHelpful": "Беше ли това полезно?",
+  "thankYouForFeedback": "Благодарим за отзива!",
+  "maxFilesUploadError": "Можете да качите само 4 файла наведнъж",
+  "attachedFiles": "📎 Прикачени файлове",
+  "takePhoto": "Направете снимка",
+  "captureWithCamera": "Заснемане с камера",
+  "selectImages": "Изберете изображения",
+  "chooseFromGallery": "Изберете от галерията",
+  "selectFile": "Изберете файл",
+  "chooseAnyFileType": "Изберете всякакъв тип файл",
+  "cannotReportOwnMessages": "Не можете да докладвате собствените си съобщения",
+  "messageReportedSuccessfully": "✅ Съобщението е докладвано успешно",
+  "confirmReportMessage": "Сигурни ли сте, че искате да докладвате това съобщение?",
+  "selectChatAssistant": "Изберете чат асистент",
+  "enableMoreApps": "Активирайте повече приложения",
+  "chatCleared": "Чатът е изчистен",
+  "clearChatTitle": "Изчистване на чата?",
+  "confirmClearChat": "Сигурни ли сте, че искате да изчистите чата? Това действие не може да бъде отменено."
 }

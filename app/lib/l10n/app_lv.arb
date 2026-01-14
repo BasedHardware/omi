@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Ziņojums nokopēts starpliktuvē.",
+  "messageCopied": "✨ Ziņojums nokopēts starpliktuvē",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Iespējas",
   "noNotificationScopesAvailable": "Paziņojumu tvērumi nav pieejami",
   "popularApps": "Populārākās lietotnes",
-  "pleaseProvidePrompt": "Lūdzu, norādiet uzvedni"
+  "pleaseProvidePrompt": "Lūdzu, norādiet uzvedni",
+  "chatWithAppName": "Tērzēšana ar {appName}",
+  "defaultAiAssistant": "Noklusējuma AI asistents",
+  "readyToChat": "✨ Gatavs tērzēt!",
+  "connectionNeeded": "🌐 Nepieciešams savienojums",
+  "startConversation": "Sāciet sarunu un ļaujiet būt brīnumiem",
+  "checkInternetConnection": "Lūdzu, pārbaudiet interneta savienojumu",
+  "wasThisHelpful": "Vai tas bija noderīgi?",
+  "thankYouForFeedback": "Paldies par atsauksmēm!",
+  "maxFilesUploadError": "Vienlaikus var augšupielādēt tikai 4 failus",
+  "attachedFiles": "📎 Pievienotie faili",
+  "takePhoto": "Uzņemt fotoattēlu",
+  "captureWithCamera": "Uzņemt ar kameru",
+  "selectImages": "Atlasīt attēlus",
+  "chooseFromGallery": "Izvēlieties no galerijas",
+  "selectFile": "Atlasīt failu",
+  "chooseAnyFileType": "Izvēlieties jebkuru faila tipu",
+  "cannotReportOwnMessages": "Jūs nevarat ziņot par saviem ziņojumiem",
+  "messageReportedSuccessfully": "✅ Ziņojums veiksmīgi ziņots",
+  "confirmReportMessage": "Vai tiešām vēlaties ziņot par šo ziņojumu?",
+  "selectChatAssistant": "Izvēlēties tērzēšanas asistentu",
+  "enableMoreApps": "Iespējot vairāk lietotņu",
+  "chatCleared": "Tērzēšana notīrīta",
+  "clearChatTitle": "Notīrīt tērzēšanu?",
+  "confirmClearChat": "Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt."
 }

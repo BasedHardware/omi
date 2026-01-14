@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Mesaj panoya kopyalandı.",
+  "messageCopied": "✨ Mesaj panoya kopyalandı",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2530,5 +2530,29 @@
   "filterCapabilities": "Yetenekler",
   "noNotificationScopesAvailable": "Kullanılabilir bildirim kapsamı yok",
   "popularApps": "Popüler Uygulamalar",
-  "pleaseProvidePrompt": "Lütfen bir istem sağlayın"
+  "pleaseProvidePrompt": "Lütfen bir istem sağlayın",
+  "chatWithAppName": "{appName} ile sohbet",
+  "defaultAiAssistant": "Varsayılan AI Asistanı",
+  "readyToChat": "✨ Sohbete hazır!",
+  "connectionNeeded": "🌐 Bağlantı gerekli",
+  "startConversation": "Bir sohbet başlatın ve büyünün başlamasına izin verin",
+  "checkInternetConnection": "Lütfen internet bağlantınızı kontrol edin",
+  "wasThisHelpful": "Bu yardımcı oldu mu?",
+  "thankYouForFeedback": "Geri bildiriminiz için teşekkürler!",
+  "maxFilesUploadError": "Aynı anda yalnızca 4 dosya yükleyebilirsiniz",
+  "attachedFiles": "📎 Ekli Dosyalar",
+  "takePhoto": "Fotoğraf Çek",
+  "captureWithCamera": "Kamera ile yakala",
+  "selectImages": "Görsel Seç",
+  "chooseFromGallery": "Galeriden seç",
+  "selectFile": "Dosya Seç",
+  "chooseAnyFileType": "Herhangi bir dosya türü seçin",
+  "cannotReportOwnMessages": "Kendi mesajlarınızı bildiremezsiniz",
+  "messageReportedSuccessfully": "✅ Mesaj başarıyla bildirildi",
+  "confirmReportMessage": "Bu mesajı bildirmek istediğinizden emin misiniz?",
+  "selectChatAssistant": "Sohbet Asistanı Seç",
+  "enableMoreApps": "Daha Fazla Uygulama Etkinleştir",
+  "chatCleared": "Sohbet temizlendi",
+  "clearChatTitle": "Sohbeti Temizle?",
+  "confirmClearChat": "Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz."
 }

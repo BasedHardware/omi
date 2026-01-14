@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Повідомлення скопійовано до буфера обміну.",
+  "messageCopied": "✨ Повідомлення скопійовано в буфер обміну",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Поскаржитись на повідомлення",
+  "reportMessage": "Повідомити про повідомлення",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Можливості",
   "noNotificationScopesAvailable": "Немає доступних областей сповіщень",
   "popularApps": "Популярні додатки",
-  "pleaseProvidePrompt": "Будь ласка, надайте запит"
+  "pleaseProvidePrompt": "Будь ласка, надайте запит",
+  "chatWithAppName": "Чат з {appName}",
+  "defaultAiAssistant": "AI-асистент за замовчуванням",
+  "readyToChat": "✨ Готовий до чату!",
+  "connectionNeeded": "🌐 Потрібне підключення",
+  "startConversation": "Почніть розмову і дозвольте магії розпочатися",
+  "checkInternetConnection": "Будь ласка, перевірте підключення до Інтернету",
+  "wasThisHelpful": "Чи було це корисно?",
+  "thankYouForFeedback": "Дякуємо за ваш відгук!",
+  "maxFilesUploadError": "Ви можете завантажити лише 4 файли за раз",
+  "attachedFiles": "📎 Прикріплені файли",
+  "takePhoto": "Зробити фото",
+  "captureWithCamera": "Зняти камерою",
+  "selectImages": "Вибрати зображення",
+  "chooseFromGallery": "Вибрати з галереї",
+  "selectFile": "Вибрати файл",
+  "chooseAnyFileType": "Вибрати будь-який тип файлу",
+  "cannotReportOwnMessages": "Ви не можете повідомити про власні повідомлення",
+  "messageReportedSuccessfully": "✅ Повідомлення успішно надіслано",
+  "confirmReportMessage": "Ви впевнені, що хочете повідомити про це повідомлення?",
+  "selectChatAssistant": "Вибрати чат-асистента",
+  "enableMoreApps": "Увімкнути більше додатків",
+  "chatCleared": "Чат очищено",
+  "clearChatTitle": "Очистити чат?",
+  "confirmClearChat": "Ви впевнені, що хочете очистити чат? Цю дію не можна скасувати."
 }

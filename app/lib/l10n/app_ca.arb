@@ -347,11 +347,11 @@
   "@noMessagesYet": {
     "description": "Empty chat state message"
   },
-  "deletingMessages": "Eliminant els vostres missatges de la memòria d'Omi...",
+  "deletingMessages": "Suprimint els teus missatges de la memòria d'Omi...",
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Missatge copiat al porta-retalls.",
+  "messageCopied": "✨ Missatge copiat al porta-retalls",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -359,7 +359,7 @@
   "@cannotReportOwnMessage": {
     "description": "Error when trying to report own message"
   },
-  "reportMessage": "Denunciar missatge",
+  "reportMessage": "Informar del missatge",
   "@reportMessage": {
     "description": "Report message dialog title"
   },
@@ -2566,5 +2566,29 @@
   "filterCapabilities": "Capacitats",
   "noNotificationScopesAvailable": "No hi ha àmbits de notificació disponibles",
   "popularApps": "Aplicacions populars",
-  "pleaseProvidePrompt": "Si us plau, proporcioneu una indicació"
+  "pleaseProvidePrompt": "Si us plau, proporcioneu una indicació",
+  "chatWithAppName": "Xat amb {appName}",
+  "defaultAiAssistant": "Assistent d'IA per defecte",
+  "readyToChat": "✨ Llest per xatejar!",
+  "connectionNeeded": "🌐 Connexió necessària",
+  "startConversation": "Comença una conversa i deixa que la màgia comenci",
+  "checkInternetConnection": "Si us plau, comprova la teva connexió a Internet",
+  "wasThisHelpful": "Ha estat útil?",
+  "thankYouForFeedback": "Gràcies pels teus comentaris!",
+  "maxFilesUploadError": "Només pots pujar 4 fitxers a la vegada",
+  "attachedFiles": "📎 Fitxers adjunts",
+  "takePhoto": "Fer una foto",
+  "captureWithCamera": "Capturar amb la càmera",
+  "selectImages": "Seleccionar imatges",
+  "chooseFromGallery": "Triar de la galeria",
+  "selectFile": "Seleccionar un fitxer",
+  "chooseAnyFileType": "Triar qualsevol tipus de fitxer",
+  "cannotReportOwnMessages": "No pots informar dels teus propis missatges",
+  "messageReportedSuccessfully": "✅ Missatge informat correctament",
+  "confirmReportMessage": "Estàs segur que vols informar d'aquest missatge?",
+  "selectChatAssistant": "Seleccionar assistent de xat",
+  "enableMoreApps": "Activar més aplicacions",
+  "chatCleared": "Xat esborrat",
+  "clearChatTitle": "Esborrar el xat?",
+  "confirmClearChat": "Estàs segur que vols esborrar el xat? Aquesta acció no es pot desfer."
 }

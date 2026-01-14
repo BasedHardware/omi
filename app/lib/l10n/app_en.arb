@@ -349,11 +349,11 @@
   },
   "deletingMessages": "Deleting your messages from Omi's memory...",
   "@deletingMessages": {
-    "description": "Loading text while clearing chat"
+    "description": "Loading text when clearing chat"
   },
-  "messageCopied": "Message copied to clipboard.",
+  "messageCopied": "✨ Message copied to clipboard",
   "@messageCopied": {
-    "description": "Snackbar after copying message"
+    "description": "Snackbar message for copied text"
   },
   "cannotReportOwnMessage": "You cannot report your own messages.",
   "@cannotReportOwnMessage": {
@@ -361,7 +361,7 @@
   },
   "reportMessage": "Report Message",
   "@reportMessage": {
-    "description": "Report message dialog title"
+    "description": "Report dialog title"
   },
   "reportMessageConfirm": "Are you sure you want to report this message?",
   "@reportMessageConfirm": {
@@ -3537,5 +3537,106 @@
   "pleaseProvidePrompt": "Please provide a prompt",
   "@pleaseProvidePrompt": {
     "description": "Validation error when prompt text field is empty"
+  },
+  "chatWithAppName": "Chat with {appName}",
+  "@chatWithAppName": {
+    "description": "Chat subtitle with app name",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultAiAssistant": "Default AI Assistant",
+  "@defaultAiAssistant": {
+    "description": "Label for default AI assistant"
+  },
+  "readyToChat": "✨ Ready to chat!",
+  "@readyToChat": {
+    "description": "Empty state title when connected"
+  },
+  "connectionNeeded": "🌐 Connection needed",
+  "@connectionNeeded": {
+    "description": "Empty state title when not connected"
+  },
+  "startConversation": "Start a conversation and let the magic begin",
+  "@startConversation": {
+    "description": "Empty state subtitle when connected"
+  },
+  "checkInternetConnection": "Please check your internet connection",
+  "@checkInternetConnection": {
+    "description": "Empty state subtitle when not connected"
+  },
+  "wasThisHelpful": "Was this helpful?",
+  "@wasThisHelpful": {
+    "description": "NPS feedback prompt"
+  },
+  "thankYouForFeedback": "Thank you for your feedback!",
+  "@thankYouForFeedback": {
+    "description": "Feedback confirmation message"
+  },
+  "maxFilesUploadError": "You can only upload 4 files at a time",
+  "@maxFilesUploadError": {
+    "description": "Error message for file upload limit"
+  },
+  "attachedFiles": "📎 Attached Files",
+  "@attachedFiles": {
+    "description": "Label for attached files section"
+  },
+  "takePhoto": "Take a Photo",
+  "@takePhoto": {
+    "description": "File option: take photo"
+  },
+  "captureWithCamera": "Capture with camera",
+  "@captureWithCamera": {
+    "description": "File option: capture with camera subtitle"
+  },
+  "selectImages": "Select Images",
+  "@selectImages": {
+    "description": "File option: select images"
+  },
+  "chooseFromGallery": "Choose from gallery",
+  "@chooseFromGallery": {
+    "description": "File option: choose from gallery subtitle"
+  },
+  "selectFile": "Select a File",
+  "@selectFile": {
+    "description": "File option: select file"
+  },
+  "chooseAnyFileType": "Choose any file type",
+  "@chooseAnyFileType": {
+    "description": "File option: choose any file type subtitle"
+  },
+  "cannotReportOwnMessages": "You cannot report your own messages",
+  "@cannotReportOwnMessages": {
+    "description": "Error when trying to report own message"
+  },
+  "messageReportedSuccessfully": "✅ Message reported successfully",
+  "@messageReportedSuccessfully": {
+    "description": "Success message for reported message"
+  },
+  "confirmReportMessage": "Are you sure you want to report this message?",
+  "@confirmReportMessage": {
+    "description": "Report dialog confirmation text"
+  },
+  "selectChatAssistant": "Select Chat Assistant",
+  "@selectChatAssistant": {
+    "description": "App selection modal title"
+  },
+  "enableMoreApps": "Enable More Apps",
+  "@enableMoreApps": {
+    "description": "Link to enable more apps"
+  },
+  "chatCleared": "Chat cleared",
+  "@chatCleared": {
+    "description": "Snackbar message for cleared chat"
+  },
+  "clearChatTitle": "Clear Chat?",
+  "@clearChatTitle": {
+    "description": "Clear chat dialog title"
+  },
+  "confirmClearChat": "Are you sure you want to clear the chat? This action cannot be undone.",
+  "@confirmClearChat": {
+    "description": "Clear chat confirmation text"
   }
 }

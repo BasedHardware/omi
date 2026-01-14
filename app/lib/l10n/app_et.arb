@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Sõnum kopeeritud lõikelauale.",
+  "messageCopied": "✨ Sõnum kopeeritud lõikelauale",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2548,5 +2548,29 @@
   "filterCapabilities": "Võimed",
   "noNotificationScopesAvailable": "Teatiste ulatusi pole saadaval",
   "popularApps": "Populaarsed rakendused",
-  "pleaseProvidePrompt": "Palun esitage viip"
+  "pleaseProvidePrompt": "Palun esitage viip",
+  "chatWithAppName": "Vestle rakendusega {appName}",
+  "defaultAiAssistant": "Vaikimisi AI abiline",
+  "readyToChat": "✨ Valmis vestluseks!",
+  "connectionNeeded": "🌐 Vajalik ühendus",
+  "startConversation": "Alustage vestlust ja laske maagia alata",
+  "checkInternetConnection": "Palun kontrollige oma internetiühendust",
+  "wasThisHelpful": "Kas see oli kasulik?",
+  "thankYouForFeedback": "Täname tagasiside eest!",
+  "maxFilesUploadError": "Saate üles laadida ainult 4 faili korraga",
+  "attachedFiles": "📎 Lisatud failid",
+  "takePhoto": "Tee foto",
+  "captureWithCamera": "Jäädvusta kaameraga",
+  "selectImages": "Vali pildid",
+  "chooseFromGallery": "Vali galeriist",
+  "selectFile": "Vali fail",
+  "chooseAnyFileType": "Vali mis tahes failitüüp",
+  "cannotReportOwnMessages": "Te ei saa oma sõnumeid teatada",
+  "messageReportedSuccessfully": "✅ Sõnum edukalt teatatud",
+  "confirmReportMessage": "Kas olete kindel, et soovite seda sõnumit teatada?",
+  "selectChatAssistant": "Vali vestlusabiline",
+  "enableMoreApps": "Luba rohkem rakendusi",
+  "chatCleared": "Vestlus kustutatud",
+  "clearChatTitle": "Kustuta vestlus?",
+  "confirmClearChat": "Kas olete kindel, et soovite vestlust kustutada? Seda tegevust ei saa tagasi võtta."
 }

@@ -351,7 +351,7 @@
   "@deletingMessages": {
     "description": "Loading text while clearing chat"
   },
-  "messageCopied": "Zpráva zkopírována do schránky.",
+  "messageCopied": "✨ Zpráva zkopírována do schránky",
   "@messageCopied": {
     "description": "Snackbar after copying message"
   },
@@ -2566,5 +2566,29 @@
   "filterCapabilities": "Funkce",
   "noNotificationScopesAvailable": "Nejsou k dispozici žádné rozsahy oznámení",
   "popularApps": "Oblíbené aplikace",
-  "pleaseProvidePrompt": "Zadejte prosím výzvu"
+  "pleaseProvidePrompt": "Zadejte prosím výzvu",
+  "chatWithAppName": "Chat s {appName}",
+  "defaultAiAssistant": "Výchozí AI asistent",
+  "readyToChat": "✨ Připraven k chatu!",
+  "connectionNeeded": "🌐 Vyžadováno připojení",
+  "startConversation": "Začněte konverzaci a nechte kouzlo začít",
+  "checkInternetConnection": "Zkontrolujte prosím své připojení k internetu",
+  "wasThisHelpful": "Bylo to užitečné?",
+  "thankYouForFeedback": "Děkujeme za zpětnou vazbu!",
+  "maxFilesUploadError": "Můžete nahrát pouze 4 soubory najednou",
+  "attachedFiles": "📎 Připojené soubory",
+  "takePhoto": "Vyfotit",
+  "captureWithCamera": "Zachytit kamerou",
+  "selectImages": "Vybrat obrázky",
+  "chooseFromGallery": "Vybrat z galerie",
+  "selectFile": "Vybrat soubor",
+  "chooseAnyFileType": "Vybrat jakýkoli typ souboru",
+  "cannotReportOwnMessages": "Nemůžete nahlásit vlastní zprávy",
+  "messageReportedSuccessfully": "✅ Zpráva úspěšně nahlášena",
+  "confirmReportMessage": "Opravdu chcete nahlásit tuto zprávu?",
+  "selectChatAssistant": "Vybrat chatovacího asistenta",
+  "enableMoreApps": "Povolit více aplikací",
+  "chatCleared": "Chat vymazán",
+  "clearChatTitle": "Vymazat chat?",
+  "confirmClearChat": "Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět."
 }
