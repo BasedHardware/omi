@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
 import hashlib
 import secrets
+from database.cache import get_memory_cache
 from database.apps import (
     get_private_apps_db,
     get_public_unapproved_apps_db,
@@ -265,15 +266,28 @@ def get_private_apps(uid: str) -> List:
 
 
 def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
+    # Use separate cache keys for with/without reviews
+    cache_key = f'get_public_approved_apps_data:reviews={int(include_reviews)}'
+
+    # Get memory cache instance
+    memory_cache = get_memory_cache()
+
+    # 1. Check in-memory cache first (fastest, <1ms, NO Redis egress)
+    if cached := memory_cache.get(cache_key):
+        print(f'{cache_key} from memory cache')
+        return cached
+
+    # 2. Check Redis cache (existing logic, ~5ms, Redis egress)
     all_apps = []
     if cached_apps := get_generic_cache('get_public_approved_apps_data'):
-        print('get_public_approved_apps_data from cache')
+        print('get_public_approved_apps_data from Redis cache')
         all_apps = cached_apps
-        pass
     else:
+        # 3. Database query (slow, ~50-100ms)
         all_apps = get_public_approved_apps_db()
-        set_generic_cache('get_public_approved_apps_data', all_apps, 60 * 10)  # 10 minutes cached
+        set_generic_cache('get_public_approved_apps_data', all_apps, 30)  # 30 seconds cached
 
+    # Process apps (add installs, reviews, etc.)
     app_ids = [app['id'] for app in all_apps]
     apps_installs = get_apps_installs_count(app_ids)
     apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
@@ -292,6 +306,10 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         apps.append(App(**app_dict))
     if include_reviews:
         apps = sorted(apps, key=weighted_rating, reverse=True)
+
+    # 4. Store in memory cache for next time
+    memory_cache.set(cache_key, apps, ttl=30)
+
     return apps
 
 
