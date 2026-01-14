@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Activați mai multe aplicații",
   "chatCleared": "Chat șters",
   "clearChatTitle": "Ștergeți chatul?",
-  "confirmClearChat": "Sigur doriți să ștergeți chatul? Această acțiune nu poate fi anulată."
+  "confirmClearChat": "Sigur doriți să ștergeți chatul? Această acțiune nu poate fi anulată.",
+  "copy": "Copiază",
+  "share": "Partajează",
+  "report": "Raportează"
 }

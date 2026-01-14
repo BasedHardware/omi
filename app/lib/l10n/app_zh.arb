@@ -996,5 +996,8 @@
   "enableMoreApps": "启用更多应用",
   "chatCleared": "聊天已清除",
   "clearChatTitle": "清除聊天？",
-  "confirmClearChat": "您确定要清除聊天吗？此操作无法撤销。"
+  "confirmClearChat": "您确定要清除聊天吗？此操作无法撤销。",
+  "copy": "复制",
+  "share": "分享",
+  "report": "举报"
 }

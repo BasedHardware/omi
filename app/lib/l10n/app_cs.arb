@@ -2590,5 +2590,8 @@
   "enableMoreApps": "Povolit více aplikací",
   "chatCleared": "Chat vymazán",
   "clearChatTitle": "Vymazat chat?",
-  "confirmClearChat": "Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět."
+  "confirmClearChat": "Opravdu chcete vymazat chat? Tuto akci nelze vrátit zpět.",
+  "copy": "Kopírovat",
+  "share": "Sdílet",
+  "report": "Nahlásit"
 }

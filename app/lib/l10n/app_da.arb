@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Aktiver flere apps",
   "chatCleared": "Chat ryddet",
   "clearChatTitle": "Ryd chat?",
-  "confirmClearChat": "Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes."
+  "confirmClearChat": "Er du sikker på, at du vil rydde chatten? Denne handling kan ikke fortrydes.",
+  "copy": "Kopiér",
+  "share": "Del",
+  "report": "Rapportér"
 }

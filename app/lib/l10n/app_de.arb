@@ -996,5 +996,8 @@
   "enableMoreApps": "Mehr Apps aktivieren",
   "chatCleared": "Chat gelöscht",
   "clearChatTitle": "Chat löschen?",
-  "confirmClearChat": "Möchten Sie den Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+  "confirmClearChat": "Möchten Sie den Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "copy": "Kopieren",
+  "share": "Teilen",
+  "report": "Melden"
 }

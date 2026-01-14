@@ -2319,7 +2319,7 @@
   "pleaseCheckInternetConnection": "Si us plau, comprova la teva connexió a Internet i torna-ho a intentar",
   "pleaseSelectReason": "Si us plau, selecciona un motiu",
   "tellUsMoreWhatWentWrong": "Explica'ns més sobre què va anar malament...",
-  "selectText": "Selecciona text",
+  "selectText": "Seleccionar text",
   "maximumGoalsAllowed": "Màxim {count} objectius permesos",
   "conversationCannotBeMerged": "Aquesta conversa no es pot fusionar (bloquejada o ja en procés de fusió)",
   "pleaseEnterFolderName": "Si us plau, introdueix un nom de carpeta",
@@ -2590,5 +2590,8 @@
   "enableMoreApps": "Activar més aplicacions",
   "chatCleared": "Xat esborrat",
   "clearChatTitle": "Esborrar el xat?",
-  "confirmClearChat": "Estàs segur que vols esborrar el xat? Aquesta acció no es pot desfer."
+  "confirmClearChat": "Estàs segur que vols esborrar el xat? Aquesta acció no es pot desfer.",
+  "copy": "Copiar",
+  "share": "Compartir",
+  "report": "Informar"
 }

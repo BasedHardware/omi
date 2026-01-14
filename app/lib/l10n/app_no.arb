@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Aktiver flere apper",
   "chatCleared": "Chat tømt",
   "clearChatTitle": "Tøm chat?",
-  "confirmClearChat": "Er du sikker på at du vil tømme chatten? Denne handlingen kan ikke angres."
+  "confirmClearChat": "Er du sikker på at du vil tømme chatten? Denne handlingen kan ikke angres.",
+  "copy": "Kopiér",
+  "share": "Del",
+  "report": "Rapporter"
 }

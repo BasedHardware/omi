@@ -2319,7 +2319,7 @@
   "pleaseCheckInternetConnection": "Sila semak sambungan internet anda dan cuba lagi",
   "pleaseSelectReason": "Sila pilih sebab",
   "tellUsMoreWhatWentWrong": "Beritahu kami lebih lanjut tentang apa yang salah...",
-  "selectText": "Pilih teks",
+  "selectText": "Pilih Teks",
   "maximumGoalsAllowed": "Maksimum {count} matlamat dibenarkan",
   "conversationCannotBeMerged": "Perbualan ini tidak boleh digabungkan (dikunci atau sudah digabungkan)",
   "pleaseEnterFolderName": "Sila masukkan nama folder",
@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Dayakan Lebih Banyak Apl",
   "chatCleared": "Sembang dibersihkan",
   "clearChatTitle": "Kosongkan Sembang?",
-  "confirmClearChat": "Adakah anda pasti mahu mengosongkan sembang? Tindakan ini tidak boleh dibatalkan."
+  "confirmClearChat": "Adakah anda pasti mahu mengosongkan sembang? Tindakan ini tidak boleh dibatalkan.",
+  "copy": "Salin",
+  "share": "Kongsi",
+  "report": "Laporkan"
 }

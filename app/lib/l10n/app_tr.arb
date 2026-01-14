@@ -2301,7 +2301,7 @@
   "pleaseCheckInternetConnection": "Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin",
   "pleaseSelectReason": "Lütfen bir neden seçin",
   "tellUsMoreWhatWentWrong": "Neyin yanlış gittiğini bize daha fazla anlatın...",
-  "selectText": "Metni seç",
+  "selectText": "Metin Seç",
   "maximumGoalsAllowed": "Maksimum {count} hedef izin verildi",
   "conversationCannotBeMerged": "Bu konuşma birleştirilemez (kilitli veya zaten birleştiriliyor)",
   "pleaseEnterFolderName": "Lütfen bir klasör adı girin",
@@ -2554,5 +2554,8 @@
   "enableMoreApps": "Daha Fazla Uygulama Etkinleştir",
   "chatCleared": "Sohbet temizlendi",
   "clearChatTitle": "Sohbeti Temizle?",
-  "confirmClearChat": "Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+  "confirmClearChat": "Sohbeti temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+  "copy": "Kopyala",
+  "share": "Paylaş",
+  "report": "Bildir"
 }

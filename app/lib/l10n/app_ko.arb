@@ -2572,5 +2572,8 @@
   "enableMoreApps": "더 많은 앱 활성화",
   "chatCleared": "채팅이 삭제되었습니다",
   "clearChatTitle": "채팅 삭제?",
-  "confirmClearChat": "채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
+  "confirmClearChat": "채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "copy": "복사",
+  "share": "공유",
+  "report": "신고"
 }

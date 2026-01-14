@@ -975,5 +975,8 @@
   "enableMoreApps": "さらにアプリを有効にする",
   "chatCleared": "チャットをクリアしました",
   "clearChatTitle": "チャットをクリア？",
-  "confirmClearChat": "チャットをクリアしてもよろしいですか？この操作は元に戻せません。"
+  "confirmClearChat": "チャットをクリアしてもよろしいですか？この操作は元に戻せません。",
+  "copy": "コピー",
+  "share": "共有",
+  "report": "報告"
 }

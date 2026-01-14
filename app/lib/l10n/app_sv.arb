@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Aktivera fler appar",
   "chatCleared": "Chatt rensad",
   "clearChatTitle": "Rensa chatt?",
-  "confirmClearChat": "Är du säker på att du vill rensa chatten? Denna åtgärd kan inte ångras."
+  "confirmClearChat": "Är du säker på att du vill rensa chatten? Denna åtgärd kan inte ångras.",
+  "copy": "Kopiera",
+  "share": "Dela",
+  "report": "Rapportera"
 }

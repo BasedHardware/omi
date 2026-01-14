@@ -996,5 +996,8 @@
   "enableMoreApps": "Ativar mais aplicativos",
   "chatCleared": "Chat limpo",
   "clearChatTitle": "Limpar chat?",
-  "confirmClearChat": "Tem certeza de que deseja limpar o chat? Esta ação não pode ser desfeita."
+  "confirmClearChat": "Tem certeza de que deseja limpar o chat? Esta ação não pode ser desfeita.",
+  "copy": "Copiar",
+  "share": "Compartilhar",
+  "report": "Denunciar"
 }

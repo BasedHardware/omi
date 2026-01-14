@@ -2554,5 +2554,8 @@
   "enableMoreApps": "Abilita più app",
   "chatCleared": "Chat cancellata",
   "clearChatTitle": "Cancellare la chat?",
-  "confirmClearChat": "Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata."
+  "confirmClearChat": "Sei sicuro di voler cancellare la chat? Questa azione non può essere annullata.",
+  "copy": "Copia",
+  "share": "Condividi",
+  "report": "Segnala"
 }

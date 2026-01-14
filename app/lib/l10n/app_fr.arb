@@ -1374,5 +1374,8 @@
   "enableMoreApps": "Activer plus d'applications",
   "chatCleared": "Chat effacé",
   "clearChatTitle": "Effacer le chat ?",
-  "confirmClearChat": "Êtes-vous sûr de vouloir effacer le chat ? Cette action ne peut pas être annulée."
+  "confirmClearChat": "Êtes-vous sûr de vouloir effacer le chat ? Cette action ne peut pas être annulée.",
+  "copy": "Copier",
+  "share": "Partager",
+  "report": "Signaler"
 }

@@ -996,5 +996,8 @@
   "enableMoreApps": "Habilitar más aplicaciones",
   "chatCleared": "Chat borrado",
   "clearChatTitle": "¿Borrar chat?",
-  "confirmClearChat": "¿Estás seguro de que quieres borrar el chat? Esta acción no se puede deshacer."
+  "confirmClearChat": "¿Estás seguro de que quieres borrar el chat? Esta acción no se puede deshacer.",
+  "copy": "Copiar",
+  "share": "Compartir",
+  "report": "Reportar"
 }

@@ -2319,7 +2319,7 @@
   "pleaseCheckInternetConnection": "Sprawdź połączenie internetowe i spróbuj ponownie",
   "pleaseSelectReason": "Wybierz przyczynę",
   "tellUsMoreWhatWentWrong": "Powiedz nam więcej o tym, co poszło nie tak...",
-  "selectText": "Zaznacz tekst",
+  "selectText": "Wybierz tekst",
   "maximumGoalsAllowed": "Maksymalnie {count} celów dozwolonych",
   "conversationCannotBeMerged": "Ta rozmowa nie może zostać scalona (zablokowana lub już scalana)",
   "pleaseEnterFolderName": "Wprowadź nazwę folderu",
@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Włącz więcej aplikacji",
   "chatCleared": "Czat wyczyszczony",
   "clearChatTitle": "Wyczyścić czat?",
-  "confirmClearChat": "Czy na pewno chcesz wyczyścić czat? Tej akcji nie można cofnąć."
+  "confirmClearChat": "Czy na pewno chcesz wyczyścić czat? Tej akcji nie można cofnąć.",
+  "copy": "Kopiuj",
+  "share": "Udostępnij",
+  "report": "Zgłoś"
 }

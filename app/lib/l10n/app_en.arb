@@ -2345,7 +2345,7 @@
   },
   "selectText": "Select Text",
   "@selectText": {
-    "description": "Title for screen where user can select and copy text from a message"
+    "description": "Button to select text from message"
   },
   "maximumGoalsAllowed": "Maximum {count} goals allowed",
   "@maximumGoalsAllowed": {
@@ -3638,5 +3638,17 @@
   "confirmClearChat": "Are you sure you want to clear the chat? This action cannot be undone.",
   "@confirmClearChat": {
     "description": "Clear chat confirmation text"
+  },
+  "copy": "Copy",
+  "@copy": {
+    "description": "Button to copy message text"
+  },
+  "share": "Share",
+  "@share": {
+    "description": "Button to share message"
+  },
+  "report": "Report",
+  "@report": {
+    "description": "Button to report message"
   }
 }

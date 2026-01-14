@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Bật thêm ứng dụng",
   "chatCleared": "Đã xóa cuộc trò chuyện",
   "clearChatTitle": "Xóa cuộc trò chuyện?",
-  "confirmClearChat": "Bạn có chắc chắn muốn xóa cuộc trò chuyện không? Hành động này không thể hoàn tác."
+  "confirmClearChat": "Bạn có chắc chắn muốn xóa cuộc trò chuyện không? Hành động này không thể hoàn tác.",
+  "copy": "Sao chép",
+  "share": "Chia sẻ",
+  "report": "Báo cáo"
 }

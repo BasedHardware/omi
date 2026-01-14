@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Luba rohkem rakendusi",
   "chatCleared": "Vestlus kustutatud",
   "clearChatTitle": "Kustuta vestlus?",
-  "confirmClearChat": "Kas olete kindel, et soovite vestlust kustutada? Seda tegevust ei saa tagasi võtta."
+  "confirmClearChat": "Kas olete kindel, et soovite vestlust kustutada? Seda tegevust ei saa tagasi võtta.",
+  "copy": "Kopeeri",
+  "share": "Jaga",
+  "report": "Teata"
 }

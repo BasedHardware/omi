@@ -1374,5 +1374,8 @@
   "enableMoreApps": "Meer apps inschakelen",
   "chatCleared": "Chat gewist",
   "clearChatTitle": "Chat wissen?",
-  "confirmClearChat": "Weet u zeker dat u de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt."
+  "confirmClearChat": "Weet u zeker dat u de chat wilt wissen? Deze actie kan niet ongedaan worden gemaakt.",
+  "copy": "Kopiëren",
+  "share": "Delen",
+  "report": "Melden"
 }

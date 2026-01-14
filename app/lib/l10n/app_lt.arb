@@ -2554,5 +2554,8 @@
   "enableMoreApps": "Įgalinti daugiau programų",
   "chatCleared": "Pokalbis išvalytas",
   "clearChatTitle": "Išvalyti pokalbį?",
-  "confirmClearChat": "Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti."
+  "confirmClearChat": "Ar tikrai norite išvalyti pokalbį? Šio veiksmo negalima atšaukti.",
+  "copy": "Kopijuoti",
+  "share": "Dalintis",
+  "report": "Pranešti"
 }

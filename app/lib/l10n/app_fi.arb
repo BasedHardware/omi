@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Ota käyttöön lisää sovelluksia",
   "chatCleared": "Chat tyhjennetty",
   "clearChatTitle": "Tyhjennä chat?",
-  "confirmClearChat": "Haluatko varmasti tyhjentää chatin? Tätä toimintoa ei voi peruuttaa."
+  "confirmClearChat": "Haluatko varmasti tyhjentää chatin? Tätä toimintoa ei voi peruuttaa.",
+  "copy": "Kopioi",
+  "share": "Jaa",
+  "report": "Raportoi"
 }

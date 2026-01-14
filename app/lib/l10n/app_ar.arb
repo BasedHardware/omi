@@ -2319,7 +2319,7 @@
   "pleaseCheckInternetConnection": "يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى",
   "pleaseSelectReason": "يرجى اختيار سبب",
   "tellUsMoreWhatWentWrong": "أخبرنا المزيد عما حدث خطأ...",
-  "selectText": "اختر النص",
+  "selectText": "تحديد النص",
   "maximumGoalsAllowed": "الحد الأقصى {count} أهداف مسموح به",
   "conversationCannotBeMerged": "لا يمكن دمج هذه المحادثة (مقفلة أو قيد الدمج بالفعل)",
   "pleaseEnterFolderName": "يرجى إدخال اسم المجلد",
@@ -2604,5 +2604,8 @@
   "enableMoreApps": "تفعيل المزيد من التطبيقات",
   "chatCleared": "تم مسح الدردشة",
   "clearChatTitle": "مسح الدردشة؟",
-  "confirmClearChat": "هل أنت متأكد من أنك تريد مسح الدردشة؟ هذا الإجراء لا يمكن التراجع عنه."
+  "confirmClearChat": "هل أنت متأكد من أنك تريد مسح الدردشة؟ هذا الإجراء لا يمكن التراجع عنه.",
+  "copy": "نسخ",
+  "share": "مشاركة",
+  "report": "إبلاغ"
 }

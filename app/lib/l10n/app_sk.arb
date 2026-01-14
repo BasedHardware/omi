@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Povoliť viac aplikácií",
   "chatCleared": "Chat vymazaný",
   "clearChatTitle": "Vymazať chat?",
-  "confirmClearChat": "Naozaj chcete vymazať chat? Túto akciu nemožno vrátiť späť."
+  "confirmClearChat": "Naozaj chcete vymazať chat? Túto akciu nemožno vrátiť späť.",
+  "copy": "Kopírovať",
+  "share": "Zdieľať",
+  "report": "Nahlásiť"
 }

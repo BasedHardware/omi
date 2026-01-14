@@ -2319,7 +2319,7 @@
   "pleaseCheckInternetConnection": "Harap periksa koneksi internet Anda dan coba lagi",
   "pleaseSelectReason": "Harap pilih alasan",
   "tellUsMoreWhatWentWrong": "Beri tahu kami lebih lanjut tentang apa yang salah...",
-  "selectText": "Pilih teks",
+  "selectText": "Pilih Teks",
   "maximumGoalsAllowed": "Maksimal {count} tujuan diizinkan",
   "conversationCannotBeMerged": "Percakapan ini tidak dapat digabung (terkunci atau sudah digabungkan)",
   "pleaseEnterFolderName": "Harap masukkan nama folder",
@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Aktifkan Lebih Banyak Aplikasi",
   "chatCleared": "Obrolan dibersihkan",
   "clearChatTitle": "Hapus Obrolan?",
-  "confirmClearChat": "Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan."
+  "confirmClearChat": "Apakah Anda yakin ingin menghapus obrolan? Tindakan ini tidak dapat dibatalkan.",
+  "copy": "Salin",
+  "share": "Bagikan",
+  "report": "Laporkan"
 }

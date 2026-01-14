@@ -2572,5 +2572,8 @@
   "enableMoreApps": "További alkalmazások engedélyezése",
   "chatCleared": "Chat törölve",
   "clearChatTitle": "Chat törlése?",
-  "confirmClearChat": "Biztosan törölni szeretné a chatet? Ez a művelet nem vonható vissza."
+  "confirmClearChat": "Biztosan törölni szeretné a chatet? Ez a művelet nem vonható vissza.",
+  "copy": "Másolás",
+  "share": "Megosztás",
+  "report": "Jelentés"
 }

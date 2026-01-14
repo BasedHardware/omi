@@ -2572,5 +2572,8 @@
   "enableMoreApps": "Iespējot vairāk lietotņu",
   "chatCleared": "Tērzēšana notīrīta",
   "clearChatTitle": "Notīrīt tērzēšanu?",
-  "confirmClearChat": "Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt."
+  "confirmClearChat": "Vai tiešām vēlaties notīrīt tērzēšanu? Šo darbību nevar atsaukt.",
+  "copy": "Kopēt",
+  "share": "Dalīties",
+  "report": "Ziņot"
 }
