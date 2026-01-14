@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Что мы собираем",
   "dataCollectionMessage": "Продолжая, ваши разговоры, записи и личная информация будут надежно храниться на наших серверах для предоставления аналитики на основе ИИ и включения всех функций приложения.",
   "dataProtection": "Защита данных",
-  "yourDataIsProtected": "Ваши данные защищены и регулируются нашей "
+  "yourDataIsProtected": "Ваши данные защищены и регулируются нашей ",
+  "pleaseSelectYourPrimaryLanguage": "Пожалуйста, выберите ваш основной язык",
+  "chooseYourLanguage": "Выберите ваш язык",
+  "selectPreferredLanguageForBestExperience": "Выберите предпочитаемый язык для наилучшего опыта Omi",
+  "searchLanguages": "Поиск языков...",
+  "continue": "Продолжить",
+  "selectALanguage": "Выберите язык",
+  "tryDifferentSearchTerm": "Попробуйте другой поисковый запрос"
 }

@@ -1199,5 +1199,12 @@
   "whatWeCollect": "我们收集的信息",
   "dataCollectionMessage": "继续即表示您的对话、录音和个人信息将安全地存储在我们的服务器上，以提供 AI 驱动的见解并启用所有应用功能。",
   "dataProtection": "数据保护",
-  "yourDataIsProtected": "您的数据受保护并受我们的"
+  "yourDataIsProtected": "您的数据受保护并受我们的",
+  "pleaseSelectYourPrimaryLanguage": "请选择您的主要语言",
+  "chooseYourLanguage": "选择您的语言",
+  "selectPreferredLanguageForBestExperience": "选择您的首选语言以获得最佳 Omi 体验",
+  "searchLanguages": "搜索语言...",
+  "continue": "继续",
+  "selectALanguage": "选择语言",
+  "tryDifferentSearchTerm": "尝试不同的搜索词"
 }

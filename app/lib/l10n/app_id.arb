@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Atur bahasa Anda untuk transkripsi yang lebih tajam dan pengalaman yang dipersonalisasi.",
   "singleLanguageModeInfo": "Mode Bahasa Tunggal diaktifkan. Terjemahan dinonaktifkan untuk akurasi yang lebih tinggi.",
   "searchLanguageHint": "Cari bahasa berdasarkan nama atau kode",
-  "noLanguagesFound": "Tidak ada bahasa ditemukan",
+  "noLanguagesFound": "Tidak ada bahasa yang ditemukan",
   "skip": "Lewati",
   "languageSetTo": "Bahasa diatur ke {language}",
   "@languageSetTo": {
@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Apa yang kami kumpulkan",
   "dataCollectionMessage": "Dengan melanjutkan, percakapan, rekaman, dan informasi pribadi Anda akan disimpan dengan aman di server kami untuk memberikan wawasan berbasis AI dan mengaktifkan semua fitur aplikasi.",
   "dataProtection": "Perlindungan Data",
-  "yourDataIsProtected": "Data Anda dilindungi dan diatur oleh "
+  "yourDataIsProtected": "Data Anda dilindungi dan diatur oleh ",
+  "pleaseSelectYourPrimaryLanguage": "Silakan pilih bahasa utama Anda",
+  "chooseYourLanguage": "Pilih bahasa Anda",
+  "selectPreferredLanguageForBestExperience": "Pilih bahasa pilihan Anda untuk pengalaman Omi terbaik",
+  "searchLanguages": "Cari bahasa...",
+  "continue": "Lanjutkan",
+  "selectALanguage": "Pilih bahasa",
+  "tryDifferentSearchTerm": "Coba istilah pencarian yang berbeda"
 }

@@ -2752,5 +2752,12 @@
   "whatWeCollect": "สิ่งที่เราเก็บรวบรวม",
   "dataCollectionMessage": "การดำเนินการต่อจะทำให้การสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณถูกเก็บไว้อย่างปลอดภัยบนเซิร์ฟเวอร์ของเราเพื่อมอบข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานคุณสมบัติทั้งหมดของแอป",
   "dataProtection": "การป้องกันข้อมูล",
-  "yourDataIsProtected": "ข้อมูลของคุณได้รับการปกป้องและควบคุมโดย"
+  "yourDataIsProtected": "ข้อมูลของคุณได้รับการปกป้องและควบคุมโดย",
+  "pleaseSelectYourPrimaryLanguage": "กรุณาเลือกภาษาหลักของคุณ",
+  "chooseYourLanguage": "เลือกภาษาของคุณ",
+  "selectPreferredLanguageForBestExperience": "เลือกภาษาที่คุณต้องการสำหรับประสบการณ์ Omi ที่ดีที่สุด",
+  "searchLanguages": "ค้นหาภาษา...",
+  "continue": "ดำเนินการต่อ",
+  "selectALanguage": "เลือกภาษา",
+  "tryDifferentSearchTerm": "ลองใช้คำค้นหาอื่น"
 }

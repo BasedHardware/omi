@@ -10,10 +10,11 @@ Strategy: Prioritize small/medium files, defer large files
 
 OVERALL STATISTICS
 ------------------
-Files Completed: 31
+Files Completed: 32
+Files Skipped (Internal): 2
 Files Skipped (Large): 3
-Total Keys Added: 304
-Total Translations: 10,336 (304 keys × 34 languages)
+Total Keys Added: 320
+Total Translations: 10,880 (320 keys × 34 languages)
 
 ================================================================================
 COMPLETED FILES
@@ -416,6 +417,36 @@ Notes: Localized memory management dialog including header, statistics labels,
        widgets to support dynamic l10n values.
 Commit: 56f775dff
 
+FILE 60: desktop_auth_screen.dart
+----------------------------------
+Location: app/lib/desktop/pages/onboarding/screens/
+Keys Added: 16
+Keys: welcomeToOmi, personalGrowthJourney, continueWithApple, continueWithGoogle,
+      byContinuingYouAgree, termsOfService, and, privacyPolicy, dataAndPrivacy,
+      secureAuthViaAppleId, secureAuthViaGoogleAccount, whatWeCollect,
+      dataCollectionMessage, dataProtection, yourDataIsProtected, cancel
+Script: /tmp/translate_auth_screen_keys.py
+Status: ✅ COMPLETED
+Notes: Localized authentication screen including main screen text, sign-in button
+       labels, terms agreement, consent dialog with data collection and protection
+       sections. Dynamic strings for Apple/Google auth methods handled with ternary
+       operators. Reused existing keys (termsOfService, privacyPolicy, and, cancel).
+Commit: c06aa88ac
+
+desktop_onboarding_wrapper.dart
+--------------------------------
+Location: app/lib/desktop/pages/onboarding/
+Status: ⏭️ SKIPPED - No user-facing strings
+Notes: Contains only internal step metadata (_steps list) that is not displayed to
+       users. No localization required.
+
+desktop_device_screen.dart
+--------------------------
+Location: app/lib/desktop/pages/onboarding/screens/
+Status: ⏭️ SKIPPED - Entire file commented out
+Notes: All code is commented out (480 lines). Not in active use. No localization
+       required.
+
 ================================================================================
 SKIPPED FILES (LARGE - TO BE COMPLETED LATER)
 ================================================================================
@@ -617,6 +648,6 @@ echo "✅ Translated <feature> keys for all 34 languages!"
 END OF PROGRESS TRACKER
 ================================================================================
 Last Updated: 2026-01-14
-Last Completed: FILE 59 - desktop_memory_management_dialog.dart (16 keys, 544 translations)
-Previous Completed: FILE 58 - desktop_memory_item.dart (4 keys, 136 translations)
+Last Completed: FILE 60 - desktop_auth_screen.dart (16 keys, 544 translations)
+Previous Completed: FILE 59 - desktop_memory_management_dialog.dart (16 keys, 544 translations)
 Current Session: [active]

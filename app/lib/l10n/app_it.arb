@@ -2734,5 +2734,12 @@
   "whatWeCollect": "Cosa raccogliamo",
   "dataCollectionMessage": "Continuando, le tue conversazioni, registrazioni e informazioni personali verranno archiviate in modo sicuro sui nostri server per fornire informazioni basate sull'IA e abilitare tutte le funzionalità dell'app.",
   "dataProtection": "Protezione dei dati",
-  "yourDataIsProtected": "I tuoi dati sono protetti e regolati dalla nostra "
+  "yourDataIsProtected": "I tuoi dati sono protetti e regolati dalla nostra ",
+  "pleaseSelectYourPrimaryLanguage": "Seleziona la tua lingua principale",
+  "chooseYourLanguage": "Scegli la tua lingua",
+  "selectPreferredLanguageForBestExperience": "Seleziona la tua lingua preferita per la migliore esperienza Omi",
+  "searchLanguages": "Cerca lingue...",
+  "continue": "Continua",
+  "selectALanguage": "Seleziona una lingua",
+  "tryDifferentSearchTerm": "Prova un termine di ricerca diverso"
 }

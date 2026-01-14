@@ -1178,5 +1178,12 @@
   "whatWeCollect": "収集する情報",
   "dataCollectionMessage": "続行すると、あなたの会話、録音、個人情報は、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にするために、当社のサーバーに安全に保存されます。",
   "dataProtection": "データ保護",
-  "yourDataIsProtected": "あなたのデータは保護され、"
+  "yourDataIsProtected": "あなたのデータは保護され、",
+  "pleaseSelectYourPrimaryLanguage": "主要言語を選択してください",
+  "chooseYourLanguage": "言語を選択",
+  "selectPreferredLanguageForBestExperience": "最高のOmi体験のために優先言語を選択してください",
+  "searchLanguages": "言語を検索...",
+  "continue": "続ける",
+  "selectALanguage": "言語を選択",
+  "tryDifferentSearchTerm": "別の検索語を試してください"
 }

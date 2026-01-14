@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Ko mēs vācam",
   "dataCollectionMessage": "Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros, lai sniegtu AI vadītu ieskatu un iespējotu visas lietotnes funkcijas.",
   "dataProtection": "Datu aizsardzība",
-  "yourDataIsProtected": "Jūsu dati ir aizsargāti un regulēti ar mūsu "
+  "yourDataIsProtected": "Jūsu dati ir aizsargāti un regulēti ar mūsu ",
+  "pleaseSelectYourPrimaryLanguage": "Lūdzu, izvēlieties savu primāro valodu",
+  "chooseYourLanguage": "Izvēlieties savu valodu",
+  "selectPreferredLanguageForBestExperience": "Izvēlieties vēlamo valodu labākajai Omi pieredzei",
+  "searchLanguages": "Meklēt valodas...",
+  "continue": "Turpināt",
+  "selectALanguage": "Izvēlieties valodu",
+  "tryDifferentSearchTerm": "Mēģiniet citu meklēšanas terminu"
 }

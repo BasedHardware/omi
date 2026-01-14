@@ -1199,5 +1199,12 @@
   "whatWeCollect": "O que coletamos",
   "dataCollectionMessage": "Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores para fornecer insights alimentados por IA e habilitar todos os recursos do aplicativo.",
   "dataProtection": "Proteção de dados",
-  "yourDataIsProtected": "Seus dados são protegidos e regidos por nossa "
+  "yourDataIsProtected": "Seus dados são protegidos e regidos por nossa ",
+  "pleaseSelectYourPrimaryLanguage": "Por favor, selecione o seu idioma principal",
+  "chooseYourLanguage": "Escolha o seu idioma",
+  "selectPreferredLanguageForBestExperience": "Selecione o seu idioma preferido para a melhor experiência Omi",
+  "searchLanguages": "Pesquisar idiomas...",
+  "continue": "Continuar",
+  "selectALanguage": "Selecione um idioma",
+  "tryDifferentSearchTerm": "Tente um termo de pesquisa diferente"
 }

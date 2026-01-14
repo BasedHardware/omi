@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Setează limba pentru transcrieri mai precise și o experiență personalizată.",
   "singleLanguageModeInfo": "Modul limbă unică este activat. Traducerea este dezactivată pentru o acuratețe mai mare.",
   "searchLanguageHint": "Search language by name or code",
-  "noLanguagesFound": "No languages found",
+  "noLanguagesFound": "Nu s-au găsit limbi",
   "skip": "Omite",
   "languageSetTo": "Limba setată la {language}",
   "@languageSetTo": {
@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Ce colectăm",
   "dataCollectionMessage": "Continuând, conversațiile, înregistrările și informațiile personale vor fi stocate în siguranță pe serverele noastre pentru a oferi informații alimentate de AI și a activa toate funcțiile aplicației.",
   "dataProtection": "Protecția datelor",
-  "yourDataIsProtected": "Datele tale sunt protejate și guvernate de "
+  "yourDataIsProtected": "Datele tale sunt protejate și guvernate de ",
+  "pleaseSelectYourPrimaryLanguage": "Vă rugăm să selectați limba principală",
+  "chooseYourLanguage": "Alegeți limba dvs.",
+  "selectPreferredLanguageForBestExperience": "Selectați limba preferată pentru cea mai bună experiență Omi",
+  "searchLanguages": "Căutați limbi...",
+  "continue": "Continuați",
+  "selectALanguage": "Selectați o limbă",
+  "tryDifferentSearchTerm": "Încercați un alt termen de căutare"
 }

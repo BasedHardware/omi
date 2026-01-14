@@ -1199,5 +1199,12 @@
   "whatWeCollect": "हम क्या एकत्र करते हैं",
   "dataCollectionMessage": "जारी रखने से, आपकी बातचीत, रिकॉर्डिंग और व्यक्तिगत जानकारी AI-संचालित अंतर्दृष्टि प्रदान करने और सभी ऐप सुविधाओं को सक्षम करने के लिए हमारे सर्वर पर सुरक्षित रूप से संग्रहीत की जाएगी।",
   "dataProtection": "डेटा सुरक्षा",
-  "yourDataIsProtected": "आपका डेटा सुरक्षित है और हमारी "
+  "yourDataIsProtected": "आपका डेटा सुरक्षित है और हमारी ",
+  "pleaseSelectYourPrimaryLanguage": "कृपया अपनी प्राथमिक भाषा चुनें",
+  "chooseYourLanguage": "अपनी भाषा चुनें",
+  "selectPreferredLanguageForBestExperience": "सर्वोत्तम Omi अनुभव के लिए अपनी पसंदीदा भाषा चुनें",
+  "searchLanguages": "भाषाएं खोजें...",
+  "continue": "जारी रखें",
+  "selectALanguage": "एक भाषा चुनें",
+  "tryDifferentSearchTerm": "एक अलग खोज शब्द आज़माएं"
 }

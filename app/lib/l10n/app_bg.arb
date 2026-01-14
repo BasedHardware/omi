@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Задайте вашия език за по-точни транскрипции и персонализирано изживяване.",
   "singleLanguageModeInfo": "Режимът с един език е активиран. Преводът е деактивиран за по-висока точност.",
   "searchLanguageHint": "Търсете език по име или код",
-  "noLanguagesFound": "Не са намерени езици",
+  "noLanguagesFound": "Няма намерени езици",
   "skip": "Пропусни",
   "languageSetTo": "Езикът е зададен на {language}",
   "@languageSetTo": {
@@ -2770,5 +2770,12 @@
   "whatWeCollect": "Какво събираме",
   "dataCollectionMessage": "Продължавайки, вашите разговори, записи и лична информация ще бъдат съхранявани сигурно на нашите сървъри, за да предоставим прозрения, задвижвани от AI, и да активираме всички функции на приложението.",
   "dataProtection": "Защита на данните",
-  "yourDataIsProtected": "Вашите данни са защитени и регулирани от нашата "
+  "yourDataIsProtected": "Вашите данни са защитени и регулирани от нашата ",
+  "pleaseSelectYourPrimaryLanguage": "Моля, изберете основния си език",
+  "chooseYourLanguage": "Изберете вашия език",
+  "selectPreferredLanguageForBestExperience": "Изберете предпочитания език за най-добро Omi изживяване",
+  "searchLanguages": "Търсене на езици...",
+  "continue": "Продължи",
+  "selectALanguage": "Изберете език",
+  "tryDifferentSearchTerm": "Опитайте с различен термин за търсене"
 }

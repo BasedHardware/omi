@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Встановіть свою мову для точнішої транскрипції та персоналізованого досвіду.",
   "singleLanguageModeInfo": "Режим однієї мови увімкнено. Переклад вимкнено для вищої точності.",
   "searchLanguageHint": "Шукайте мову за назвою або кодом",
-  "noLanguagesFound": "Мов не знайдено",
+  "noLanguagesFound": "Мови не знайдені",
   "skip": "Пропустити",
   "languageSetTo": "Мову встановлено на {language}",
   "@languageSetTo": {
@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Що ми збираємо",
   "dataCollectionMessage": "Продовжуючи, ваші розмови, записи та особиста інформація будуть безпечно зберігатися на наших серверах для надання аналітики на основі ШІ та увімкнення всіх функцій додатку.",
   "dataProtection": "Захист даних",
-  "yourDataIsProtected": "Ваші дані захищені та регулюються нашою "
+  "yourDataIsProtected": "Ваші дані захищені та регулюються нашою ",
+  "pleaseSelectYourPrimaryLanguage": "Будь ласка, оберіть вашу основну мову",
+  "chooseYourLanguage": "Оберіть вашу мову",
+  "selectPreferredLanguageForBestExperience": "Оберіть бажану мову для найкращого досвіду Omi",
+  "searchLanguages": "Пошук мов...",
+  "continue": "Продовжити",
+  "selectALanguage": "Оберіть мову",
+  "tryDifferentSearchTerm": "Спробуйте інший пошуковий запит"
 }

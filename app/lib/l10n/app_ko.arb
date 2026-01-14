@@ -2752,5 +2752,12 @@
   "whatWeCollect": "수집하는 정보",
   "dataCollectionMessage": "계속하면 대화, 녹음 및 개인 정보가 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화하기 위해 서버에 안전하게 저장됩니다.",
   "dataProtection": "데이터 보호",
-  "yourDataIsProtected": "귀하의 데이터는 보호되며 "
+  "yourDataIsProtected": "귀하의 데이터는 보호되며 ",
+  "pleaseSelectYourPrimaryLanguage": "기본 언어를 선택하세요",
+  "chooseYourLanguage": "언어를 선택하세요",
+  "selectPreferredLanguageForBestExperience": "최고의 Omi 경험을 위해 선호하는 언어를 선택하세요",
+  "searchLanguages": "언어 검색...",
+  "continue": "계속",
+  "selectALanguage": "언어 선택",
+  "tryDifferentSearchTerm": "다른 검색어를 시도해보세요"
 }

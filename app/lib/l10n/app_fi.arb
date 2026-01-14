@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Mitä keräämme",
   "dataCollectionMessage": "Jatkamalla keskustelusi, tallenteet ja henkilötiedot tallennetaan turvallisesti palvelimillemme tarjotaksemme tekoälyavusteisia näkemyksiä ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.",
   "dataProtection": "Tietosuoja",
-  "yourDataIsProtected": "Tietosi ovat suojattuja ja niitä säätelee "
+  "yourDataIsProtected": "Tietosi ovat suojattuja ja niitä säätelee ",
+  "pleaseSelectYourPrimaryLanguage": "Valitse ensisijainen kielesi",
+  "chooseYourLanguage": "Valitse kielesi",
+  "selectPreferredLanguageForBestExperience": "Valitse suosikkikielesi parhaan Omi-kokemuksen saamiseksi",
+  "searchLanguages": "Hae kieliä...",
+  "continue": "Jatka",
+  "selectALanguage": "Valitse kieli",
+  "tryDifferentSearchTerm": "Kokeile eri hakusanaa"
 }

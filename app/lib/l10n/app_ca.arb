@@ -2770,5 +2770,12 @@
   "whatWeCollect": "Què recopilem",
   "dataCollectionMessage": "En continuar, les teves converses, enregistraments i informació personal s'emmagatzemaran de manera segura als nostres servidors per proporcionar informació impulsada per IA i habilitar totes les funcions de l'aplicació.",
   "dataProtection": "Protecció de dades",
-  "yourDataIsProtected": "Les teves dades estan protegides i regides per la nostra "
+  "yourDataIsProtected": "Les teves dades estan protegides i regides per la nostra ",
+  "pleaseSelectYourPrimaryLanguage": "Si us plau, seleccioneu la vostra llengua principal",
+  "chooseYourLanguage": "Trieu el vostre idioma",
+  "selectPreferredLanguageForBestExperience": "Seleccioneu el vostre idioma preferit per a la millor experiència Omi",
+  "searchLanguages": "Cerca idiomes...",
+  "continue": "Continuar",
+  "selectALanguage": "Seleccioneu un idioma",
+  "tryDifferentSearchTerm": "Proveu un terme de cerca diferent"
 }

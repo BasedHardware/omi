@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Nastavte svoj jazyk pre presnejšie prepisy a personalizovaný zážitok.",
   "singleLanguageModeInfo": "Režim jedného jazyka je povolený. Preklad je vypnutý pre vyššiu presnosť.",
   "searchLanguageHint": "Hľadať jazyk podľa názvu alebo kódu",
-  "noLanguagesFound": "Neboli nájdené žiadne jazyky",
+  "noLanguagesFound": "Nenašli sa žiadne jazyky",
   "skip": "Preskočiť",
   "languageSetTo": "Jazyk bol nastavený na {language}",
   "@languageSetTo": {
@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Čo zbierame",
   "dataCollectionMessage": "Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch, aby poskytli prehľady založené na AI a umožnili všetky funkcie aplikácie.",
   "dataProtection": "Ochrana dát",
-  "yourDataIsProtected": "Vaše dáta sú chránené a riadia sa našimi "
+  "yourDataIsProtected": "Vaše dáta sú chránené a riadia sa našimi ",
+  "pleaseSelectYourPrimaryLanguage": "Prosím vyberte svoj primárny jazyk",
+  "chooseYourLanguage": "Vyberte si svoj jazyk",
+  "selectPreferredLanguageForBestExperience": "Vyberte si preferovaný jazyk pre najlepší Omi zážitok",
+  "searchLanguages": "Hľadať jazyky...",
+  "continue": "Pokračovať",
+  "selectALanguage": "Vyberte jazyk",
+  "tryDifferentSearchTerm": "Skúste iný vyhľadávací výraz"
 }

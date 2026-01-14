@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Những gì chúng tôi thu thập",
   "dataCollectionMessage": "Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi để cung cấp thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.",
   "dataProtection": "Bảo vệ dữ liệu",
-  "yourDataIsProtected": "Dữ liệu của bạn được bảo vệ và quản lý bởi "
+  "yourDataIsProtected": "Dữ liệu của bạn được bảo vệ và quản lý bởi ",
+  "pleaseSelectYourPrimaryLanguage": "Vui lòng chọn ngôn ngữ chính của bạn",
+  "chooseYourLanguage": "Chọn ngôn ngữ của bạn",
+  "selectPreferredLanguageForBestExperience": "Chọn ngôn ngữ ưu tiên của bạn để có trải nghiệm Omi tốt nhất",
+  "searchLanguages": "Tìm kiếm ngôn ngữ...",
+  "continue": "Tiếp tục",
+  "selectALanguage": "Chọn một ngôn ngữ",
+  "tryDifferentSearchTerm": "Thử một từ khóa tìm kiếm khác"
 }

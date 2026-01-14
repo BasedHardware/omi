@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Vad vi samlar in",
   "dataCollectionMessage": "Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar för att tillhandahålla AI-drivna insikter och aktivera alla appfunktioner.",
   "dataProtection": "Dataskydd",
-  "yourDataIsProtected": "Din data är skyddad och styrs av vår "
+  "yourDataIsProtected": "Din data är skyddad och styrs av vår ",
+  "pleaseSelectYourPrimaryLanguage": "Välj ditt primära språk",
+  "chooseYourLanguage": "Välj ditt språk",
+  "selectPreferredLanguageForBestExperience": "Välj ditt föredragna språk för den bästa Omi-upplevelsen",
+  "searchLanguages": "Sök språk...",
+  "continue": "Fortsätt",
+  "selectALanguage": "Välj ett språk",
+  "tryDifferentSearchTerm": "Prova ett annat sökord"
 }

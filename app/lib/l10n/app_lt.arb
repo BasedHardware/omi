@@ -2734,5 +2734,12 @@
   "whatWeCollect": "Ką renkame",
   "dataCollectionMessage": "Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose, kad galėtume teikti AI valdomą įžvalgą ir įgalinti visas programos funkcijas.",
   "dataProtection": "Duomenų apsauga",
-  "yourDataIsProtected": "Jūsų duomenys yra saugomi ir valdomi pagal mūsų "
+  "yourDataIsProtected": "Jūsų duomenys yra saugomi ir valdomi pagal mūsų ",
+  "pleaseSelectYourPrimaryLanguage": "Pasirinkite pagrindinę kalbą",
+  "chooseYourLanguage": "Pasirinkite kalbą",
+  "selectPreferredLanguageForBestExperience": "Pasirinkite pageidaujamą kalbą geriausiam Omi patirčiai",
+  "searchLanguages": "Ieškoti kalbų...",
+  "continue": "Tęsti",
+  "selectALanguage": "Pasirinkite kalbą",
+  "tryDifferentSearchTerm": "Pabandykite kitą paieškos terminą"
 }

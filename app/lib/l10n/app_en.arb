@@ -4004,5 +4004,12 @@
   "yourDataIsProtected": "Your data is protected and governed by our ",
   "@yourDataIsProtected": {
     "description": "First part of data protection text"
-  }
+  },
+  "pleaseSelectYourPrimaryLanguage": "Please select your primary language",
+  "chooseYourLanguage": "Choose your language",
+  "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
+  "searchLanguages": "Search languages...",
+  "continue": "Continue",
+  "selectALanguage": "Select a language",
+  "tryDifferentSearchTerm": "Try a different search term"
 }

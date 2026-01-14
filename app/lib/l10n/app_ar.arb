@@ -2784,5 +2784,12 @@
   "whatWeCollect": "ما نجمعه",
   "dataCollectionMessage": "بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا لتوفير رؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.",
   "dataProtection": "حماية البيانات",
-  "yourDataIsProtected": "بياناتك محمية وتخضع لـ "
+  "yourDataIsProtected": "بياناتك محمية وتخضع لـ ",
+  "pleaseSelectYourPrimaryLanguage": "يرجى تحديد لغتك الأساسية",
+  "chooseYourLanguage": "اختر لغتك",
+  "selectPreferredLanguageForBestExperience": "اختر لغتك المفضلة للحصول على أفضل تجربة Omi",
+  "searchLanguages": "بحث عن اللغات...",
+  "continue": "متابعة",
+  "selectALanguage": "اختر لغة",
+  "tryDifferentSearchTerm": "جرب مصطلح بحث مختلف"
 }

@@ -2734,5 +2734,12 @@
   "whatWeCollect": "Topladıklarımız",
   "dataCollectionMessage": "Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz AI destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için sunucularımızda güvenli bir şekilde saklanacaktır.",
   "dataProtection": "Veri Koruması",
-  "yourDataIsProtected": "Verileriniz korunmaktadır ve "
+  "yourDataIsProtected": "Verileriniz korunmaktadır ve ",
+  "pleaseSelectYourPrimaryLanguage": "Lütfen birincil dilinizi seçin",
+  "chooseYourLanguage": "Dilinizi seçin",
+  "selectPreferredLanguageForBestExperience": "En iyi Omi deneyimi için tercih ettiğiniz dili seçin",
+  "searchLanguages": "Dil ara...",
+  "continue": "Devam et",
+  "selectALanguage": "Bir dil seçin",
+  "tryDifferentSearchTerm": "Farklı bir arama terimi deneyin"
 }

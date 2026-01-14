@@ -1570,5 +1570,12 @@
   "whatWeCollect": "Wat we verzamelen",
   "dataCollectionMessage": "Door door te gaan, worden je gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers om AI-gedreven inzichten te bieden en alle app-functies mogelijk te maken.",
   "dataProtection": "Gegevensbescherming",
-  "yourDataIsProtected": "Je gegevens zijn beschermd en worden beheerst door ons "
+  "yourDataIsProtected": "Je gegevens zijn beschermd en worden beheerst door ons ",
+  "pleaseSelectYourPrimaryLanguage": "Selecteer uw primaire taal",
+  "chooseYourLanguage": "Kies uw taal",
+  "selectPreferredLanguageForBestExperience": "Selecteer uw voorkeurstaal voor de beste Omi-ervaring",
+  "searchLanguages": "Zoek talen...",
+  "continue": "Doorgaan",
+  "selectALanguage": "Selecteer een taal",
+  "tryDifferentSearchTerm": "Probeer een andere zoekterm"
 }

@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Indstil dit sprog for skarpere transskriptioner og en personlig oplevelse.",
   "singleLanguageModeInfo": "Enkeltsprogs-tilstand er aktiveret. Oversættelse er deaktiveret for højere nøjagtighed.",
   "searchLanguageHint": "Search language by name or code",
-  "noLanguagesFound": "No languages found",
+  "noLanguagesFound": "Ingen sprog fundet",
   "skip": "Spring over",
   "languageSetTo": "Sprog indstillet til {language}",
   "@languageSetTo": {
@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Hvad vi indsamler",
   "dataCollectionMessage": "Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere for at levere AI-drevne indsigter og aktivere alle app-funktioner.",
   "dataProtection": "Databeskyttelse",
-  "yourDataIsProtected": "Dine data er beskyttet og styret af vores "
+  "yourDataIsProtected": "Dine data er beskyttet og styret af vores ",
+  "pleaseSelectYourPrimaryLanguage": "Vælg venligst dit primære sprog",
+  "chooseYourLanguage": "Vælg dit sprog",
+  "selectPreferredLanguageForBestExperience": "Vælg dit foretrukne sprog for den bedste Omi-oplevelse",
+  "searchLanguages": "Søg sprog...",
+  "continue": "Fortsæt",
+  "selectALanguage": "Vælg et sprog",
+  "tryDifferentSearchTerm": "Prøv et andet søgeord"
 }

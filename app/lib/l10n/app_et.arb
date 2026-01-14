@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Mida me kogume",
   "dataCollectionMessage": "Jätkates salvestatakse teie vestlused, salvestused ja isikuandmed turvaliselt meie serveritesse, et pakkuda AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
   "dataProtection": "Andmekaitse",
-  "yourDataIsProtected": "Teie andmed on kaitstud ja neid reguleerib meie "
+  "yourDataIsProtected": "Teie andmed on kaitstud ja neid reguleerib meie ",
+  "pleaseSelectYourPrimaryLanguage": "Palun valige oma põhikeel",
+  "chooseYourLanguage": "Valige oma keel",
+  "selectPreferredLanguageForBestExperience": "Valige oma eelistatud keel parima Omi kogemuse jaoks",
+  "searchLanguages": "Otsi keeli...",
+  "continue": "Jätka",
+  "selectALanguage": "Valige keel",
+  "tryDifferentSearchTerm": "Proovige teist otsingusõna"
 }

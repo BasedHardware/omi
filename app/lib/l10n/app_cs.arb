@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Nastavte svůj jazyk pro ostřejší přepisy a personalizovaný zážitek.",
   "singleLanguageModeInfo": "Režim jednoho jazyka je povolen. Překlad je zakázán pro vyšší přesnost.",
   "searchLanguageHint": "Hledat jazyk podle názvu nebo kódu",
-  "noLanguagesFound": "Nenalezeny žádné jazyky",
+  "noLanguagesFound": "Nebyly nalezeny žádné jazyky",
   "skip": "Přeskočit",
   "languageSetTo": "Jazyk nastaven na {language}",
   "@languageSetTo": {
@@ -2770,5 +2770,12 @@
   "whatWeCollect": "Co sbíráme",
   "dataCollectionMessage": "Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech, aby poskytly přehledy založené na AI a umožnily všechny funkce aplikace.",
   "dataProtection": "Ochrana dat",
-  "yourDataIsProtected": "Vaše data jsou chráněna a řídí se našimi "
+  "yourDataIsProtected": "Vaše data jsou chráněna a řídí se našimi ",
+  "pleaseSelectYourPrimaryLanguage": "Prosím vyberte svůj primární jazyk",
+  "chooseYourLanguage": "Vyberte svůj jazyk",
+  "selectPreferredLanguageForBestExperience": "Vyberte si preferovaný jazyk pro nejlepší Omi zážitek",
+  "searchLanguages": "Hledat jazyky...",
+  "continue": "Pokračovat",
+  "selectALanguage": "Vyberte jazyk",
+  "tryDifferentSearchTerm": "Zkuste jiný výraz pro vyhledávání"
 }

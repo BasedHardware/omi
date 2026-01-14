@@ -1334,7 +1334,7 @@
   "languageForTranscription": "Állítsd be a nyelvedet a pontosabb átíráshoz és személyre szabott élményhez.",
   "singleLanguageModeInfo": "Egynyelvű mód engedélyezve. A fordítás ki van kapcsolva a nagyobb pontosság érdekében.",
   "searchLanguageHint": "Keress nyelvet név vagy kód alapján",
-  "noLanguagesFound": "Nem találhatók nyelvek",
+  "noLanguagesFound": "Nem található nyelv",
   "skip": "Kihagyás",
   "languageSetTo": "Nyelv beállítva: {language}",
   "@languageSetTo": {
@@ -2752,5 +2752,12 @@
   "whatWeCollect": "Mit gyűjtünk",
   "dataCollectionMessage": "A folytatással beszélgetéseid, felvételeid és személyes adataid biztonságosan tárolódnak szervereiken, hogy AI-alapú betekintéseket nyújtsunk és engedélyezzük az összes app funkciót.",
   "dataProtection": "Adatvédelem",
-  "yourDataIsProtected": "Adataid védettek és "
+  "yourDataIsProtected": "Adataid védettek és ",
+  "pleaseSelectYourPrimaryLanguage": "Kérjük, válassza ki az elsődleges nyelvét",
+  "chooseYourLanguage": "Válassza ki a nyelvét",
+  "selectPreferredLanguageForBestExperience": "Válassza ki a preferált nyelvét a legjobb Omi élményért",
+  "searchLanguages": "Nyelvek keresése...",
+  "continue": "Folytatás",
+  "selectALanguage": "Válasszon egy nyelvet",
+  "tryDifferentSearchTerm": "Próbáljon ki egy másik keresési kifejezést"
 }
