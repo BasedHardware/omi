@@ -2578,5 +2578,6 @@
   "rating1PlusStars": "1+ نجوم",
   "filterRating": "التقييم",
   "filterCapabilities": "الإمكانيات",
-  "noNotificationScopesAvailable": "لا توجد نطاقات إشعارات متاحة"
+  "noNotificationScopesAvailable": "لا توجد نطاقات إشعارات متاحة",
+  "popularApps": "التطبيقات الشائعة"
 }

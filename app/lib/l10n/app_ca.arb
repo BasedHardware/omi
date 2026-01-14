@@ -2564,5 +2564,6 @@
   "rating1PlusStars": "1+ estrelles",
   "filterRating": "Valoració",
   "filterCapabilities": "Capacitats",
-  "noNotificationScopesAvailable": "No hi ha àmbits de notificació disponibles"
+  "noNotificationScopesAvailable": "No hi ha àmbits de notificació disponibles",
+  "popularApps": "Aplicacions populars"
 }

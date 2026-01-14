@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ αστέρι",
   "filterRating": "Αξιολόγηση",
   "filterCapabilities": "Δυνατότητες",
-  "noNotificationScopesAvailable": "Δεν υπάρχουν διαθέσιμα πεδία ειδοποιήσεων"
+  "noNotificationScopesAvailable": "Δεν υπάρχουν διαθέσιμα πεδία ειδοποιήσεων",
+  "popularApps": "Δημοφιλείς εφαρμογές"
 }

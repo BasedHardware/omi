@@ -1348,5 +1348,6 @@
   "rating1PlusStars": "1+ ster",
   "filterRating": "Beoordeling",
   "filterCapabilities": "Functies",
-  "noNotificationScopesAvailable": "Geen meldingsbereiken beschikbaar"
+  "noNotificationScopesAvailable": "Geen meldingsbereiken beschikbaar",
+  "popularApps": "Populaire apps"
 }

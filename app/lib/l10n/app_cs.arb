@@ -2564,5 +2564,6 @@
   "rating1PlusStars": "1+ hvězdička",
   "filterRating": "Hodnocení",
   "filterCapabilities": "Funkce",
-  "noNotificationScopesAvailable": "Nejsou k dispozici žádné rozsahy oznámení"
+  "noNotificationScopesAvailable": "Nejsou k dispozici žádné rozsahy oznámení",
+  "popularApps": "Oblíbené aplikace"
 }

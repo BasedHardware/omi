@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ stjerner",
   "filterRating": "Bedømmelse",
   "filterCapabilities": "Funktioner",
-  "noNotificationScopesAvailable": "Ingen notifikationsområder tilgængelige"
+  "noNotificationScopesAvailable": "Ingen notifikationsområder tilgængelige",
+  "popularApps": "Populære apps"
 }

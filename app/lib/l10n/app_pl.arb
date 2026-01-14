@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ gwiazdka",
   "filterRating": "Ocena",
   "filterCapabilities": "Funkcje",
-  "noNotificationScopesAvailable": "Brak dostępnych zakresów powiadomień"
+  "noNotificationScopesAvailable": "Brak dostępnych zakresów powiadomień",
+  "popularApps": "Popularne aplikacje"
 }

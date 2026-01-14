@@ -970,5 +970,6 @@
   "rating1PlusStars": "1+ Sterne",
   "filterRating": "Bewertung",
   "filterCapabilities": "Funktionen",
-  "noNotificationScopesAvailable": "Keine Benachrichtigungsbereiche verfügbar"
+  "noNotificationScopesAvailable": "Keine Benachrichtigungsbereiche verfügbar",
+  "popularApps": "Beliebte Apps"
 }

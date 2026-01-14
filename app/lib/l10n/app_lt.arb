@@ -2528,5 +2528,6 @@
   "rating1PlusStars": "1+ žvaigždutė",
   "filterRating": "Įvertinimas",
   "filterCapabilities": "Galimybės",
-  "noNotificationScopesAvailable": "Pranešimų sritys nepasiekiamos"
+  "noNotificationScopesAvailable": "Pranešimų sritys nepasiekiamos",
+  "popularApps": "Populiarios programos"
 }

@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ csillag",
   "filterRating": "Értékelés",
   "filterCapabilities": "Képességek",
-  "noNotificationScopesAvailable": "Nincsenek elérhető értesítési hatókörök"
+  "noNotificationScopesAvailable": "Nincsenek elérhető értesítési hatókörök",
+  "popularApps": "Népszerű alkalmazások"
 }

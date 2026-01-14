@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ stjerne",
   "filterRating": "Vurdering",
   "filterCapabilities": "Funksjoner",
-  "noNotificationScopesAvailable": "Ingen varslingsområder tilgjengelig"
+  "noNotificationScopesAvailable": "Ingen varslingsområder tilgjengelig",
+  "popularApps": "Populære apper"
 }

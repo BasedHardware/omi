@@ -3529,5 +3529,9 @@
   "noNotificationScopesAvailable": "No notification scopes available",
   "@noNotificationScopesAvailable": {
     "description": "Message shown when no notification scopes are available"
+  },
+  "popularApps": "Popular Apps",
+  "@popularApps": {
+    "description": "Section title for popular apps"
   }
 }

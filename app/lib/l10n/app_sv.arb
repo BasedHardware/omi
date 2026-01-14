@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ stjärna",
   "filterRating": "Betyg",
   "filterCapabilities": "Funktioner",
-  "noNotificationScopesAvailable": "Inga aviseringsområden tillgängliga"
+  "noNotificationScopesAvailable": "Inga aviseringsområden tillgängliga",
+  "popularApps": "Populära appar"
 }

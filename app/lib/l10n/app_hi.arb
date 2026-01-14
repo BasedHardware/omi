@@ -970,5 +970,6 @@
   "rating1PlusStars": "1+ सितारा",
   "filterRating": "रेटिंग",
   "filterCapabilities": "क्षमताएं",
-  "noNotificationScopesAvailable": "कोई सूचना स्कोप उपलब्ध नहीं हैं"
+  "noNotificationScopesAvailable": "कोई सूचना स्कोप उपलब्ध नहीं हैं",
+  "popularApps": "लोकप्रिय ऐप्स"
 }

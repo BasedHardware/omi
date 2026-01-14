@@ -1348,5 +1348,6 @@
   "rating1PlusStars": "1+ étoile",
   "filterRating": "Évaluation",
   "filterCapabilities": "Fonctionnalités",
-  "noNotificationScopesAvailable": "Aucun périmètre de notification disponible"
+  "noNotificationScopesAvailable": "Aucun périmètre de notification disponible",
+  "popularApps": "Applications populaires"
 }

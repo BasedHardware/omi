@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ Bintang",
   "filterRating": "Penilaian",
   "filterCapabilities": "Keupayaan",
-  "noNotificationScopesAvailable": "Tiada skop pemberitahuan tersedia"
+  "noNotificationScopesAvailable": "Tiada skop pemberitahuan tersedia",
+  "popularApps": "Aplikasi Popular"
 }

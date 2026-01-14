@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ ดาว",
   "filterRating": "คะแนน",
   "filterCapabilities": "ความสามารถ",
-  "noNotificationScopesAvailable": "ไม่มีขอบเขตการแจ้งเตือนที่พร้อมใช้งาน"
+  "noNotificationScopesAvailable": "ไม่มีขอบเขตการแจ้งเตือนที่พร้อมใช้งาน",
+  "popularApps": "แอปยอดนิยม"
 }

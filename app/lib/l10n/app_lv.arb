@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ zvaigzne",
   "filterRating": "Vērtējums",
   "filterCapabilities": "Iespējas",
-  "noNotificationScopesAvailable": "Paziņojumu tvērumi nav pieejami"
+  "noNotificationScopesAvailable": "Paziņojumu tvērumi nav pieejami",
+  "popularApps": "Populārākās lietotnes"
 }

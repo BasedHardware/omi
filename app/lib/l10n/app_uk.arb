@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ зірка",
   "filterRating": "Рейтинг",
   "filterCapabilities": "Можливості",
-  "noNotificationScopesAvailable": "Немає доступних областей сповіщень"
+  "noNotificationScopesAvailable": "Немає доступних областей сповіщень",
+  "popularApps": "Популярні додатки"
 }

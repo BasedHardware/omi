@@ -970,5 +970,6 @@
   "rating1PlusStars": "1+星",
   "filterRating": "评分",
   "filterCapabilities": "功能",
-  "noNotificationScopesAvailable": "没有可用的通知范围"
+  "noNotificationScopesAvailable": "没有可用的通知范围",
+  "popularApps": "热门应用"
 }

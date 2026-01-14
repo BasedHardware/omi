@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ täht",
   "filterRating": "Hinnang",
   "filterCapabilities": "Võimed",
-  "noNotificationScopesAvailable": "Teatiste ulatusi pole saadaval"
+  "noNotificationScopesAvailable": "Teatiste ulatusi pole saadaval",
+  "popularApps": "Populaarsed rakendused"
 }

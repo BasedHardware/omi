@@ -970,5 +970,6 @@
   "rating1PlusStars": "1+ estrellas",
   "filterRating": "Valoración",
   "filterCapabilities": "Capacidades",
-  "noNotificationScopesAvailable": "No hay ámbitos de notificación disponibles"
+  "noNotificationScopesAvailable": "No hay ámbitos de notificación disponibles",
+  "popularApps": "Aplicaciones populares"
 }

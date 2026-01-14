@@ -970,5 +970,6 @@
   "rating1PlusStars": "1+ estrela",
   "filterRating": "Avaliação",
   "filterCapabilities": "Recursos",
-  "noNotificationScopesAvailable": "Nenhum escopo de notificação disponível"
+  "noNotificationScopesAvailable": "Nenhum escopo de notificação disponível",
+  "popularApps": "Aplicativos populares"
 }

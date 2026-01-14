@@ -2546,5 +2546,6 @@
   "rating1PlusStars": "1+ tähti",
   "filterRating": "Arvostelu",
   "filterCapabilities": "Ominaisuudet",
-  "noNotificationScopesAvailable": "Ilmoitusalueita ei ole saatavilla"
+  "noNotificationScopesAvailable": "Ilmoitusalueita ei ole saatavilla",
+  "popularApps": "Suositut sovellukset"
 }

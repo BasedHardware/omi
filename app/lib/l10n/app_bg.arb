@@ -2564,5 +2564,6 @@
   "rating1PlusStars": "1+ звезди",
   "filterRating": "Оценка",
   "filterCapabilities": "Възможности",
-  "noNotificationScopesAvailable": "Няма налични области за уведомления"
+  "noNotificationScopesAvailable": "Няма налични области за уведомления",
+  "popularApps": "Популярни приложения"
 }

@@ -2528,5 +2528,6 @@
   "rating1PlusStars": "1+ yıldız",
   "filterRating": "Değerlendirme",
   "filterCapabilities": "Yetenekler",
-  "noNotificationScopesAvailable": "Kullanılabilir bildirim kapsamı yok"
+  "noNotificationScopesAvailable": "Kullanılabilir bildirim kapsamı yok",
+  "popularApps": "Popüler Uygulamalar"
 }

@@ -949,5 +949,6 @@
   "rating1PlusStars": "1+つ星",
   "filterRating": "評価",
   "filterCapabilities": "機能",
-  "noNotificationScopesAvailable": "通知スコープが利用できません"
+  "noNotificationScopesAvailable": "通知スコープが利用できません",
+  "popularApps": "人気アプリ"
 }
