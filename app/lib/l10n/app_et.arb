@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Rakenduse kategooria",
   "pricingFree": "Tasuta",
   "pricingPaid": "Tasuline",
-  "loadingCapabilities": "Võimete laadimine..."
+  "loadingCapabilities": "Võimete laadimine...",
+  "filterInstalled": "Paigaldatud",
+  "filterMyApps": "Minu rakendused",
+  "clearSelection": "Tühista valik",
+  "filterCategory": "Kategooria",
+  "rating4PlusStars": "4+ tärni",
+  "rating3PlusStars": "3+ tärni",
+  "rating2PlusStars": "2+ tärni",
+  "rating1PlusStars": "1+ täht",
+  "filterRating": "Hinnang",
+  "filterCapabilities": "Võimed"
 }

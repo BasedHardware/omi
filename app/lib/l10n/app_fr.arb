@@ -1337,5 +1337,15 @@
   "appCategoryModalTitle": "Catégorie de l'application",
   "pricingFree": "Gratuit",
   "pricingPaid": "Payant",
-  "loadingCapabilities": "Chargement des fonctionnalités..."
+  "loadingCapabilities": "Chargement des fonctionnalités...",
+  "filterInstalled": "Installées",
+  "filterMyApps": "Mes applications",
+  "clearSelection": "Effacer la sélection",
+  "filterCategory": "Catégorie",
+  "rating4PlusStars": "4+ étoiles",
+  "rating3PlusStars": "3+ étoiles",
+  "rating2PlusStars": "2+ étoiles",
+  "rating1PlusStars": "1+ étoile",
+  "filterRating": "Évaluation",
+  "filterCapabilities": "Fonctionnalités"
 }

@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Lietotnes kategorija",
   "pricingFree": "Bezmaksas",
   "pricingPaid": "Maksas",
-  "loadingCapabilities": "Ielādē iespējas..."
+  "loadingCapabilities": "Ielādē iespējas...",
+  "filterInstalled": "Instalēts",
+  "filterMyApps": "Manas lietotnes",
+  "clearSelection": "Notīrīt atlasi",
+  "filterCategory": "Kategorija",
+  "rating4PlusStars": "4+ zvaigznes",
+  "rating3PlusStars": "3+ zvaigznes",
+  "rating2PlusStars": "2+ zvaigznes",
+  "rating1PlusStars": "1+ zvaigzne",
+  "filterRating": "Vērtējums",
+  "filterCapabilities": "Iespējas"
 }

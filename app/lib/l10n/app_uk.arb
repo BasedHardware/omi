@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Категорія додатку",
   "pricingFree": "Безкоштовно",
   "pricingPaid": "Платно",
-  "loadingCapabilities": "Завантаження можливостей..."
+  "loadingCapabilities": "Завантаження можливостей...",
+  "filterInstalled": "Встановлено",
+  "filterMyApps": "Мої додатки",
+  "clearSelection": "Очистити вибір",
+  "filterCategory": "Категорія",
+  "rating4PlusStars": "4+ зірки",
+  "rating3PlusStars": "3+ зірки",
+  "rating2PlusStars": "2+ зірки",
+  "rating1PlusStars": "1+ зірка",
+  "filterRating": "Рейтинг",
+  "filterCapabilities": "Можливості"
 }

@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Categoria aplicației",
   "pricingFree": "Gratuit",
   "pricingPaid": "Cu plată",
-  "loadingCapabilities": "Se încarcă capacitățile..."
+  "loadingCapabilities": "Se încarcă capacitățile...",
+  "filterInstalled": "Instalate",
+  "filterMyApps": "Aplicațiile mele",
+  "clearSelection": "Șterge selecția",
+  "filterCategory": "Categorie",
+  "rating4PlusStars": "4+ stele",
+  "rating3PlusStars": "3+ stele",
+  "rating2PlusStars": "2+ stele",
+  "rating1PlusStars": "1+ stea",
+  "filterRating": "Evaluare",
+  "filterCapabilities": "Capacități"
 }

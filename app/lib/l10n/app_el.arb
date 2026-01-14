@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Κατηγορία εφαρμογής",
   "pricingFree": "Δωρεάν",
   "pricingPaid": "Επί πληρωμή",
-  "loadingCapabilities": "Φόρτωση δυνατοτήτων..."
+  "loadingCapabilities": "Φόρτωση δυνατοτήτων...",
+  "filterInstalled": "Εγκατεστημένα",
+  "filterMyApps": "Οι εφαρμογές μου",
+  "clearSelection": "Εκκαθάριση επιλογής",
+  "filterCategory": "Κατηγορία",
+  "rating4PlusStars": "4+ αστέρια",
+  "rating3PlusStars": "3+ αστέρια",
+  "rating2PlusStars": "2+ αστέρια",
+  "rating1PlusStars": "1+ αστέρι",
+  "filterRating": "Αξιολόγηση",
+  "filterCapabilities": "Δυνατότητες"
 }

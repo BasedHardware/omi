@@ -959,5 +959,15 @@
   "appCategoryModalTitle": "应用类别",
   "pricingFree": "免费",
   "pricingPaid": "付费",
-  "loadingCapabilities": "正在加载功能..."
+  "loadingCapabilities": "正在加载功能...",
+  "filterInstalled": "已安装",
+  "filterMyApps": "我的应用",
+  "clearSelection": "清除选择",
+  "filterCategory": "类别",
+  "rating4PlusStars": "4+星",
+  "rating3PlusStars": "3+星",
+  "rating2PlusStars": "2+星",
+  "rating1PlusStars": "1+星",
+  "filterRating": "评分",
+  "filterCapabilities": "功能"
 }

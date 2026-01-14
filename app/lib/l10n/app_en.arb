@@ -3485,5 +3485,45 @@
   "loadingCapabilities": "Loading capabilities...",
   "@loadingCapabilities": {
     "description": "Loading state message while fetching app capabilities"
+  },
+  "filterInstalled": "Installed",
+  "@filterInstalled": {
+    "description": "Filter option for installed apps"
+  },
+  "filterMyApps": "My Apps",
+  "@filterMyApps": {
+    "description": "Filter option for user's own apps"
+  },
+  "clearSelection": "Clear selection",
+  "@clearSelection": {
+    "description": "Option to clear the current filter selection"
+  },
+  "filterCategory": "Category",
+  "@filterCategory": {
+    "description": "Category filter dropdown label"
+  },
+  "rating4PlusStars": "4+ Stars",
+  "@rating4PlusStars": {
+    "description": "Filter for apps with 4 or more stars"
+  },
+  "rating3PlusStars": "3+ Stars",
+  "@rating3PlusStars": {
+    "description": "Filter for apps with 3 or more stars"
+  },
+  "rating2PlusStars": "2+ Stars",
+  "@rating2PlusStars": {
+    "description": "Filter for apps with 2 or more stars"
+  },
+  "rating1PlusStars": "1+ Stars",
+  "@rating1PlusStars": {
+    "description": "Filter for apps with 1 or more stars"
+  },
+  "filterRating": "Rating",
+  "@filterRating": {
+    "description": "Rating filter dropdown label"
+  },
+  "filterCapabilities": "Capabilities",
+  "@filterCapabilities": {
+    "description": "Capabilities filter dropdown label"
   }
 }

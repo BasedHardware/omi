@@ -2553,5 +2553,15 @@
   "appCategoryModalTitle": "Категория на приложението",
   "pricingFree": "Безплатно",
   "pricingPaid": "Платено",
-  "loadingCapabilities": "Зареждане на възможностите..."
+  "loadingCapabilities": "Зареждане на възможностите...",
+  "filterInstalled": "Инсталирани",
+  "filterMyApps": "Моите приложения",
+  "clearSelection": "Изчистване на избора",
+  "filterCategory": "Категория",
+  "rating4PlusStars": "4+ звезди",
+  "rating3PlusStars": "3+ звезди",
+  "rating2PlusStars": "2+ звезди",
+  "rating1PlusStars": "1+ звезди",
+  "filterRating": "Оценка",
+  "filterCapabilities": "Възможности"
 }

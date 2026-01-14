@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Kategori Aplikasi",
   "pricingFree": "Gratis",
   "pricingPaid": "Berbayar",
-  "loadingCapabilities": "Memuat kemampuan..."
+  "loadingCapabilities": "Memuat kemampuan...",
+  "filterInstalled": "Terpasang",
+  "filterMyApps": "Aplikasi Saya",
+  "clearSelection": "Hapus pilihan",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ Bintang",
+  "rating3PlusStars": "3+ Bintang",
+  "rating2PlusStars": "2+ Bintang",
+  "rating1PlusStars": "1+ Bintang",
+  "filterRating": "Penilaian",
+  "filterCapabilities": "Kemampuan"
 }

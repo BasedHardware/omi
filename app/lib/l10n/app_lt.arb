@@ -2517,5 +2517,15 @@
   "appCategoryModalTitle": "Programos kategorija",
   "pricingFree": "Nemokama",
   "pricingPaid": "Mokama",
-  "loadingCapabilities": "Įkeliamos galimybės..."
+  "loadingCapabilities": "Įkeliamos galimybės...",
+  "filterInstalled": "Įdiegta",
+  "filterMyApps": "Mano programos",
+  "clearSelection": "Išvalyti pasirinkimą",
+  "filterCategory": "Kategorija",
+  "rating4PlusStars": "4+ žvaigždutės",
+  "rating3PlusStars": "3+ žvaigždutės",
+  "rating2PlusStars": "2+ žvaigždutės",
+  "rating1PlusStars": "1+ žvaigždutė",
+  "filterRating": "Įvertinimas",
+  "filterCapabilities": "Galimybės"
 }

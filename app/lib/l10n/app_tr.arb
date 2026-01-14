@@ -2517,5 +2517,15 @@
   "appCategoryModalTitle": "Uygulama Kategorisi",
   "pricingFree": "Ücretsiz",
   "pricingPaid": "Ücretli",
-  "loadingCapabilities": "Yetenekler yükleniyor..."
+  "loadingCapabilities": "Yetenekler yükleniyor...",
+  "filterInstalled": "Yüklü",
+  "filterMyApps": "Uygulamalarım",
+  "clearSelection": "Seçimi temizle",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ yıldız",
+  "rating3PlusStars": "3+ yıldız",
+  "rating2PlusStars": "2+ yıldız",
+  "rating1PlusStars": "1+ yıldız",
+  "filterRating": "Değerlendirme",
+  "filterCapabilities": "Yetenekler"
 }

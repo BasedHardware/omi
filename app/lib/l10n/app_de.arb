@@ -959,5 +959,15 @@
   "appCategoryModalTitle": "App-Kategorie",
   "pricingFree": "Kostenlos",
   "pricingPaid": "Kostenpflichtig",
-  "loadingCapabilities": "Funktionen werden geladen..."
+  "loadingCapabilities": "Funktionen werden geladen...",
+  "filterInstalled": "Installiert",
+  "filterMyApps": "Meine Apps",
+  "clearSelection": "Auswahl löschen",
+  "filterCategory": "Kategorie",
+  "rating4PlusStars": "4+ Sterne",
+  "rating3PlusStars": "3+ Sterne",
+  "rating2PlusStars": "2+ Sterne",
+  "rating1PlusStars": "1+ Sterne",
+  "filterRating": "Bewertung",
+  "filterCapabilities": "Funktionen"
 }

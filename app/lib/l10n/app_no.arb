@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "App-kategori",
   "pricingFree": "Gratis",
   "pricingPaid": "Betalt",
-  "loadingCapabilities": "Laster inn funksjoner..."
+  "loadingCapabilities": "Laster inn funksjoner...",
+  "filterInstalled": "Installert",
+  "filterMyApps": "Mine apper",
+  "clearSelection": "Tøm valg",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ stjerner",
+  "rating3PlusStars": "3+ stjerner",
+  "rating2PlusStars": "2+ stjerner",
+  "rating1PlusStars": "1+ stjerne",
+  "filterRating": "Vurdering",
+  "filterCapabilities": "Funksjoner"
 }

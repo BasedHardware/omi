@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Danh mục ứng dụng",
   "pricingFree": "Miễn phí",
   "pricingPaid": "Trả phí",
-  "loadingCapabilities": "Đang tải khả năng..."
+  "loadingCapabilities": "Đang tải khả năng...",
+  "filterInstalled": "Đã cài đặt",
+  "filterMyApps": "Ứng dụng của tôi",
+  "clearSelection": "Xóa lựa chọn",
+  "filterCategory": "Danh mục",
+  "rating4PlusStars": "4+ sao",
+  "rating3PlusStars": "3+ sao",
+  "rating2PlusStars": "2+ sao",
+  "rating1PlusStars": "1+ sao",
+  "filterRating": "Đánh giá",
+  "filterCapabilities": "Khả năng"
 }

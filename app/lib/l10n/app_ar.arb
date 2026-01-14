@@ -2567,5 +2567,15 @@
   "appCategoryModalTitle": "فئة التطبيق",
   "pricingFree": "مجاني",
   "pricingPaid": "مدفوع",
-  "loadingCapabilities": "جارٍ تحميل الإمكانيات..."
+  "loadingCapabilities": "جارٍ تحميل الإمكانيات...",
+  "filterInstalled": "مثبتة",
+  "filterMyApps": "تطبيقاتي",
+  "clearSelection": "مسح الاختيار",
+  "filterCategory": "الفئة",
+  "rating4PlusStars": "4+ نجوم",
+  "rating3PlusStars": "3+ نجوم",
+  "rating2PlusStars": "2+ نجوم",
+  "rating1PlusStars": "1+ نجوم",
+  "filterRating": "التقييم",
+  "filterCapabilities": "الإمكانيات"
 }

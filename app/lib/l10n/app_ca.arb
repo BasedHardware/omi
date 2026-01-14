@@ -2553,5 +2553,15 @@
   "appCategoryModalTitle": "Categoria de l'aplicació",
   "pricingFree": "Gratuït",
   "pricingPaid": "De pagament",
-  "loadingCapabilities": "Carregant capacitats..."
+  "loadingCapabilities": "Carregant capacitats...",
+  "filterInstalled": "Instal·lades",
+  "filterMyApps": "Les meves aplicacions",
+  "clearSelection": "Esborrar selecció",
+  "filterCategory": "Categoria",
+  "rating4PlusStars": "4+ estrelles",
+  "rating3PlusStars": "3+ estrelles",
+  "rating2PlusStars": "2+ estrelles",
+  "rating1PlusStars": "1+ estrelles",
+  "filterRating": "Valoració",
+  "filterCapabilities": "Capacitats"
 }

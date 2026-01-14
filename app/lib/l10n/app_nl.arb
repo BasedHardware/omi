@@ -1337,5 +1337,15 @@
   "appCategoryModalTitle": "App-categorie",
   "pricingFree": "Gratis",
   "pricingPaid": "Betaald",
-  "loadingCapabilities": "Functies laden..."
+  "loadingCapabilities": "Functies laden...",
+  "filterInstalled": "Geïnstalleerd",
+  "filterMyApps": "Mijn apps",
+  "clearSelection": "Selectie wissen",
+  "filterCategory": "Categorie",
+  "rating4PlusStars": "4+ sterren",
+  "rating3PlusStars": "3+ sterren",
+  "rating2PlusStars": "2+ sterren",
+  "rating1PlusStars": "1+ ster",
+  "filterRating": "Beoordeling",
+  "filterCapabilities": "Functies"
 }

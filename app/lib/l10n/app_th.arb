@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "หมวดหมู่แอป",
   "pricingFree": "ฟรี",
   "pricingPaid": "เสียค่าใช้จ่าย",
-  "loadingCapabilities": "กำลังโหลดความสามารถ..."
+  "loadingCapabilities": "กำลังโหลดความสามารถ...",
+  "filterInstalled": "ติดตั้งแล้ว",
+  "filterMyApps": "แอปของฉัน",
+  "clearSelection": "ล้างการเลือก",
+  "filterCategory": "หมวดหมู่",
+  "rating4PlusStars": "4+ ดาว",
+  "rating3PlusStars": "3+ ดาว",
+  "rating2PlusStars": "2+ ดาว",
+  "rating1PlusStars": "1+ ดาว",
+  "filterRating": "คะแนน",
+  "filterCapabilities": "ความสามารถ"
 }

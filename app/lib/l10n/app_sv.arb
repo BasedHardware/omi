@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Appkategori",
   "pricingFree": "Gratis",
   "pricingPaid": "Betald",
-  "loadingCapabilities": "Laddar funktioner..."
+  "loadingCapabilities": "Laddar funktioner...",
+  "filterInstalled": "Installerade",
+  "filterMyApps": "Mina appar",
+  "clearSelection": "Rensa val",
+  "filterCategory": "Kategori",
+  "rating4PlusStars": "4+ stjärnor",
+  "rating3PlusStars": "3+ stjärnor",
+  "rating2PlusStars": "2+ stjärnor",
+  "rating1PlusStars": "1+ stjärna",
+  "filterRating": "Betyg",
+  "filterCapabilities": "Funktioner"
 }

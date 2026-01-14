@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "앱 카테고리",
   "pricingFree": "무료",
   "pricingPaid": "유료",
-  "loadingCapabilities": "기능 로드 중..."
+  "loadingCapabilities": "기능 로드 중...",
+  "filterInstalled": "설치됨",
+  "filterMyApps": "내 앱",
+  "clearSelection": "선택 해제",
+  "filterCategory": "카테고리",
+  "rating4PlusStars": "4+별",
+  "rating3PlusStars": "3+별",
+  "rating2PlusStars": "2+별",
+  "rating1PlusStars": "1+별",
+  "filterRating": "평점",
+  "filterCapabilities": "기능"
 }

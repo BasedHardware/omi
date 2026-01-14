@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Sovelluksen kategoria",
   "pricingFree": "Ilmainen",
   "pricingPaid": "Maksullinen",
-  "loadingCapabilities": "Ladataan ominaisuuksia..."
+  "loadingCapabilities": "Ladataan ominaisuuksia...",
+  "filterInstalled": "Asennettu",
+  "filterMyApps": "Omat sovellukseni",
+  "clearSelection": "Tyhjennä valinta",
+  "filterCategory": "Kategoria",
+  "rating4PlusStars": "4+ tähteä",
+  "rating3PlusStars": "3+ tähteä",
+  "rating2PlusStars": "2+ tähteä",
+  "rating1PlusStars": "1+ tähti",
+  "filterRating": "Arvostelu",
+  "filterCapabilities": "Ominaisuudet"
 }

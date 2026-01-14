@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Kategoria aplikacji",
   "pricingFree": "Bezpłatna",
   "pricingPaid": "Płatna",
-  "loadingCapabilities": "Ładowanie funkcji..."
+  "loadingCapabilities": "Ładowanie funkcji...",
+  "filterInstalled": "Zainstalowane",
+  "filterMyApps": "Moje aplikacje",
+  "clearSelection": "Wyczyść wybór",
+  "filterCategory": "Kategoria",
+  "rating4PlusStars": "4+ gwiazdki",
+  "rating3PlusStars": "3+ gwiazdki",
+  "rating2PlusStars": "2+ gwiazdki",
+  "rating1PlusStars": "1+ gwiazdka",
+  "filterRating": "Ocena",
+  "filterCapabilities": "Funkcje"
 }

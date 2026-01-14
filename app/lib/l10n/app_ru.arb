@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Категория приложения",
   "pricingFree": "Бесплатно",
   "pricingPaid": "Платно",
-  "loadingCapabilities": "Загрузка возможностей..."
+  "loadingCapabilities": "Загрузка возможностей...",
+  "filterInstalled": "Установлено",
+  "filterMyApps": "Мои приложения",
+  "clearSelection": "Очистить выбор",
+  "filterCategory": "Категория",
+  "rating4PlusStars": "4+ звезды",
+  "rating3PlusStars": "3+ звезды",
+  "rating2PlusStars": "2+ звезды",
+  "rating1PlusStars": "1+ звезда",
+  "filterRating": "Рейтинг",
+  "filterCapabilities": "Возможности"
 }

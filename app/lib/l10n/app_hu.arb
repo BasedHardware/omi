@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Alkalmazás kategória",
   "pricingFree": "Ingyenes",
   "pricingPaid": "Fizetős",
-  "loadingCapabilities": "Képességek betöltése..."
+  "loadingCapabilities": "Képességek betöltése...",
+  "filterInstalled": "Telepítve",
+  "filterMyApps": "Saját alkalmazásaim",
+  "clearSelection": "Kijelölés törlése",
+  "filterCategory": "Kategória",
+  "rating4PlusStars": "4+ csillag",
+  "rating3PlusStars": "3+ csillag",
+  "rating2PlusStars": "2+ csillag",
+  "rating1PlusStars": "1+ csillag",
+  "filterRating": "Értékelés",
+  "filterCapabilities": "Képességek"
 }

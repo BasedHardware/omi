@@ -2553,5 +2553,15 @@
   "appCategoryModalTitle": "Kategorie aplikace",
   "pricingFree": "Zdarma",
   "pricingPaid": "Placené",
-  "loadingCapabilities": "Načítání funkcí..."
+  "loadingCapabilities": "Načítání funkcí...",
+  "filterInstalled": "Nainstalováno",
+  "filterMyApps": "Moje aplikace",
+  "clearSelection": "Vymazat výběr",
+  "filterCategory": "Kategorie",
+  "rating4PlusStars": "4+ hvězdiček",
+  "rating3PlusStars": "3+ hvězdiček",
+  "rating2PlusStars": "2+ hvězdiček",
+  "rating1PlusStars": "1+ hvězdička",
+  "filterRating": "Hodnocení",
+  "filterCapabilities": "Funkce"
 }

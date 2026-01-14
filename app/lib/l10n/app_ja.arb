@@ -938,5 +938,15 @@
   "appCategoryModalTitle": "アプリカテゴリ",
   "pricingFree": "無料",
   "pricingPaid": "有料",
-  "loadingCapabilities": "機能を読み込み中..."
+  "loadingCapabilities": "機能を読み込み中...",
+  "filterInstalled": "インストール済み",
+  "filterMyApps": "マイアプリ",
+  "clearSelection": "選択をクリア",
+  "filterCategory": "カテゴリ",
+  "rating4PlusStars": "4+つ星",
+  "rating3PlusStars": "3+つ星",
+  "rating2PlusStars": "2+つ星",
+  "rating1PlusStars": "1+つ星",
+  "filterRating": "評価",
+  "filterCapabilities": "機能"
 }

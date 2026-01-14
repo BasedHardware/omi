@@ -959,5 +959,15 @@
   "appCategoryModalTitle": "ऐप श्रेणी",
   "pricingFree": "मुफ़्त",
   "pricingPaid": "सशुल्क",
-  "loadingCapabilities": "क्षमताएं लोड हो रही हैं..."
+  "loadingCapabilities": "क्षमताएं लोड हो रही हैं...",
+  "filterInstalled": "इंस्टॉल किया गया",
+  "filterMyApps": "मेरे ऐप्स",
+  "clearSelection": "चयन साफ़ करें",
+  "filterCategory": "श्रेणी",
+  "rating4PlusStars": "4+ सितारे",
+  "rating3PlusStars": "3+ सितारे",
+  "rating2PlusStars": "2+ सितारे",
+  "rating1PlusStars": "1+ सितारा",
+  "filterRating": "रेटिंग",
+  "filterCapabilities": "क्षमताएं"
 }

@@ -959,5 +959,15 @@
   "appCategoryModalTitle": "Categoría de la aplicación",
   "pricingFree": "Gratis",
   "pricingPaid": "De pago",
-  "loadingCapabilities": "Cargando capacidades..."
+  "loadingCapabilities": "Cargando capacidades...",
+  "filterInstalled": "Instaladas",
+  "filterMyApps": "Mis aplicaciones",
+  "clearSelection": "Borrar selección",
+  "filterCategory": "Categoría",
+  "rating4PlusStars": "4+ estrellas",
+  "rating3PlusStars": "3+ estrellas",
+  "rating2PlusStars": "2+ estrellas",
+  "rating1PlusStars": "1+ estrellas",
+  "filterRating": "Valoración",
+  "filterCapabilities": "Capacidades"
 }

@@ -2535,5 +2535,15 @@
   "appCategoryModalTitle": "Kategória aplikácie",
   "pricingFree": "Zadarmo",
   "pricingPaid": "Platené",
-  "loadingCapabilities": "Načítavajú sa funkcie..."
+  "loadingCapabilities": "Načítavajú sa funkcie...",
+  "filterInstalled": "Nainštalované",
+  "filterMyApps": "Moje aplikácie",
+  "clearSelection": "Vymazať výber",
+  "filterCategory": "Kategória",
+  "rating4PlusStars": "4+ hviezdičiek",
+  "rating3PlusStars": "3+ hviezdičiek",
+  "rating2PlusStars": "2+ hviezdičiek",
+  "rating1PlusStars": "1+ hviezdička",
+  "filterRating": "Hodnotenie",
+  "filterCapabilities": "Funkcie"
 }
