@@ -139,6 +139,10 @@ workflows:
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
 
+          # Debug: Check if watch app is in archive
+          echo "=== Checking archive contents ==="
+          ls -la build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Watch/ 2>/dev/null || echo "NO WATCH FOLDER IN ARCHIVE"
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
