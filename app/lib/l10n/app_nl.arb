@@ -1321,5 +1321,20 @@
   "ratingsCount": "{count}+ beoordelingen",
   "errorActivatingApp": "Fout bij activeren van de app",
   "integrationSetupRequired": "Als dit een integratie-app is, zorg er dan voor dat de installatie is voltooid.",
-  "installed": "Geïnstalleerd"
+  "installed": "Geïnstalleerd",
+  "appIdLabel": "App-ID",
+  "appNameLabel": "App-naam",
+  "appNamePlaceholder": "Mijn geweldige app",
+  "pleaseEnterAppName": "Voer de app-naam in",
+  "categoryLabel": "Categorie",
+  "selectCategory": "Selecteer categorie",
+  "descriptionLabel": "Beschrijving",
+  "appDescriptionPlaceholder": "Mijn geweldige app is een geweldige app die geweldige dingen doet. Het is de beste app ooit!",
+  "pleaseProvideValidDescription": "Geef een geldige beschrijving op",
+  "appPricingLabel": "App-prijzen",
+  "noneSelected": "Geen geselecteerd",
+  "appIdCopiedToClipboard": "App-ID gekopieerd naar klembord",
+  "appCategoryModalTitle": "App-categorie",
+  "pricingFree": "Gratis",
+  "pricingPaid": "Betaald"
 }

@@ -2501,5 +2501,20 @@
   "ratingsCount": "{count}+ valutazioni",
   "errorActivatingApp": "Errore nell'attivazione dell'app",
   "integrationSetupRequired": "Se questa è un'app di integrazione, assicurati che la configurazione sia completata.",
-  "installed": "Installato"
+  "installed": "Installato",
+  "appIdLabel": "ID dell'app",
+  "appNameLabel": "Nome dell'app",
+  "appNamePlaceholder": "La mia fantastica app",
+  "pleaseEnterAppName": "Inserisci il nome dell'app",
+  "categoryLabel": "Categoria",
+  "selectCategory": "Seleziona categoria",
+  "descriptionLabel": "Descrizione",
+  "appDescriptionPlaceholder": "La mia fantastica app è un'app fantastica che fa cose incredibili. È la migliore app di sempre!",
+  "pleaseProvideValidDescription": "Fornisci una descrizione valida",
+  "appPricingLabel": "Prezzo dell'app",
+  "noneSelected": "Nessuna selezionata",
+  "appIdCopiedToClipboard": "ID dell'app copiato negli appunti",
+  "appCategoryModalTitle": "Categoria dell'app",
+  "pricingFree": "Gratuita",
+  "pricingPaid": "A pagamento"
 }

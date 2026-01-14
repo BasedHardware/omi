@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ peringkat",
   "errorActivatingApp": "Kesalahan mengaktifkan aplikasi",
   "integrationSetupRequired": "Jika ini adalah aplikasi integrasi, pastikan pengaturan telah selesai.",
-  "installed": "Terinstal"
+  "installed": "Terinstal",
+  "appIdLabel": "ID Aplikasi",
+  "appNameLabel": "Nama Aplikasi",
+  "appNamePlaceholder": "Aplikasi Hebat Saya",
+  "pleaseEnterAppName": "Harap masukkan nama aplikasi",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Pilih Kategori",
+  "descriptionLabel": "Deskripsi",
+  "appDescriptionPlaceholder": "Aplikasi Hebat Saya adalah aplikasi luar biasa yang melakukan hal-hal menakjubkan. Ini adalah aplikasi terbaik!",
+  "pleaseProvideValidDescription": "Harap berikan deskripsi yang valid",
+  "appPricingLabel": "Harga Aplikasi",
+  "noneSelected": "Tidak Ada yang Dipilih",
+  "appIdCopiedToClipboard": "ID Aplikasi disalin ke clipboard",
+  "appCategoryModalTitle": "Kategori Aplikasi",
+  "pricingFree": "Gratis",
+  "pricingPaid": "Berbayar"
 }

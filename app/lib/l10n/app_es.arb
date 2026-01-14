@@ -943,5 +943,20 @@
   "ratingsCount": "{count}+ calificaciones",
   "errorActivatingApp": "Error al activar la aplicación",
   "integrationSetupRequired": "Si esta es una aplicación de integración, asegúrese de que la configuración esté completa.",
-  "installed": "Instalado"
+  "installed": "Instalado",
+  "appIdLabel": "ID de la aplicación",
+  "appNameLabel": "Nombre de la aplicación",
+  "appNamePlaceholder": "Mi aplicación increíble",
+  "pleaseEnterAppName": "Por favor, ingrese el nombre de la aplicación",
+  "categoryLabel": "Categoría",
+  "selectCategory": "Seleccionar categoría",
+  "descriptionLabel": "Descripción",
+  "appDescriptionPlaceholder": "Mi aplicación increíble es una aplicación genial que hace cosas asombrosas. ¡Es la mejor aplicación!",
+  "pleaseProvideValidDescription": "Por favor, proporcione una descripción válida",
+  "appPricingLabel": "Precio de la aplicación",
+  "noneSelected": "Ninguna seleccionada",
+  "appIdCopiedToClipboard": "ID de la aplicación copiado al portapapeles",
+  "appCategoryModalTitle": "Categoría de la aplicación",
+  "pricingFree": "Gratis",
+  "pricingPaid": "De pago"
 }

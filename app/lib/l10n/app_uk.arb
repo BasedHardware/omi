@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ оцінок",
   "errorActivatingApp": "Помилка активації додатка",
   "integrationSetupRequired": "Якщо це додаток інтеграції, переконайтеся, що налаштування завершено.",
-  "installed": "Встановлено"
+  "installed": "Встановлено",
+  "appIdLabel": "ID додатку",
+  "appNameLabel": "Назва додатку",
+  "appNamePlaceholder": "Мій чудовий додаток",
+  "pleaseEnterAppName": "Будь ласка, введіть назву додатку",
+  "categoryLabel": "Категорія",
+  "selectCategory": "Виберіть категорію",
+  "descriptionLabel": "Опис",
+  "appDescriptionPlaceholder": "Мій чудовий додаток — це чудовий додаток, який робить дивовижні речі. Це найкращий додаток!",
+  "pleaseProvideValidDescription": "Будь ласка, надайте дійсний опис",
+  "appPricingLabel": "Ціноутворення додатку",
+  "noneSelected": "Нічого не вибрано",
+  "appIdCopiedToClipboard": "ID додатку скопійовано в буфер обміну",
+  "appCategoryModalTitle": "Категорія додатку",
+  "pricingFree": "Безкоштовно",
+  "pricingPaid": "Платно"
 }

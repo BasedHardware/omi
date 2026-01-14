@@ -2551,5 +2551,20 @@
   "ratingsCount": "{count}+ تقييم",
   "errorActivatingApp": "خطأ في تفعيل التطبيق",
   "integrationSetupRequired": "إذا كان هذا تطبيق تكامل، تأكد من اكتمال الإعداد.",
-  "installed": "مثبّت"
+  "installed": "مثبّت",
+  "appIdLabel": "معرّف التطبيق",
+  "appNameLabel": "اسم التطبيق",
+  "appNamePlaceholder": "تطبيقي الرائع",
+  "pleaseEnterAppName": "يرجى إدخال اسم التطبيق",
+  "categoryLabel": "الفئة",
+  "selectCategory": "اختر الفئة",
+  "descriptionLabel": "الوصف",
+  "appDescriptionPlaceholder": "تطبيقي الرائع هو تطبيق رائع يقوم بأشياء مذهلة. إنه أفضل تطبيق على الإطلاق!",
+  "pleaseProvideValidDescription": "يرجى تقديم وصف صحيح",
+  "appPricingLabel": "سعر التطبيق",
+  "noneSelected": "لم يتم الاختيار",
+  "appIdCopiedToClipboard": "تم نسخ معرّف التطبيق إلى الحافظة",
+  "appCategoryModalTitle": "فئة التطبيق",
+  "pricingFree": "مجاني",
+  "pricingPaid": "مدفوع"
 }

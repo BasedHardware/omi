@@ -2537,5 +2537,20 @@
   "ratingsCount": "{count}+ hodnocení",
   "errorActivatingApp": "Chyba při aktivaci aplikace",
   "integrationSetupRequired": "Pokud se jedná o integrační aplikaci, ujistěte se, že je nastavení dokončeno.",
-  "installed": "Nainstalováno"
+  "installed": "Nainstalováno",
+  "appIdLabel": "ID aplikace",
+  "appNameLabel": "Název aplikace",
+  "appNamePlaceholder": "Má úžasná aplikace",
+  "pleaseEnterAppName": "Zadejte prosím název aplikace",
+  "categoryLabel": "Kategorie",
+  "selectCategory": "Vyberte kategorii",
+  "descriptionLabel": "Popis",
+  "appDescriptionPlaceholder": "Má úžasná aplikace je skvělá aplikace, která dělá úžasné věci. Je to nejlepší aplikace!",
+  "pleaseProvideValidDescription": "Zadejte prosím platný popis",
+  "appPricingLabel": "Cena aplikace",
+  "noneSelected": "Nic nevybráno",
+  "appIdCopiedToClipboard": "ID aplikace zkopírováno do schránky",
+  "appCategoryModalTitle": "Kategorie aplikace",
+  "pricingFree": "Zdarma",
+  "pricingPaid": "Placené"
 }

@@ -3421,5 +3421,65 @@
   "installed": "Installed",
   "@installed": {
     "description": "Badge label indicating an app is installed"
+  },
+  "appIdLabel": "App ID",
+  "@appIdLabel": {
+    "description": "Label for the app ID field"
+  },
+  "appNameLabel": "App Name",
+  "@appNameLabel": {
+    "description": "Label for the app name field"
+  },
+  "appNamePlaceholder": "My Awesome App",
+  "@appNamePlaceholder": {
+    "description": "Placeholder text for app name input"
+  },
+  "pleaseEnterAppName": "Please enter app name",
+  "@pleaseEnterAppName": {
+    "description": "Validation error when app name is empty"
+  },
+  "categoryLabel": "Category",
+  "@categoryLabel": {
+    "description": "Label for the category field"
+  },
+  "selectCategory": "Select Category",
+  "@selectCategory": {
+    "description": "Placeholder text for category dropdown"
+  },
+  "descriptionLabel": "Description",
+  "@descriptionLabel": {
+    "description": "Label for the description field"
+  },
+  "appDescriptionPlaceholder": "My Awesome App is a great app that does amazing things. It is the best app ever!",
+  "@appDescriptionPlaceholder": {
+    "description": "Placeholder text for app description input"
+  },
+  "pleaseProvideValidDescription": "Please provide a valid description",
+  "@pleaseProvideValidDescription": {
+    "description": "Validation error when description is empty"
+  },
+  "appPricingLabel": "App Pricing",
+  "@appPricingLabel": {
+    "description": "Label for the app pricing field"
+  },
+  "noneSelected": "None Selected",
+  "@noneSelected": {
+    "description": "Placeholder text when no pricing option is selected"
+  },
+  "appIdCopiedToClipboard": "App ID copied to clipboard",
+  "@appIdCopiedToClipboard": {
+    "description": "Success message when app ID is copied"
+  },
+  "appCategoryModalTitle": "App Category",
+  "@appCategoryModalTitle": {
+    "description": "Title for the category selection modal"
+  },
+  "pricingFree": "Free",
+  "@pricingFree": {
+    "description": "Free pricing option"
+  },
+  "pricingPaid": "Paid",
+  "@pricingPaid": {
+    "description": "Paid pricing option"
   }
 }

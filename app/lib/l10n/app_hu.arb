@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ értékelés",
   "errorActivatingApp": "Hiba az alkalmazás aktiválása során",
   "integrationSetupRequired": "Ha ez egy integrációs alkalmazás, győződjön meg róla, hogy a beállítás befejeződött.",
-  "installed": "Telepítve"
+  "installed": "Telepítve",
+  "appIdLabel": "Alkalmazás azonosító",
+  "appNameLabel": "Alkalmazás neve",
+  "appNamePlaceholder": "Nagyszerű alkalmazásom",
+  "pleaseEnterAppName": "Kérjük, adja meg az alkalmazás nevét",
+  "categoryLabel": "Kategória",
+  "selectCategory": "Kategória kiválasztása",
+  "descriptionLabel": "Leírás",
+  "appDescriptionPlaceholder": "Nagyszerű alkalmazásom egy remek alkalmazás, amely csodálatos dolgokat tesz. Ez a legjobb alkalmazás!",
+  "pleaseProvideValidDescription": "Kérjük, adjon meg érvényes leírást",
+  "appPricingLabel": "Alkalmazás árazása",
+  "noneSelected": "Nincs kiválasztva",
+  "appIdCopiedToClipboard": "Alkalmazás azonosító vágólapra másolva",
+  "appCategoryModalTitle": "Alkalmazás kategória",
+  "pricingFree": "Ingyenes",
+  "pricingPaid": "Fizetős"
 }

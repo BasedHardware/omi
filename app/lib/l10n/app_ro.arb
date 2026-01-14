@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ evaluări",
   "errorActivatingApp": "Eroare la activarea aplicației",
   "integrationSetupRequired": "Dacă aceasta este o aplicație de integrare, asigurați-vă că configurarea este completă.",
-  "installed": "Instalat"
+  "installed": "Instalat",
+  "appIdLabel": "ID-ul aplicației",
+  "appNameLabel": "Numele aplicației",
+  "appNamePlaceholder": "Aplicația mea minunată",
+  "pleaseEnterAppName": "Vă rugăm să introduceți numele aplicației",
+  "categoryLabel": "Categorie",
+  "selectCategory": "Selectați categoria",
+  "descriptionLabel": "Descriere",
+  "appDescriptionPlaceholder": "Aplicația mea minunată este o aplicație grozavă care face lucruri uimitoare. Este cea mai bună aplicație!",
+  "pleaseProvideValidDescription": "Vă rugăm să furnizați o descriere validă",
+  "appPricingLabel": "Prețul aplicației",
+  "noneSelected": "Niciuna selectată",
+  "appIdCopiedToClipboard": "ID-ul aplicației copiat în clipboard",
+  "appCategoryModalTitle": "Categoria aplicației",
+  "pricingFree": "Gratuit",
+  "pricingPaid": "Cu plată"
 }

@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ betyg",
   "errorActivatingApp": "Fel vid aktivering av app",
   "integrationSetupRequired": "Om detta är en integrationsapp, se till att installationen är klar.",
-  "installed": "Installerad"
+  "installed": "Installerad",
+  "appIdLabel": "App-ID",
+  "appNameLabel": "Appnamn",
+  "appNamePlaceholder": "Min fantastiska app",
+  "pleaseEnterAppName": "Ange appnamn",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Välj kategori",
+  "descriptionLabel": "Beskrivning",
+  "appDescriptionPlaceholder": "Min fantastiska app är en fantastisk app som gör fantastiska saker. Det är den bästa appen!",
+  "pleaseProvideValidDescription": "Ange en giltig beskrivning",
+  "appPricingLabel": "Apppriser",
+  "noneSelected": "Ingen vald",
+  "appIdCopiedToClipboard": "App-ID kopierat till urklipp",
+  "appCategoryModalTitle": "Appkategori",
+  "pricingFree": "Gratis",
+  "pricingPaid": "Betald"
 }

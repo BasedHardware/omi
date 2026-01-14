@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ vurderinger",
   "errorActivatingApp": "Fejl ved aktivering af app",
   "integrationSetupRequired": "Hvis dette er en integrationsapp, skal du sørge for, at opsætningen er fuldført.",
-  "installed": "Installeret"
+  "installed": "Installeret",
+  "appIdLabel": "App-ID",
+  "appNameLabel": "Appnavn",
+  "appNamePlaceholder": "Min fantastiske app",
+  "pleaseEnterAppName": "Indtast venligst appnavn",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Vælg kategori",
+  "descriptionLabel": "Beskrivelse",
+  "appDescriptionPlaceholder": "Min fantastiske app er en fantastisk app, der gør fantastiske ting. Det er den bedste app nogensinde!",
+  "pleaseProvideValidDescription": "Angiv venligst en gyldig beskrivelse",
+  "appPricingLabel": "App-priser",
+  "noneSelected": "Ingen valgt",
+  "appIdCopiedToClipboard": "App-ID kopieret til udklipsholder",
+  "appCategoryModalTitle": "App-kategori",
+  "pricingFree": "Gratis",
+  "pricingPaid": "Betalt"
 }

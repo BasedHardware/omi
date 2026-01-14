@@ -2501,5 +2501,20 @@
   "ratingsCount": "{count}+ įvertinimų",
   "errorActivatingApp": "Klaida aktyvinant programą",
   "integrationSetupRequired": "Jei tai integracijos programa, įsitikinkite, kad sąranka užbaigta.",
-  "installed": "Įdiegta"
+  "installed": "Įdiegta",
+  "appIdLabel": "Programos ID",
+  "appNameLabel": "Programos pavadinimas",
+  "appNamePlaceholder": "Mano nuostabi programa",
+  "pleaseEnterAppName": "Įveskite programos pavadinimą",
+  "categoryLabel": "Kategorija",
+  "selectCategory": "Pasirinkite kategoriją",
+  "descriptionLabel": "Aprašymas",
+  "appDescriptionPlaceholder": "Mano nuostabi programa yra puiki programa, kuri daro nuostabius dalykus. Tai geriausia programa!",
+  "pleaseProvideValidDescription": "Pateikite tinkamą aprašymą",
+  "appPricingLabel": "Programos kainodara",
+  "noneSelected": "Nepasirinkta",
+  "appIdCopiedToClipboard": "Programos ID nukopijuotas į iškarpinę",
+  "appCategoryModalTitle": "Programos kategorija",
+  "pricingFree": "Nemokama",
+  "pricingPaid": "Mokama"
 }

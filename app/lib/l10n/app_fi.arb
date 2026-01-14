@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ arvioita",
   "errorActivatingApp": "Virhe sovelluksen aktivoinnissa",
   "integrationSetupRequired": "Jos tämä on integraatiosovellus, varmista että asennus on valmis.",
-  "installed": "Asennettu"
+  "installed": "Asennettu",
+  "appIdLabel": "Sovelluksen tunnus",
+  "appNameLabel": "Sovelluksen nimi",
+  "appNamePlaceholder": "Upea sovellukseni",
+  "pleaseEnterAppName": "Anna sovelluksen nimi",
+  "categoryLabel": "Kategoria",
+  "selectCategory": "Valitse kategoria",
+  "descriptionLabel": "Kuvaus",
+  "appDescriptionPlaceholder": "Upea sovellukseni on loistava sovellus, joka tekee hämmästyttäviä asioita. Se on paras sovellus!",
+  "pleaseProvideValidDescription": "Anna kelvollinen kuvaus",
+  "appPricingLabel": "Sovelluksen hinnoittelu",
+  "noneSelected": "Ei valittu",
+  "appIdCopiedToClipboard": "Sovelluksen tunnus kopioitu leikepöydälle",
+  "appCategoryModalTitle": "Sovelluksen kategoria",
+  "pricingFree": "Ilmainen",
+  "pricingPaid": "Maksullinen"
 }

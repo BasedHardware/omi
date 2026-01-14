@@ -2537,5 +2537,20 @@
   "ratingsCount": "{count}+ оценки",
   "errorActivatingApp": "Грешка при активиране на приложението",
   "integrationSetupRequired": "Ако това е интеграционно приложение, уверете се, че настройката е завършена.",
-  "installed": "Инсталирано"
+  "installed": "Инсталирано",
+  "appIdLabel": "ID на приложението",
+  "appNameLabel": "Име на приложението",
+  "appNamePlaceholder": "Моето страхотно приложение",
+  "pleaseEnterAppName": "Моля, въведете име на приложението",
+  "categoryLabel": "Категория",
+  "selectCategory": "Изберете категория",
+  "descriptionLabel": "Описание",
+  "appDescriptionPlaceholder": "Моето страхотно приложение е страхотно приложение, което прави невероятни неща. То е най-доброто приложение!",
+  "pleaseProvideValidDescription": "Моля, предоставете валидно описание",
+  "appPricingLabel": "Ценообразуване на приложението",
+  "noneSelected": "Няма избрано",
+  "appIdCopiedToClipboard": "ID на приложението е копирано в клипборда",
+  "appCategoryModalTitle": "Категория на приложението",
+  "pricingFree": "Безплатно",
+  "pricingPaid": "Платено"
 }

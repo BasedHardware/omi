@@ -943,5 +943,20 @@
   "ratingsCount": "{count}+ Bewertungen",
   "errorActivatingApp": "Fehler beim Aktivieren der App",
   "integrationSetupRequired": "Wenn dies eine Integrations-App ist, stellen Sie sicher, dass die Einrichtung abgeschlossen ist.",
-  "installed": "Installiert"
+  "installed": "Installiert",
+  "appIdLabel": "App-ID",
+  "appNameLabel": "App-Name",
+  "appNamePlaceholder": "Meine fantastische App",
+  "pleaseEnterAppName": "Bitte geben Sie einen App-Namen ein",
+  "categoryLabel": "Kategorie",
+  "selectCategory": "Kategorie auswählen",
+  "descriptionLabel": "Beschreibung",
+  "appDescriptionPlaceholder": "Meine fantastische App ist eine großartige App, die erstaunliche Dinge tut. Sie ist die beste App aller Zeiten!",
+  "pleaseProvideValidDescription": "Bitte geben Sie eine gültige Beschreibung an",
+  "appPricingLabel": "App-Preisgestaltung",
+  "noneSelected": "Keine ausgewählt",
+  "appIdCopiedToClipboard": "App-ID in Zwischenablage kopiert",
+  "appCategoryModalTitle": "App-Kategorie",
+  "pricingFree": "Kostenlos",
+  "pricingPaid": "Kostenpflichtig"
 }

@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ ocen",
   "errorActivatingApp": "Błąd aktywacji aplikacji",
   "integrationSetupRequired": "Jeśli to aplikacja integracyjna, upewnij się, że konfiguracja jest zakończona.",
-  "installed": "Zainstalowano"
+  "installed": "Zainstalowano",
+  "appIdLabel": "ID aplikacji",
+  "appNameLabel": "Nazwa aplikacji",
+  "appNamePlaceholder": "Moja wspaniała aplikacja",
+  "pleaseEnterAppName": "Proszę wprowadzić nazwę aplikacji",
+  "categoryLabel": "Kategoria",
+  "selectCategory": "Wybierz kategorię",
+  "descriptionLabel": "Opis",
+  "appDescriptionPlaceholder": "Moja wspaniała aplikacja to świetna aplikacja, która robi niesamowite rzeczy. To najlepsza aplikacja!",
+  "pleaseProvideValidDescription": "Proszę podać prawidłowy opis",
+  "appPricingLabel": "Ceny aplikacji",
+  "noneSelected": "Nie wybrano",
+  "appIdCopiedToClipboard": "ID aplikacji skopiowane do schowka",
+  "appCategoryModalTitle": "Kategoria aplikacji",
+  "pricingFree": "Bezpłatna",
+  "pricingPaid": "Płatna"
 }

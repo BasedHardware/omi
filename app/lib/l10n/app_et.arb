@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ hinnangut",
   "errorActivatingApp": "Viga rakenduse aktiveerimisel",
   "integrationSetupRequired": "Kui see on integratsioonirakendus, veenduge, et seadistamine on lõpetatud.",
-  "installed": "Paigaldatud"
+  "installed": "Paigaldatud",
+  "appIdLabel": "Rakenduse ID",
+  "appNameLabel": "Rakenduse nimi",
+  "appNamePlaceholder": "Minu suurepärane rakendus",
+  "pleaseEnterAppName": "Palun sisestage rakenduse nimi",
+  "categoryLabel": "Kategooria",
+  "selectCategory": "Valige kategooria",
+  "descriptionLabel": "Kirjeldus",
+  "appDescriptionPlaceholder": "Minu suurepärane rakendus on suurepärane rakendus, mis teeb hämmastav asju. See on parim rakendus!",
+  "pleaseProvideValidDescription": "Palun esitage kehtiv kirjeldus",
+  "appPricingLabel": "Rakenduse hinnakujundus",
+  "noneSelected": "Valimata",
+  "appIdCopiedToClipboard": "Rakenduse ID kopeeritud lõikelauale",
+  "appCategoryModalTitle": "Rakenduse kategooria",
+  "pricingFree": "Tasuta",
+  "pricingPaid": "Tasuline"
 }

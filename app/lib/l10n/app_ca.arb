@@ -2537,5 +2537,20 @@
   "ratingsCount": "{count}+ valoracions",
   "errorActivatingApp": "Error en activar l'aplicació",
   "integrationSetupRequired": "Si aquesta és una aplicació d'integració, assegura't que la configuració està completada.",
-  "installed": "Instal·lat"
+  "installed": "Instal·lat",
+  "appIdLabel": "ID de l'aplicació",
+  "appNameLabel": "Nom de l'aplicació",
+  "appNamePlaceholder": "La meva aplicació fantàstica",
+  "pleaseEnterAppName": "Si us plau, introduïu el nom de l'aplicació",
+  "categoryLabel": "Categoria",
+  "selectCategory": "Seleccioneu categoria",
+  "descriptionLabel": "Descripció",
+  "appDescriptionPlaceholder": "La meva aplicació fantàstica és una aplicació genial que fa coses increïbles. És la millor aplicació!",
+  "pleaseProvideValidDescription": "Si us plau, proporcioneu una descripció vàlida",
+  "appPricingLabel": "Preu de l'aplicació",
+  "noneSelected": "Cap seleccionat",
+  "appIdCopiedToClipboard": "ID de l'aplicació copiat al porta-retalls",
+  "appCategoryModalTitle": "Categoria de l'aplicació",
+  "pricingFree": "Gratuït",
+  "pricingPaid": "De pagament"
 }

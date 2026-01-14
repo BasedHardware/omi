@@ -12,6 +12,7 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class DesktopAppMetadataWidget extends StatelessWidget {
@@ -149,21 +150,22 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             // Form fields
             // App ID field (if updating)
             if (context.watch<AddAppProvider>().updateAppId != null) ...[
-              _buildFieldLabel('App ID'),
+              _buildFieldLabel(context, context.l10n.appIdLabel),
               const SizedBox(height: 8),
               _buildAppIdField(context),
               const SizedBox(height: 20),
             ],
 
             // App Name field
-            _buildFieldLabel('App Name'),
+            _buildFieldLabel(context, context.l10n.appNameLabel),
             const SizedBox(height: 8),
             _buildTextField(
+              context: context,
               controller: appNameController,
-              hintText: 'My Awesome App',
+              hintText: context.l10n.appNamePlaceholder,
               validator: (value) {
                 if (value == null || value.isEmpty) {
-                  return 'Please enter app name';
+                  return context.l10n.pleaseEnterAppName;
                 }
                 return null;
               },
@@ -172,21 +174,21 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             const SizedBox(height: 20),
 
             // Category field
-            _buildFieldLabel('Category'),
+            _buildFieldLabel(context, context.l10n.categoryLabel),
             const SizedBox(height: 8),
             _buildCategoryDropdown(context),
 
             const SizedBox(height: 20),
 
             // Description field
-            _buildFieldLabel('Description'),
+            _buildFieldLabel(context, context.l10n.descriptionLabel),
             const SizedBox(height: 8),
             _buildDescriptionField(context),
 
             // App Pricing field (if allowed)
             if (allowPaidApps) ...[
               const SizedBox(height: 20),
-              _buildFieldLabel('App Pricing'),
+              _buildFieldLabel(context, context.l10n.appPricingLabel),
               const SizedBox(height: 8),
               _buildPricingDropdown(context),
             ],
@@ -196,7 +198,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildFieldLabel(String label) {
+  Widget _buildFieldLabel(BuildContext context, String label) {
     return Text(
       label,
       style: const TextStyle(
@@ -208,6 +210,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
   }
 
   Widget _buildTextField({
+    required BuildContext context,
     required TextEditingController controller,
     required String hintText,
     String? Function(String?)? validator,
@@ -277,7 +280,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                 Clipboard.setData(ClipboardData(text: appId));
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text('App ID copied to clipboard'),
+                    content: Text(context.l10n.appIdCopiedToClipboard),
                     backgroundColor: ResponsiveHelper.purplePrimary,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -321,23 +324,25 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  category?.isNotEmpty == true ? category! : 'Select Category',
-                  style: TextStyle(
-                    color: category?.isNotEmpty == true ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
-                    fontSize: 14,
+          child: Builder(
+            builder: (context) => Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    category?.isNotEmpty == true ? category! : context.l10n.selectCategory,
+                    style: TextStyle(
+                      color: category?.isNotEmpty == true ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
-              ),
-              const Icon(
-                FontAwesomeIcons.chevronDown,
-                color: ResponsiveHelper.textTertiary,
-                size: 12,
-              ),
-            ],
+                const Icon(
+                  FontAwesomeIcons.chevronDown,
+                  color: ResponsiveHelper.textTertiary,
+                  size: 12,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -389,29 +394,31 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                         ),
                       ),
                     )
-                  : TextFormField(
-                      controller: appDescriptionController,
-                      maxLines: null,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please provide a valid description';
-                        }
-                        return null;
-                      },
-                      style: const TextStyle(
-                        color: ResponsiveHelper.textPrimary,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'My Awesome App is a great app that does amazing things. It is the best app ever!',
-                        hintStyle: TextStyle(
-                          color: ResponsiveHelper.textTertiary,
+                  : Builder(
+                      builder: (context) => TextFormField(
+                        controller: appDescriptionController,
+                        maxLines: null,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return context.l10n.pleaseProvideValidDescription;
+                          }
+                          return null;
+                        },
+                        style: const TextStyle(
+                          color: ResponsiveHelper.textPrimary,
                           fontSize: 14,
+                          height: 1.5,
                         ),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                        isDense: false,
+                        decoration: InputDecoration(
+                          hintText: context.l10n.appDescriptionPlaceholder,
+                          hintStyle: const TextStyle(
+                            color: ResponsiveHelper.textTertiary,
+                            fontSize: 14,
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.all(16),
+                          isDense: false,
+                        ),
                       ),
                     ),
             ),
@@ -468,24 +475,26 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  appPricing?.isNotEmpty == true ? appPricing! : 'None Selected',
-                  style: TextStyle(
-                    color:
-                        appPricing?.isNotEmpty == true ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
-                    fontSize: 14,
+          child: Builder(
+            builder: (context) => Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    appPricing?.isNotEmpty == true ? appPricing! : context.l10n.noneSelected,
+                    style: TextStyle(
+                      color:
+                          appPricing?.isNotEmpty == true ? ResponsiveHelper.textPrimary : ResponsiveHelper.textTertiary,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
-              ),
-              const Icon(
-                FontAwesomeIcons.chevronDown,
-                color: ResponsiveHelper.textTertiary,
-                size: 12,
-              ),
-            ],
+                const Icon(
+                  FontAwesomeIcons.chevronDown,
+                  color: ResponsiveHelper.textTertiary,
+                  size: 12,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -523,19 +532,19 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             ),
 
             // Header
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     FontAwesomeIcons.tag,
                     color: ResponsiveHelper.textSecondary,
                     size: 18,
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Text(
-                    'App Category',
-                    style: TextStyle(
+                    context.l10n.appCategoryModalTitle,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -599,7 +608,7 @@ class DesktopAppMetadataWidget extends StatelessWidget {
   }
 
   void _showPricingModal(BuildContext context) {
-    final options = ['Free', 'Paid'];
+    final options = [context.l10n.pricingFree, context.l10n.pricingPaid];
 
     showModalBottomSheet(
       context: context,
@@ -631,19 +640,19 @@ class DesktopAppMetadataWidget extends StatelessWidget {
             ),
 
             // Header
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     FontAwesomeIcons.dollarSign,
                     color: ResponsiveHelper.textSecondary,
                     size: 18,
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Text(
-                    'App Pricing',
-                    style: TextStyle(
+                    context.l10n.appPricingLabel,
+                    style: const TextStyle(
                       color: ResponsiveHelper.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -665,13 +674,13 @@ class DesktopAppMetadataWidget extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final option = options[index];
                   final provider = context.watch<AddAppProvider>();
-                  final isSelected = (option == 'Paid' && provider.isPaid) || (option == 'Free' && !provider.isPaid);
+                  final isSelected = (option == context.l10n.pricingPaid && provider.isPaid) || (option == context.l10n.pricingFree && !provider.isPaid);
 
                   return Material(
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: () {
-                        provider.setIsPaid(option == 'Paid');
+                        provider.setIsPaid(option == context.l10n.pricingPaid);
                         Navigator.pop(context);
                       },
                       child: Container(

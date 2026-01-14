@@ -1321,5 +1321,20 @@
   "ratingsCount": "{count}+ notes",
   "errorActivatingApp": "Erreur lors de l'activation de l'application",
   "integrationSetupRequired": "S'il s'agit d'une application d'intégration, assurez-vous que la configuration est terminée.",
-  "installed": "Installé"
+  "installed": "Installé",
+  "appIdLabel": "ID de l'application",
+  "appNameLabel": "Nom de l'application",
+  "appNamePlaceholder": "Mon application géniale",
+  "pleaseEnterAppName": "Veuillez saisir le nom de l'application",
+  "categoryLabel": "Catégorie",
+  "selectCategory": "Sélectionner une catégorie",
+  "descriptionLabel": "Description",
+  "appDescriptionPlaceholder": "Mon application géniale est une application formidable qui fait des choses incroyables. C'est la meilleure application !",
+  "pleaseProvideValidDescription": "Veuillez fournir une description valide",
+  "appPricingLabel": "Tarification de l'application",
+  "noneSelected": "Aucune sélection",
+  "appIdCopiedToClipboard": "ID de l'application copié dans le presse-papiers",
+  "appCategoryModalTitle": "Catégorie de l'application",
+  "pricingFree": "Gratuit",
+  "pricingPaid": "Payant"
 }

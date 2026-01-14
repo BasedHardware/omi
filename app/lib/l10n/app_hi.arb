@@ -943,5 +943,20 @@
   "ratingsCount": "{count}+ रेटिंग",
   "errorActivatingApp": "ऐप सक्रिय करने में त्रुटि",
   "integrationSetupRequired": "यदि यह एक एकीकरण ऐप है, तो सुनिश्चित करें कि सेटअप पूर्ण हो गया है।",
-  "installed": "इंस्टॉल किया गया"
+  "installed": "इंस्टॉल किया गया",
+  "appIdLabel": "ऐप ID",
+  "appNameLabel": "ऐप का नाम",
+  "appNamePlaceholder": "मेरा शानदार ऐप",
+  "pleaseEnterAppName": "कृपया ऐप का नाम दर्ज करें",
+  "categoryLabel": "श्रेणी",
+  "selectCategory": "श्रेणी चुनें",
+  "descriptionLabel": "विवरण",
+  "appDescriptionPlaceholder": "मेरा शानदार ऐप एक बेहतरीन ऐप है जो अद्भुत काम करता है। यह सबसे अच्छा ऐप है!",
+  "pleaseProvideValidDescription": "कृपया एक मान्य विवरण प्रदान करें",
+  "appPricingLabel": "ऐप मूल्य निर्धारण",
+  "noneSelected": "कुछ नहीं चुना गया",
+  "appIdCopiedToClipboard": "ऐप ID क्लिपबोर्ड पर कॉपी की गई",
+  "appCategoryModalTitle": "ऐप श्रेणी",
+  "pricingFree": "मुफ़्त",
+  "pricingPaid": "सशुल्क"
 }

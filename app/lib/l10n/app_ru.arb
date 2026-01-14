@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ оценок",
   "errorActivatingApp": "Ошибка активации приложения",
   "integrationSetupRequired": "Если это интеграционное приложение, убедитесь, что настройка завершена.",
-  "installed": "Установлено"
+  "installed": "Установлено",
+  "appIdLabel": "ID приложения",
+  "appNameLabel": "Название приложения",
+  "appNamePlaceholder": "Моё потрясающее приложение",
+  "pleaseEnterAppName": "Пожалуйста, введите название приложения",
+  "categoryLabel": "Категория",
+  "selectCategory": "Выберите категорию",
+  "descriptionLabel": "Описание",
+  "appDescriptionPlaceholder": "Моё потрясающее приложение — это отличное приложение, которое делает удивительные вещи. Это лучшее приложение!",
+  "pleaseProvideValidDescription": "Пожалуйста, предоставьте действительное описание",
+  "appPricingLabel": "Ценообразование приложения",
+  "noneSelected": "Ничего не выбрано",
+  "appIdCopiedToClipboard": "ID приложения скопирован в буфер обмена",
+  "appCategoryModalTitle": "Категория приложения",
+  "pricingFree": "Бесплатно",
+  "pricingPaid": "Платно"
 }

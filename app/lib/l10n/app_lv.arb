@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ vērtējumi",
   "errorActivatingApp": "Kļūda, aktivizējot lietotni",
   "integrationSetupRequired": "Ja šī ir integrācijas lietotne, pārliecinieties, ka iestatīšana ir pabeigta.",
-  "installed": "Instalēts"
+  "installed": "Instalēts",
+  "appIdLabel": "Lietotnes ID",
+  "appNameLabel": "Lietotnes nosaukums",
+  "appNamePlaceholder": "Mana brīnišķīgā lietotne",
+  "pleaseEnterAppName": "Lūdzu, ievadiet lietotnes nosaukumu",
+  "categoryLabel": "Kategorija",
+  "selectCategory": "Atlasiet kategoriju",
+  "descriptionLabel": "Apraksts",
+  "appDescriptionPlaceholder": "Mana brīnišķīgā lietotne ir lieliska lietotne, kas dara pārsteidzošas lietas. Tā ir labākā lietotne!",
+  "pleaseProvideValidDescription": "Lūdzu, norādiet derīgu aprakstu",
+  "appPricingLabel": "Lietotnes cenu noteikšana",
+  "noneSelected": "Nav atlasīts",
+  "appIdCopiedToClipboard": "Lietotnes ID nokopēts starpliktuvē",
+  "appCategoryModalTitle": "Lietotnes kategorija",
+  "pricingFree": "Bezmaksas",
+  "pricingPaid": "Maksas"
 }

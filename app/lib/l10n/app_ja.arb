@@ -922,5 +922,20 @@
   "ratingsCount": "{count}+の評価",
   "errorActivatingApp": "アプリの有効化エラー",
   "integrationSetupRequired": "これが統合アプリの場合は、セットアップが完了していることを確認してください。",
-  "installed": "インストール済み"
+  "installed": "インストール済み",
+  "appIdLabel": "アプリID",
+  "appNameLabel": "アプリ名",
+  "appNamePlaceholder": "私の素晴らしいアプリ",
+  "pleaseEnterAppName": "アプリ名を入力してください",
+  "categoryLabel": "カテゴリ",
+  "selectCategory": "カテゴリを選択",
+  "descriptionLabel": "説明",
+  "appDescriptionPlaceholder": "私の素晴らしいアプリは、素晴らしいことをする素晴らしいアプリです。これは最高のアプリです！",
+  "pleaseProvideValidDescription": "有効な説明を入力してください",
+  "appPricingLabel": "アプリの価格設定",
+  "noneSelected": "未選択",
+  "appIdCopiedToClipboard": "アプリIDをクリップボードにコピーしました",
+  "appCategoryModalTitle": "アプリカテゴリ",
+  "pricingFree": "無料",
+  "pricingPaid": "有料"
 }

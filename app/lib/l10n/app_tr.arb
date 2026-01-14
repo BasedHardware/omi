@@ -2501,5 +2501,20 @@
   "ratingsCount": "{count}+ puan",
   "errorActivatingApp": "Uygulamayı etkinleştirme hatası",
   "integrationSetupRequired": "Bu bir entegrasyon uygulamasıysa, kurulumun tamamlandığından emin olun.",
-  "installed": "Yüklendi"
+  "installed": "Yüklendi",
+  "appIdLabel": "Uygulama Kimliği",
+  "appNameLabel": "Uygulama Adı",
+  "appNamePlaceholder": "Harika Uygulamam",
+  "pleaseEnterAppName": "Lütfen uygulama adını girin",
+  "categoryLabel": "Kategori",
+  "selectCategory": "Kategori Seçin",
+  "descriptionLabel": "Açıklama",
+  "appDescriptionPlaceholder": "Harika Uygulamam harika şeyler yapan harika bir uygulamadır. En iyi uygulama!",
+  "pleaseProvideValidDescription": "Lütfen geçerli bir açıklama sağlayın",
+  "appPricingLabel": "Uygulama Fiyatlandırması",
+  "noneSelected": "Seçilmedi",
+  "appIdCopiedToClipboard": "Uygulama Kimliği panoya kopyalandı",
+  "appCategoryModalTitle": "Uygulama Kategorisi",
+  "pricingFree": "Ücretsiz",
+  "pricingPaid": "Ücretli"
 }

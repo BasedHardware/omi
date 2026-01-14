@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ คะแนน",
   "errorActivatingApp": "ข้อผิดพลาดในการเปิดใช้งานแอป",
   "integrationSetupRequired": "หากนี่เป็นแอปการผสานรวม ตรวจสอบให้แน่ใจว่าการตั้งค่าเสร็จสมบูรณ์",
-  "installed": "ติดตั้งแล้ว"
+  "installed": "ติดตั้งแล้ว",
+  "appIdLabel": "ID แอป",
+  "appNameLabel": "ชื่อแอป",
+  "appNamePlaceholder": "แอปที่ยอดเยี่ยมของฉัน",
+  "pleaseEnterAppName": "กรุณาป้อนชื่อแอป",
+  "categoryLabel": "หมวดหมู่",
+  "selectCategory": "เลือกหมวดหมู่",
+  "descriptionLabel": "คำอธิบาย",
+  "appDescriptionPlaceholder": "แอปที่ยอดเยี่ยมของฉันเป็นแอปที่ยอดเยี่ยมที่ทำสิ่งที่น่าทึ่ง มันเป็นแอปที่ดีที่สุด!",
+  "pleaseProvideValidDescription": "กรุณาให้คำอธิบายที่ถูกต้อง",
+  "appPricingLabel": "การกำหนดราคาแอป",
+  "noneSelected": "ไม่ได้เลือก",
+  "appIdCopiedToClipboard": "คัดลอก ID แอปไปยังคลิปบอร์ดแล้ว",
+  "appCategoryModalTitle": "หมวดหมู่แอป",
+  "pricingFree": "ฟรี",
+  "pricingPaid": "เสียค่าใช้จ่าย"
 }

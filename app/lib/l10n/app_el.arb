@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ αξιολογήσεις",
   "errorActivatingApp": "Σφάλμα ενεργοποίησης εφαρμογής",
   "integrationSetupRequired": "Εάν αυτή είναι μια εφαρμογή ενσωμάτωσης, βεβαιωθείτε ότι η εγκατάσταση έχει ολοκληρωθεί.",
-  "installed": "Εγκατεστημένο"
+  "installed": "Εγκατεστημένο",
+  "appIdLabel": "Αναγνωριστικό εφαρμογής",
+  "appNameLabel": "Όνομα εφαρμογής",
+  "appNamePlaceholder": "Η υπέροχη εφαρμογή μου",
+  "pleaseEnterAppName": "Παρακαλώ εισάγετε το όνομα της εφαρμογής",
+  "categoryLabel": "Κατηγορία",
+  "selectCategory": "Επιλέξτε κατηγορία",
+  "descriptionLabel": "Περιγραφή",
+  "appDescriptionPlaceholder": "Η υπέροχη εφαρμογή μου είναι μια υπέροχη εφαρμογή που κάνει καταπληκτικά πράγματα. Είναι η καλύτερη εφαρμογή!",
+  "pleaseProvideValidDescription": "Παρακαλώ δώστε μια έγκυρη περιγραφή",
+  "appPricingLabel": "Τιμολόγηση εφαρμογής",
+  "noneSelected": "Δεν επιλέχθηκε κανένα",
+  "appIdCopiedToClipboard": "Το αναγνωριστικό εφαρμογής αντιγράφηκε στο πρόχειρο",
+  "appCategoryModalTitle": "Κατηγορία εφαρμογής",
+  "pricingFree": "Δωρεάν",
+  "pricingPaid": "Επί πληρωμή"
 }

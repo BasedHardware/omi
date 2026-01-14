@@ -2519,5 +2519,20 @@
   "ratingsCount": "{count}+ đánh giá",
   "errorActivatingApp": "Lỗi kích hoạt ứng dụng",
   "integrationSetupRequired": "Nếu đây là ứng dụng tích hợp, hãy đảm bảo thiết lập đã hoàn tất.",
-  "installed": "Đã cài đặt"
+  "installed": "Đã cài đặt",
+  "appIdLabel": "ID ứng dụng",
+  "appNameLabel": "Tên ứng dụng",
+  "appNamePlaceholder": "Ứng dụng tuyệt vời của tôi",
+  "pleaseEnterAppName": "Vui lòng nhập tên ứng dụng",
+  "categoryLabel": "Danh mục",
+  "selectCategory": "Chọn danh mục",
+  "descriptionLabel": "Mô tả",
+  "appDescriptionPlaceholder": "Ứng dụng tuyệt vời của tôi là một ứng dụng tuyệt vời làm những điều tuyệt vời. Đây là ứng dụng tốt nhất!",
+  "pleaseProvideValidDescription": "Vui lòng cung cấp mô tả hợp lệ",
+  "appPricingLabel": "Giá ứng dụng",
+  "noneSelected": "Không có lựa chọn",
+  "appIdCopiedToClipboard": "Đã sao chép ID ứng dụng vào clipboard",
+  "appCategoryModalTitle": "Danh mục ứng dụng",
+  "pricingFree": "Miễn phí",
+  "pricingPaid": "Trả phí"
 }

@@ -943,5 +943,20 @@
   "ratingsCount": "{count}+条评分",
   "errorActivatingApp": "激活应用时出错",
   "integrationSetupRequired": "如果这是集成应用,请确保设置已完成。",
-  "installed": "已安装"
+  "installed": "已安装",
+  "appIdLabel": "应用ID",
+  "appNameLabel": "应用名称",
+  "appNamePlaceholder": "我的出色应用",
+  "pleaseEnterAppName": "请输入应用名称",
+  "categoryLabel": "类别",
+  "selectCategory": "选择类别",
+  "descriptionLabel": "描述",
+  "appDescriptionPlaceholder": "我的出色应用是一个做出惊人事情的出色应用。这是最好的应用！",
+  "pleaseProvideValidDescription": "请提供有效描述",
+  "appPricingLabel": "应用定价",
+  "noneSelected": "未选择",
+  "appIdCopiedToClipboard": "应用ID已复制到剪贴板",
+  "appCategoryModalTitle": "应用类别",
+  "pricingFree": "免费",
+  "pricingPaid": "付费"
 }
