@@ -109,11 +109,6 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable watchOS companion app
-        script: |
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
@@ -121,6 +116,10 @@ workflows:
       - name: Flutter build ipa
         script: |
           xcode-project use-profiles
+
+          # Enable watchOS companion app after xcode-project use-profiles
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
 
           # Extract version name from pubspec.yaml (source of truth)
           PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
@@ -451,11 +450,6 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable watchOS companion app
-        script: |
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
@@ -465,6 +459,10 @@ workflows:
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
+
+          # Enable watchOS companion app after xcode-project use-profiles
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
 
           # Build
           BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
@@ -1004,11 +1002,6 @@ workflows:
         script: |
           dart run build_runner build --delete-conflicting-outputs
 
-      - name: Enable watchOS companion app
-        script: |
-          chmod +x ios/scripts/enable_watchos.sh
-          ios/scripts/enable_watchos.sh
-
       - name: Installs pod
         script: |
           cd ios && pod install --repo-update
@@ -1018,6 +1011,10 @@ workflows:
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
+
+          # Enable watchOS companion app after xcode-project use-profiles
+          chmod +x ios/scripts/enable_watchos.sh
+          ios/scripts/enable_watchos.sh
 
           # Build
           shorebird patch ios \
