@@ -2827,7 +2827,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'आप एक शानदार ऐप हैं, आपका काम उपयोगकर्ता के प्रश्नों का उत्तर देना और उन्हें अच्छा महसूस कराना है...';
 
   @override
-  String get conversationPrompt => 'बातचीत संकेत';
+  String get conversationPrompt => 'बातचीत प्रॉम्प्ट';
 
   @override
   String get conversationPromptPlaceholder => 'आप एक शानदार ऐप हैं, आपको बातचीत का प्रतिलेख और सारांश दिया जाएगा...';
@@ -2873,4 +2873,78 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get connectNow => 'अभी कनेक्ट करें';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ इंस्टॉल';
+  }
+
+  @override
+  String get uninstallApp => 'ऐप अनइंस्टॉल करें';
+
+  @override
+  String get subscribe => 'सदस्यता लें';
+
+  @override
+  String get dataAccessNotice => 'डेटा एक्सेस सूचना';
+
+  @override
+  String get dataAccessWarning =>
+      'यह ऐप आपके डेटा तक पहुंच बनाएगा। Omi AI इस बात के लिए जिम्मेदार नहीं है कि इस ऐप द्वारा आपके डेटा का उपयोग, संशोधन या हटाया कैसे जाता है';
+
+  @override
+  String get installApp => 'ऐप इंस्टॉल करें';
+
+  @override
+  String get betaTesterNotice =>
+      'आप इस ऐप के लिए बीटा परीक्षक हैं। यह अभी तक सार्वजनिक नहीं है। स्वीकृत होने के बाद यह सार्वजनिक हो जाएगा।';
+
+  @override
+  String get appUnderReviewOwner =>
+      'आपका ऐप समीक्षाधीन है और केवल आपके लिए दृश्यमान है। स्वीकृत होने के बाद यह सार्वजनिक हो जाएगा।';
+
+  @override
+  String get appRejectedNotice =>
+      'आपका ऐप अस्वीकार कर दिया गया है। कृपया ऐप विवरण अपडेट करें और समीक्षा के लिए पुनः सबमिट करें।';
+
+  @override
+  String get setupSteps => 'सेटअप चरण';
+
+  @override
+  String get setupInstructions => 'सेटअप निर्देश';
+
+  @override
+  String get integrationInstructions => 'एकीकरण निर्देश';
+
+  @override
+  String get preview => 'पूर्वावलोकन';
+
+  @override
+  String get aboutTheApp => 'ऐप के बारे में';
+
+  @override
+  String get aboutThePersona => 'व्यक्तित्व के बारे में';
+
+  @override
+  String get chatPersonality => 'चैट व्यक्तित्व';
+
+  @override
+  String get ratingsAndReviews => 'रेटिंग और समीक्षाएं';
+
+  @override
+  String get noRatings => 'कोई रेटिंग नहीं';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ रेटिंग';
+  }
+
+  @override
+  String get errorActivatingApp => 'ऐप सक्रिय करने में त्रुटि';
+
+  @override
+  String get integrationSetupRequired => 'यदि यह एक एकीकरण ऐप है, तो सुनिश्चित करें कि सेटअप पूर्ण हो गया है।';
+
+  @override
+  String get installed => 'इंस्टॉल किया गया';
 }

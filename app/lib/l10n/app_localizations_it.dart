@@ -2865,7 +2865,7 @@ class AppLocalizationsIt extends AppLocalizations {
       'Sei un\'app fantastica, il tuo compito è rispondere alle domande degli utenti e farli sentire bene...';
 
   @override
-  String get conversationPrompt => 'Prompt Conversazione';
+  String get conversationPrompt => 'Prompt di conversazione';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2912,4 +2912,79 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get connectNow => 'Collega Ora';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installazioni';
+  }
+
+  @override
+  String get uninstallApp => 'Disinstalla app';
+
+  @override
+  String get subscribe => 'Abbonati';
+
+  @override
+  String get dataAccessNotice => 'Avviso di accesso ai dati';
+
+  @override
+  String get dataAccessWarning =>
+      'Questa app accederà ai tuoi dati. Omi AI non è responsabile di come i tuoi dati vengono utilizzati, modificati o eliminati da questa app';
+
+  @override
+  String get installApp => 'Installa app';
+
+  @override
+  String get betaTesterNotice =>
+      'Sei un beta tester per questa app. Non è ancora pubblica. Diventerà pubblica una volta approvata.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'La tua app è in revisione e visibile solo a te. Diventerà pubblica una volta approvata.';
+
+  @override
+  String get appRejectedNotice =>
+      'La tua app è stata rifiutata. Aggiorna i dettagli dell\'app e inviala nuovamente per la revisione.';
+
+  @override
+  String get setupSteps => 'Passaggi di configurazione';
+
+  @override
+  String get setupInstructions => 'Istruzioni di configurazione';
+
+  @override
+  String get integrationInstructions => 'Istruzioni di integrazione';
+
+  @override
+  String get preview => 'Anteprima';
+
+  @override
+  String get aboutTheApp => 'Informazioni sull\'app';
+
+  @override
+  String get aboutThePersona => 'Informazioni sulla persona';
+
+  @override
+  String get chatPersonality => 'Personalità della chat';
+
+  @override
+  String get ratingsAndReviews => 'Valutazioni e recensioni';
+
+  @override
+  String get noRatings => 'nessuna valutazione';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ valutazioni';
+  }
+
+  @override
+  String get errorActivatingApp => 'Errore nell\'attivazione dell\'app';
+
+  @override
+  String get integrationSetupRequired =>
+      'Se questa è un\'app di integrazione, assicurati che la configurazione sia completata.';
+
+  @override
+  String get installed => 'Installato';
 }

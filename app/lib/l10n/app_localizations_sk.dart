@@ -2904,4 +2904,76 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get connectNow => 'Pripojiť teraz';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ inštalácií';
+  }
+
+  @override
+  String get uninstallApp => 'Odinštalovať aplikáciu';
+
+  @override
+  String get subscribe => 'Prihlásiť sa na odber';
+
+  @override
+  String get dataAccessNotice => 'Upozornenie na prístup k údajom';
+
+  @override
+  String get dataAccessWarning =>
+      'Táto aplikácia bude mať prístup k vašim údajom. Omi AI nie je zodpovedný za to, ako táto aplikácia používa, upravuje alebo maže vaše údaje';
+
+  @override
+  String get installApp => 'Inštalovať aplikáciu';
+
+  @override
+  String get betaTesterNotice => 'Ste beta tester tejto aplikácie. Ešte nie je verejná. Bude verejná po schválení.';
+
+  @override
+  String get appUnderReviewOwner => 'Vaša aplikácia je v recenzii a viditeľná len pre vás. Bude verejná po schválení.';
+
+  @override
+  String get appRejectedNotice =>
+      'Vaša aplikácia bola zamietnutá. Aktualizujte prosím podrobnosti aplikácie a odošlite ju znova na recenziu.';
+
+  @override
+  String get setupSteps => 'Kroky nastavenia';
+
+  @override
+  String get setupInstructions => 'Pokyny na nastavenie';
+
+  @override
+  String get integrationInstructions => 'Pokyny na integráciu';
+
+  @override
+  String get preview => 'Náhľad';
+
+  @override
+  String get aboutTheApp => 'O aplikácii';
+
+  @override
+  String get aboutThePersona => 'O persóne';
+
+  @override
+  String get chatPersonality => 'Osobnosť chatu';
+
+  @override
+  String get ratingsAndReviews => 'Hodnotenia a recenzie';
+
+  @override
+  String get noRatings => 'žiadne hodnotenia';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ hodnotení';
+  }
+
+  @override
+  String get errorActivatingApp => 'Chyba pri aktivácii aplikácie';
+
+  @override
+  String get integrationSetupRequired => 'Ak sa jedná o integračnú aplikáciu, uistite sa, že je nastavenie dokončené.';
+
+  @override
+  String get installed => 'Nainštalované';
 }

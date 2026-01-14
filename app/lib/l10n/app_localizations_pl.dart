@@ -2804,7 +2804,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get open => 'Otwórz';
 
   @override
-  String get install => 'Instaluj';
+  String get install => 'Zainstaluj';
 
   @override
   String get noAppsAvailable => 'Brak dostępnych aplikacji';
@@ -2904,4 +2904,79 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get connectNow => 'Połącz teraz';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instalacji';
+  }
+
+  @override
+  String get uninstallApp => 'Odinstaluj aplikację';
+
+  @override
+  String get subscribe => 'Subskrybuj';
+
+  @override
+  String get dataAccessNotice => 'Powiadomienie o dostępie do danych';
+
+  @override
+  String get dataAccessWarning =>
+      'Ta aplikacja będzie miała dostęp do Twoich danych. Omi AI nie ponosi odpowiedzialności za sposób, w jaki Twoje dane są wykorzystywane, modyfikowane lub usuwane przez tę aplikację';
+
+  @override
+  String get installApp => 'Zainstaluj aplikację';
+
+  @override
+  String get betaTesterNotice =>
+      'Jesteś testerem beta tej aplikacji. Nie jest jeszcze publiczna. Stanie się publiczna po zatwierdzeniu.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Twoja aplikacja jest w trakcie przeglądu i widoczna tylko dla Ciebie. Stanie się publiczna po zatwierdzeniu.';
+
+  @override
+  String get appRejectedNotice =>
+      'Twoja aplikacja została odrzucona. Zaktualizuj szczegóły aplikacji i prześlij ją ponownie do przeglądu.';
+
+  @override
+  String get setupSteps => 'Kroki konfiguracji';
+
+  @override
+  String get setupInstructions => 'Instrukcje konfiguracji';
+
+  @override
+  String get integrationInstructions => 'Instrukcje integracji';
+
+  @override
+  String get preview => 'Podgląd';
+
+  @override
+  String get aboutTheApp => 'O aplikacji';
+
+  @override
+  String get aboutThePersona => 'O personie';
+
+  @override
+  String get chatPersonality => 'Osobowość czatu';
+
+  @override
+  String get ratingsAndReviews => 'Oceny i recenzje';
+
+  @override
+  String get noRatings => 'brak ocen';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ ocen';
+  }
+
+  @override
+  String get errorActivatingApp => 'Błąd aktywacji aplikacji';
+
+  @override
+  String get integrationSetupRequired =>
+      'Jeśli to aplikacja integracyjna, upewnij się, że konfiguracja jest zakończona.';
+
+  @override
+  String get installed => 'Zainstalowano';
 }

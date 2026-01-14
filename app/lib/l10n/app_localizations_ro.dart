@@ -2208,7 +2208,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get filterManual => 'Manual';
 
   @override
-  String get completed => 'Completed';
+  String get completed => 'Finalizat';
 
   @override
   String get markComplete => 'Marchează ca finalizat';
@@ -2867,7 +2867,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Ești o aplicație grozavă, treaba ta este să răspunzi la întrebările utilizatorilor și să-i faci să se simtă bine...';
 
   @override
-  String get conversationPrompt => 'Solicitare Conversație';
+  String get conversationPrompt => 'Prompt de conversație';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2914,4 +2914,79 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get connectNow => 'Conectează Acum';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instalări';
+  }
+
+  @override
+  String get uninstallApp => 'Dezinstalează aplicația';
+
+  @override
+  String get subscribe => 'Abonează-te';
+
+  @override
+  String get dataAccessNotice => 'Notificare acces la date';
+
+  @override
+  String get dataAccessWarning =>
+      'Această aplicație va accesa datele dvs. Omi AI nu este responsabil pentru modul în care datele dvs. sunt utilizate, modificate sau șterse de această aplicație';
+
+  @override
+  String get installApp => 'Instalează aplicația';
+
+  @override
+  String get betaTesterNotice =>
+      'Ești tester beta pentru această aplicație. Nu este încă publică. Va fi publică odată ce va fi aprobată.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Aplicația ta este în curs de revizuire și vizibilă doar pentru tine. Va fi publică odată ce va fi aprobată.';
+
+  @override
+  String get appRejectedNotice =>
+      'Aplicația ta a fost respinsă. Te rugăm să actualizezi detaliile aplicației și să o trimiți din nou pentru revizuire.';
+
+  @override
+  String get setupSteps => 'Pași de configurare';
+
+  @override
+  String get setupInstructions => 'Instrucțiuni de configurare';
+
+  @override
+  String get integrationInstructions => 'Instrucțiuni de integrare';
+
+  @override
+  String get preview => 'Previzualizare';
+
+  @override
+  String get aboutTheApp => 'Despre aplicație';
+
+  @override
+  String get aboutThePersona => 'Despre persoană';
+
+  @override
+  String get chatPersonality => 'Personalitatea chat-ului';
+
+  @override
+  String get ratingsAndReviews => 'Evaluări și recenzii';
+
+  @override
+  String get noRatings => 'fără evaluări';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ evaluări';
+  }
+
+  @override
+  String get errorActivatingApp => 'Eroare la activarea aplicației';
+
+  @override
+  String get integrationSetupRequired =>
+      'Dacă aceasta este o aplicație de integrare, asigurați-vă că configurarea este completă.';
+
+  @override
+  String get installed => 'Instalat';
 }

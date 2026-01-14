@@ -2201,7 +2201,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get filterManual => 'Власні';
 
   @override
-  String get completed => 'Виконано';
+  String get completed => 'Завершено';
 
   @override
   String get markComplete => 'Позначити як виконане';
@@ -2857,7 +2857,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Ви чудовий додаток, ваше завдання - відповідати на запити користувачів і змушувати їх почуватися добре...';
 
   @override
-  String get conversationPrompt => 'Підказка розмови';
+  String get conversationPrompt => 'Запит розмови';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2904,4 +2904,77 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get connectNow => 'Підключити зараз';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ встановлень';
+  }
+
+  @override
+  String get uninstallApp => 'Видалити додаток';
+
+  @override
+  String get subscribe => 'Підписатися';
+
+  @override
+  String get dataAccessNotice => 'Повідомлення про доступ до даних';
+
+  @override
+  String get dataAccessWarning =>
+      'Цей додаток матиме доступ до ваших даних. Omi AI не несе відповідальності за те, як ваші дані використовуються, змінюються або видаляються цим додатком';
+
+  @override
+  String get installApp => 'Встановити додаток';
+
+  @override
+  String get betaTesterNotice =>
+      'Ви бета-тестувальник цього додатка. Він ще не є публічним. Він стане публічним після схвалення.';
+
+  @override
+  String get appUnderReviewOwner => 'Ваш додаток на розгляді та видимий лише вам. Він стане публічним після схвалення.';
+
+  @override
+  String get appRejectedNotice =>
+      'Ваш додаток було відхилено. Будь ласка, оновіть деталі додатка та надішліть його на розгляд знову.';
+
+  @override
+  String get setupSteps => 'Кроки налаштування';
+
+  @override
+  String get setupInstructions => 'Інструкції з налаштування';
+
+  @override
+  String get integrationInstructions => 'Інструкції з інтеграції';
+
+  @override
+  String get preview => 'Попередній перегляд';
+
+  @override
+  String get aboutTheApp => 'Про додаток';
+
+  @override
+  String get aboutThePersona => 'Про персону';
+
+  @override
+  String get chatPersonality => 'Особистість чату';
+
+  @override
+  String get ratingsAndReviews => 'Оцінки та відгуки';
+
+  @override
+  String get noRatings => 'немає оцінок';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ оцінок';
+  }
+
+  @override
+  String get errorActivatingApp => 'Помилка активації додатка';
+
+  @override
+  String get integrationSetupRequired => 'Якщо це додаток інтеграції, переконайтеся, що налаштування завершено.';
+
+  @override
+  String get installed => 'Встановлено';
 }

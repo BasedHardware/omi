@@ -2858,7 +2858,7 @@ class AppLocalizationsBg extends AppLocalizations {
       'Вие сте страхотно приложение, вашата задача е да отговаряте на потребителските запитвания и да ги карате да се чувстват добре...';
 
   @override
-  String get conversationPrompt => 'Подсказка за разговор';
+  String get conversationPrompt => 'Подканване за разговор';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2905,4 +2905,78 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get connectNow => 'Свържи сега';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ инсталации';
+  }
+
+  @override
+  String get uninstallApp => 'Деинсталиране на приложението';
+
+  @override
+  String get subscribe => 'Абониране';
+
+  @override
+  String get dataAccessNotice => 'Уведомление за достъп до данни';
+
+  @override
+  String get dataAccessWarning =>
+      'Това приложение ще има достъп до вашите данни. Omi AI не носи отговорност за това как вашите данни се използват, модифицират или изтриват от това приложение';
+
+  @override
+  String get installApp => 'Инсталиране на приложението';
+
+  @override
+  String get betaTesterNotice =>
+      'Вие сте бета тестер за това приложение. То все още не е публично. Ще стане публично след одобрение.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Вашето приложение е в процес на преглед и е видимо само за вас. Ще стане публично след одобрение.';
+
+  @override
+  String get appRejectedNotice =>
+      'Вашето приложение е отхвърлено. Моля, актуализирайте детайлите на приложението и го подайте отново за преглед.';
+
+  @override
+  String get setupSteps => 'Стъпки за настройка';
+
+  @override
+  String get setupInstructions => 'Инструкции за настройка';
+
+  @override
+  String get integrationInstructions => 'Инструкции за интеграция';
+
+  @override
+  String get preview => 'Преглед';
+
+  @override
+  String get aboutTheApp => 'За приложението';
+
+  @override
+  String get aboutThePersona => 'За персоната';
+
+  @override
+  String get chatPersonality => 'Личност на чата';
+
+  @override
+  String get ratingsAndReviews => 'Оценки и отзиви';
+
+  @override
+  String get noRatings => 'няма оценки';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ оценки';
+  }
+
+  @override
+  String get errorActivatingApp => 'Грешка при активиране на приложението';
+
+  @override
+  String get integrationSetupRequired => 'Ако това е интеграционно приложение, уверете се, че настройката е завършена.';
+
+  @override
+  String get installed => 'Инсталирано';
 }

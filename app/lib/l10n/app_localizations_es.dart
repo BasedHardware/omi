@@ -2885,4 +2885,79 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get connectNow => 'Conectar ahora';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instalaciones';
+  }
+
+  @override
+  String get uninstallApp => 'Desinstalar aplicación';
+
+  @override
+  String get subscribe => 'Suscribirse';
+
+  @override
+  String get dataAccessNotice => 'Aviso de acceso a datos';
+
+  @override
+  String get dataAccessWarning =>
+      'Esta aplicación accederá a sus datos. Omi AI no es responsable de cómo esta aplicación utiliza, modifica o elimina sus datos';
+
+  @override
+  String get installApp => 'Instalar aplicación';
+
+  @override
+  String get betaTesterNotice =>
+      'Eres un probador beta de esta aplicación. Aún no es pública. Será pública una vez aprobada.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Tu aplicación está en revisión y solo visible para ti. Será pública una vez aprobada.';
+
+  @override
+  String get appRejectedNotice =>
+      'Tu aplicación ha sido rechazada. Por favor actualiza los detalles de la aplicación y vuelve a enviarla para revisión.';
+
+  @override
+  String get setupSteps => 'Pasos de configuración';
+
+  @override
+  String get setupInstructions => 'Instrucciones de configuración';
+
+  @override
+  String get integrationInstructions => 'Instrucciones de integración';
+
+  @override
+  String get preview => 'Vista previa';
+
+  @override
+  String get aboutTheApp => 'Acerca de la aplicación';
+
+  @override
+  String get aboutThePersona => 'Acerca de la persona';
+
+  @override
+  String get chatPersonality => 'Personalidad del chat';
+
+  @override
+  String get ratingsAndReviews => 'Calificaciones y reseñas';
+
+  @override
+  String get noRatings => 'sin calificaciones';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ calificaciones';
+  }
+
+  @override
+  String get errorActivatingApp => 'Error al activar la aplicación';
+
+  @override
+  String get integrationSetupRequired =>
+      'Si esta es una aplicación de integración, asegúrese de que la configuración esté completa.';
+
+  @override
+  String get installed => 'Instalado';
 }

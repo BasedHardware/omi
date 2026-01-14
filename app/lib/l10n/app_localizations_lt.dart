@@ -2197,7 +2197,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get filterManual => 'Rankinis';
 
   @override
-  String get completed => 'Baigta';
+  String get completed => 'Užbaigta';
 
   @override
   String get markComplete => 'Pažymėti kaip užbaigtą';
@@ -2853,7 +2853,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Jūs esate puiki programėlė, jūsų darbas – atsakyti į vartotojų užklausas ir padaryti, kad jie jaustųsi gerai...';
 
   @override
-  String get conversationPrompt => 'Pokalbio nurodymas';
+  String get conversationPrompt => 'Pokalbio raginimas';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2900,4 +2900,76 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get connectNow => 'Prijungti dabar';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ diegimų';
+  }
+
+  @override
+  String get uninstallApp => 'Pašalinti programą';
+
+  @override
+  String get subscribe => 'Prenumeruoti';
+
+  @override
+  String get dataAccessNotice => 'Duomenų prieigos pranešimas';
+
+  @override
+  String get dataAccessWarning =>
+      'Ši programa turės prieigą prie jūsų duomenų. Omi AI neatsako už tai, kaip ši programa naudoja, modifikuoja ar ištrina jūsų duomenis';
+
+  @override
+  String get installApp => 'Įdiegti programą';
+
+  @override
+  String get betaTesterNotice => 'Esate šios programos beta testuotojas. Ji dar nėra vieša. Ji taps vieša patvirtinus.';
+
+  @override
+  String get appUnderReviewOwner => 'Jūsų programa peržiūrima ir matoma tik jums. Ji taps vieša patvirtinus.';
+
+  @override
+  String get appRejectedNotice =>
+      'Jūsų programa buvo atmesta. Atnaujinkite programos informaciją ir pateikite ją iš naujo peržiūrai.';
+
+  @override
+  String get setupSteps => 'Sąrankos veiksmai';
+
+  @override
+  String get setupInstructions => 'Sąrankos instrukcijos';
+
+  @override
+  String get integrationInstructions => 'Integracijos instrukcijos';
+
+  @override
+  String get preview => 'Peržiūra';
+
+  @override
+  String get aboutTheApp => 'Apie programą';
+
+  @override
+  String get aboutThePersona => 'Apie asmenybę';
+
+  @override
+  String get chatPersonality => 'Pokalbio asmenybė';
+
+  @override
+  String get ratingsAndReviews => 'Įvertinimai ir atsiliepimai';
+
+  @override
+  String get noRatings => 'nėra įvertinimų';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ įvertinimų';
+  }
+
+  @override
+  String get errorActivatingApp => 'Klaida aktyvinant programą';
+
+  @override
+  String get integrationSetupRequired => 'Jei tai integracijos programa, įsitikinkite, kad sąranka užbaigta.';
+
+  @override
+  String get installed => 'Įdiegta';
 }

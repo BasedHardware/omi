@@ -2874,7 +2874,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Είστε μια υπέροχη εφαρμογή, η δουλειά σας είναι να απαντάτε στα ερωτήματα των χρηστών και να τους κάνετε να αισθάνονται καλά...';
 
   @override
-  String get conversationPrompt => 'Προτροπή συζήτησης';
+  String get conversationPrompt => 'Προτροπή συνομιλίας';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2921,4 +2921,79 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get connectNow => 'Σύνδεση τώρα';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ εγκαταστάσεις';
+  }
+
+  @override
+  String get uninstallApp => 'Απεγκατάσταση εφαρμογής';
+
+  @override
+  String get subscribe => 'Εγγραφή';
+
+  @override
+  String get dataAccessNotice => 'Ειδοποίηση πρόσβασης δεδομένων';
+
+  @override
+  String get dataAccessWarning =>
+      'Αυτή η εφαρμογή θα έχει πρόσβαση στα δεδομένα σας. Η Omi AI δεν είναι υπεύθυνη για τον τρόπο χρήσης, τροποποίησης ή διαγραφής των δεδομένων σας από αυτήν την εφαρμογή';
+
+  @override
+  String get installApp => 'Εγκατάσταση εφαρμογής';
+
+  @override
+  String get betaTesterNotice =>
+      'Είστε δοκιμαστής beta για αυτήν την εφαρμογή. Δεν είναι ακόμα δημόσια. Θα γίνει δημόσια μόλις εγκριθεί.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Η εφαρμογή σας βρίσκεται υπό αναθεώρηση και είναι ορατή μόνο σε εσάς. Θα γίνει δημόσια μόλις εγκριθεί.';
+
+  @override
+  String get appRejectedNotice =>
+      'Η εφαρμογή σας απορρίφθηκε. Παρακαλούμε ενημερώστε τις λεπτομέρειες της εφαρμογής και υποβάλετε ξανά για αναθεώρηση.';
+
+  @override
+  String get setupSteps => 'Βήματα εγκατάστασης';
+
+  @override
+  String get setupInstructions => 'Οδηγίες εγκατάστασης';
+
+  @override
+  String get integrationInstructions => 'Οδηγίες ενσωμάτωσης';
+
+  @override
+  String get preview => 'Προεπισκόπηση';
+
+  @override
+  String get aboutTheApp => 'Σχετικά με την εφαρμογή';
+
+  @override
+  String get aboutThePersona => 'Σχετικά με το πρόσωπο';
+
+  @override
+  String get chatPersonality => 'Προσωπικότητα συνομιλίας';
+
+  @override
+  String get ratingsAndReviews => 'Αξιολογήσεις και κριτικές';
+
+  @override
+  String get noRatings => 'χωρίς αξιολογήσεις';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ αξιολογήσεις';
+  }
+
+  @override
+  String get errorActivatingApp => 'Σφάλμα ενεργοποίησης εφαρμογής';
+
+  @override
+  String get integrationSetupRequired =>
+      'Εάν αυτή είναι μια εφαρμογή ενσωμάτωσης, βεβαιωθείτε ότι η εγκατάσταση έχει ολοκληρωθεί.';
+
+  @override
+  String get installed => 'Εγκατεστημένο';
 }

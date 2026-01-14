@@ -2861,7 +2861,7 @@ class AppLocalizationsId extends AppLocalizations {
       'Anda adalah aplikasi yang luar biasa, tugas Anda adalah merespons pertanyaan pengguna dan membuat mereka merasa baik...';
 
   @override
-  String get conversationPrompt => 'Petunjuk Percakapan';
+  String get conversationPrompt => 'Prompt Percakapan';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2908,4 +2908,78 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get connectNow => 'Hubungkan Sekarang';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instalasi';
+  }
+
+  @override
+  String get uninstallApp => 'Copot Aplikasi';
+
+  @override
+  String get subscribe => 'Berlangganan';
+
+  @override
+  String get dataAccessNotice => 'Pemberitahuan Akses Data';
+
+  @override
+  String get dataAccessWarning =>
+      'Aplikasi ini akan mengakses data Anda. Omi AI tidak bertanggung jawab atas bagaimana data Anda digunakan, dimodifikasi, atau dihapus oleh aplikasi ini';
+
+  @override
+  String get installApp => 'Instal Aplikasi';
+
+  @override
+  String get betaTesterNotice =>
+      'Anda adalah penguji beta untuk aplikasi ini. Ini belum publik. Ini akan menjadi publik setelah disetujui.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Aplikasi Anda sedang dalam peninjauan dan hanya terlihat oleh Anda. Ini akan menjadi publik setelah disetujui.';
+
+  @override
+  String get appRejectedNotice =>
+      'Aplikasi Anda telah ditolak. Harap perbarui detail aplikasi dan kirim ulang untuk ditinjau.';
+
+  @override
+  String get setupSteps => 'Langkah Pengaturan';
+
+  @override
+  String get setupInstructions => 'Instruksi Pengaturan';
+
+  @override
+  String get integrationInstructions => 'Instruksi Integrasi';
+
+  @override
+  String get preview => 'Pratinjau';
+
+  @override
+  String get aboutTheApp => 'Tentang Aplikasi';
+
+  @override
+  String get aboutThePersona => 'Tentang Persona';
+
+  @override
+  String get chatPersonality => 'Kepribadian Obrolan';
+
+  @override
+  String get ratingsAndReviews => 'Peringkat & Ulasan';
+
+  @override
+  String get noRatings => 'tidak ada peringkat';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ peringkat';
+  }
+
+  @override
+  String get errorActivatingApp => 'Kesalahan mengaktifkan aplikasi';
+
+  @override
+  String get integrationSetupRequired => 'Jika ini adalah aplikasi integrasi, pastikan pengaturan telah selesai.';
+
+  @override
+  String get installed => 'Terinstal';
 }

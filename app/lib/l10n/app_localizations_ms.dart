@@ -2909,4 +2909,78 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get connectNow => 'Sambung Sekarang';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ pemasangan';
+  }
+
+  @override
+  String get uninstallApp => 'Nyahpasang Apl';
+
+  @override
+  String get subscribe => 'Langgan';
+
+  @override
+  String get dataAccessNotice => 'Notis Akses Data';
+
+  @override
+  String get dataAccessWarning =>
+      'Apl ini akan mengakses data anda. Omi AI tidak bertanggungjawab terhadap bagaimana data anda digunakan, diubah suai, atau dipadamkan oleh apl ini';
+
+  @override
+  String get installApp => 'Pasang Apl';
+
+  @override
+  String get betaTesterNotice =>
+      'Anda adalah penguji beta untuk apl ini. Ia belum lagi awam. Ia akan menjadi awam setelah diluluskan.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Apl anda sedang dalam semakan dan hanya kelihatan kepada anda. Ia akan menjadi awam setelah diluluskan.';
+
+  @override
+  String get appRejectedNotice =>
+      'Apl anda telah ditolak. Sila kemas kini butiran apl dan hantar semula untuk semakan.';
+
+  @override
+  String get setupSteps => 'Langkah Persediaan';
+
+  @override
+  String get setupInstructions => 'Arahan Persediaan';
+
+  @override
+  String get integrationInstructions => 'Arahan Integrasi';
+
+  @override
+  String get preview => 'Pratonton';
+
+  @override
+  String get aboutTheApp => 'Tentang Apl';
+
+  @override
+  String get aboutThePersona => 'Tentang Persona';
+
+  @override
+  String get chatPersonality => 'Keperibadian Sembang';
+
+  @override
+  String get ratingsAndReviews => 'Penilaian & Ulasan';
+
+  @override
+  String get noRatings => 'tiada penilaian';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ penilaian';
+  }
+
+  @override
+  String get errorActivatingApp => 'Ralat mengaktifkan apl';
+
+  @override
+  String get integrationSetupRequired => 'Jika ini adalah apl integrasi, pastikan persediaan telah selesai.';
+
+  @override
+  String get installed => 'Dipasang';
 }

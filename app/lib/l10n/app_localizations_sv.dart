@@ -2201,7 +2201,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get filterManual => 'Manuell';
 
   @override
-  String get completed => 'Slutförd';
+  String get completed => 'Klar';
 
   @override
   String get markComplete => 'Markera som slutförd';
@@ -2856,7 +2856,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'Du är en fantastisk app, ditt jobb är att svara på användarfrågor och få dem att må bra...';
 
   @override
-  String get conversationPrompt => 'Samtalsuppmaning';
+  String get conversationPrompt => 'Samtalsprompt';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2903,4 +2903,77 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get connectNow => 'Anslut nu';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installationer';
+  }
+
+  @override
+  String get uninstallApp => 'Avinstallera app';
+
+  @override
+  String get subscribe => 'Prenumerera';
+
+  @override
+  String get dataAccessNotice => 'Meddelande om dataåtkomst';
+
+  @override
+  String get dataAccessWarning =>
+      'Denna app kommer att få åtkomst till dina data. Omi AI är inte ansvarig för hur dina data används, modifieras eller raderas av denna app';
+
+  @override
+  String get installApp => 'Installera app';
+
+  @override
+  String get betaTesterNotice =>
+      'Du är betatestare för denna app. Den är inte offentlig ännu. Den blir offentlig när den godkänns.';
+
+  @override
+  String get appUnderReviewOwner => 'Din app granskas och är bara synlig för dig. Den blir offentlig när den godkänns.';
+
+  @override
+  String get appRejectedNotice =>
+      'Din app har avvisats. Uppdatera appens detaljer och skicka in den igen för granskning.';
+
+  @override
+  String get setupSteps => 'Installationssteg';
+
+  @override
+  String get setupInstructions => 'Installationsinstruktioner';
+
+  @override
+  String get integrationInstructions => 'Integrationsinstruktioner';
+
+  @override
+  String get preview => 'Förhandsvisning';
+
+  @override
+  String get aboutTheApp => 'Om appen';
+
+  @override
+  String get aboutThePersona => 'Om personan';
+
+  @override
+  String get chatPersonality => 'Chattpersonlighet';
+
+  @override
+  String get ratingsAndReviews => 'Betyg och recensioner';
+
+  @override
+  String get noRatings => 'inga betyg';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ betyg';
+  }
+
+  @override
+  String get errorActivatingApp => 'Fel vid aktivering av app';
+
+  @override
+  String get integrationSetupRequired => 'Om detta är en integrationsapp, se till att installationen är klar.';
+
+  @override
+  String get installed => 'Installerad';
 }

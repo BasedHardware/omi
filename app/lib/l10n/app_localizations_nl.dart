@@ -2907,4 +2907,79 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get connectNow => 'Nu verbinden';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installaties';
+  }
+
+  @override
+  String get uninstallApp => 'App verwijderen';
+
+  @override
+  String get subscribe => 'Abonneren';
+
+  @override
+  String get dataAccessNotice => 'Melding gegevenstoegang';
+
+  @override
+  String get dataAccessWarning =>
+      'Deze app heeft toegang tot uw gegevens. Omi AI is niet verantwoordelijk voor hoe uw gegevens worden gebruikt, gewijzigd of verwijderd door deze app';
+
+  @override
+  String get installApp => 'App installeren';
+
+  @override
+  String get betaTesterNotice =>
+      'U bent een bètatester voor deze app. Het is nog niet openbaar. Het wordt openbaar zodra het is goedgekeurd.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Uw app wordt beoordeeld en is alleen zichtbaar voor u. Het wordt openbaar zodra het is goedgekeurd.';
+
+  @override
+  String get appRejectedNotice =>
+      'Uw app is afgewezen. Werk de app-details bij en dien deze opnieuw in ter beoordeling.';
+
+  @override
+  String get setupSteps => 'Installatiestappen';
+
+  @override
+  String get setupInstructions => 'Installatie-instructies';
+
+  @override
+  String get integrationInstructions => 'Integratie-instructies';
+
+  @override
+  String get preview => 'Voorbeeld';
+
+  @override
+  String get aboutTheApp => 'Over de app';
+
+  @override
+  String get aboutThePersona => 'Over de persona';
+
+  @override
+  String get chatPersonality => 'Chatpersoonlijkheid';
+
+  @override
+  String get ratingsAndReviews => 'Beoordelingen en recensies';
+
+  @override
+  String get noRatings => 'geen beoordelingen';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ beoordelingen';
+  }
+
+  @override
+  String get errorActivatingApp => 'Fout bij activeren van de app';
+
+  @override
+  String get integrationSetupRequired =>
+      'Als dit een integratie-app is, zorg er dan voor dat de installatie is voltooid.';
+
+  @override
+  String get installed => 'Geïnstalleerd';
 }

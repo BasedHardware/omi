@@ -2217,7 +2217,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get filterManual => 'Manuell';
 
   @override
-  String get completed => 'Erledigt';
+  String get completed => 'Abgeschlossen';
 
   @override
   String get markComplete => 'Als abgeschlossen markieren';
@@ -2876,7 +2876,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Sie sind eine großartige App, Ihre Aufgabe ist es, auf Benutzeranfragen zu antworten und ihnen ein gutes Gefühl zu geben...';
 
   @override
-  String get conversationPrompt => 'Konversations-Eingabeaufforderung';
+  String get conversationPrompt => 'Gesprächsaufforderung';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2923,4 +2923,79 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get connectNow => 'Jetzt verbinden';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ Installationen';
+  }
+
+  @override
+  String get uninstallApp => 'App deinstallieren';
+
+  @override
+  String get subscribe => 'Abonnieren';
+
+  @override
+  String get dataAccessNotice => 'Datenzugriffshinweis';
+
+  @override
+  String get dataAccessWarning =>
+      'Diese App greift auf Ihre Daten zu. Omi AI ist nicht verantwortlich dafür, wie Ihre Daten von dieser App verwendet, geändert oder gelöscht werden';
+
+  @override
+  String get installApp => 'App installieren';
+
+  @override
+  String get betaTesterNotice =>
+      'Sie sind Beta-Tester für diese App. Sie ist noch nicht öffentlich. Sie wird öffentlich, sobald sie genehmigt wurde.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Ihre App wird überprüft und ist nur für Sie sichtbar. Sie wird öffentlich, sobald sie genehmigt wurde.';
+
+  @override
+  String get appRejectedNotice =>
+      'Ihre App wurde abgelehnt. Bitte aktualisieren Sie die App-Details und reichen Sie sie erneut zur Überprüfung ein.';
+
+  @override
+  String get setupSteps => 'Einrichtungsschritte';
+
+  @override
+  String get setupInstructions => 'Einrichtungsanleitung';
+
+  @override
+  String get integrationInstructions => 'Integrationsanleitung';
+
+  @override
+  String get preview => 'Vorschau';
+
+  @override
+  String get aboutTheApp => 'Über die App';
+
+  @override
+  String get aboutThePersona => 'Über die Persona';
+
+  @override
+  String get chatPersonality => 'Chat-Persönlichkeit';
+
+  @override
+  String get ratingsAndReviews => 'Bewertungen und Rezensionen';
+
+  @override
+  String get noRatings => 'keine Bewertungen';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ Bewertungen';
+  }
+
+  @override
+  String get errorActivatingApp => 'Fehler beim Aktivieren der App';
+
+  @override
+  String get integrationSetupRequired =>
+      'Wenn dies eine Integrations-App ist, stellen Sie sicher, dass die Einrichtung abgeschlossen ist.';
+
+  @override
+  String get installed => 'Installiert';
 }

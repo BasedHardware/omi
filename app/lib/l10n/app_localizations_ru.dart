@@ -2206,7 +2206,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get filterManual => 'Ручные';
 
   @override
-  String get completed => 'Выполнено';
+  String get completed => 'Завершено';
 
   @override
   String get markComplete => 'Отметить как выполненное';
@@ -2861,7 +2861,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Вы - отличное приложение, ваша задача - отвечать на запросы пользователей и заставлять их чувствовать себя хорошо...';
 
   @override
-  String get conversationPrompt => 'Подсказка разговора';
+  String get conversationPrompt => 'Запрос разговора';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2908,4 +2908,78 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get connectNow => 'Подключить сейчас';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ установок';
+  }
+
+  @override
+  String get uninstallApp => 'Удалить приложение';
+
+  @override
+  String get subscribe => 'Подписаться';
+
+  @override
+  String get dataAccessNotice => 'Уведомление о доступе к данным';
+
+  @override
+  String get dataAccessWarning =>
+      'Это приложение получит доступ к вашим данным. Omi AI не несет ответственности за то, как ваши данные используются, изменяются или удаляются этим приложением';
+
+  @override
+  String get installApp => 'Установить приложение';
+
+  @override
+  String get betaTesterNotice =>
+      'Вы бета-тестер этого приложения. Оно еще не является публичным. Оно станет публичным после одобрения.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Ваше приложение находится на рассмотрении и видно только вам. Оно станет публичным после одобрения.';
+
+  @override
+  String get appRejectedNotice =>
+      'Ваше приложение было отклонено. Пожалуйста, обновите информацию о приложении и отправьте его на рассмотрение снова.';
+
+  @override
+  String get setupSteps => 'Шаги настройки';
+
+  @override
+  String get setupInstructions => 'Инструкции по настройке';
+
+  @override
+  String get integrationInstructions => 'Инструкции по интеграции';
+
+  @override
+  String get preview => 'Предварительный просмотр';
+
+  @override
+  String get aboutTheApp => 'О приложении';
+
+  @override
+  String get aboutThePersona => 'О персоне';
+
+  @override
+  String get chatPersonality => 'Личность чата';
+
+  @override
+  String get ratingsAndReviews => 'Оценки и отзывы';
+
+  @override
+  String get noRatings => 'нет оценок';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ оценок';
+  }
+
+  @override
+  String get errorActivatingApp => 'Ошибка активации приложения';
+
+  @override
+  String get integrationSetupRequired => 'Если это интеграционное приложение, убедитесь, что настройка завершена.';
+
+  @override
+  String get installed => 'Установлено';
 }

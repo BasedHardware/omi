@@ -2850,7 +2850,7 @@ class AppLocalizationsNo extends AppLocalizations {
       'Du er en fantastisk app, jobben din er å svare på brukerforespørsler og få dem til å føle seg bra...';
 
   @override
-  String get conversationPrompt => 'Samtale-instruksjon';
+  String get conversationPrompt => 'Samtaleprompt';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2897,4 +2897,78 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get connectNow => 'Koble til nå';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installasjoner';
+  }
+
+  @override
+  String get uninstallApp => 'Avinstaller app';
+
+  @override
+  String get subscribe => 'Abonner';
+
+  @override
+  String get dataAccessNotice => 'Datatilgangsvarsel';
+
+  @override
+  String get dataAccessWarning =>
+      'Denne appen vil få tilgang til dataene dine. Omi AI er ikke ansvarlig for hvordan dataene dine brukes, endres eller slettes av denne appen';
+
+  @override
+  String get installApp => 'Installer app';
+
+  @override
+  String get betaTesterNotice =>
+      'Du er betatester for denne appen. Den er ikke offentlig ennå. Den vil bli offentlig når den er godkjent.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Appen din er under vurdering og bare synlig for deg. Den vil bli offentlig når den er godkjent.';
+
+  @override
+  String get appRejectedNotice =>
+      'Appen din har blitt avvist. Vennligst oppdater appdetaljene og send inn på nytt for vurdering.';
+
+  @override
+  String get setupSteps => 'Oppsettstrinn';
+
+  @override
+  String get setupInstructions => 'Oppsettsanvisninger';
+
+  @override
+  String get integrationInstructions => 'Integrasjonsanvisninger';
+
+  @override
+  String get preview => 'Forhåndsvisning';
+
+  @override
+  String get aboutTheApp => 'Om appen';
+
+  @override
+  String get aboutThePersona => 'Om personaen';
+
+  @override
+  String get chatPersonality => 'Chatpersonlighet';
+
+  @override
+  String get ratingsAndReviews => 'Vurderinger og anmeldelser';
+
+  @override
+  String get noRatings => 'ingen vurderinger';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ vurderinger';
+  }
+
+  @override
+  String get errorActivatingApp => 'Feil ved aktivering av app';
+
+  @override
+  String get integrationSetupRequired => 'Hvis dette er en integrasjonsapp, sørg for at oppsettet er fullført.';
+
+  @override
+  String get installed => 'Installert';
 }

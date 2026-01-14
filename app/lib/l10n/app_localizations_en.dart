@@ -2904,4 +2904,77 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectNow => 'Connect Now';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installs';
+  }
+
+  @override
+  String get uninstallApp => 'Uninstall App';
+
+  @override
+  String get subscribe => 'Subscribe';
+
+  @override
+  String get dataAccessNotice => 'Data Access Notice';
+
+  @override
+  String get dataAccessWarning =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+
+  @override
+  String get installApp => 'Install App';
+
+  @override
+  String get betaTesterNotice =>
+      'You are a beta tester for this app. It is not public yet. It will be public once approved.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Your app is under review and visible only to you. It will be public once approved.';
+
+  @override
+  String get appRejectedNotice => 'Your app has been rejected. Please update the app details and resubmit for review.';
+
+  @override
+  String get setupSteps => 'Setup Steps';
+
+  @override
+  String get setupInstructions => 'Setup Instructions';
+
+  @override
+  String get integrationInstructions => 'Integration Instructions';
+
+  @override
+  String get preview => 'Preview';
+
+  @override
+  String get aboutTheApp => 'About the App';
+
+  @override
+  String get aboutThePersona => 'About the Persona';
+
+  @override
+  String get chatPersonality => 'Chat Personality';
+
+  @override
+  String get ratingsAndReviews => 'Ratings & Reviews';
+
+  @override
+  String get noRatings => 'no ratings';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ ratings';
+  }
+
+  @override
+  String get errorActivatingApp => 'Error activating the app';
+
+  @override
+  String get integrationSetupRequired => 'If this is an integration app, make sure the setup is completed.';
+
+  @override
+  String get installed => 'Installed';
 }

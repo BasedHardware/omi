@@ -2857,7 +2857,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Jūs esat lieliska lietotne, jūsu darbs ir atbildēt uz lietotāju jautājumiem un likt viņiem justies labi...';
 
   @override
-  String get conversationPrompt => 'Sarunas norādījums';
+  String get conversationPrompt => 'Sarunas uzvedne';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2904,4 +2904,78 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get connectNow => 'Savienot tagad';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instalācijas';
+  }
+
+  @override
+  String get uninstallApp => 'Atinstalēt lietotni';
+
+  @override
+  String get subscribe => 'Abonēt';
+
+  @override
+  String get dataAccessNotice => 'Datu piekļuves paziņojums';
+
+  @override
+  String get dataAccessWarning =>
+      'Šī lietotne piekļūs jūsu datiem. Omi AI nav atbildīgs par to, kā šī lietotne izmanto, modificē vai dzēš jūsu datus';
+
+  @override
+  String get installApp => 'Instalēt lietotni';
+
+  @override
+  String get betaTesterNotice =>
+      'Jūs esat šīs lietotnes beta testētājs. Tā vēl nav publiska. Tā kļūs publiska pēc apstiprināšanas.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Jūsu lietotne tiek pārskatīta un ir redzama tikai jums. Tā kļūs publiska pēc apstiprināšanas.';
+
+  @override
+  String get appRejectedNotice =>
+      'Jūsu lietotne tika noraidīta. Lūdzu, atjauniniet lietotnes informāciju un atkārtoti iesniedziet to pārskatīšanai.';
+
+  @override
+  String get setupSteps => 'Iestatīšanas soļi';
+
+  @override
+  String get setupInstructions => 'Iestatīšanas instrukcijas';
+
+  @override
+  String get integrationInstructions => 'Integrācijas instrukcijas';
+
+  @override
+  String get preview => 'Priekšskatījums';
+
+  @override
+  String get aboutTheApp => 'Par lietotni';
+
+  @override
+  String get aboutThePersona => 'Par personu';
+
+  @override
+  String get chatPersonality => 'Tērzēšanas personība';
+
+  @override
+  String get ratingsAndReviews => 'Vērtējumi un atsauksmes';
+
+  @override
+  String get noRatings => 'nav vērtējumu';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ vērtējumi';
+  }
+
+  @override
+  String get errorActivatingApp => 'Kļūda, aktivizējot lietotni';
+
+  @override
+  String get integrationSetupRequired => 'Ja šī ir integrācijas lietotne, pārliecinieties, ka iestatīšana ir pabeigta.';
+
+  @override
+  String get installed => 'Instalēts';
 }

@@ -2202,7 +2202,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get filterManual => 'Manual';
 
   @override
-  String get completed => 'Completed';
+  String get completed => 'Fuldført';
 
   @override
   String get markComplete => 'Marker som fuldført';
@@ -2856,7 +2856,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Du er en fantastisk app, dit job er at svare på brugerforespørgsler og få dem til at føle sig godt tilpas...';
 
   @override
-  String get conversationPrompt => 'Samtale-prompt';
+  String get conversationPrompt => 'Samtaleprompt';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2903,4 +2903,79 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get connectNow => 'Tilslut nu';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installationer';
+  }
+
+  @override
+  String get uninstallApp => 'Afinstaller app';
+
+  @override
+  String get subscribe => 'Abonner';
+
+  @override
+  String get dataAccessNotice => 'Meddelelse om dataadgang';
+
+  @override
+  String get dataAccessWarning =>
+      'Denne app vil få adgang til dine data. Omi AI er ikke ansvarlig for, hvordan dine data bruges, ændres eller slettes af denne app';
+
+  @override
+  String get installApp => 'Installer app';
+
+  @override
+  String get betaTesterNotice =>
+      'Du er betatester for denne app. Den er ikke offentlig endnu. Den bliver offentlig, når den er godkendt.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Din app er under gennemgang og kun synlig for dig. Den bliver offentlig, når den er godkendt.';
+
+  @override
+  String get appRejectedNotice =>
+      'Din app er blevet afvist. Opdater venligst app-detaljerne og indsend den igen til gennemgang.';
+
+  @override
+  String get setupSteps => 'Opsætningstrin';
+
+  @override
+  String get setupInstructions => 'Opsætningsinstruktioner';
+
+  @override
+  String get integrationInstructions => 'Integrationsinstruktioner';
+
+  @override
+  String get preview => 'Forhåndsvisning';
+
+  @override
+  String get aboutTheApp => 'Om appen';
+
+  @override
+  String get aboutThePersona => 'Om personaen';
+
+  @override
+  String get chatPersonality => 'Chatpersonlighed';
+
+  @override
+  String get ratingsAndReviews => 'Vurderinger og anmeldelser';
+
+  @override
+  String get noRatings => 'ingen vurderinger';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ vurderinger';
+  }
+
+  @override
+  String get errorActivatingApp => 'Fejl ved aktivering af app';
+
+  @override
+  String get integrationSetupRequired =>
+      'Hvis dette er en integrationsapp, skal du sørge for, at opsætningen er fuldført.';
+
+  @override
+  String get installed => 'Installeret';
 }

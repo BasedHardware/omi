@@ -4227,7 +4227,7 @@ abstract class AppLocalizations {
   /// **'Manual'**
   String get filterManual;
 
-  /// Status label
+  /// Badge label indicating setup is completed
   ///
   /// In en, this message translates to:
   /// **'Completed'**
@@ -5493,7 +5493,7 @@ abstract class AppLocalizations {
   /// **'You are an awesome app, your job is to respond to the user queries and make them feel good...'**
   String get chatPromptPlaceholder;
 
-  /// Label for conversation prompt text field
+  /// Section title for conversation prompt
   ///
   /// In en, this message translates to:
   /// **'Conversation Prompt'**
@@ -5582,6 +5582,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect Now'**
   String get connectNow;
+
+  /// Number of app installs shown in app detail header
+  ///
+  /// In en, this message translates to:
+  /// **'{count}+ installs'**
+  String installsCount(String count);
+
+  /// Button label to uninstall an installed app
+  ///
+  /// In en, this message translates to:
+  /// **'Uninstall App'**
+  String get uninstallApp;
+
+  /// Button label to subscribe to a paid app
+  ///
+  /// In en, this message translates to:
+  /// **'Subscribe'**
+  String get subscribe;
+
+  /// Dialog title warning about app data access
+  ///
+  /// In en, this message translates to:
+  /// **'Data Access Notice'**
+  String get dataAccessNotice;
+
+  /// Warning message about app data access in confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app'**
+  String get dataAccessWarning;
+
+  /// Button label to install an app
+  ///
+  /// In en, this message translates to:
+  /// **'Install App'**
+  String get installApp;
+
+  /// Notice shown to beta testers of private apps
+  ///
+  /// In en, this message translates to:
+  /// **'You are a beta tester for this app. It is not public yet. It will be public once approved.'**
+  String get betaTesterNotice;
+
+  /// Notice shown to app owner when app is under review
+  ///
+  /// In en, this message translates to:
+  /// **'Your app is under review and visible only to you. It will be public once approved.'**
+  String get appUnderReviewOwner;
+
+  /// Notice shown when app submission is rejected
+  ///
+  /// In en, this message translates to:
+  /// **'Your app has been rejected. Please update the app details and resubmit for review.'**
+  String get appRejectedNotice;
+
+  /// Section title for integration setup steps
+  ///
+  /// In en, this message translates to:
+  /// **'Setup Steps'**
+  String get setupSteps;
+
+  /// Title for setup instructions page
+  ///
+  /// In en, this message translates to:
+  /// **'Setup Instructions'**
+  String get setupInstructions;
+
+  /// Link label for integration instructions
+  ///
+  /// In en, this message translates to:
+  /// **'Integration Instructions'**
+  String get integrationInstructions;
+
+  /// Section title for app preview images
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get preview;
+
+  /// Section title for app description
+  ///
+  /// In en, this message translates to:
+  /// **'About the App'**
+  String get aboutTheApp;
+
+  /// Section title for persona description
+  ///
+  /// In en, this message translates to:
+  /// **'About the Persona'**
+  String get aboutThePersona;
+
+  /// Section title for chat personality prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Personality'**
+  String get chatPersonality;
+
+  /// Section title for ratings and reviews
+  ///
+  /// In en, this message translates to:
+  /// **'Ratings & Reviews'**
+  String get ratingsAndReviews;
+
+  /// Text shown when app has no ratings
+  ///
+  /// In en, this message translates to:
+  /// **'no ratings'**
+  String get noRatings;
+
+  /// Number of ratings for an app
+  ///
+  /// In en, this message translates to:
+  /// **'{count}+ ratings'**
+  String ratingsCount(String count);
+
+  /// Dialog title when app activation fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error activating the app'**
+  String get errorActivatingApp;
+
+  /// Error message explaining integration setup requirement
+  ///
+  /// In en, this message translates to:
+  /// **'If this is an integration app, make sure the setup is completed.'**
+  String get integrationSetupRequired;
+
+  /// Badge label indicating an app is installed
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get installed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

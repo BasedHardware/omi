@@ -2845,4 +2845,74 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectNow => '立即连接';
+
+  @override
+  String installsCount(String count) {
+    return '$count+次安装';
+  }
+
+  @override
+  String get uninstallApp => '卸载应用';
+
+  @override
+  String get subscribe => '订阅';
+
+  @override
+  String get dataAccessNotice => '数据访问通知';
+
+  @override
+  String get dataAccessWarning => '此应用将访问您的数据。Omi AI 不对此应用如何使用、修改或删除您的数据负责';
+
+  @override
+  String get installApp => '安装应用';
+
+  @override
+  String get betaTesterNotice => '您是此应用的测试版测试者。它尚未公开。获得批准后将公开。';
+
+  @override
+  String get appUnderReviewOwner => '您的应用正在审核中,仅对您可见。获得批准后将公开。';
+
+  @override
+  String get appRejectedNotice => '您的应用已被拒绝。请更新应用详情并重新提交审核。';
+
+  @override
+  String get setupSteps => '设置步骤';
+
+  @override
+  String get setupInstructions => '设置说明';
+
+  @override
+  String get integrationInstructions => '集成说明';
+
+  @override
+  String get preview => '预览';
+
+  @override
+  String get aboutTheApp => '关于应用';
+
+  @override
+  String get aboutThePersona => '关于角色';
+
+  @override
+  String get chatPersonality => '聊天个性';
+
+  @override
+  String get ratingsAndReviews => '评分和评论';
+
+  @override
+  String get noRatings => '暂无评分';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+条评分';
+  }
+
+  @override
+  String get errorActivatingApp => '激活应用时出错';
+
+  @override
+  String get integrationSetupRequired => '如果这是集成应用,请确保设置已完成。';
+
+  @override
+  String get installed => '已安装';
 }

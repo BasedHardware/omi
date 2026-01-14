@@ -2814,7 +2814,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get open => 'Obrir';
 
   @override
-  String get install => 'Instal·lar';
+  String get install => 'Instal·la';
 
   @override
   String get noAppsAvailable => 'No hi ha aplicacions disponibles';
@@ -2914,4 +2914,79 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get connectNow => 'Connecta ara';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instal·lacions';
+  }
+
+  @override
+  String get uninstallApp => 'Desinstal·la l\'aplicació';
+
+  @override
+  String get subscribe => 'Subscriu-te';
+
+  @override
+  String get dataAccessNotice => 'Avís d\'accés a dades';
+
+  @override
+  String get dataAccessWarning =>
+      'Aquesta aplicació accedirà a les teves dades. Omi AI no és responsable de com s\'utilitzen, modifiquen o eliminen les teves dades per aquesta aplicació';
+
+  @override
+  String get installApp => 'Instal·la l\'aplicació';
+
+  @override
+  String get betaTesterNotice =>
+      'Ets provador beta d\'aquesta aplicació. Encara no és pública. Serà pública un cop aprovada.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'La teva aplicació està en revisió i només visible per a tu. Serà pública un cop aprovada.';
+
+  @override
+  String get appRejectedNotice =>
+      'La teva aplicació ha estat rebutjada. Si us plau, actualitza els detalls de l\'aplicació i torna-la a enviar per a revisió.';
+
+  @override
+  String get setupSteps => 'Passos de configuració';
+
+  @override
+  String get setupInstructions => 'Instruccions de configuració';
+
+  @override
+  String get integrationInstructions => 'Instruccions d\'integració';
+
+  @override
+  String get preview => 'Previsualització';
+
+  @override
+  String get aboutTheApp => 'Sobre l\'aplicació';
+
+  @override
+  String get aboutThePersona => 'Sobre la persona';
+
+  @override
+  String get chatPersonality => 'Personalitat del xat';
+
+  @override
+  String get ratingsAndReviews => 'Valoracions i ressenyes';
+
+  @override
+  String get noRatings => 'sense valoracions';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ valoracions';
+  }
+
+  @override
+  String get errorActivatingApp => 'Error en activar l\'aplicació';
+
+  @override
+  String get integrationSetupRequired =>
+      'Si aquesta és una aplicació d\'integració, assegura\'t que la configuració està completada.';
+
+  @override
+  String get installed => 'Instal·lat';
 }

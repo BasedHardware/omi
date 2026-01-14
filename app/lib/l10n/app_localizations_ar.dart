@@ -2876,4 +2876,76 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get connectNow => 'الاتصال الآن';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ عملية تثبيت';
+  }
+
+  @override
+  String get uninstallApp => 'إلغاء تثبيت التطبيق';
+
+  @override
+  String get subscribe => 'اشترك';
+
+  @override
+  String get dataAccessNotice => 'إشعار الوصول إلى البيانات';
+
+  @override
+  String get dataAccessWarning =>
+      'سيصل هذا التطبيق إلى بياناتك. Omi AI غير مسؤول عن كيفية استخدام بياناتك أو تعديلها أو حذفها بواسطة هذا التطبيق';
+
+  @override
+  String get installApp => 'تثبيت التطبيق';
+
+  @override
+  String get betaTesterNotice =>
+      'أنت مختبر تجريبي لهذا التطبيق. إنه غير عام حتى الآن. سيكون عامًا بمجرد الموافقة عليه.';
+
+  @override
+  String get appUnderReviewOwner => 'تطبيقك قيد المراجعة ومرئي لك فقط. سيكون عامًا بمجرد الموافقة عليه.';
+
+  @override
+  String get appRejectedNotice => 'تم رفض تطبيقك. يرجى تحديث تفاصيل التطبيق وإعادة تقديمه للمراجعة.';
+
+  @override
+  String get setupSteps => 'خطوات الإعداد';
+
+  @override
+  String get setupInstructions => 'تعليمات الإعداد';
+
+  @override
+  String get integrationInstructions => 'تعليمات التكامل';
+
+  @override
+  String get preview => 'معاينة';
+
+  @override
+  String get aboutTheApp => 'حول التطبيق';
+
+  @override
+  String get aboutThePersona => 'حول الشخصية';
+
+  @override
+  String get chatPersonality => 'شخصية الدردشة';
+
+  @override
+  String get ratingsAndReviews => 'التقييمات والمراجعات';
+
+  @override
+  String get noRatings => 'لا توجد تقييمات';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ تقييم';
+  }
+
+  @override
+  String get errorActivatingApp => 'خطأ في تفعيل التطبيق';
+
+  @override
+  String get integrationSetupRequired => 'إذا كان هذا تطبيق تكامل، تأكد من اكتمال الإعداد.';
+
+  @override
+  String get installed => 'مثبّت';
 }

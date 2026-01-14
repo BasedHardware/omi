@@ -2859,7 +2859,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Harika bir uygulamasınız, işiniz kullanıcı sorgularına yanıt vermek ve onları iyi hissettirmek...';
 
   @override
-  String get conversationPrompt => 'Konuşma Yönlendirmesi';
+  String get conversationPrompt => 'Konuşma İstemi';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2906,4 +2906,78 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get connectNow => 'Şimdi Bağlan';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ yükleme';
+  }
+
+  @override
+  String get uninstallApp => 'Uygulamayı kaldır';
+
+  @override
+  String get subscribe => 'Abone ol';
+
+  @override
+  String get dataAccessNotice => 'Veri Erişim Bildirimi';
+
+  @override
+  String get dataAccessWarning =>
+      'Bu uygulama verilerinize erişecek. Omi AI, bu uygulama tarafından verilerinizin nasıl kullanıldığı, değiştirildiği veya silindiğinden sorumlu değildir';
+
+  @override
+  String get installApp => 'Uygulamayı yükle';
+
+  @override
+  String get betaTesterNotice =>
+      'Bu uygulamanın beta test kullanıcısısınız. Henüz herkese açık değil. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Uygulamanız inceleniyor ve yalnızca size görünür. Onaylandıktan sonra herkese açık olacak.';
+
+  @override
+  String get appRejectedNotice =>
+      'Uygulamanız reddedildi. Lütfen uygulama ayrıntılarını güncelleyin ve inceleme için yeniden gönderin.';
+
+  @override
+  String get setupSteps => 'Kurulum Adımları';
+
+  @override
+  String get setupInstructions => 'Kurulum Talimatları';
+
+  @override
+  String get integrationInstructions => 'Entegrasyon Talimatları';
+
+  @override
+  String get preview => 'Önizleme';
+
+  @override
+  String get aboutTheApp => 'Uygulama Hakkında';
+
+  @override
+  String get aboutThePersona => 'Kişilik Hakkında';
+
+  @override
+  String get chatPersonality => 'Sohbet Kişiliği';
+
+  @override
+  String get ratingsAndReviews => 'Puanlar ve Yorumlar';
+
+  @override
+  String get noRatings => 'puan yok';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ puan';
+  }
+
+  @override
+  String get errorActivatingApp => 'Uygulamayı etkinleştirme hatası';
+
+  @override
+  String get integrationSetupRequired => 'Bu bir entegrasyon uygulamasıysa, kurulumun tamamlandığından emin olun.';
+
+  @override
+  String get installed => 'Yüklendi';
 }

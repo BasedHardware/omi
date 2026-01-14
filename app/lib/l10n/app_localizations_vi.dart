@@ -2857,7 +2857,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bạn là một ứng dụng tuyệt vời, công việc của bạn là trả lời các truy vấn của người dùng và làm cho họ cảm thấy tốt...';
 
   @override
-  String get conversationPrompt => 'Lời nhắc Cuộc trò chuyện';
+  String get conversationPrompt => 'Lời nhắc hội thoại';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2904,4 +2904,78 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get connectNow => 'Kết nối Ngay';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ lượt cài đặt';
+  }
+
+  @override
+  String get uninstallApp => 'Gỡ cài đặt ứng dụng';
+
+  @override
+  String get subscribe => 'Đăng ký';
+
+  @override
+  String get dataAccessNotice => 'Thông báo truy cập dữ liệu';
+
+  @override
+  String get dataAccessWarning =>
+      'Ứng dụng này sẽ truy cập dữ liệu của bạn. Omi AI không chịu trách nhiệm về cách dữ liệu của bạn được sử dụng, sửa đổi hoặc xóa bởi ứng dụng này';
+
+  @override
+  String get installApp => 'Cài đặt ứng dụng';
+
+  @override
+  String get betaTesterNotice =>
+      'Bạn là người kiểm tra beta cho ứng dụng này. Nó chưa được công khai. Nó sẽ được công khai sau khi được phê duyệt.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Ứng dụng của bạn đang được xem xét và chỉ hiển thị cho bạn. Nó sẽ được công khai sau khi được phê duyệt.';
+
+  @override
+  String get appRejectedNotice =>
+      'Ứng dụng của bạn đã bị từ chối. Vui lòng cập nhật chi tiết ứng dụng và gửi lại để xem xét.';
+
+  @override
+  String get setupSteps => 'Các bước thiết lập';
+
+  @override
+  String get setupInstructions => 'Hướng dẫn thiết lập';
+
+  @override
+  String get integrationInstructions => 'Hướng dẫn tích hợp';
+
+  @override
+  String get preview => 'Xem trước';
+
+  @override
+  String get aboutTheApp => 'Về ứng dụng';
+
+  @override
+  String get aboutThePersona => 'Về nhân vật';
+
+  @override
+  String get chatPersonality => 'Cá tính trò chuyện';
+
+  @override
+  String get ratingsAndReviews => 'Đánh giá & Nhận xét';
+
+  @override
+  String get noRatings => 'không có đánh giá';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ đánh giá';
+  }
+
+  @override
+  String get errorActivatingApp => 'Lỗi kích hoạt ứng dụng';
+
+  @override
+  String get integrationSetupRequired => 'Nếu đây là ứng dụng tích hợp, hãy đảm bảo thiết lập đã hoàn tất.';
+
+  @override
+  String get installed => 'Đã cài đặt';
 }

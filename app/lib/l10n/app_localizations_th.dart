@@ -2187,7 +2187,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get filterManual => 'ด้วยตนเอง';
 
   @override
-  String get completed => 'เสร็จสมบูรณ์';
+  String get completed => 'เสร็จสิ้น';
 
   @override
   String get markComplete => 'ทำเครื่องหมายว่าเสร็จสมบูรณ์';
@@ -2837,7 +2837,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get chatPromptPlaceholder => 'คุณเป็นแอปที่ยอดเยี่ยม งานของคุณคือตอบคำถามของผู้ใช้และทำให้พวกเขารู้สึกดี...';
 
   @override
-  String get conversationPrompt => 'พร้อมท์การสนทนา';
+  String get conversationPrompt => 'คำสั่งการสนทนา';
 
   @override
   String get conversationPromptPlaceholder => 'คุณเป็นแอปที่ยอดเยี่ยม คุณจะได้รับบทสนทนาและสรุปการสนทนา...';
@@ -2882,4 +2882,77 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get connectNow => 'เชื่อมต่อตอนนี้';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ การติดตั้ง';
+  }
+
+  @override
+  String get uninstallApp => 'ถอนการติดตั้งแอป';
+
+  @override
+  String get subscribe => 'สมัครสมาชิก';
+
+  @override
+  String get dataAccessNotice => 'ประกาศการเข้าถึงข้อมูล';
+
+  @override
+  String get dataAccessWarning =>
+      'แอปนี้จะเข้าถึงข้อมูลของคุณ Omi AI ไม่รับผิดชอบต่อวิธีการใช้ แก้ไข หรือลบข้อมูลของคุณโดยแอปนี้';
+
+  @override
+  String get installApp => 'ติดตั้งแอป';
+
+  @override
+  String get betaTesterNotice =>
+      'คุณเป็นผู้ทดสอบเบต้าสำหรับแอปนี้ ยังไม่เปิดเผยต่อสาธารณะ จะเปิดเผยต่อสาธารณะเมื่อได้รับการอนุมัติ';
+
+  @override
+  String get appUnderReviewOwner =>
+      'แอปของคุณกำลังอยู่ในระหว่างการตรวจสอบและมองเห็นได้เฉพาะคุณเท่านั้น จะเปิดเผยต่อสาธารณะเมื่อได้รับการอนุมัติ';
+
+  @override
+  String get appRejectedNotice => 'แอปของคุณถูกปฏิเสธ โปรดอัปเดตรายละเอียดแอปและส่งอีกครั้งเพื่อตรวจสอบ';
+
+  @override
+  String get setupSteps => 'ขั้นตอนการตั้งค่า';
+
+  @override
+  String get setupInstructions => 'คำแนะนำการตั้งค่า';
+
+  @override
+  String get integrationInstructions => 'คำแนะนำการผสานรวม';
+
+  @override
+  String get preview => 'ดูตัวอย่าง';
+
+  @override
+  String get aboutTheApp => 'เกี่ยวกับแอป';
+
+  @override
+  String get aboutThePersona => 'เกี่ยวกับบุคลิก';
+
+  @override
+  String get chatPersonality => 'บุคลิกการแชท';
+
+  @override
+  String get ratingsAndReviews => 'คะแนนและรีวิว';
+
+  @override
+  String get noRatings => 'ไม่มีคะแนน';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ คะแนน';
+  }
+
+  @override
+  String get errorActivatingApp => 'ข้อผิดพลาดในการเปิดใช้งานแอป';
+
+  @override
+  String get integrationSetupRequired => 'หากนี่เป็นแอปการผสานรวม ตรวจสอบให้แน่ใจว่าการตั้งค่าเสร็จสมบูรณ์';
+
+  @override
+  String get installed => 'ติดตั้งแล้ว';
 }

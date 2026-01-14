@@ -2850,4 +2850,74 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectNow => '今すぐ接続';
+
+  @override
+  String installsCount(String count) {
+    return '$count+インストール';
+  }
+
+  @override
+  String get uninstallApp => 'アプリをアンインストール';
+
+  @override
+  String get subscribe => 'サブスクライブ';
+
+  @override
+  String get dataAccessNotice => 'データアクセス通知';
+
+  @override
+  String get dataAccessWarning => 'このアプリはあなたのデータにアクセスします。Omi AIは、このアプリによってデータがどのように使用、変更、または削除されるかについて責任を負いません';
+
+  @override
+  String get installApp => 'アプリをインストール';
+
+  @override
+  String get betaTesterNotice => 'あなたはこのアプリのベータテスターです。まだ公開されていません。承認されると公開されます。';
+
+  @override
+  String get appUnderReviewOwner => 'あなたのアプリは審査中で、あなただけに表示されます。承認されると公開されます。';
+
+  @override
+  String get appRejectedNotice => 'あなたのアプリは却下されました。アプリの詳細を更新して、再度審査に提出してください。';
+
+  @override
+  String get setupSteps => 'セットアップ手順';
+
+  @override
+  String get setupInstructions => 'セットアップ手順';
+
+  @override
+  String get integrationInstructions => '統合手順';
+
+  @override
+  String get preview => 'プレビュー';
+
+  @override
+  String get aboutTheApp => 'アプリについて';
+
+  @override
+  String get aboutThePersona => 'ペルソナについて';
+
+  @override
+  String get chatPersonality => 'チャットパーソナリティ';
+
+  @override
+  String get ratingsAndReviews => '評価とレビュー';
+
+  @override
+  String get noRatings => '評価なし';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+の評価';
+  }
+
+  @override
+  String get errorActivatingApp => 'アプリの有効化エラー';
+
+  @override
+  String get integrationSetupRequired => 'これが統合アプリの場合は、セットアップが完了していることを確認してください。';
+
+  @override
+  String get installed => 'インストール済み';
 }

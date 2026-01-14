@@ -2159,7 +2159,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get filterManual => '수동';
 
   @override
-  String get completed => '완료됨';
+  String get completed => '완료';
 
   @override
   String get markComplete => '완료로 표시';
@@ -2850,4 +2850,74 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get connectNow => '지금 연결';
+
+  @override
+  String installsCount(String count) {
+    return '$count+회 설치';
+  }
+
+  @override
+  String get uninstallApp => '앱 제거';
+
+  @override
+  String get subscribe => '구독';
+
+  @override
+  String get dataAccessNotice => '데이터 접근 알림';
+
+  @override
+  String get dataAccessWarning => '이 앱은 귀하의 데이터에 접근합니다. Omi AI는 이 앱이 귀하의 데이터를 사용, 수정 또는 삭제하는 방법에 대해 책임지지 않습니다';
+
+  @override
+  String get installApp => '앱 설치';
+
+  @override
+  String get betaTesterNotice => '귀하는 이 앱의 베타 테스터입니다. 아직 공개되지 않았습니다. 승인되면 공개됩니다.';
+
+  @override
+  String get appUnderReviewOwner => '귀하의 앱이 검토 중이며 귀하만 볼 수 있습니다. 승인되면 공개됩니다.';
+
+  @override
+  String get appRejectedNotice => '귀하의 앱이 거부되었습니다. 앱 세부정보를 업데이트하고 검토를 위해 다시 제출하세요.';
+
+  @override
+  String get setupSteps => '설정 단계';
+
+  @override
+  String get setupInstructions => '설정 지침';
+
+  @override
+  String get integrationInstructions => '통합 지침';
+
+  @override
+  String get preview => '미리보기';
+
+  @override
+  String get aboutTheApp => '앱 정보';
+
+  @override
+  String get aboutThePersona => '페르소나 정보';
+
+  @override
+  String get chatPersonality => '채팅 성격';
+
+  @override
+  String get ratingsAndReviews => '평점 및 리뷰';
+
+  @override
+  String get noRatings => '평점 없음';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+개의 평점';
+  }
+
+  @override
+  String get errorActivatingApp => '앱 활성화 오류';
+
+  @override
+  String get integrationSetupRequired => '이것이 통합 앱인 경우 설정이 완료되었는지 확인하세요.';
+
+  @override
+  String get installed => '설치됨';
 }

@@ -2869,7 +2869,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'Egy fantasztikus alkalmazás vagy, a feladatod, hogy válaszolj a felhasználói kérdésekre és jól éreztess velük...';
 
   @override
-  String get conversationPrompt => 'Beszélgetési utasítás';
+  String get conversationPrompt => 'Beszélgetési felszólítás';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2917,4 +2917,79 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get connectNow => 'Csatlakoztatás most';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ telepítés';
+  }
+
+  @override
+  String get uninstallApp => 'Alkalmazás eltávolítása';
+
+  @override
+  String get subscribe => 'Feliratkozás';
+
+  @override
+  String get dataAccessNotice => 'Adathozzáférési értesítés';
+
+  @override
+  String get dataAccessWarning =>
+      'Ez az alkalmazás hozzáfér az adataihoz. Az Omi AI nem felelős azért, hogy ez az alkalmazás hogyan használja, módosítja vagy törli az adatait';
+
+  @override
+  String get installApp => 'Alkalmazás telepítése';
+
+  @override
+  String get betaTesterNotice =>
+      'Ön ennek az alkalmazásnak a béta tesztelője. Még nem nyilvános. Jóváhagyás után nyilvános lesz.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Az alkalmazása felülvizsgálat alatt áll, és csak Ön számára látható. Jóváhagyás után nyilvános lesz.';
+
+  @override
+  String get appRejectedNotice =>
+      'Az alkalmazását elutasították. Kérjük, frissítse az alkalmazás adatait, és küldje be újra felülvizsgálatra.';
+
+  @override
+  String get setupSteps => 'Beállítási lépések';
+
+  @override
+  String get setupInstructions => 'Beállítási utasítások';
+
+  @override
+  String get integrationInstructions => 'Integrációs utasítások';
+
+  @override
+  String get preview => 'Előnézet';
+
+  @override
+  String get aboutTheApp => 'Az alkalmazásról';
+
+  @override
+  String get aboutThePersona => 'A személyről';
+
+  @override
+  String get chatPersonality => 'Chat személyiség';
+
+  @override
+  String get ratingsAndReviews => 'Értékelések és vélemények';
+
+  @override
+  String get noRatings => 'nincs értékelés';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ értékelés';
+  }
+
+  @override
+  String get errorActivatingApp => 'Hiba az alkalmazás aktiválása során';
+
+  @override
+  String get integrationSetupRequired =>
+      'Ha ez egy integrációs alkalmazás, győződjön meg róla, hogy a beállítás befejeződött.';
+
+  @override
+  String get installed => 'Telepítve';
 }

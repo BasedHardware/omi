@@ -2801,7 +2801,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get open => 'Ava';
 
   @override
-  String get install => 'Installi';
+  String get install => 'Paigalda';
 
   @override
   String get noAppsAvailable => 'Rakendusi pole saadaval';
@@ -2900,4 +2900,78 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get connectNow => 'Ühenda kohe';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ paigaldust';
+  }
+
+  @override
+  String get uninstallApp => 'Desinstalli rakendus';
+
+  @override
+  String get subscribe => 'Telli';
+
+  @override
+  String get dataAccessNotice => 'Andmetele juurdepääsu teatis';
+
+  @override
+  String get dataAccessWarning =>
+      'See rakendus pääseb ligi teie andmetele. Omi AI ei vastuta selle eest, kuidas see rakendus teie andmeid kasutab, muudab või kustutab';
+
+  @override
+  String get installApp => 'Installi rakendus';
+
+  @override
+  String get betaTesterNotice =>
+      'Olete selle rakenduse beeta-testija. See ei ole veel avalik. See muutub avalikuks pärast kinnitamist.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Teie rakendus on ülevaatamisel ja nähtav ainult teile. See muutub avalikuks pärast kinnitamist.';
+
+  @override
+  String get appRejectedNotice =>
+      'Teie rakendus on tagasi lükatud. Palun värskendage rakenduse üksikasju ja esitage see uuesti ülevaatamiseks.';
+
+  @override
+  String get setupSteps => 'Seadistamise sammud';
+
+  @override
+  String get setupInstructions => 'Seadistamise juhised';
+
+  @override
+  String get integrationInstructions => 'Integratsiooni juhised';
+
+  @override
+  String get preview => 'Eelvaade';
+
+  @override
+  String get aboutTheApp => 'Rakenduse kohta';
+
+  @override
+  String get aboutThePersona => 'Isiku kohta';
+
+  @override
+  String get chatPersonality => 'Vestluse isiksus';
+
+  @override
+  String get ratingsAndReviews => 'Hinnangud ja arvustused';
+
+  @override
+  String get noRatings => 'hinnanguid pole';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ hinnangut';
+  }
+
+  @override
+  String get errorActivatingApp => 'Viga rakenduse aktiveerimisel';
+
+  @override
+  String get integrationSetupRequired => 'Kui see on integratsioonirakendus, veenduge, et seadistamine on lõpetatud.';
+
+  @override
+  String get installed => 'Paigaldatud';
 }

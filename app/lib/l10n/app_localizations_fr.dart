@@ -2922,4 +2922,79 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connectNow => 'Connecter maintenant';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ installations';
+  }
+
+  @override
+  String get uninstallApp => 'Désinstaller l\'application';
+
+  @override
+  String get subscribe => 'S\'abonner';
+
+  @override
+  String get dataAccessNotice => 'Avis d\'accès aux données';
+
+  @override
+  String get dataAccessWarning =>
+      'Cette application accédera à vos données. Omi AI n\'est pas responsable de la manière dont vos données sont utilisées, modifiées ou supprimées par cette application';
+
+  @override
+  String get installApp => 'Installer l\'application';
+
+  @override
+  String get betaTesterNotice =>
+      'Vous êtes un testeur bêta pour cette application. Elle n\'est pas encore publique. Elle sera publique une fois approuvée.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Votre application est en cours de révision et visible uniquement pour vous. Elle sera publique une fois approuvée.';
+
+  @override
+  String get appRejectedNotice =>
+      'Votre application a été rejetée. Veuillez mettre à jour les détails de l\'application et la soumettre à nouveau pour révision.';
+
+  @override
+  String get setupSteps => 'Étapes de configuration';
+
+  @override
+  String get setupInstructions => 'Instructions de configuration';
+
+  @override
+  String get integrationInstructions => 'Instructions d\'intégration';
+
+  @override
+  String get preview => 'Aperçu';
+
+  @override
+  String get aboutTheApp => 'À propos de l\'application';
+
+  @override
+  String get aboutThePersona => 'À propos du persona';
+
+  @override
+  String get chatPersonality => 'Personnalité du chat';
+
+  @override
+  String get ratingsAndReviews => 'Notes et avis';
+
+  @override
+  String get noRatings => 'aucune note';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ notes';
+  }
+
+  @override
+  String get errorActivatingApp => 'Erreur lors de l\'activation de l\'application';
+
+  @override
+  String get integrationSetupRequired =>
+      'S\'il s\'agit d\'une application d\'intégration, assurez-vous que la configuration est terminée.';
+
+  @override
+  String get installed => 'Installé';
 }

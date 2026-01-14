@@ -2196,7 +2196,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get filterManual => 'Manuaalinen';
 
   @override
-  String get completed => 'Suoritettu';
+  String get completed => 'Valmis';
 
   @override
   String get markComplete => 'Merkitse valmiiksi';
@@ -2896,4 +2896,78 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get connectNow => 'Yhdistä nyt';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ asennusta';
+  }
+
+  @override
+  String get uninstallApp => 'Poista sovellus';
+
+  @override
+  String get subscribe => 'Tilaa';
+
+  @override
+  String get dataAccessNotice => 'Tietojen käyttöilmoitus';
+
+  @override
+  String get dataAccessWarning =>
+      'Tämä sovellus käyttää tietojasi. Omi AI ei ole vastuussa siitä, miten tietojasi käytetään, muokataan tai poistetaan tällä sovelluksella';
+
+  @override
+  String get installApp => 'Asenna sovellus';
+
+  @override
+  String get betaTesterNotice =>
+      'Olet tämän sovelluksen beta-testaaja. Se ei ole vielä julkinen. Se tulee julkiseksi hyväksynnän jälkeen.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Sovelluksesi on tarkistettavana ja näkyvissä vain sinulle. Se tulee julkiseksi hyväksynnän jälkeen.';
+
+  @override
+  String get appRejectedNotice =>
+      'Sovelluksesi on hylätty. Päivitä sovelluksen tiedot ja lähetä se uudelleen tarkistettavaksi.';
+
+  @override
+  String get setupSteps => 'Asennusvaiheet';
+
+  @override
+  String get setupInstructions => 'Asennusohjeet';
+
+  @override
+  String get integrationInstructions => 'Integrointiohjeet';
+
+  @override
+  String get preview => 'Esikatselu';
+
+  @override
+  String get aboutTheApp => 'Tietoja sovelluksesta';
+
+  @override
+  String get aboutThePersona => 'Tietoja persoonasta';
+
+  @override
+  String get chatPersonality => 'Chatin persoonallisuus';
+
+  @override
+  String get ratingsAndReviews => 'Arviot ja arvostelut';
+
+  @override
+  String get noRatings => 'ei arvioita';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ arvioita';
+  }
+
+  @override
+  String get errorActivatingApp => 'Virhe sovelluksen aktivoinnissa';
+
+  @override
+  String get integrationSetupRequired => 'Jos tämä on integraatiosovellus, varmista että asennus on valmis.';
+
+  @override
+  String get installed => 'Asennettu';
 }

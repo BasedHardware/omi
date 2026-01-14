@@ -2828,7 +2828,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Você é um aplicativo incrível, seu trabalho é responder às consultas dos usuários e fazê-los se sentirem bem...';
 
   @override
-  String get conversationPrompt => 'Prompt de Conversa';
+  String get conversationPrompt => 'Prompt de conversa';
 
   @override
   String get conversationPromptPlaceholder =>
@@ -2875,4 +2875,79 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get connectNow => 'Conectar Agora';
+
+  @override
+  String installsCount(String count) {
+    return '$count+ instalações';
+  }
+
+  @override
+  String get uninstallApp => 'Desinstalar aplicativo';
+
+  @override
+  String get subscribe => 'Assinar';
+
+  @override
+  String get dataAccessNotice => 'Aviso de acesso a dados';
+
+  @override
+  String get dataAccessWarning =>
+      'Este aplicativo acessará seus dados. Omi AI não é responsável por como seus dados são usados, modificados ou excluídos por este aplicativo';
+
+  @override
+  String get installApp => 'Instalar aplicativo';
+
+  @override
+  String get betaTesterNotice =>
+      'Você é um testador beta deste aplicativo. Ele ainda não é público. Ele será público assim que for aprovado.';
+
+  @override
+  String get appUnderReviewOwner =>
+      'Seu aplicativo está em análise e visível apenas para você. Ele será público assim que for aprovado.';
+
+  @override
+  String get appRejectedNotice =>
+      'Seu aplicativo foi rejeitado. Por favor, atualize os detalhes do aplicativo e reenvie para análise.';
+
+  @override
+  String get setupSteps => 'Etapas de configuração';
+
+  @override
+  String get setupInstructions => 'Instruções de configuração';
+
+  @override
+  String get integrationInstructions => 'Instruções de integração';
+
+  @override
+  String get preview => 'Visualização';
+
+  @override
+  String get aboutTheApp => 'Sobre o aplicativo';
+
+  @override
+  String get aboutThePersona => 'Sobre a persona';
+
+  @override
+  String get chatPersonality => 'Personalidade do chat';
+
+  @override
+  String get ratingsAndReviews => 'Avaliações e comentários';
+
+  @override
+  String get noRatings => 'sem avaliações';
+
+  @override
+  String ratingsCount(String count) {
+    return '$count+ avaliações';
+  }
+
+  @override
+  String get errorActivatingApp => 'Erro ao ativar o aplicativo';
+
+  @override
+  String get integrationSetupRequired =>
+      'Se este for um aplicativo de integração, certifique-se de que a configuração está concluída.';
+
+  @override
+  String get installed => 'Instalado';
 }
